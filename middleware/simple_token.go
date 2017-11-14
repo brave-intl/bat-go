@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"os"
 	"strings"
@@ -29,7 +30,8 @@ func isSimpleTokenValid(list []string, token string) bool {
 		return false
 	}
 	for _, validToken := range list {
-		if token == validToken {
+		// NOTE token length information is leaked even with subtle.ConstantTimeCompare
+		if subtle.ConstantTimeCompare([]byte(validToken), []byte(token)) == 1 {
 			return true
 		}
 	}
