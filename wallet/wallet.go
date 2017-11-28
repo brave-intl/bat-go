@@ -6,12 +6,12 @@ import (
 )
 
 type WalletInfo struct {
-	Id          string                  `json:"paymentId" valid:"uuidv4"`
-	Provider    string                  `json:"provider" valid:"in(uphold)`
-	ProviderId  string                  `json:"providerId"`
-	AltCurrency altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey   string                  `json:"publicKey,omitempty"`
-	LastBalance Balance                 `json:"balances,omitempty"`
+	Id          string                   `json:"paymentId" valid:"uuidv4"`
+	Provider    string                   `json:"provider" valid:"in(uphold)"`
+	ProviderId  string                   `json:"providerId"`
+	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
+	PublicKey   string                   `json:"publicKey,omitempty"`
+	LastBalance *Balance                 `json:"balances,omitempty"`
 }
 
 type TransactionInfo struct {

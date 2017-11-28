@@ -3,10 +3,11 @@ package httpsignature
 import (
 	"crypto"
 	"encoding/hex"
-	"golang.org/x/crypto/ed25519"
 	"net/http"
 	"reflect"
 	"testing"
+
+	"golang.org/x/crypto/ed25519"
 )
 
 func TestBuildSigningString(t *testing.T) {
@@ -76,6 +77,7 @@ func TestVerify(t *testing.T) {
 
 	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
 	r.Header.Set("Foo", "bar")
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 
 	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
 	if err != nil {
@@ -86,6 +88,8 @@ func TestVerify(t *testing.T) {
 	}
 
 	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
+
 	valid, err = s.Verify(pubKey, crypto.Hash(0), r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
@@ -107,7 +111,7 @@ func TestTextMarshal(t *testing.T) {
 		t.Error("Unexpected error during marshal")
 	}
 
-	expected := "Signature keyId=\"Test\",algorithm=\"ed25519\",headers=\"(request-target) host date content-type digest content-length\",signature=\"Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0=\""
+	expected := "keyId=\"Test\",algorithm=\"ed25519\",headers=\"(request-target) host date content-type digest content-length\",signature=\"Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0=\""
 
 	if string(b) != expected {
 		t.Error("Incorrect string value from marshal")
@@ -120,7 +124,7 @@ func TestTextMarshal(t *testing.T) {
 		t.Error("Unexpected error during marshal")
 	}
 
-	expected = "Signature keyId=\"Test\",algorithm=\"ed25519\",signature=\"Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0=\""
+	expected = "keyId=\"Test\",algorithm=\"ed25519\",signature=\"Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0=\""
 
 	if string(b) != expected {
 		t.Error("Incorrect string value from marshal")

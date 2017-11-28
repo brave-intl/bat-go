@@ -3,11 +3,13 @@ package httpsignature
 // https://www.ietf.org/id/draft-cavage-http-signatures-08.txt
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -21,11 +23,10 @@ type SignatureParams struct {
 
 type Signature struct {
 	SignatureParams
-	Sig string
+	Sig string // FIXME remove since we should always use http.Request header?
 }
 
 const (
-	headerPrefix  = "Signature "
 	RequestTarget = "(request-target)"
 )
 
@@ -88,6 +89,12 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 		return err
 	}
 	s.Sig = base64.StdEncoding.EncodeToString(sig)
+
+	sHeader, err := s.MarshalText()
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Signature", string(sHeader))
 	return nil
 }
 
@@ -96,15 +103,22 @@ type Verifier interface {
 }
 
 func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
-	ss, err := s.BuildSigningString(req)
+	signingStr, err := s.BuildSigningString(req)
 	if err != nil {
 		return false, err
 	}
-	sig, err := base64.StdEncoding.DecodeString(s.Sig)
+
+	var tmp Signature
+	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
 	if err != nil {
 		return false, err
 	}
-	return verifier.Verify(ss, sig, opts)
+
+	sig, err := base64.StdEncoding.DecodeString(tmp.Sig)
+	if err != nil {
+		return false, err
+	}
+	return verifier.Verify(signingStr, sig, opts)
 }
 
 func (s *Signature) MarshalText() (text []byte, err error) {
@@ -113,8 +127,6 @@ func (s *Signature) MarshalText() (text []byte, err error) {
 	}
 
 	// FIXME just replace with sprintf?
-
-	text = append(text, []byte(headerPrefix)...)
 
 	text = append(text, []byte("keyId=\"")...)
 	text = append(text, []byte(s.KeyId)...)
@@ -173,4 +185,43 @@ func (s *Signature) UnmarshalText(text []byte) (err error) {
 	}
 
 	return nil
+}
+
+// An encapsulated HTTP signature request
+type HttpSignedRequest struct {
+	Headers map[string]string `json:"headers"` //TODO add verfier to ensure only lower-cased keys
+	Body    string            `json:"octets"`
+}
+
+func (sr *HttpSignedRequest) Extract() (*Signature, *http.Request, error) {
+	var s Signature
+	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var r http.Request
+	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
+	r.Header = http.Header{}
+	for k, v := range sr.Headers {
+		if k == RequestTarget {
+			// TODO
+			return nil, nil, errors.New(fmt.Sprintf("%s pseudo-header not implemented", RequestTarget))
+		} else {
+			r.Header.Set(k, v)
+		}
+	}
+	return &s, &r, nil
+}
+
+func Encapsulate(req *http.Request) (*HttpSignedRequest, error) {
+	enc := HttpSignedRequest{}
+	for k, values := range req.Header {
+		enc.Headers[k] = strings.Join(values, ", ")
+	}
+	// FIXME
+	//enc.Headers[RequestTarget] =
+	bodyBytes, _ := ioutil.ReadAll(req.Body)
+	enc.Body = string(bodyBytes)
+	return &enc, nil
 }

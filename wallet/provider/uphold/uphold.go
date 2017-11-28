@@ -4,9 +4,16 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils"
@@ -16,11 +23,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"os"
-	"time"
 )
 
 type UpholdWallet struct {
@@ -43,6 +45,8 @@ var (
 	}
 )
 
+// TODO add context?
+
 func New(info wallet.WalletInfo, privKey ed25519.PrivateKey, pubKey httpsignature.Ed25519PubKey) (*UpholdWallet, error) {
 	if info.Provider != "uphold" {
 		return nil, errors.New("The wallet provider must be uphold")
@@ -61,7 +65,11 @@ func New(info wallet.WalletInfo, privKey ed25519.PrivateKey, pubKey httpsignatur
 }
 
 func FromWalletInfo(info wallet.WalletInfo) (*UpholdWallet, error) {
-	return New(info, ed25519.PrivateKey{}, httpsignature.Ed25519PubKey{})
+	var publicKey httpsignature.Ed25519PubKey
+	if len(info.PublicKey) > 0 {
+		publicKey, _ = hex.DecodeString(info.PublicKey)
+	}
+	return New(info, ed25519.PrivateKey{}, publicKey)
 }
 
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
@@ -70,6 +78,23 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 		req.Header.Add("Authorization", "Bearer "+accessToken)
 	}
 	return req, err
+}
+
+func submit(req *http.Request) (*http.Response, error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode/100 != 2 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		var uhErr UpholdError
+		if json.Unmarshal(body, &uhErr) != nil {
+			return nil, errors.New(fmt.Sprintf("Error %d, %s", resp.StatusCode, body))
+		} else {
+			return nil, uhErr
+		}
+	}
+	return resp, nil
 }
 
 type CardSettings struct {
@@ -88,13 +113,9 @@ func (w *UpholdWallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := submit(req)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return nil, errors.New(fmt.Sprintf("Error %d, %s", resp.StatusCode, body))
 	}
 
 	var details CardDetails
@@ -114,8 +135,8 @@ func (w *UpholdWallet) GetWalletInfo() wallet.WalletInfo {
 }
 
 type Denomination struct {
-	Amount   decimal.Decimal         `json:"amount"`
-	Currency altcurrency.AltCurrency `json:"currency"`
+	Amount   decimal.Decimal          `json:"amount"`
+	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
 type TransactionRequest struct {
@@ -123,35 +144,51 @@ type TransactionRequest struct {
 	Destination  string       `json:"destination"`
 }
 
-func (w *UpholdWallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
-	// FIXME
-	return nil, nil
-}
-
-// An encapsulated HTTP signature transaction
-type HttpSignedTransactionRequest struct {
-	Headers map[string]string `json:"headers"` //TODO add verfier to ensure only lower-cased keys
-	Body    string            `json:"octets"`
-}
-
-func (sr *HttpSignedTransactionRequest) Extract() (*httpsignature.Signature, *http.Request, error) {
-	var s httpsignature.Signature
-	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
+func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
+	transferReq := TransactionRequest{Denomination{altcurrency.FromProbi(probi), &altcurrency}, destination}
+	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var r http.Request
-	r.Header = http.Header{}
-	for k, v := range sr.Headers {
-		if k == httpsignature.RequestTarget {
-			// TODO
-			return nil, nil, errors.New(fmt.Sprintf("%s pseudo-header not implemented", httpsignature.RequestTarget))
-		} else {
-			r.Header.Set(k, v)
-		}
+	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions?commit=true", bytes.NewBuffer(unsignedTransaction))
+	if err != nil {
+		return nil, err
 	}
-	return &s, &r, nil
+
+	var s httpsignature.Signature
+	s.Algorithm = httpsignature.ED25519
+	s.KeyId = "primary"
+	s.Headers = []string{"digest"}
+
+	// FIXME digest calc should move to httpsignature lib
+	var d digest.DigestInstance
+	d.Hash = crypto.SHA256
+	req.Header.Add("Digest", d.Calculate(unsignedTransaction))
+
+	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
+	return req, err
+}
+
+func (w *UpholdWallet) EncapsulateTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*httpsignature.HttpSignedRequest, error) {
+	req, err := w.SignTransfer(altcurrency, probi, destination)
+	if err != nil {
+		return nil, err
+	}
+	return httpsignature.Encapsulate(req)
+}
+
+func (w *UpholdWallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
+	req, err := w.SignTransfer(altcurrency, probi, destination)
+	if err != nil {
+		return nil, err
+	}
+	_, err = submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &wallet.TransactionInfo{probi, altcurrency, destination}, nil
 }
 
 func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionRequest, error) {
@@ -160,7 +197,7 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 		return nil, err
 	}
 
-	var signedTx HttpSignedTransactionRequest
+	var signedTx httpsignature.HttpSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -210,8 +247,6 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 		return nil, err
 	}
 
-	// FIXME could be extra fields in body :/ any way to check?
-
 	if !govalidator.IsEmail(transaction.Destination) {
 		if !govalidator.IsUUIDv4(transaction.Destination) {
 			if !utils.IsBTCAddress(transaction.Destination) {
@@ -220,6 +255,22 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 				}
 			}
 		}
+	}
+
+	// NOTE we are effectively stuck using two different JSON parsers on the same data as our parser
+	// is different than Uphold's. this has the unfortunate effect of opening us to attacks
+	// that exploit differences between parsers. to mitigate this we will be extremely strict
+	// in parsing, requiring that the remarshalled struct is equivalent. this means the order
+	// of fields must be identical as well as numeric serialization. for encoding/json, note
+	// that struct keys are serialized in the order they are defined
+
+	remarshalledBody, err := json.Marshal(&transaction)
+	if err != nil {
+		return nil, err
+	}
+
+	if string(remarshalledBody) != signedTx.Body {
+		return nil, errors.New("The remarshalled body must be identical")
 	}
 
 	return &transaction, nil
@@ -232,7 +283,7 @@ func (w *UpholdWallet) VerifyTransaction(transactionB64 string) (*wallet.Transac
 	}
 	var info wallet.TransactionInfo
 	info.Probi = transaction.Denomination.Currency.ToProbi(transaction.Denomination.Amount)
-	info.AltCurrency = transaction.Denomination.Currency
+	info.AltCurrency = *transaction.Denomination.Currency
 	info.Destination = transaction.Destination
 
 	return &info, err
@@ -245,7 +296,7 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 	}
 
 	b, _ := base64.StdEncoding.DecodeString(transactionB64)
-	var signedTx HttpSignedTransactionRequest
+	var signedTx httpsignature.HttpSignedRequest
 	json.Unmarshal(b, &signedTx)
 
 	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions?commit=true", bytes.NewBufferString(signedTx.Body))
@@ -257,18 +308,9 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 		req.Header.Add(k, v)
 	}
 
-	resp, err := client.Do(req)
+	_, err = submit(req)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		var uhErr UpholdError
-		if json.Unmarshal(b, &uhErr) != nil {
-			return nil, errors.New(fmt.Sprintf("Error %d, %s", resp.StatusCode, body))
-		} else {
-			return nil, uhErr
-		}
 	}
 
 	return info, nil
@@ -276,7 +318,7 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 
 func (w *UpholdWallet) GetBalance(refresh bool) (*wallet.Balance, error) {
 	if !refresh {
-		return &w.LastBalance, nil
+		return w.LastBalance, nil
 	}
 
 	var balance wallet.Balance
@@ -286,7 +328,7 @@ func (w *UpholdWallet) GetBalance(refresh bool) (*wallet.Balance, error) {
 		return nil, err
 	}
 
-	if details.Currency != w.AltCurrency {
+	if details.Currency != *w.AltCurrency {
 		return nil, errors.New("Returned currency did not match wallet altcurrency")
 	}
 
@@ -294,7 +336,7 @@ func (w *UpholdWallet) GetBalance(refresh bool) (*wallet.Balance, error) {
 	balance.SpendableProbi = details.Currency.ToProbi(details.AvailableBalance)
 	balance.ConfirmedProbi = balance.SpendableProbi
 	balance.UnconfirmedProbi = balance.TotalProbi.Sub(balance.SpendableProbi)
-	w.LastBalance = balance
+	w.LastBalance = &balance
 
 	return &balance, nil
 }

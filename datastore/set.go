@@ -3,6 +3,7 @@ package datastore
 import (
 	"context"
 	"errors"
+
 	"github.com/brave-intl/bat-go/utils"
 	sliceset "github.com/brave-intl/bat-go/utils/set"
 )

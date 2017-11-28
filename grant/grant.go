@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"sort"
+
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
@@ -16,8 +19,11 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/square/go-jose"
 	"golang.org/x/crypto/ed25519"
-	"os"
-	"sort"
+)
+
+const (
+	lowerTxLimit = 20
+	upperTxLimit = 120
 )
 
 var (
@@ -29,6 +35,7 @@ var (
 	grantPublicKey            ed25519.PublicKey
 	grantWallet               wallet.Wallet
 	refreshBalance            = true // for testing we can disable balance refresh
+	testSubmit                = true // for testing we can disable testing tx submit
 )
 
 func InitGrantService() error {
@@ -36,10 +43,16 @@ func InitGrantService() error {
 	if os.Getenv("ENV") == "production" && refreshBalance != true {
 		return errors.New("refreshBalance must be true in production!!")
 	}
+	if os.Getenv("ENV") == "production" && testSubmit != true {
+		return errors.New("testSubmit must be true in production!!")
+	}
 	var info wallet.WalletInfo
 	info.Provider = "uphold"
 	info.ProviderId = GrantWalletCardId
-	info.AltCurrency = altcurrency.BAT
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
 
 	grantWallet, err := uphold.FromWalletInfo(info)
 	if err != nil {
@@ -51,10 +64,12 @@ func InitGrantService() error {
 }
 
 type Grant struct {
-	AltCurrency altcurrency.AltCurrency `json:"altcurrency"`
-	GrantId     uuid.UUID               `json:"grantId"`
-	Probi       decimal.Decimal         `json:"probi"`
-	PromotionId uuid.UUID               `json:"promotionId"`
+	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency"`
+	GrantId           uuid.UUID                `json:"grantId"`
+	Probi             decimal.Decimal          `json:"probi"`
+	PromotionId       uuid.UUID                `json:"promotionId"`
+	MaturityTimestamp int64                    `json:"maturityTime"` // FIXME
+	ExpiryTimestamp   int64                    `json:"expiryTime"`   // FIXME
 }
 
 // ByProbi implements sort.Interface for []Grant based on the Probi field.
@@ -70,7 +85,7 @@ func FromCompactJWS(s string) (*Grant, error) {
 		return nil, err
 	}
 	for _, sig := range jws.Signatures {
-		if sig.Header.Algorithm != "ed25519" {
+		if sig.Header.Algorithm != "EdDSA" {
 			return nil, errors.New("Error unsupported JWS algorithm")
 		}
 	}
@@ -147,30 +162,37 @@ func (req *RedeemGrantsRequest) Verify(ctx context.Context) (*wallet.Transaction
 	if txInfo.AltCurrency != altcurrency.BAT {
 		return nil, errors.New("Only grants submitted with BAT transactions are supported")
 	}
-	limit := decimal.New(20, 1)
-	if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(limit)) {
-		return nil, errors.New("Included transactions must be for a minimum of 20 BAT")
+	if txInfo.Probi.LessThan(decimal.Zero) {
+		return nil, errors.New("Included transaction cannot be for negative BAT")
+	}
+	if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
+		return nil, errors.New(fmt.Sprintf("Included transaction must be for a minimum of %d BAT", lowerTxLimit))
 	}
 	if txInfo.Probi.LessThan(balance.SpendableProbi) {
 		return nil, errors.New("Wallet has enough funds to cover transaction")
+	}
+	if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
+		return nil, errors.New(fmt.Sprintf("Included transaction must be for a maxiumum of %d BAT", upperTxLimit))
 	}
 	if txInfo.Destination != SettlementDestination {
 		return nil, errors.New("Included transactions must have settlement as their destination")
 	}
 
-	// TODO remove this once we can retrieve publicKey info from uphold
-	// NOTE We check the signature on the included transaction by attempting to submit it.
-	//      We rely on the fact that uphold verifies signatures before doing balance checking.
-	//      We are expecting a balance error, if we get a signature error we have
-	//      the wrong publicKey.
-	_, err = userWallet.SubmitTransaction(req.Transaction)
-	if err == nil {
-		return nil, errors.New("An included transaction unexpectedly succeeded")
-	} else {
-		if wallet.IsInvalidSignature(err) {
-			return nil, errors.New("The included transaction was signed with the wrong publicKey!")
-		} else if !wallet.IsInsufficientBalance(err) {
-			return nil, err
+	if testSubmit {
+		// TODO remove this once we can retrieve publicKey info from uphold
+		// NOTE We check the signature on the included transaction by attempting to submit it.
+		//      We rely on the fact that uphold verifies signatures before doing balance checking.
+		//      We are expecting a balance error, if we get a signature error we have
+		//      the wrong publicKey.
+		_, err = userWallet.SubmitTransaction(req.Transaction)
+		if err == nil {
+			return nil, errors.New("An included transaction unexpectedly succeeded")
+		} else {
+			if wallet.IsInvalidSignature(err) {
+				return nil, errors.New("The included transaction was signed with the wrong publicKey!")
+			} else if !wallet.IsInsufficientBalance(err) {
+				return nil, err
+			}
 		}
 	}
 
@@ -186,7 +208,7 @@ func (req *RedeemGrantsRequest) Verify(ctx context.Context) (*wallet.Transaction
 			// 5. Fail if there are leftover grants
 			return nil, errors.New("More grants included than are needed to fufill included transaction")
 		}
-		if grant.AltCurrency != altcurrency.BAT {
+		if *grant.AltCurrency != altcurrency.BAT {
 			return nil, errors.New("All grants must be in BAT")
 		}
 		sumProbi = sumProbi.Add(grant.Probi)
@@ -239,6 +261,8 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO consider early response here, best to avoid exposing any signature timing
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {

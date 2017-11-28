@@ -41,3 +41,7 @@
 [[constraint]]
   name = "github.com/ethereum/go-ethereum"
   version = "1.7.2"
+
+[[constraint]]
+  name = "github.com/getsentry/raven-go"
+  branch = "master"

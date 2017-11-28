@@ -38,12 +38,13 @@ func (set *UnsafeSliceSet) Close() error {
 }
 
 type SliceSet struct {
-	u UnsafeSliceSet
+	u *UnsafeSliceSet
 	sync.RWMutex
 }
 
 func NewSliceSet() SliceSet {
-	return SliceSet{u: NewUnsafeSliceSet()}
+	tmp := NewUnsafeSliceSet()
+	return SliceSet{u: &tmp}
 }
 
 func (set *SliceSet) Cardinality() (int, error) {

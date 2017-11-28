@@ -3,13 +3,14 @@ package uphold
 import (
 	"encoding/hex"
 	"fmt"
+	"os"
+	"reflect"
+	"testing"
+
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"os"
-	"reflect"
-	"testing"
 )
 
 func TestGetCardDetails(t *testing.T) {
@@ -21,7 +22,10 @@ func TestGetCardDetails(t *testing.T) {
 	info.Provider = "uphold"
 	//info.ProviderId = "3f9bfeb9-bafd-43b7-ac64-4e47208ff1a1"
 	info.ProviderId = "6654ecb0-6079-4f6c-ba58-791cc890a561"
-	info.AltCurrency = altcurrency.BAT
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
 
 	wallet, err := FromWalletInfo(info)
 	if err != nil {
@@ -38,16 +42,19 @@ func TestDecodeTransaction(t *testing.T) {
 	var info wallet.WalletInfo
 	info.Provider = "uphold"
 	info.ProviderId = uuid.NewV4().String()
-	info.AltCurrency = altcurrency.BAT
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
 
 	wallet, err := FromWalletInfo(info)
 	if err != nil {
 		t.Error(err)
 	}
 
-	wallet.PubKey, _ = hex.DecodeString("656c44ebe9640d5491bbe2b4a29efd0775f4ee73002681b4caf604bd55482da6")
+	wallet.PubKey, _ = hex.DecodeString("424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf")
 
-	txnB64 := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WG9sTTVjUVhCU055Vmc1M0NrQjROU215b0h0dnJOVysyYTdWVTB0RmpMaz0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIlpHU1U0RlYyN0RSZjJOYmh3UFkwb0ZGcFRlcURuM0VHZkpmYkQ4MzZkdWFqdWVKOTMvemg2YTF0SUtONklTTWFFTXMwRjFiUnhPWjVxSkIwK256V0JRPT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjoyNSxcImN1cnJlbmN5XCI6XCJCQVRcIn0sXCJkZXN0aW5hdGlvblwiOlwiZm9vQGJhci5jb21cIn0ifQ=="
+	txnB64 := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
 	txnReq, err := wallet.DecodeTransaction(txnB64)
 	if err != nil {
@@ -57,11 +64,19 @@ func TestDecodeTransaction(t *testing.T) {
 	var expected TransactionRequest
 	expected.Destination = "foo@bar.com"
 	expected.Denomination.Amount, _ = decimal.NewFromString("25.0")
-	expected.Denomination.Currency = altcurrency.BAT
+	{
+		tmp := altcurrency.BAT
+		expected.Denomination.Currency = &tmp
+	}
 
 	if !reflect.DeepEqual(*txnReq, expected) {
 		t.Error("Decoded transaction does not match expected value")
 	}
+}
+
+func TestReMarshall(t *testing.T) {
+	// FIXME
+	//{"denomination":{"amount":"50.000000000000000000","currency":"BAT"},"destination":"99f7ee1c-bce7-4b11-bb91-825412f4764b"}}
 }
 
 func TestVerifyTransaction(t *testing.T) {

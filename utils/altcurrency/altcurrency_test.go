@@ -2,8 +2,9 @@ package altcurrency
 
 import (
 	"encoding/json"
-	"github.com/shopspring/decimal"
 	"testing"
+
+	"github.com/shopspring/decimal"
 )
 
 func TestJsonUnmarshal(t *testing.T) {
@@ -14,6 +15,7 @@ func TestJsonUnmarshal(t *testing.T) {
 	}
 	if a != BAT {
 		t.Error("Unexpected altcurrency to be BAT")
+		t.Error(a)
 	}
 
 	err = json.Unmarshal([]byte("\"FOO\""), &a)

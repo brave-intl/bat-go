@@ -26,6 +26,12 @@
   version = "BTCUTIL_0_5_0"
 
 [[projects]]
+  name = "github.com/certifi/gocertifi"
+  packages = ["."]
+  revision = "a4ab0227d360091084658029ec8ae45f989fba3e"
+  version = "2017.11.05"
+
+[[projects]]
   name = "github.com/ethereum/go-ethereum"
   packages = ["common","common/hexutil","common/math","crypto","crypto/secp256k1","crypto/sha3","rlp"]
   revision = "1db4ecdc0b9e828ff65777fb466fc7c1d04e0de9"
@@ -36,6 +42,12 @@
   packages = ["internal","redis"]
   revision = "47dc60e71eed504e3ef8e77ee3c6fe720f3be57f"
   version = "v1.3.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/getsentry/raven-go"
+  packages = ["."]
+  revision = "c9de0b92586aaba092c2a231cb7384354b178544"
 
 [[projects]]
   name = "github.com/go-chi/chi"
@@ -54,6 +66,12 @@
   packages = ["pbutil"]
   revision = "3247c84500bff8d9fb6d579d800f20b3e091582c"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
 
 [[projects]]
   name = "github.com/pressly/lg"
@@ -130,6 +148,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7a379b6865ed65c2081f708ad382c8e3b06128a70a50c310a956c0f29a5d0a5d"
+  inputs-digest = "187d21dd0fe26a95533fc263547b33652f92887fe55be438632848a2ca197dcf"
   solver-name = "gps-cdcl"
   solver-version = 1
