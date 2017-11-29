@@ -81,6 +81,12 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 }
 
 func submit(req *http.Request) (*http.Response, error) {
+	req.Header.Add("content-type", "application/json")
+
+	// FIXME dump request on debug loglevel
+	//dump, _ := httputil.DumpRequestOut(req, true)
+	//fmt.Println(string(dump))
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -164,7 +170,8 @@ func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi d
 	// FIXME digest calc should move to httpsignature lib
 	var d digest.DigestInstance
 	d.Hash = crypto.SHA256
-	req.Header.Add("Digest", d.Calculate(unsignedTransaction))
+	d.Calculate(unsignedTransaction)
+	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
 	return req, err
@@ -188,7 +195,15 @@ func (w *UpholdWallet) Transfer(altcurrency altcurrency.AltCurrency, probi decim
 		return nil, err
 	}
 
-	return &wallet.TransactionInfo{probi, altcurrency, destination}, nil
+	var txInfo wallet.TransactionInfo
+	txInfo.Probi = probi
+	{
+		tmp := altcurrency
+		txInfo.AltCurrency = &tmp
+	}
+	txInfo.Destination = destination
+
+	return &txInfo, nil
 }
 
 func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionRequest, error) {
@@ -283,10 +298,17 @@ func (w *UpholdWallet) VerifyTransaction(transactionB64 string) (*wallet.Transac
 	}
 	var info wallet.TransactionInfo
 	info.Probi = transaction.Denomination.Currency.ToProbi(transaction.Denomination.Amount)
-	info.AltCurrency = *transaction.Denomination.Currency
+	{
+		tmp := *transaction.Denomination.Currency
+		info.AltCurrency = &tmp
+	}
 	info.Destination = transaction.Destination
 
 	return &info, err
+}
+
+type UpholdTransactionResponse struct {
+	Status string `json:"status"`
 }
 
 func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
@@ -308,10 +330,20 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 		req.Header.Add(k, v)
 	}
 
-	_, err = submit(req)
+	resp, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	var uhResp UpholdTransactionResponse
+	err = json.Unmarshal(body, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	info.Fee = decimal.Zero
+	info.Status = uhResp.Status
 
 	return info, nil
 }

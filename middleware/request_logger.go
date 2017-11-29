@@ -65,7 +65,7 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 					recStr := fmt.Sprint(rec)
 					packet := raven.NewPacket(
 						recStr,
-						raven.NewException(errors.New(recStr), raven.GetOrNewStacktrace(rec.(error), 2, 3, nil)),
+						raven.NewException(errors.New(recStr), raven.NewStacktrace(2, 3, nil)),
 						raven.NewHttp(r),
 					)
 					raven.Capture(packet, nil)

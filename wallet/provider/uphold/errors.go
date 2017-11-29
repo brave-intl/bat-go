@@ -9,26 +9,30 @@ type UpholdBaseError struct {
 	Message string `json:"message"`
 }
 
-// TODO maybe just use JSON fields?
+// TODO just use json.RawMessage
 
 type UpholdDenominationValidationErrors struct {
 	AmountError []UpholdBaseError `json:"amount, omitempty"`
+	Data        json.RawMessage   `json:",omitempty"`
 }
 
 type UpholdDenominationErrors struct {
 	Code                               string `json:"code"`
 	UpholdDenominationValidationErrors `json:"errors,omitempty"`
+	Data                               json.RawMessage `json:",omitempty"`
 }
 
 type UpholdValidationErrors struct {
 	SignatureError     []UpholdBaseError        `json:"signature, omitempty"`
 	DenominationErrors UpholdDenominationErrors `json:"denomination, omitempty"`
+	Data               json.RawMessage          `json:",omitempty"`
 }
 
 type UpholdError struct {
 	Message          string                 `json:"error,omitempty"`
 	Code             string                 `json:"code"`
 	ValidationErrors UpholdValidationErrors `json:"errors,omitempty"`
+	Data             json.RawMessage        `json:",omitempty"`
 }
 
 type Fuck struct {

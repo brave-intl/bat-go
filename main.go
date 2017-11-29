@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/controllers"
+	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils"
 	"github.com/garyburd/redigo/redis"
@@ -13,6 +16,10 @@ import (
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
 	"github.com/sirupsen/logrus"
+)
+
+var (
+	redisUrl = os.Getenv("REDIS_URL")
 )
 
 func main() {
@@ -40,13 +47,18 @@ func main() {
 	// Also handles panic recovery
 	r.Use(middleware.RequestLogger(logger))
 
+	redisAddress := "localhost:6379"
+	if len(redisUrl) > 0 {
+		redisAddress = strings.TrimPrefix(redisUrl, "redis://")
+	}
 	rp := &redis.Pool{
 		MaxIdle:     3,
 		IdleTimeout: 240 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", "localhost:6379") },
+		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
 	serverCtx = utils.WithRedisPool(serverCtx, rp)
 
+	grant.InitGrantService()
 	r.Mount("/v1/grants", controllers.GrantsRouter())
 	r.Get("/metrics", middleware.Metrics())
 

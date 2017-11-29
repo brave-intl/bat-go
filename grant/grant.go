@@ -11,6 +11,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -33,19 +34,21 @@ var (
 	GrantWalletPrivateKeyHex  = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	GrantWalletCardId         = os.Getenv("GRANT_WALLET_CARD_ID")
 	grantPublicKey            ed25519.PublicKey
-	grantWallet               wallet.Wallet
+	grantWallet               *uphold.UpholdWallet
 	refreshBalance            = true // for testing we can disable balance refresh
 	testSubmit                = true // for testing we can disable testing tx submit
 )
 
 func InitGrantService() error {
 	grantPublicKey, _ = hex.DecodeString(GrantSignatorPublicKeyHex)
+
 	if os.Getenv("ENV") == "production" && refreshBalance != true {
 		return errors.New("refreshBalance must be true in production!!")
 	}
 	if os.Getenv("ENV") == "production" && testSubmit != true {
 		return errors.New("testSubmit must be true in production!!")
 	}
+
 	var info wallet.WalletInfo
 	info.Provider = "uphold"
 	info.ProviderId = GrantWalletCardId
@@ -54,12 +57,18 @@ func InitGrantService() error {
 		info.AltCurrency = &tmp
 	}
 
-	grantWallet, err := uphold.FromWalletInfo(info)
+	var pubKey httpsignature.Ed25519PubKey
+	var privKey ed25519.PrivateKey
+	var err error
+
+	pubKey, _ = hex.DecodeString(GrantWalletPublicKeyHex)
+	privKey, _ = hex.DecodeString(GrantWalletPrivateKeyHex)
+
+	grantWallet, err = uphold.New(info, privKey, pubKey)
 	if err != nil {
 		return err
 	}
-	grantWallet.PubKey, _ = hex.DecodeString(GrantWalletPublicKeyHex)
-	grantWallet.PrivKey, _ = hex.DecodeString(GrantWalletPrivateKeyHex)
+
 	return nil
 }
 
@@ -105,7 +114,7 @@ func FromCompactJWS(s string) (*Grant, error) {
 
 type RedeemGrantsRequest struct {
 	Grants      []string          `json:"grants" valid:"compactjws"`
-	WalletInfo  wallet.WalletInfo `json:"wallet"`
+	WalletInfo  wallet.WalletInfo `json:"wallet" valid:"required"`
 	Transaction string            `json:"transaction" valid:"base64"`
 }
 
@@ -159,7 +168,7 @@ func (req *RedeemGrantsRequest) Verify(ctx context.Context) (*wallet.Transaction
 	if err != nil {
 		return nil, err
 	}
-	if txInfo.AltCurrency != altcurrency.BAT {
+	if *txInfo.AltCurrency != altcurrency.BAT {
 		return nil, errors.New("Only grants submitted with BAT transactions are supported")
 	}
 	if txInfo.Probi.LessThan(decimal.Zero) {
@@ -191,7 +200,7 @@ func (req *RedeemGrantsRequest) Verify(ctx context.Context) (*wallet.Transaction
 			if wallet.IsInvalidSignature(err) {
 				return nil, errors.New("The included transaction was signed with the wrong publicKey!")
 			} else if !wallet.IsInsufficientBalance(err) {
-				return nil, err
+				return nil, errors.New("Error while test submitting the included transaction: " + err.Error())
 			}
 		}
 	}
@@ -249,36 +258,39 @@ func (req *RedeemGrantsRequest) Verify(ctx context.Context) (*wallet.Transaction
 	}
 
 	var redeemTxInfo wallet.TransactionInfo
-	redeemTxInfo.AltCurrency = altcurrency.BAT
+	{
+		tmp := altcurrency.BAT
+		redeemTxInfo.AltCurrency = &tmp
+	}
 	redeemTxInfo.Probi = sumProbi
 	redeemTxInfo.Destination = req.WalletInfo.ProviderId
 	return &redeemTxInfo, nil
 }
 
-func (req *RedeemGrantsRequest) Redeem(ctx context.Context) error {
-	txInfo, err := req.Verify(ctx)
-	_, err = req.Verify(ctx)
+func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
+	grantFulfillmentInfo, err := req.Verify(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// TODO consider early response here, best to avoid exposing any signature timing
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// fund user wallet with probi from grants
-	_, err = grantWallet.Transfer(txInfo.AltCurrency, txInfo.Probi, txInfo.Destination)
+	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// send settlement transaction to wallet provider
-	_, err = userWallet.SubmitTransaction(req.Transaction)
+	settlementInfo, err := userWallet.SubmitTransaction(req.Transaction)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	return settlementInfo, nil
 }

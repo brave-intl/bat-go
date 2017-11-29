@@ -3,14 +3,15 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/go-chi/chi"
 	"github.com/pressly/lg"
-	"io/ioutil"
-	"net/http"
-	"os"
 )
 
 func GrantsRouter() chi.Router {
@@ -50,12 +51,18 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = req.Redeem(r.Context())
+	txInfo, err := req.Redeem(r.Context())
 	if err != nil {
 		errMsg := fmt.Sprintf("Error redeeming grant: %v", err)
 		log.Error(errMsg)
 		// FIXME not all errors are 4xx
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
+		panic(err)
 	}
 }

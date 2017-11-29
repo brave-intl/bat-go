@@ -25,8 +25,12 @@ var hashId = map[string]crypto.Hash{
 	"SHA-512": crypto.SHA512,
 }
 
+func (d *DigestInstance) String() string {
+	return fmt.Sprintf("%s=%s", hashName[d.Hash], d.Digest)
+}
+
 func (d *DigestInstance) MarshalText() (text []byte, err error) {
-	return []byte(fmt.Sprintf("%s=%s", hashName[d.Hash], d.Digest)), nil
+	return []byte(d.String()), nil
 }
 
 func (d *DigestInstance) UnmarshalText(text []byte) (err error) {
@@ -47,7 +51,8 @@ func (d *DigestInstance) Calculate(b []byte) string {
 	hash := d.New()
 	hash.Write(b)
 	var out []byte
-	return base64.StdEncoding.EncodeToString(hash.Sum(out))
+	d.Digest = base64.StdEncoding.EncodeToString(hash.Sum(out))
+	return d.Digest
 }
 
 func (d *DigestInstance) Verify(b []byte) bool {

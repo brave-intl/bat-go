@@ -6,20 +6,21 @@ import (
 )
 
 type WalletInfo struct {
-	Id          string                   `json:"paymentId" valid:"uuidv4"`
+	Id          string                   `json:"paymentId" valid:"uuidv4,optional"`
 	Provider    string                   `json:"provider" valid:"in(uphold)"`
-	ProviderId  string                   `json:"providerId"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey   string                   `json:"publicKey,omitempty"`
-	LastBalance *Balance                 `json:"balances,omitempty"`
+	ProviderId  string                   `json:"providerId" valid:"uuidv4"`
+	AltCurrency *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
+	PublicKey   string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional"`
+	LastBalance *Balance                 `json:"balances,omitempty" valid:"-"`
 }
 
 type TransactionInfo struct {
-	Probi       decimal.Decimal
-	AltCurrency altcurrency.AltCurrency
-	Destination string
+	Probi       decimal.Decimal          `json:"probi"`
+	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
+	Destination string                   `json:"address"`
+	Fee         decimal.Decimal          `json:"fee"`
+	Status      string                   `json:"status"`
 	// Status
-	// Fees
 	// Hash
 }
 

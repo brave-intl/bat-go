@@ -10,7 +10,7 @@ import (
 	"unicode"
 
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/shopspring/decimal"
 )
 
@@ -105,10 +105,20 @@ func GetBTCAddressVersion(str string) int {
 	return int(version)
 }
 
+// Copied from https://github.com/ethereum/go-ethereum/, licensed under the GNU General Public License v3.0
+// Keccak256 calculates and returns the Keccak256 hash of the input data.
+func Keccak256(data ...[]byte) []byte {
+	d := sha3.NewKeccak256()
+	for _, b := range data {
+		d.Write(b)
+	}
+	return d.Sum(nil)
+}
+
 func ToChecksumETHAddress(str string) string {
 	lower := strings.Replace(strings.ToLower(str), "0x", "", 1)
 	lowerBytes := []byte(lower)
-	hash := crypto.Keccak256([]byte(lower))
+	hash := Keccak256([]byte(lower))
 	hashHex := make([]byte, hex.EncodedLen(len(hash)))
 	hex.Encode(hashHex, hash)
 
