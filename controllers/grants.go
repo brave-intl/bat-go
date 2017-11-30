@@ -36,7 +36,6 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) {
 
 	var req grant.RedeemGrantsRequest
 	err = json.Unmarshal(body, &req)
-	log.Info(req)
 	if err != nil {
 		errMsg := fmt.Sprintf("Error unmarshalling body: %v", err)
 		log.Error(errMsg)
