@@ -56,7 +56,8 @@ func (d *DigestInstance) Calculate(b []byte) string {
 }
 
 func (d *DigestInstance) Verify(b []byte) bool {
-	expected := d.Calculate(b)
+	tmp := *d
+	expected := tmp.Calculate(b)
 	if d.Digest != expected {
 		return false
 	}

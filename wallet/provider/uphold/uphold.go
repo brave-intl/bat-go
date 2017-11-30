@@ -291,6 +291,9 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 	return &transaction, nil
 }
 
+// NOTE VerifyTransaction guards against transactions that seek to exploit parser differences
+// such as including additional fields that are not understood by this implementation but may
+// be understood by the upstream wallet provider. See DecodeTransaction for details.
 func (w *UpholdWallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
 	transaction, err := w.DecodeTransaction(transactionB64)
 	if err != nil {
@@ -321,23 +324,33 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 	var signedTx httpsignature.HttpSignedRequest
 	json.Unmarshal(b, &signedTx)
 
-	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions?commit=true", bytes.NewBufferString(signedTx.Body))
+	var headers http.Header
+	var body io.ReadCloser
+	{
+		_, req, err := signedTx.Extract()
+		if err != nil {
+			return nil, err
+		}
+		headers = req.Header
+		body = req.Body
+	}
+
+	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions?commit=true", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range signedTx.Headers {
-		req.Header.Add(k, v)
-	}
+	req.Header = headers
+	req.Body = body
 
 	resp, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	respBody, _ := ioutil.ReadAll(resp.Body)
 	var uhResp UpholdTransactionResponse
-	err = json.Unmarshal(body, &uhResp)
+	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
 		return nil, err
 	}

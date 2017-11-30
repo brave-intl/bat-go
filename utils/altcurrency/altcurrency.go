@@ -14,6 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// FIXME change this to a struct instead of a type alias?
 type AltCurrency int
 
 const (

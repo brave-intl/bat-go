@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"golang.org/x/net/lex/httplex"
 )
 
 type SignatureParams struct {
@@ -204,6 +206,13 @@ func (sr *HttpSignedRequest) Extract() (*Signature, *http.Request, error) {
 	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
 	r.Header = http.Header{}
 	for k, v := range sr.Headers {
+		if !httplex.ValidHeaderFieldName(k) {
+			return nil, nil, errors.New("invalid encapsulated header name")
+		}
+		if !httplex.ValidHeaderFieldValue(v) {
+			return nil, nil, errors.New("invalid encapsulated header value")
+		}
+
 		if k == RequestTarget {
 			// TODO
 			return nil, nil, errors.New(fmt.Sprintf("%s pseudo-header not implemented", RequestTarget))

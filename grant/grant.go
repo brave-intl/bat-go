@@ -287,6 +287,10 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	}
 
 	// send settlement transaction to wallet provider
+	//
+	// NOTE Verify (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
+	// such as including additional fields that are not understood by this wallet provider implementation but may
+	// be understood by the upstream wallet provider.
 	settlementInfo, err := userWallet.SubmitTransaction(req.Transaction)
 	if err != nil {
 		return nil, err

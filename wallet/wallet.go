@@ -34,6 +34,9 @@ type Balance struct {
 type Wallet interface {
 	GetWalletInfo() WalletInfo
 	Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*TransactionInfo, error)
+	// NOTE VerifyTransaction must guard against transactions that seek to exploit parser differences
+	// such as including additional fields that are not understood by local implementation but may
+	// be understood by the upstream wallet provider.
 	VerifyTransaction(transactionB64 string) (*TransactionInfo, error)
 	SubmitTransaction(transactionB64 string) (*TransactionInfo, error)
 	GetBalance(refresh bool) (*Balance, error)
