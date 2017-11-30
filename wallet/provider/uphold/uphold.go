@@ -340,6 +340,10 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 		return nil, err
 	}
 
+	// Copy headers added from newRequest
+	for k, _ := range req.Header {
+		headers.Set(k, req.Header.Get(k))
+	}
 	req.Header = headers
 	req.Body = body
 
