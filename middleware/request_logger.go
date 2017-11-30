@@ -50,6 +50,11 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.EscapedPath() == "/metrics" { // Skip logging prometheus metric scrapes
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			entry := httpLogger.NewLogEntry(r)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
