@@ -1,9 +1,10 @@
 package middleware
 
 import (
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
 )
 
 var (
@@ -46,8 +47,7 @@ var (
 	)
 )
 
-// FIXME
-func InstrumentedRoundTripper(service string) http.RoundTripper {
+func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http.RoundTripper {
 	inFlightGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "client_in_flight_requests",
 		Help:        "A gauge of in-flight requests for the wrapped client.",
@@ -122,11 +122,11 @@ func InstrumentedRoundTripper(service string) http.RoundTripper {
 		},
 	}
 
-	// Wrap the default RoundTripper with middleware.
+	// Wrap the specified RoundTripper with middleware.
 	return promhttp.InstrumentRoundTripperInFlight(inFlightGauge,
 		promhttp.InstrumentRoundTripperCounter(counter,
 			promhttp.InstrumentRoundTripperTrace(trace,
-				promhttp.InstrumentRoundTripperDuration(histVec, http.DefaultTransport),
+				promhttp.InstrumentRoundTripperDuration(histVec, roundTripper),
 			),
 		),
 	)

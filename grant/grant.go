@@ -239,22 +239,19 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, errors.New("Included transactions must have settlement as their destination")
 	}
 
+	var submitId string
 	if testSubmit {
 		// TODO remove this once we can retrieve publicKey info from uphold
-		// NOTE We check the signature on the included transaction by attempting to submit it.
-		//      We rely on the fact that uphold verifies signatures before doing balance checking.
-		//      We are expecting a balance error, if we get a signature error we have
-		//      the wrong publicKey.
-		_, err = userWallet.SubmitTransaction(req.Transaction)
-		if err == nil {
-			return nil, errors.New("An included transaction unexpectedly succeeded")
-		} else {
+		// NOTE We check the signature on the included transaction by submitting it but not confirming it
+		submitInfo, err := userWallet.SubmitTransaction(req.Transaction, false)
+		if err != nil {
 			if wallet.IsInvalidSignature(err) {
 				return nil, errors.New("The included transaction was signed with the wrong publicKey!")
 			} else if !wallet.IsInsufficientBalance(err) {
 				return nil, errors.New("Error while test submitting the included transaction: " + err.Error())
 			}
 		}
+		submitId = submitInfo.ID
 	}
 
 	// 3. Sort decoded grants, largest probi to smallest
@@ -346,6 +343,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	}
 	redeemTxInfo.Probi = sumProbi
 	redeemTxInfo.Destination = req.WalletInfo.ProviderId
+	redeemTxInfo.ID = submitId
 	return &redeemTxInfo, nil
 }
 
@@ -355,7 +353,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 		return nil, err
 	}
 
-	// TODO consider early response here, best to avoid exposing any signature timing
+	submitId := grantFulfillmentInfo.ID
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
@@ -368,12 +366,12 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 		return nil, err
 	}
 
-	// send settlement transaction to wallet provider
+	// confirm settlement transaction previously sent to wallet provider
 	//
 	// NOTE VerifyAndConsume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
 	// such as including additional fields that are not understood by this wallet provider implementation but may
 	// be understood by the upstream wallet provider.
-	settlementInfo, err := userWallet.SubmitTransaction(req.Transaction)
+	settlementInfo, err := userWallet.ConfirmTransaction(submitId)
 	if err != nil {
 		return nil, err
 	}
