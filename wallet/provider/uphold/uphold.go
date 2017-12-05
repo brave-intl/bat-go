@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -94,8 +93,6 @@ func submit(req *http.Request) (*http.Response, error) {
 	//dump, _ := httputil.DumpRequestOut(req, true)
 	//fmt.Println(string(dump))
 
-	log.Println(req.URL.String())
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -159,7 +156,7 @@ type TransactionRequest struct {
 	Destination  string       `json:"destination"`
 }
 
-func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
+func (w *UpholdWallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
 	transferReq := TransactionRequest{Denomination{altcurrency.FromProbi(probi), &altcurrency}, destination}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
@@ -187,7 +184,7 @@ func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi d
 }
 
 func (w *UpholdWallet) EncapsulateTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*httpsignature.HttpSignedRequest, error) {
-	req, err := w.SignTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +192,7 @@ func (w *UpholdWallet) EncapsulateTransfer(altcurrency altcurrency.AltCurrency, 
 }
 
 func (w *UpholdWallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
-	req, err := w.SignTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination)
 	if err != nil {
 		return nil, err
 	}
