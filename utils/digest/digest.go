@@ -2,15 +2,16 @@ package digest
 
 import (
 	"crypto"
-	_ "crypto/sha256"
-	_ "crypto/sha512"
+	_ "crypto/sha256" // Needed since crypto.SHA256 does not actually pull in implementation
+	_ "crypto/sha512" // Needed since crypto.SHA512 does not actually pull in implementation
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 )
 
-type DigestInstance struct {
+// Instance consists of the hash type and an internal digest value
+type Instance struct {
 	crypto.Hash
 	Digest string
 }
@@ -20,44 +21,58 @@ var hashName = map[crypto.Hash]string{
 	crypto.SHA512: "SHA-512",
 }
 
-var hashId = map[string]crypto.Hash{
+var hashID = map[string]crypto.Hash{
 	"SHA-256": crypto.SHA256,
 	"SHA-512": crypto.SHA512,
 }
 
-func (d *DigestInstance) String() string {
+// Return a string representation digest in HTTP Digest header format
+func (d *Instance) String() string {
 	return fmt.Sprintf("%s=%s", hashName[d.Hash], d.Digest)
 }
 
-func (d *DigestInstance) MarshalText() (text []byte, err error) {
+// MarshalText returns the marshalled digest in HTTP Digest header format
+func (d *Instance) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
 
-func (d *DigestInstance) UnmarshalText(text []byte) (err error) {
+// UnmarshalText parses the digest from HTTP Digest header format
+func (d *Instance) UnmarshalText(text []byte) (err error) {
 	s := strings.SplitN(string(text), "=", 2)
 	if len(s) != 2 {
 		return errors.New("A valid digest specifier must consist of two parts separated by =")
 	}
 	var exists bool
-	d.Hash, exists = hashId[s[0]]
+	d.Hash, exists = hashID[s[0]]
 	if !exists {
-		return errors.New(fmt.Sprintf("The digest algorithm %s is not supported", s[0]))
+		return fmt.Errorf("The digest algorithm %s is not supported", s[0])
 	}
 	d.Digest = s[1]
 	return nil
 }
 
-func (d *DigestInstance) Calculate(b []byte) string {
+// Calculate but do not update the internal digest value for b.
+// Subsequent calls to MarshalText, String, etc will not use the returned value.
+func (d *Instance) Calculate(b []byte) string {
 	hash := d.New()
-	hash.Write(b)
+	_, err := hash.Write(b)
+	if err != nil {
+		panic(err)
+	}
 	var out []byte
-	d.Digest = base64.StdEncoding.EncodeToString(hash.Sum(out))
-	return d.Digest
+	return base64.StdEncoding.EncodeToString(hash.Sum(out))
 }
 
-func (d *DigestInstance) Verify(b []byte) bool {
-	tmp := *d
-	expected := tmp.Calculate(b)
+// Update (after calculating) the internal digest value for b.
+// Subsequent calls to MarshalText, String, etc will use the updated value.
+func (d *Instance) Update(b []byte) {
+	d.Digest = d.Calculate(b)
+}
+
+// Verify by calculating the digest value for b and checking against the internal digest value.
+// Returns true if the digest values match.
+func (d *Instance) Verify(b []byte) bool {
+	expected := d.Calculate(b)
 	if d.Digest != expected {
 		return false
 	}

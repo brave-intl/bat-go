@@ -1,6 +1,8 @@
 package datastore
 
 import (
+	"strconv"
+
 	"github.com/garyburd/redigo/redis"
 )
 
@@ -30,4 +32,49 @@ func (set *RedisSet) Add(e string) (bool, error) {
 }
 func (set *RedisSet) Close() error {
 	return (*set.conn).Close()
+}
+
+type RedisKv struct {
+	conn *redis.Conn
+}
+
+func GetRedisKv(conn *redis.Conn) RedisKv {
+	return RedisKv{conn: conn}
+}
+
+func (store *RedisKv) Set(key string, value string, ttl int, upsert bool) (bool, error) {
+	var ret string
+	var err error
+
+	if ttl < 0 {
+		if upsert {
+			ret, err = redis.String((*store.conn).Do("SET", key, value))
+		} else {
+			ret, err = redis.String((*store.conn).Do("SET", key, value, "NX"))
+		}
+	} else {
+		if upsert {
+			ret, err = redis.String((*store.conn).Do("SET", key, value, "EX", strconv.Itoa(ttl)))
+		} else {
+			ret, err = redis.String((*store.conn).Do("SET", key, value, "NX", "EX", strconv.Itoa(ttl)))
+		}
+	}
+
+	return ret == "OK", err
+}
+
+func (store *RedisKv) Get(key string) (string, error) {
+	return redis.String((*store.conn).Do("GET", key))
+}
+
+func (store *RedisKv) Delete(key string) (bool, error) {
+	n, err := redis.Int((*store.conn).Do("DEL", key))
+	if n != 0 {
+		return true, err
+	}
+	return false, err
+}
+
+func (store *RedisKv) Close() error {
+	return (*store.conn).Close()
 }

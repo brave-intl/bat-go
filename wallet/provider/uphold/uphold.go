@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -86,6 +87,8 @@ func submit(req *http.Request) (*http.Response, error) {
 	// FIXME dump request on debug loglevel
 	//dump, _ := httputil.DumpRequestOut(req, true)
 	//fmt.Println(string(dump))
+
+	log.Println(req.URL.String())
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -168,9 +171,9 @@ func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi d
 	s.Headers = []string{"digest"}
 
 	// FIXME digest calc should move to httpsignature lib
-	var d digest.DigestInstance
+	var d digest.Instance
 	d.Hash = crypto.SHA256
-	d.Calculate(unsignedTransaction)
+	d.Update(unsignedTransaction)
 	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
@@ -223,7 +226,7 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 		return nil, errors.New("A transaction signature must cover the request body via digest")
 	}
 
-	var digest digest.DigestInstance
+	var digest digest.Instance
 	err = digest.UnmarshalText([]byte(digestHeader))
 	if err != nil {
 		return nil, err

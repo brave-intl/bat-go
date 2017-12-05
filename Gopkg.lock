@@ -14,12 +14,6 @@
   revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/btcsuite/btcd"
-  packages = ["btcec"]
-  revision = "8cea3866d0f7fb12d567a20744942c0d078c7d15"
-
-[[projects]]
   name = "github.com/btcsuite/btcutil"
   packages = ["base58"]
   revision = "ff82dacded1c76d101bce55c394c03c0bbff69e8"
@@ -33,7 +27,7 @@
 
 [[projects]]
   name = "github.com/ethereum/go-ethereum"
-  packages = ["common","common/hexutil","common/math","crypto","crypto/secp256k1","crypto/sha3","rlp"]
+  packages = ["crypto/sha3"]
   revision = "1db4ecdc0b9e828ff65777fb466fc7c1d04e0de9"
   version = "v1.7.2"
 
@@ -135,9 +129,21 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/net"
+  packages = ["idna","lex/httplex"]
+  revision = "a8b9294777976932365dabb6640cf1468d95c70f"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix","windows"]
   revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/text"
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
+  revision = "75cc3cad82b5f47d3fb229ddda8c5167da14f294"
 
 [[projects]]
   name = "gopkg.in/square/go-jose.v2"
@@ -148,6 +154,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "187d21dd0fe26a95533fc263547b33652f92887fe55be438632848a2ca197dcf"
+  inputs-digest = "6185fc1d2b2fd8d9cc3240215b7137c8a48fbb1c3b28f36a87c0efec9a6b0077"
   solver-name = "gps-cdcl"
   solver-version = 1
