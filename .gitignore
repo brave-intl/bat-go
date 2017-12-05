@@ -9,3 +9,6 @@
 # Project specific ignores
 vendor
 bat-go*
+grantTokens.json
+bin/*/*
+!bin/*/main.go

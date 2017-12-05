@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -35,6 +36,17 @@ var validWeeks = flag.Uint("valid-weeks", defaultValidWeeks, "weeks after the ma
 var expiryDateStr = flag.String("expiry-date", "", "datetime when tokens should expire [ISO 8601, conflicts with -valid-duration]")
 var promotionId = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
 var outputFile = flag.String("out", "./grantTokens.json", "output file path")
+
+type promotionInfo struct {
+	ID       uuid.UUID `json:"promotionId"`
+	Priority int       `json:"priority"`
+	Active   bool      `json:"active"`
+}
+
+type grantRegistration struct {
+	Grants     []string        `json:"grants"`
+	Promotions []promotionInfo `json:"promotions"`
+}
 
 func main() {
 	var err error
@@ -109,7 +121,7 @@ func main() {
 		}
 	}
 
-	//grants := make([]grant.Grant, numGrants, numGrants)
+	grants := make([]string, 0, *numGrants)
 	for i := 0; i < int(*numGrants); i++ {
 		var grant grant.Grant
 		grant.AltCurrency = &altCurrency
@@ -131,6 +143,17 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Println(serializedJWS)
+		grants = append(grants, serializedJWS)
+	}
+	var grantReg grantRegistration
+	grantReg.Grants = grants
+	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUuid, 0, false}}
+	serializedGrants, err := json.Marshal(grantReg)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	err = ioutil.WriteFile(*outputFile, serializedGrants, 0600)
+	if err != nil {
+		log.Fatalln(err)
 	}
 }
