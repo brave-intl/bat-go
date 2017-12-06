@@ -15,6 +15,7 @@ import (
 
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	registerGrantInstrumentation = false
 	InitGrantService()
 
 	expectedGrantJSON := []byte(`{"altcurrency":"BAT","grantId":"9614ade7-58af-4df0-86c6-2f70051b43de","probi":"30000000000000000000","promotionId":"880309fc-df27-40a8-8d51-9cf39885e61d","maturityTime":1511769862,"expiryTime":1513843462}`)
@@ -40,11 +41,12 @@ func TestFromCompactJWS(t *testing.T) {
 	// TODO add incorrect signature tests
 }
 
-func TestVerify(t *testing.T) {
+func TestVerifyAndConsume(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	SettlementDestination = "foo@bar.com"
 	refreshBalance = false
 	testSubmit = false
+	registerGrantInstrumentation = false
 	InitGrantService()
 
 	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI5NjE0YWRlNy01OGFmLTRkZjAtODZjNi0yZjcwMDUxYjQzZGUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.OOEBJUHPE21OyFw5Vq1tRTxYQc7aEL-KL5Lb4nb1TZn_3LFkXEPY7bNo0GhJ6k9X2UkZ19rnfBbpXHKuqBupDA"}
@@ -65,14 +67,23 @@ func TestVerify(t *testing.T) {
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 	ctx = context.WithValue(ctx, "datastore.set", "slice")
+	ctx = context.WithValue(ctx, "datastore.kv", "map")
 
 	request := RedeemGrantsRequest{grants, walletInfo, transaction}
-	_, err := request.Verify(ctx)
+	_, err := request.VerifyAndConsume(ctx)
+	if err == nil {
+		t.Error("Should not be able to redeem without a valid claim on a grant")
+	}
+
+	claimReq := ClaimGrantRequest{walletInfo}
+	claimReq.Claim(ctx, "9614ade7-58af-4df0-86c6-2f70051b43de")
+
+	_, err = request.VerifyAndConsume(ctx)
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = request.Verify(ctx)
+	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("expected re-redeem with the same grant to fail")
 	}
@@ -80,8 +91,11 @@ func TestVerify(t *testing.T) {
 	// another grant from the same promotionId
 	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiJmODdlN2ZiNC0wZjgwLTQwYWQtYjA5Mi04NGY3MGU0NDg0MjEiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.AZ13bwEbmIt-ji2gWqg4ofRd1dQ8D1h0BnypWkg_AsKlfU5ne3LcSnfsMkamwv_0Vz4OgApwDl5feC2lMRHFDg"}
 
+	// claim this grant as well to ensure we are testing re-redeem with same wallet and promotion
+	claimReq.Claim(ctx, "f87e7fb4-0f80-40ad-b092-84f70e448421")
+
 	request = RedeemGrantsRequest{grants, walletInfo, transaction}
-	_, err = request.Verify(ctx)
+	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("expected re-redeem with the same wallet and promotion to fail")
 	}

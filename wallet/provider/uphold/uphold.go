@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/digest"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
@@ -39,9 +40,14 @@ var (
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
 	}[environment]
-	client = &http.Client{
-		Timeout:   time.Second * 10,
-		Transport: middleware.InstrumentedRoundTripper("uphold"),
+
+	upholdCertFingerprint = "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc="
+	client                = &http.Client{
+		Timeout: time.Second * 10,
+		Transport: middleware.InstrumentRoundTripper(
+			&http.Transport{
+				DialTLS: pindialer.MakeDialer(upholdCertFingerprint),
+			}, "uphold"),
 	}
 )
 
@@ -150,7 +156,7 @@ type TransactionRequest struct {
 	Destination  string       `json:"destination"`
 }
 
-func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
+func (w *UpholdWallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
 	transferReq := TransactionRequest{Denomination{altcurrency.FromProbi(probi), &altcurrency}, destination}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
@@ -168,9 +174,9 @@ func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi d
 	s.Headers = []string{"digest"}
 
 	// FIXME digest calc should move to httpsignature lib
-	var d digest.DigestInstance
+	var d digest.Instance
 	d.Hash = crypto.SHA256
-	d.Calculate(unsignedTransaction)
+	d.Update(unsignedTransaction)
 	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
@@ -178,7 +184,7 @@ func (w *UpholdWallet) SignTransfer(altcurrency altcurrency.AltCurrency, probi d
 }
 
 func (w *UpholdWallet) EncapsulateTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*httpsignature.HttpSignedRequest, error) {
-	req, err := w.SignTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +192,7 @@ func (w *UpholdWallet) EncapsulateTransfer(altcurrency altcurrency.AltCurrency, 
 }
 
 func (w *UpholdWallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
-	req, err := w.SignTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +229,7 @@ func (w *UpholdWallet) DecodeTransaction(transactionB64 string) (*TransactionReq
 		return nil, errors.New("A transaction signature must cover the request body via digest")
 	}
 
-	var digest digest.DigestInstance
+	var digest digest.Instance
 	err = digest.UnmarshalText([]byte(digestHeader))
 	if err != nil {
 		return nil, err
@@ -310,11 +316,19 @@ func (w *UpholdWallet) VerifyTransaction(transactionB64 string) (*wallet.Transac
 	return &info, err
 }
 
-type UpholdTransactionResponse struct {
-	Status string `json:"status"`
+type UpholdTransactionResponseDestination struct {
+	Type   string `json:"type"`
+	CardID string `json:"CardId"`
 }
 
-func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
+type UpholdTransactionResponse struct {
+	Status       string                               `json:"status"`
+	ID           string                               `json:"id"`
+	Denomination Denomination                         `json:"denomination"`
+	Destination  UpholdTransactionResponseDestination `json:"destination"`
+}
+
+func (w *UpholdWallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet.TransactionInfo, error) {
 	info, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
@@ -335,7 +349,11 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 		body = req.Body
 	}
 
-	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions?commit=true", nil)
+	url := "/v0/me/cards/" + w.ProviderId + "/transactions"
+	if confirm {
+		url = url + "?commit=true"
+	}
+	req, err := newRequest("POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -361,8 +379,44 @@ func (w *UpholdWallet) SubmitTransaction(transactionB64 string) (*wallet.Transac
 
 	info.Fee = decimal.Zero
 	info.Status = uhResp.Status
+	info.ID = uhResp.ID
 
 	return info, nil
+}
+
+func (w *UpholdWallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) {
+	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderId+"/transactions/"+id+"/commit", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+	var uhResp UpholdTransactionResponse
+	err = json.Unmarshal(respBody, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	if uhResp.Destination.Type != "card" {
+		panic("Confirming a non-card transaction is not supported!!!")
+	}
+
+	var txInfo wallet.TransactionInfo
+	txInfo.Probi = uhResp.Denomination.Currency.ToProbi(uhResp.Denomination.Amount)
+	{
+		tmp := *uhResp.Denomination.Currency
+		txInfo.AltCurrency = &tmp
+	}
+	txInfo.Destination = uhResp.Destination.CardID
+	txInfo.Fee = decimal.Zero
+	txInfo.Status = uhResp.Status
+	txInfo.ID = uhResp.ID
+
+	return &txInfo, nil
 }
 
 func (w *UpholdWallet) GetBalance(refresh bool) (*wallet.Balance, error) {

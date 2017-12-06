@@ -20,8 +20,7 @@ type TransactionInfo struct {
 	Destination string                   `json:"address"`
 	Fee         decimal.Decimal          `json:"fee"`
 	Status      string                   `json:"status"`
-	// Status
-	// Hash
+	ID          string                   `json:"id"`
 }
 
 type Balance struct {
@@ -38,7 +37,8 @@ type Wallet interface {
 	// such as including additional fields that are not understood by local implementation but may
 	// be understood by the upstream wallet provider.
 	VerifyTransaction(transactionB64 string) (*TransactionInfo, error)
-	SubmitTransaction(transactionB64 string) (*TransactionInfo, error)
+	SubmitTransaction(transactionB64 string, confirm bool) (*TransactionInfo, error)
+	ConfirmTransaction(id string) (*TransactionInfo, error)
 	GetBalance(refresh bool) (*Balance, error)
 }
 

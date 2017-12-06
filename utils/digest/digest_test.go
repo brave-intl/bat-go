@@ -6,7 +6,7 @@ import (
 )
 
 func TestMarshalText(t *testing.T) {
-	var d DigestInstance
+	var d Instance
 	d.Hash = crypto.SHA256
 	d.Digest = "=FOOBAR=="
 	b, err := d.MarshalText()
@@ -19,7 +19,7 @@ func TestMarshalText(t *testing.T) {
 }
 
 func TestUnmarshalText(t *testing.T) {
-	var expected, d DigestInstance
+	var expected, d Instance
 	expected.Hash = crypto.SHA256
 	expected.Digest = "=FOOBAR=="
 
@@ -35,7 +35,7 @@ func TestUnmarshalText(t *testing.T) {
 
 func TestCalculate(t *testing.T) {
 	expected := "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek="
-	var d DigestInstance
+	var d Instance
 	d.Hash = crypto.SHA256
 	out := d.Calculate([]byte("hello world"))
 	if out != expected {
@@ -43,8 +43,18 @@ func TestCalculate(t *testing.T) {
 	}
 }
 
+func TestUpdate(t *testing.T) {
+	expected := "uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek="
+	var d Instance
+	d.Hash = crypto.SHA256
+	d.Update([]byte("hello world"))
+	if d.Digest != expected {
+		t.Error("Incorrect update")
+	}
+}
+
 func TestVerify(t *testing.T) {
-	var d DigestInstance
+	var d Instance
 	err := d.UnmarshalText([]byte("SHA-256=uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek="))
 	if err != nil {
 		t.Error("Unexpected error during unmarshal")

@@ -228,7 +228,7 @@ func Encapsulate(req *http.Request) (*HttpSignedRequest, error) {
 	for k, values := range req.Header {
 		enc.Headers[k] = strings.Join(values, ", ")
 	}
-	// FIXME
+	// TODO implement pseudo-header
 	//enc.Headers[RequestTarget] =
 	bodyBytes, _ := ioutil.ReadAll(req.Body)
 	enc.Body = string(bodyBytes)
