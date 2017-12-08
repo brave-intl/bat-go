@@ -4,10 +4,12 @@ import (
 	"errors"
 )
 
+// Algorithm is an enum-like representing an algorithm that can be used for http signatures
 type Algorithm int
 
 const (
-	INVALID Algorithm = iota
+	invalid Algorithm = iota
+	// ED25519 EdDSA
 	ED25519
 )
 
@@ -15,7 +17,7 @@ var algorithmName = map[Algorithm]string{
 	ED25519: "ed25519",
 }
 
-var algorithmId = map[string]Algorithm{
+var algorithmID = map[string]Algorithm{
 	"ed25519": ED25519,
 }
 
@@ -23,18 +25,19 @@ func (a Algorithm) String() string {
 	return algorithmName[a]
 }
 
+// MarshalText marshalls the algorithm into text.
 func (a *Algorithm) MarshalText() (text []byte, err error) {
-	if *a == INVALID {
+	if *a == invalid {
 		return nil, errors.New("Not a supported algorithm")
 	}
 	text = []byte(a.String())
 	return
 }
 
+// UnmarshalText unmarshalls the algorithm from text.
 func (a *Algorithm) UnmarshalText(text []byte) (err error) {
-	s := string(text)
 	var exists bool
-	*a, exists = algorithmId[s]
+	*a, exists = algorithmID[string(text)]
 	if !exists {
 		return errors.New("Not a supported algorithm")
 	}

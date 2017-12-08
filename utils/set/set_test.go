@@ -6,24 +6,24 @@ import (
 
 func TestUnsafeSliceSet(t *testing.T) {
 	set := NewUnsafeSliceSet()
-	if r, _ := set.Add("FOO"); r != true {
+	if r, _ := set.Add("FOO"); !r {
 		t.Error("Add to empty set should always succeed")
 	}
-	if r, _ := set.Contains("FOO"); r != true {
+	if r, _ := set.Contains("FOO"); !r {
 		t.Error("Set should contain last added element")
 	}
 
-	if r, _ := set.Add("FOO"); r != false {
+	if r, _ := set.Add("FOO"); r {
 		t.Error("Re-add of same element should fail")
 	}
 
-	if r, _ := set.Add("BAR"); r != true {
+	if r, _ := set.Add("BAR"); !r {
 		t.Error("Add to empty set should always succeed")
 	}
-	if r, _ := set.Contains("BAR"); r != true {
+	if r, _ := set.Contains("BAR"); !r {
 		t.Error("Set should contain last added element")
 	}
-	if r, _ := set.Contains("FOO"); r != true {
+	if r, _ := set.Contains("FOO"); !r {
 		t.Error("Set should contain all added elements")
 	}
 
@@ -34,24 +34,24 @@ func TestUnsafeSliceSet(t *testing.T) {
 
 func TestSliceSet(t *testing.T) {
 	set := NewSliceSet()
-	if r, _ := set.Add("FOO"); r != true {
+	if r, _ := set.Add("FOO"); !r {
 		t.Error("Add to empty set should always succeed")
 	}
-	if r, _ := set.Contains("FOO"); r != true {
+	if r, _ := set.Contains("FOO"); !r {
 		t.Error("Set should contain last added element")
 	}
 
-	if r, _ := set.Add("FOO"); r != false {
+	if r, _ := set.Add("FOO"); r {
 		t.Error("Re-add of same element should fail")
 	}
 
-	if r, _ := set.Add("BAR"); r != true {
+	if r, _ := set.Add("BAR"); !r {
 		t.Error("Add to empty set should always succeed")
 	}
-	if r, _ := set.Contains("BAR"); r != true {
+	if r, _ := set.Contains("BAR"); !r {
 		t.Error("Set should contain last added element")
 	}
-	if r, _ := set.Contains("FOO"); r != true {
+	if r, _ := set.Contains("FOO"); !r {
 		t.Error("Set should contain all added elements")
 	}
 

@@ -26,7 +26,7 @@ const (
 	defaultValidWeeks = 24
 )
 
-var GrantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
+var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
 
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
 var value = flag.Uint("value", 30, "value for the grant [nominal units, not probi]")
@@ -34,7 +34,7 @@ var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
 var maturityDateStr = flag.String("maturity-date", "now", "datetime when tokens should become redeemable [ISO 8601]")
 var validWeeks = flag.Uint("valid-weeks", defaultValidWeeks, "weeks after the maturity date that tokens are valid before expiring [conflicts with -expiry-date]")
 var expiryDateStr = flag.String("expiry-date", "", "datetime when tokens should expire [ISO 8601, conflicts with -valid-duration]")
-var promotionId = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
+var promotionID = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
 var outputFile = flag.String("out", "./grantTokens.json", "output file path")
 
 type promotionInfo struct {
@@ -84,20 +84,20 @@ func main() {
 		expiryDate = maturityDate.AddDate(0, 0, int(*validWeeks))
 	}
 
-	promotionUuid := uuid.NewV4()
-	if *promotionId != generated {
-		promotionUuid, err = uuid.FromString(*promotionId)
+	promotionUUID := uuid.NewV4()
+	if *promotionID != generated {
+		promotionUUID, err = uuid.FromString(*promotionID)
 		if err != nil {
-			log.Fatalf("%s is not a valid uuidv4\n", promotionId)
+			log.Fatalf("%s is not a valid uuidv4\n", *promotionID)
 		}
 	}
 
-	if len(GrantSignatorPrivateKeyHex) == 0 {
+	if len(grantSignatorPrivateKeyHex) == 0 {
 		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
 	}
 
 	var grantPrivateKey ed25519.PrivateKey
-	grantPrivateKey, err = hex.DecodeString(GrantSignatorPrivateKeyHex)
+	grantPrivateKey, err = hex.DecodeString(grantSignatorPrivateKeyHex)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -107,7 +107,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	fmt.Printf("Will create %d tokens worth %d %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUuid, maturityDate.String(), expiryDate.String())
+	fmt.Printf("Will create %d tokens worth %d %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("Continue? (y/n): ")
@@ -125,21 +125,24 @@ func main() {
 	for i := 0; i < int(*numGrants); i++ {
 		var grant grant.Grant
 		grant.AltCurrency = &altCurrency
-		grant.GrantId = uuid.NewV4()
+		grant.GrantID = uuid.NewV4()
 		grant.Probi = altCurrency.ToProbi(decimal.New(int64(*value), 0))
-		grant.PromotionId = promotionUuid
+		grant.PromotionID = promotionUUID
 		grant.MaturityTimestamp = maturityDate.Unix()
 		grant.ExpiryTimestamp = expiryDate.Unix()
 
-		serializedGrant, err := json.Marshal(grant)
+		var serializedGrant []byte
+		serializedGrant, err = json.Marshal(grant)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		jws, err := signer.Sign(serializedGrant)
+		var jws *jose.JSONWebSignature
+		jws, err = signer.Sign(serializedGrant)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		serializedJWS, err := jws.CompactSerialize()
+		var serializedJWS string
+		serializedJWS, err = jws.CompactSerialize()
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -147,7 +150,7 @@ func main() {
 	}
 	var grantReg grantRegistration
 	grantReg.Grants = grants
-	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUuid, 0, false}}
+	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUUID, 0, false}}
 	serializedGrants, err := json.Marshal(grantReg)
 	if err != nil {
 		log.Fatalln(err)

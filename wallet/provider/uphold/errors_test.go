@@ -6,9 +6,9 @@ import (
 )
 
 func TestInsufficientBalance(t *testing.T) {
-	errJson := []byte(`{"code":"validation_failed","errors":{"denomination":{"code":"validation_failed","errors":{"amount":[{"code":"sufficient_funds","message":"Not enough funds for the specified amount"}]}}}}`)
-	var uhErr UpholdError
-	err := json.Unmarshal(errJson, &uhErr)
+	errJSON := []byte(`{"code":"validation_failed","errors":{"denomination":{"code":"validation_failed","errors":{"amount":[{"code":"sufficient_funds","message":"Not enough funds for the specified amount"}]}}}}`)
+	var uhErr upholdError
+	err := json.Unmarshal(errJSON, &uhErr)
 	if err != nil {
 		t.Error("Unexpected error during uphold error unmarshal")
 	}
@@ -25,9 +25,9 @@ func TestInsufficientBalance(t *testing.T) {
 }
 
 func TestInvalidSignature(t *testing.T) {
-	errJson := []byte(`{"code":"validation_failed","errors":{"signature":[{"code":"required","message":"This value is required"}]}}`)
-	var uhErr UpholdError
-	err := json.Unmarshal(errJson, &uhErr)
+	errJSON := []byte(`{"code":"validation_failed","errors":{"signature":[{"code":"required","message":"This value is required"}]}}`)
+	var uhErr upholdError
+	err := json.Unmarshal(errJSON, &uhErr)
 	if err != nil {
 		t.Error("Unexpected error during uphold error unmarshal")
 	}
@@ -42,9 +42,9 @@ func TestInvalidSignature(t *testing.T) {
 		t.Error("Incorrect resulting error string")
 	}
 
-	errJson = []byte(`{"code":"validation_failed","errors":{"signature":[{"code":"invalid","message":"This value is not valid"}]}}`)
-	uhErr = UpholdError{}
-	err = json.Unmarshal(errJson, &uhErr)
+	errJSON = []byte(`{"code":"validation_failed","errors":{"signature":[{"code":"invalid","message":"This value is not valid"}]}}`)
+	uhErr = upholdError{}
+	err = json.Unmarshal(errJSON, &uhErr)
 	if err != nil {
 		t.Error("Unexpected error during uphold error unmarshal")
 	}

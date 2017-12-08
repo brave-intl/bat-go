@@ -1,13 +1,14 @@
 package provider
 
 import (
-	"errors"
 	"fmt"
+
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 )
 
-func GetWallet(info wallet.WalletInfo) (wallet.Wallet, error) {
+// GetWallet returns the wallet corresponding to the passed wallet info
+func GetWallet(info wallet.Info) (wallet.Wallet, error) {
 	switch info.Provider {
 	case "uphold":
 		uW, err := uphold.FromWalletInfo(info)
@@ -18,6 +19,6 @@ func GetWallet(info wallet.WalletInfo) (wallet.Wallet, error) {
 		// err = uW.UpdatePublicKey()
 		return uW, err
 	default:
-		return nil, errors.New(fmt.Sprintf("No such supported wallet provider %s", info.Provider))
+		return nil, fmt.Errorf("No such supported wallet provider %s", info.Provider)
 	}
 }

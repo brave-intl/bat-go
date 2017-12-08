@@ -18,10 +18,9 @@ func TestGetCardDetails(t *testing.T) {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
 	}
 
-	var info wallet.WalletInfo
+	var info wallet.Info
 	info.Provider = "uphold"
-	//info.ProviderId = "3f9bfeb9-bafd-43b7-ac64-4e47208ff1a1"
-	info.ProviderId = "6654ecb0-6079-4f6c-ba58-791cc890a561"
+	info.ProviderID = "6654ecb0-6079-4f6c-ba58-791cc890a561"
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp
@@ -39,9 +38,9 @@ func TestGetCardDetails(t *testing.T) {
 }
 
 func TestDecodeTransaction(t *testing.T) {
-	var info wallet.WalletInfo
+	var info wallet.Info
 	info.Provider = "uphold"
-	info.ProviderId = uuid.NewV4().String()
+	info.ProviderID = uuid.NewV4().String()
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp
@@ -56,12 +55,12 @@ func TestDecodeTransaction(t *testing.T) {
 
 	txnB64 := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
-	txnReq, err := wallet.DecodeTransaction(txnB64)
+	txnReq, err := wallet.decodeTransaction(txnB64)
 	if err != nil {
 		t.Error(err)
 	}
 
-	var expected TransactionRequest
+	var expected transactionRequest
 	expected.Destination = "foo@bar.com"
 	expected.Denomination.Amount, _ = decimal.NewFromString("25.0")
 	{

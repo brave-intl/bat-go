@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	GrantSignatorPublicKeyHex = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
+	grantSignatorPublicKeyHex = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
 	inputFile                 = flag.String("in", "./grantTokens.json", "input file path")
 	grantIds                  = set.NewSliceSet()
 )
@@ -30,10 +30,13 @@ type grantRegistration struct {
 }
 
 func main() {
-	if len(GrantSignatorPublicKeyHex) == 0 {
+	if len(grantSignatorPublicKeyHex) == 0 {
 		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
 	}
-	grant.InitGrantService()
+	err := grant.InitGrantService()
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	contents, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
@@ -43,17 +46,22 @@ func main() {
 	var grantReg grantRegistration
 	err = json.Unmarshal(contents, &grantReg)
 	if err != nil {
+		log.Fatalln(err)
 	}
 
 	for i := 0; i < len(grantReg.Grants); i++ {
-		grant, err := grant.FromCompactJWS(grantReg.Grants[i])
+		var g *grant.Grant
+		g, err = grant.FromCompactJWS(grantReg.Grants[i])
 		if err != nil {
 			log.Fatalln(err)
 		}
-		if grant.PromotionId != grantReg.Promotions[0].ID {
+		if g.PromotionID != grantReg.Promotions[0].ID {
 			log.Fatalln("promotion mismatch")
 		}
-		grantIds.Add(grant.GrantId.String())
+		_, err = grantIds.Add(g.GrantID.String())
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 	numIds, err := grantIds.Cardinality()
 	if err != nil {

@@ -43,10 +43,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/pressly/lg
-// Adds support for sending captured panic to Sentry
+// Added support for sending captured panic to Sentry
 func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	httpLogger := &lg.HTTPLogger{logger}
+	httpLogger := &lg.HTTPLogger{Logger: logger}
 
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {

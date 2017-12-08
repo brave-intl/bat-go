@@ -2,30 +2,36 @@ package datastore
 
 import (
 	"context"
-	"errors"
 
-	"github.com/brave-intl/bat-go/utils"
 	mapkv "github.com/brave-intl/bat-go/utils/kv"
 )
+
+type kvDatastoreKey struct{}
 
 var (
 	kv = mapkv.NewUnsafe()
 )
 
+// GetKvDatastore returns a key value datastore based on the context
+// Defaults to an unsafe map backed datastore
 func GetKvDatastore(ctx context.Context) (KvDatastore, error) {
-	switch ctx.Value("datastore.kv").(string) {
+	val := ctx.Value(kvDatastoreKey{})
+	if val == nil {
+		val = ""
+	}
+	switch val.(string) {
 	case "redis":
-		conn := utils.GetRedisConn(ctx)
+		conn := GetRedisConn(ctx)
 		store := GetRedisKv(conn)
 		return &store, nil
+	default:
+		fallthrough
 	case "map":
 		return kv, nil
-	default:
-		return nil, errors.New("No such supported kv datastore")
 	}
 }
 
-// An interface for "key-value" access to a datastore
+// KvDatastore is an interface for "key-value" access to a datastore
 type KvDatastore interface {
 	// Set key to hold the string value with ttl in seconds, returns true if updated successfully.
 	// If ttl is negative, the value will not expire.

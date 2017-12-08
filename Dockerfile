@@ -1,5 +1,5 @@
 FROM alpine:3.6
 RUN apk add --update ca-certificates # Certificates for SSL
-COPY bat-go-linux /bin/bat-go
+COPY target/linux_amd64/grant-server /bin/
 EXPOSE 3333
-CMD ["/bin/bat-go"]
+CMD ["/bin/grant-server"]

@@ -9,44 +9,10 @@ import (
 
 var (
 	latencyBuckets = []float64{.25, .5, 1, 2.5, 5, 10}
-
-	inFlightGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "in_flight_requests",
-		Help: "A gauge of requests currently being served by the wrapped handler.",
-	})
-
-	counter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name:        "api_requests_total",
-			Help:        "Number of requests per handler.",
-			ConstLabels: prometheus.Labels{"handler": "all"},
-		},
-		[]string{"code", "method"},
-	)
-
-	histogramOpts = prometheus.HistogramOpts{
-		Name:        "request_duration_seconds",
-		Help:        "A histogram of latencies for requests.",
-		Buckets:     latencyBuckets,
-		ConstLabels: prometheus.Labels{"handler": "all"},
-	}
-	allVec = prometheus.NewHistogramVec(
-		histogramOpts,
-		[]string{"method"},
-	)
-
-	// responseSize has no labels, making it a zero-dimensional
-	// ObserverVec.
-	responseSize = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "response_size_bytes",
-			Help:    "A histogram of response sizes for requests.",
-			Buckets: []float64{200, 500, 900, 1500},
-		},
-		[]string{},
-	)
 )
 
+// InstrumentRoundTripper instruments an http.RoundTripper to capture metrics like the number
+// of active requests, the total number of requests made and latency information
 func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http.RoundTripper {
 	inFlightGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "client_in_flight_requests",
@@ -132,7 +98,9 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 	)
 }
 
-func InstrumentHandler(name string, h http.HandlerFunc) http.HandlerFunc {
+// InstrumentHandlerFunc instruments an http.HandlerFunc to capture metrics like the number
+// the total number of requests served and latency information
+func InstrumentHandlerFunc(name string, h http.HandlerFunc) http.HandlerFunc {
 	hRequests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:        "api_requests_total",
@@ -169,19 +137,7 @@ func InstrumentHandler(name string, h http.HandlerFunc) http.HandlerFunc {
 	return promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h))
 }
 
-func Instrument(next http.Handler) http.Handler {
-	return promhttp.InstrumentHandlerInFlight(inFlightGauge,
-		promhttp.InstrumentHandlerCounter(counter,
-			promhttp.InstrumentHandlerDuration(allVec,
-				promhttp.InstrumentHandlerResponseSize(responseSize, next),
-			),
-		),
-	)
-}
-
+// Metrics returns a http.HandlerFunc for the prometheus /metrics endpoint
 func Metrics() http.HandlerFunc {
-	// Register all of the metrics in the standard registry.
-	prometheus.MustRegister(inFlightGauge, counter, allVec, responseSize)
-
 	return promhttp.Handler().(http.HandlerFunc)
 }

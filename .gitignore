@@ -8,7 +8,9 @@
 
 # Project specific ignores
 vendor
-bat-go*
+target
 grantTokens.json
-bin/*/*
-!bin/*/main.go
+grant-server
+create-keypair
+create-tokens
+verify-tokens

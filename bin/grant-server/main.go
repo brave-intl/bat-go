@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/controllers"
+	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/garyburd/redigo/redis"
+	"github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
@@ -19,7 +22,7 @@ import (
 )
 
 var (
-	redisUrl = os.Getenv("REDIS_URL")
+	redisURL = os.Getenv("REDIS_URL")
 )
 
 func main() {
@@ -35,7 +38,7 @@ func main() {
 
 	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
 
-	utils.InitValidators()
+	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
 	r.Use(chiware.RequestID)
@@ -43,25 +46,33 @@ func main() {
 	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
-	r.Use(middleware.Instrument)
 	// Also handles panic recovery
 	r.Use(middleware.RequestLogger(logger))
 
 	redisAddress := "localhost:6379"
-	if len(redisUrl) > 0 {
-		redisAddress = strings.TrimPrefix(redisUrl, "redis://")
+	if len(redisURL) > 0 {
+		redisAddress = strings.TrimPrefix(redisURL, "redis://")
 	}
 	rp := &redis.Pool{
 		MaxIdle:     3,
 		IdleTimeout: 240 * time.Second,
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
-	serverCtx = utils.WithRedisPool(serverCtx, rp)
+	serverCtx = datastore.WithRedisPool(serverCtx, rp)
 
-	grant.InitGrantService()
+	err := grant.InitGrantService()
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
+
 	r.Mount("/v1/grants", controllers.GrantsRouter())
 	r.Get("/metrics", middleware.Metrics())
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
-	srv.ListenAndServe()
+	err = srv.ListenAndServe()
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
 }

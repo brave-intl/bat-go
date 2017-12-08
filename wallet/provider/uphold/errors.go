@@ -4,67 +4,50 @@ import (
 	"encoding/json"
 )
 
-type UpholdBaseError struct {
+type upholdBaseError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
 // TODO just use json.RawMessage
 
-type UpholdDenominationValidationErrors struct {
-	AmountError []UpholdBaseError `json:"amount, omitempty"`
+type upholdDenominationValidationErrors struct {
+	AmountError []upholdBaseError `json:"amount, omitempty"`
 	Data        json.RawMessage   `json:",omitempty"`
 }
 
-type UpholdDenominationErrors struct {
+type upholdDenominationErrors struct {
 	Code                               string `json:"code"`
-	UpholdDenominationValidationErrors `json:"errors,omitempty"`
+	upholdDenominationValidationErrors `json:"errors,omitempty"`
 	Data                               json.RawMessage `json:",omitempty"`
 }
 
-type UpholdValidationErrors struct {
-	SignatureError     []UpholdBaseError        `json:"signature, omitempty"`
-	DenominationErrors UpholdDenominationErrors `json:"denomination, omitempty"`
+type upholdValidationErrors struct {
+	SignatureError     []upholdBaseError        `json:"signature, omitempty"`
+	DenominationErrors upholdDenominationErrors `json:"denomination, omitempty"`
 	Data               json.RawMessage          `json:",omitempty"`
 }
 
-type UpholdError struct {
+type upholdError struct {
 	Message          string                 `json:"error,omitempty"`
 	Code             string                 `json:"code"`
-	ValidationErrors UpholdValidationErrors `json:"errors,omitempty"`
+	ValidationErrors upholdValidationErrors `json:"errors,omitempty"`
 	Data             json.RawMessage        `json:",omitempty"`
 }
 
-type Fuck struct {
-	Code string `json:"code"`
+func (err upholdError) ValidationError() bool {
+	return err.Code == "validation_failed"
 }
 
-func (err UpholdError) ValidationError() bool {
-	if err.Code == "validation_failed" {
-		return true
-	}
-	return false
+func (err upholdError) DenominationError() bool {
+	return err.ValidationError() && err.ValidationErrors.DenominationErrors.Code == "validation_failed"
 }
 
-func (err UpholdError) DenominationError() bool {
-	if err.ValidationError() {
-		if err.ValidationErrors.DenominationErrors.Code == "validation_failed" {
-			return true
-		}
-	}
-	return false
+func (err upholdError) AmountError() bool {
+	return err.DenominationError() && len(err.ValidationErrors.DenominationErrors.AmountError) > 0
 }
 
-func (err UpholdError) AmountError() bool {
-	if err.DenominationError() {
-		if len(err.ValidationErrors.DenominationErrors.AmountError) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func (err UpholdError) InsufficientBalance() bool {
+func (err upholdError) InsufficientBalance() bool {
 	if err.AmountError() {
 		for _, ae := range err.ValidationErrors.DenominationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
@@ -75,16 +58,11 @@ func (err UpholdError) InsufficientBalance() bool {
 	return false
 }
 
-func (err UpholdError) InvalidSignature() bool {
-	if err.ValidationError() {
-		if len(err.ValidationErrors.SignatureError) > 0 {
-			return true
-		}
-	}
-	return false
+func (err upholdError) InvalidSignature() bool {
+	return err.ValidationError() && len(err.ValidationErrors.SignatureError) > 0
 }
 
-func (err UpholdError) String() string {
+func (err upholdError) String() string {
 	if err.InsufficientBalance() {
 		for _, ae := range err.ValidationErrors.DenominationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
@@ -98,6 +76,6 @@ func (err UpholdError) String() string {
 	return string(b)
 }
 
-func (err UpholdError) Error() string {
+func (err upholdError) Error() string {
 	return "UpholdError: " + err.String()
 }

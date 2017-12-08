@@ -14,7 +14,7 @@ import (
 )
 
 func TestFromCompactJWS(t *testing.T) {
-	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	grantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
 	InitGrantService()
 
@@ -42,22 +42,22 @@ func TestFromCompactJWS(t *testing.T) {
 }
 
 func TestVerifyAndConsume(t *testing.T) {
-	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
-	SettlementDestination = "foo@bar.com"
+	grantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	settlementDestination = "foo@bar.com"
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
 	InitGrantService()
 
 	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI5NjE0YWRlNy01OGFmLTRkZjAtODZjNi0yZjcwMDUxYjQzZGUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.OOEBJUHPE21OyFw5Vq1tRTxYQc7aEL-KL5Lb4nb1TZn_3LFkXEPY7bNo0GhJ6k9X2UkZ19rnfBbpXHKuqBupDA"}
-	walletInfo := wallet.WalletInfo{}
+	walletInfo := wallet.Info{}
 	walletInfo.Provider = "uphold"
 	{
 		tmp := altcurrency.BAT
 		walletInfo.AltCurrency = &tmp
 	}
 
-	walletInfo.ProviderId = uuid.NewV4().String()
+	walletInfo.ProviderID = uuid.NewV4().String()
 	walletInfo.PublicKey = "424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf"
 	walletInfo.LastBalance = &wallet.Balance{}
 
@@ -66,8 +66,6 @@ func TestVerifyAndConsume(t *testing.T) {
 	logger := logrus.New()
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
-	ctx = context.WithValue(ctx, "datastore.set", "slice")
-	ctx = context.WithValue(ctx, "datastore.kv", "map")
 
 	request := RedeemGrantsRequest{grants, walletInfo, transaction}
 	_, err := request.VerifyAndConsume(ctx)

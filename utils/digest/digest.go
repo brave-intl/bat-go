@@ -1,3 +1,5 @@
+// Package digest implements an instance which serializes to / from the Digest header per rfc3230
+// https://tools.ietf.org/html/rfc3230
 package digest
 
 import (
@@ -73,8 +75,5 @@ func (d *Instance) Update(b []byte) {
 // Returns true if the digest values match.
 func (d *Instance) Verify(b []byte) bool {
 	expected := d.Calculate(b)
-	if d.Digest != expected {
-		return false
-	}
-	return true
+	return d.Digest == expected
 }

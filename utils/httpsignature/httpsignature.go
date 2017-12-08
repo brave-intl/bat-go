@@ -1,34 +1,33 @@
+// Package httpsignature contains methods for signing and verifing HTTP requests per
+// https://www.ietf.org/id/draft-cavage-http-signatures-08.txt
 package httpsignature
 
-// https://www.ietf.org/id/draft-cavage-http-signatures-08.txt
-
 import (
-	"bytes"
 	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
-
-	"golang.org/x/net/lex/httplex"
 )
 
+// SignatureParams contains parameters needed to create and verify signatures
 type SignatureParams struct {
 	Algorithm Algorithm
-	KeyId     string
+	KeyID     string
 	Headers   []string // optional
 }
 
+// Signature represents an http signature and it's parameters
 type Signature struct {
 	SignatureParams
 	Sig string // FIXME remove since we should always use http.Request header?
 }
 
 const (
+	// RequestTarget is a pseudo header consisting of the HTTP method and request uri
 	RequestTarget = "(request-target)"
 )
 
@@ -37,10 +36,11 @@ var (
 )
 
 // TODO Add New function
-// TODO New function should check that all added headers are lower-cased
+// NOTE New function should check that all added headers are lower-cased
 
+// IsMalformed returns true if the signature parameters are invalid
 func (s *SignatureParams) IsMalformed() bool {
-	if s.Algorithm == INVALID {
+	if s.Algorithm == invalid {
 		return true
 	}
 	for _, header := range s.Headers {
@@ -51,7 +51,9 @@ func (s *SignatureParams) IsMalformed() bool {
 	return false
 }
 
-// TODO? Add support for digest generation bsed on req.Body?
+// BuildSigningString builds the signing string according to the SignatureParams s and
+// HTTP request req
+// TODO Add support for digest generation based on req.Body?
 func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err error) {
 	if s.IsMalformed() {
 		return nil, errors.New("Refusing to build signing string with malformed params")
@@ -67,7 +69,7 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			if req.URL != nil && len(req.Method) > 0 {
 				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTarget, strings.ToLower(req.Method), req.URL.RequestURI()))...)
 			} else {
-				return nil, errors.New(fmt.Sprintf("Request must have a URL and Method to use the %s pseudo-header", RequestTarget))
+				return nil, fmt.Errorf("Request must have a URL and Method to use the %s pseudo-header", RequestTarget)
 			}
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
@@ -81,6 +83,7 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 	return out, nil
 }
 
+// Sign the included HTTP request req using signator and options opts
 func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *http.Request) error {
 	ss, err := s.BuildSigningString(req)
 	if err != nil {
@@ -100,10 +103,12 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 	return nil
 }
 
+// Verifier is an interface for cryptographic signature verification
 type Verifier interface {
 	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
 }
 
+// Verify the HTTP signature s over HTTP request req using verifier with options opts
 func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
 	signingStr, err := s.BuildSigningString(req)
 	if err != nil {
@@ -123,41 +128,33 @@ func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.
 	return verifier.Verify(signingStr, sig, opts)
 }
 
+// MarshalText marshalls the signature into text.
 func (s *Signature) MarshalText() (text []byte, err error) {
 	if s.IsMalformed() {
 		return nil, errors.New("Not a valid Algorithm")
 	}
 
-	// FIXME just replace with sprintf?
-
-	text = append(text, []byte("keyId=\"")...)
-	text = append(text, []byte(s.KeyId)...)
-
-	text = append(text, []byte("\",algorithm=\"")...)
 	algo, err := s.Algorithm.MarshalText()
 	if err != nil {
 		return nil, err
 	}
-	text = append(text, algo...)
 
+	headers := ""
 	if len(s.Headers) > 0 {
-		text = append(text, []byte("\",headers=\"")...)
-		text = append(text, []byte(strings.Join(s.Headers, " "))...)
+		headers = fmt.Sprintf(",headers=\"%s\"", strings.Join(s.Headers, " "))
 	}
 
-	text = append(text, []byte("\",signature=\"")...)
-	text = append(text, []byte(s.Sig)...)
-	text = append(text, []byte("\"")...)
-
+	text = []byte(fmt.Sprintf("keyId=\"%s\",algorithm=\"%s\"%s,signature=\"%s\"", s.KeyID, algo, headers, s.Sig))
 	return text, nil
 }
 
+// UnmarshalText unmarshalls the signature from text.
 func (s *Signature) UnmarshalText(text []byte) (err error) {
 	var key string
 	var value string
 
-	s.Algorithm = INVALID
-	s.KeyId = ""
+	s.Algorithm = invalid
+	s.KeyID = ""
 	s.Sig = ""
 
 	str := string(text)
@@ -166,7 +163,7 @@ func (s *Signature) UnmarshalText(text []byte) (err error) {
 		value = m[2]
 
 		if key == "keyId" {
-			s.KeyId = value
+			s.KeyID = value
 		} else if key == "algorithm" {
 			err := s.Algorithm.UnmarshalText([]byte(value))
 			if err != nil {
@@ -182,55 +179,9 @@ func (s *Signature) UnmarshalText(text []byte) (err error) {
 	}
 
 	// Check that all required fields were present
-	if s.Algorithm == INVALID || len(s.KeyId) == 0 || len(s.Sig) == 0 {
+	if s.Algorithm == invalid || len(s.KeyID) == 0 || len(s.Sig) == 0 {
 		return errors.New("A valid signature MUST have algorithm, keyId, and signature keys")
 	}
 
 	return nil
-}
-
-// An encapsulated HTTP signature request
-type HttpSignedRequest struct {
-	Headers map[string]string `json:"headers"` //TODO add verfier to ensure only lower-cased keys
-	Body    string            `json:"octets"`
-}
-
-func (sr *HttpSignedRequest) Extract() (*Signature, *http.Request, error) {
-	var s Signature
-	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var r http.Request
-	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
-	r.Header = http.Header{}
-	for k, v := range sr.Headers {
-		if !httplex.ValidHeaderFieldName(k) {
-			return nil, nil, errors.New("invalid encapsulated header name")
-		}
-		if !httplex.ValidHeaderFieldValue(v) {
-			return nil, nil, errors.New("invalid encapsulated header value")
-		}
-
-		if k == RequestTarget {
-			// TODO
-			return nil, nil, errors.New(fmt.Sprintf("%s pseudo-header not implemented", RequestTarget))
-		} else {
-			r.Header.Set(k, v)
-		}
-	}
-	return &s, &r, nil
-}
-
-func Encapsulate(req *http.Request) (*HttpSignedRequest, error) {
-	enc := HttpSignedRequest{}
-	for k, values := range req.Header {
-		enc.Headers[k] = strings.Join(values, ", ")
-	}
-	// TODO implement pseudo-header
-	//enc.Headers[RequestTarget] =
-	bodyBytes, _ := ioutil.ReadAll(req.Body)
-	enc.Body = string(bodyBytes)
-	return &enc, nil
 }

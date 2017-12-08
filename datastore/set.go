@@ -2,45 +2,48 @@ package datastore
 
 import (
 	"context"
-	"errors"
 
-	"github.com/brave-intl/bat-go/utils"
 	sliceset "github.com/brave-intl/bat-go/utils/set"
 )
+
+type setDatastoreKey struct{}
 
 var (
 	sliceSets = map[string]sliceset.SliceSet{}
 )
 
+// GetSetDatastore gets the set-like datastore configured in context for collection key
+// Defaults to a slice backed datastore
 func GetSetDatastore(ctx context.Context, key string) (SetLikeDatastore, error) {
-	switch ctx.Value("datastore.set").(string) {
+	val := ctx.Value(setDatastoreKey{})
+	if val == nil {
+		val = ""
+	}
+	switch val.(string) {
 	case "redis":
-		conn := utils.GetRedisConn(ctx)
+		conn := GetRedisConn(ctx)
 		set := GetRedisSet(conn, key)
 		return &set, nil
+	default:
+		fallthrough
 	case "slice":
 		set, exists := sliceSets[key]
 		if !exists {
-			set = sliceset.NewSliceSet()
-			sliceSets[key] = set
+			sliceSets[key] = sliceset.NewSliceSet()
+			set = sliceSets[key]
 		}
 		return &set, nil
-	default:
-		return nil, errors.New("No such supported set-like datastore")
 	}
 }
 
-// An interface for "set-like" access to a datastore
+// SetLikeDatastore is an interface for "set-like" access to a datastore
 type SetLikeDatastore interface {
 	// Add a single element to the set, return true if newly added
 	Add(e string) (bool, error)
-
-	// Returns the number of elements in the set
+	// Cardinality returns the number of elements in the set
 	Cardinality() (int, error)
-
-	// Returns whether the given item is in the set
+	// Contains returns true if the given item is in the set
 	Contains(e string) (bool, error)
-
 	// Close the underlying connection to the datastore
 	Close() error
 }

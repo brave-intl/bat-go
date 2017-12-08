@@ -13,7 +13,7 @@ import (
 func TestBuildSigningString(t *testing.T) {
 	var s Signature
 	s.Algorithm = ED25519
-	s.KeyId = "Test"
+	s.KeyID = "Test"
 	s.Headers = []string{"(request-target)", "host", "date", "cache-control", "x-example"}
 
 	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
@@ -50,7 +50,7 @@ func TestSign(t *testing.T) {
 
 	var s Signature
 	s.Algorithm = ED25519
-	s.KeyId = "primary"
+	s.KeyID = "primary"
 	s.Headers = []string{"foo"}
 
 	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
@@ -71,7 +71,7 @@ func TestVerify(t *testing.T) {
 
 	var s Signature
 	s.Algorithm = ED25519
-	s.KeyId = "primary"
+	s.KeyID = "primary"
 	s.Headers = []string{"foo"}
 	s.Sig = "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
 
@@ -102,7 +102,7 @@ func TestVerify(t *testing.T) {
 func TestTextMarshal(t *testing.T) {
 	var s Signature
 	s.Algorithm = ED25519
-	s.KeyId = "Test"
+	s.KeyID = "Test"
 	s.Headers = []string{"(request-target)", "host", "date", "content-type", "digest", "content-length"}
 	s.Sig = "Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0="
 
@@ -134,7 +134,7 @@ func TestTextMarshal(t *testing.T) {
 func TestTextUnmarshal(t *testing.T) {
 	var expected Signature
 	expected.Algorithm = ED25519
-	expected.KeyId = "Test"
+	expected.KeyID = "Test"
 	expected.Headers = []string{"(request-target)", "host", "date", "content-type", "digest", "content-length"}
 	expected.Sig = "Ef7MlxLXoBovhil3AlyjtBwAL9g4TN3tibLj7uuNB3CROat/9KaeQ4hW2NiJ+pZ6HQEOx9vYZAyi+7cmIkmJszJCut5kQLAwuX+Ms/mUFvpKlSo9StS2bMXDBNjOh4Auj774GFj4gwjS+3NhFeoqyr/MuN6HsEnkvn6zdgfE2i0="
 

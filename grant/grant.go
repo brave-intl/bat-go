@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
+	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
@@ -31,13 +32,13 @@ const (
 )
 
 var (
-	SettlementDestination        = os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	GrantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
-	GrantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
-	GrantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
-	GrantWalletCardId            = os.Getenv("GRANT_WALLET_CARD_ID")
+	settlementDestination        = os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	grantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
+	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
 	grantPublicKey               ed25519.PublicKey
-	grantWallet                  *uphold.UpholdWallet
+	grantWallet                  *uphold.Wallet
 	refreshBalance               = true // for testing we can disable balance refresh
 	testSubmit                   = true // for testing we can disable testing tx submit
 	registerGrantInstrumentation = true // for testing we can disable grant claim / redeem instrumentation registration
@@ -57,19 +58,20 @@ var (
 	)
 )
 
+// InitGrantService initializes the grant service
 func InitGrantService() error {
-	grantPublicKey, _ = hex.DecodeString(GrantSignatorPublicKeyHex)
+	grantPublicKey, _ = hex.DecodeString(grantSignatorPublicKeyHex)
 
-	if os.Getenv("ENV") == "production" && refreshBalance != true {
-		return errors.New("refreshBalance must be true in production!!")
+	if os.Getenv("ENV") == "production" && !refreshBalance {
+		return errors.New("refreshBalance must be true in production")
 	}
-	if os.Getenv("ENV") == "production" && testSubmit != true {
-		return errors.New("testSubmit must be true in production!!")
+	if os.Getenv("ENV") == "production" && !testSubmit {
+		return errors.New("testSubmit must be true in production")
 	}
 
-	var info wallet.WalletInfo
+	var info wallet.Info
 	info.Provider = "uphold"
-	info.ProviderId = GrantWalletCardId
+	info.ProviderID = grantWalletCardID
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp
@@ -79,8 +81,8 @@ func InitGrantService() error {
 	var privKey ed25519.PrivateKey
 	var err error
 
-	pubKey, _ = hex.DecodeString(GrantWalletPublicKeyHex)
-	privKey, _ = hex.DecodeString(GrantWalletPrivateKeyHex)
+	pubKey, _ = hex.DecodeString(grantWalletPublicKeyHex)
+	privKey, _ = hex.DecodeString(grantWalletPrivateKeyHex)
 
 	grantWallet, err = uphold.New(info, privKey, pubKey)
 	if err != nil {
@@ -95,11 +97,12 @@ func InitGrantService() error {
 	return nil
 }
 
+// Grant - a "check" good for the amount inscribed, redeemable between maturityTime and expiryTime
 type Grant struct {
 	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency"`
-	GrantId           uuid.UUID                `json:"grantId"`
+	GrantID           uuid.UUID                `json:"grantId"`
 	Probi             decimal.Decimal          `json:"probi"`
-	PromotionId       uuid.UUID                `json:"promotionId"`
+	PromotionID       uuid.UUID                `json:"promotionId"`
 	MaturityTimestamp int64                    `json:"maturityTime"`
 	ExpiryTimestamp   int64                    `json:"expiryTime"`
 }
@@ -138,22 +141,23 @@ func FromCompactJWS(s string) (*Grant, error) {
 	return &grant, nil
 }
 
+// ClaimGrantRequest is a request to claim a grant
 type ClaimGrantRequest struct {
-	WalletInfo wallet.WalletInfo `json:"wallet" valid:"required"`
+	WalletInfo wallet.Info `json:"wallet" valid:"required"`
 }
 
 // Claim registers a claim on behalf of a user wallet to a particular Grant.
 // Registered claims are enforced by RedeemGrantsRequest.Verify.
-func (req *ClaimGrantRequest) Claim(ctx context.Context, grantId string) error {
+func (req *ClaimGrantRequest) Claim(ctx context.Context, grantID string) error {
 	log := lg.Log(ctx)
 
 	kvDatastore, err := datastore.GetKvDatastore(ctx)
 	if err != nil {
 		return err
 	}
-	defer kvDatastore.Close()
+	defer utils.PanicCloser(kvDatastore)
 
-	_, err = kvDatastore.Set("grant:"+grantId+":claim", req.WalletInfo.ProviderId, ninetyDaysInSeconds, false)
+	_, err = kvDatastore.Set("grant:"+grantID+":claim", req.WalletInfo.ProviderID, ninetyDaysInSeconds, false)
 	if err != nil {
 		log.Error("Attempt to claim previously claimed grant!")
 		return errors.New("An existing claim to the grant already exists")
@@ -164,15 +168,17 @@ func (req *ClaimGrantRequest) Claim(ctx context.Context, grantId string) error {
 	return nil
 }
 
+// RedeemGrantsRequest a request to redeem the included grants for the wallet whose information
+// is included in order to fulfill the included transaction
 type RedeemGrantsRequest struct {
-	Grants      []string          `json:"grants" valid:"compactjws"`
-	WalletInfo  wallet.WalletInfo `json:"wallet" valid:"required"`
-	Transaction string            `json:"transaction" valid:"base64"`
+	Grants      []string    `json:"grants" valid:"compactjws"`
+	WalletInfo  wallet.Info `json:"wallet" valid:"required"`
+	Transaction string      `json:"transaction" valid:"base64"`
 }
 
-// Verify one or more grants to fufill the included transaction for wallet
+// VerifyAndConsume one or more grants to fufill the included transaction for wallet
 // Note that this is destructive, on success consumes grants.
-// Further calls to Verify with the same request will fail.
+// Further calls to Verify with the same request will fail as the grants are consumed.
 //
 // 1. Check grant signatures and decode
 //
@@ -221,37 +227,38 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, err
 	}
 	if *txInfo.AltCurrency != altcurrency.BAT {
-		return nil, errors.New("Only grants submitted with BAT transactions are supported")
+		return nil, errors.New("only grants submitted with BAT transactions are supported")
 	}
 	if txInfo.Probi.LessThan(decimal.Zero) {
-		return nil, errors.New("Included transaction cannot be for negative BAT")
+		return nil, errors.New("included transaction cannot be for negative BAT")
 	}
 	if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
-		return nil, errors.New(fmt.Sprintf("Included transaction must be for a minimum of %d BAT", lowerTxLimit))
+		return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
 	}
 	if txInfo.Probi.LessThan(balance.SpendableProbi) {
-		return nil, errors.New("Wallet has enough funds to cover transaction")
+		return nil, errors.New("wallet has enough funds to cover transaction")
 	}
 	if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
-		return nil, errors.New(fmt.Sprintf("Included transaction must be for a maxiumum of %d BAT", upperTxLimit))
+		return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
 	}
-	if txInfo.Destination != SettlementDestination {
-		return nil, errors.New("Included transactions must have settlement as their destination")
+	if txInfo.Destination != settlementDestination {
+		return nil, errors.New("included transactions must have settlement as their destination")
 	}
 
-	var submitId string
+	var submitID string
 	if testSubmit {
+		var submitInfo *wallet.TransactionInfo
 		// TODO remove this once we can retrieve publicKey info from uphold
 		// NOTE We check the signature on the included transaction by submitting it but not confirming it
-		submitInfo, err := userWallet.SubmitTransaction(req.Transaction, false)
+		submitInfo, err = userWallet.SubmitTransaction(req.Transaction, false)
 		if err != nil {
 			if wallet.IsInvalidSignature(err) {
-				return nil, errors.New("The included transaction was signed with the wrong publicKey!")
+				return nil, errors.New("the included transaction was signed with the wrong publicKey")
 			} else if !wallet.IsInsufficientBalance(err) {
-				return nil, errors.New("Error while test submitting the included transaction: " + err.Error())
+				return nil, errors.New("error while test submitting the included transaction: " + err.Error())
 			}
 		}
-		submitId = submitInfo.ID
+		submitID = submitInfo.ID
 	}
 
 	// 3. Sort decoded grants, largest probi to smallest
@@ -276,18 +283,18 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	if err != nil {
 		return nil, err
 	}
-	defer kvDatastore.Close()
+	defer utils.PanicCloser(kvDatastore)
 	// 6. Iterate through grants and check that:
 	for _, grant := range grants {
-		claimedId, err := kvDatastore.Get("grant:" + grant.GrantId.String() + ":claim")
+		claimedID, err := kvDatastore.Get("grant:" + grant.GrantID.String() + ":claim")
 		if err != nil {
 			errMsg := "Attempt to redeem grant without previous claim or with expired claim"
 			log.Error(errMsg)
-			log.Error(grant.GrantId.String())
+			log.Error(grant.GrantID.String())
 			return nil, errors.New(errMsg)
 		}
 		// the grant was previously claimed for this wallet
-		if req.WalletInfo.ProviderId != claimedId {
+		if req.WalletInfo.ProviderID != claimedID {
 			log.Error("Attempt to redeem previously claimed by another wallet!!!")
 			return nil, errors.New("Grant claim does not match provided wallet")
 		}
@@ -302,38 +309,38 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 			return nil, errors.New("Grant is expired")
 		}
 
-		redeemedGrants, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionId.String()+":grants")
+		redeemedGrants, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionID.String()+":grants")
 		if err != nil {
 			return nil, err
 		}
-		defer redeemedGrants.Close()
-		redeemedWallets, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionId.String()+":wallets")
+		defer utils.PanicCloser(redeemedGrants)
+		redeemedWallets, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionID.String()+":wallets")
 		if err != nil {
 			return nil, err
 		}
-		defer redeemedWallets.Close()
+		defer utils.PanicCloser(redeemedWallets)
 
-		result, err := redeemedGrants.Add(grant.GrantId.String())
+		result, err := redeemedGrants.Add(grant.GrantID.String())
 		if err != nil {
 			return nil, err
 		}
-		if result != true {
+		if !result {
 			// a) this wallet has not yet redeemed a grant for the given promotionId
 			log.Error("Attempt to redeem previously redeemed grant!!!")
-			return nil, errors.New(fmt.Sprintf("Grant %s has already been redeemed", grant.GrantId))
+			return nil, fmt.Errorf("grant %s has already been redeemed", grant.GrantID)
 		}
 
-		result, err = redeemedWallets.Add(req.WalletInfo.ProviderId)
+		result, err = redeemedWallets.Add(req.WalletInfo.ProviderID)
 		if err != nil {
 			return nil, err
 		}
-		if result != true {
+		if !result {
 			// b) this grant has not yet been redeemed by any wallet
 			log.Error("Attempt to redeem multiple grants from one promotion by the same wallet!!!")
-			return nil, errors.New(fmt.Sprintf("Wallet %s has already redeemed a grant from this promotion", req.WalletInfo.ProviderId))
+			return nil, fmt.Errorf("Wallet %s has already redeemed a grant from this promotion", req.WalletInfo.ProviderID)
 		}
 
-		redeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionId.String()}).Inc()
+		redeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionID.String()}).Inc()
 	}
 
 	var redeemTxInfo wallet.TransactionInfo
@@ -342,18 +349,19 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		redeemTxInfo.AltCurrency = &tmp
 	}
 	redeemTxInfo.Probi = sumProbi
-	redeemTxInfo.Destination = req.WalletInfo.ProviderId
-	redeemTxInfo.ID = submitId
+	redeemTxInfo.Destination = req.WalletInfo.ProviderID
+	redeemTxInfo.ID = submitID
 	return &redeemTxInfo, nil
 }
 
+// Redeem the grants in the included response
 func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
 	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	submitId := grantFulfillmentInfo.ID
+	submitID := grantFulfillmentInfo.ID
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
@@ -371,7 +379,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	// NOTE VerifyAndConsume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
 	// such as including additional fields that are not understood by this wallet provider implementation but may
 	// be understood by the upstream wallet provider.
-	settlementInfo, err := userWallet.ConfirmTransaction(submitId)
+	settlementInfo, err := userWallet.ConfirmTransaction(submitID)
 	if err != nil {
 		return nil, err
 	}
