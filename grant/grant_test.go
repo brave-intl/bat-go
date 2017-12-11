@@ -14,7 +14,7 @@ import (
 )
 
 func TestFromCompactJWS(t *testing.T) {
-	grantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
 	InitGrantService()
 
@@ -42,8 +42,8 @@ func TestFromCompactJWS(t *testing.T) {
 }
 
 func TestVerifyAndConsume(t *testing.T) {
-	grantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
-	settlementDestination = "foo@bar.com"
+	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	SettlementDestination = "foo@bar.com"
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false

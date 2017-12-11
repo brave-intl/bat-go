@@ -7,10 +7,11 @@
 .LSOverride
 
 # Project specific ignores
+.env
 vendor
 target
 grantTokens.json
-grant-server
-create-keypair
-create-tokens
-verify-tokens
+/grant-server
+/create-keypair
+/create-tokens
+/verify-tokens

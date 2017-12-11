@@ -11,7 +11,8 @@ import (
 type bearerTokenKey struct{}
 
 var (
-	tokenList = strings.Split(os.Getenv("TOKEN_LIST"), ",")
+	// TokenList is the list of tokens that are accepted as valid
+	TokenList = strings.Split(os.Getenv("TOKEN_LIST"), ",")
 )
 
 // BearerToken is a middleware that adds the bearer token included in a request's headers to context
@@ -48,7 +49,7 @@ func SimpleTokenAuthorizedOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		token, ok := ctx.Value(bearerTokenKey{}).(string)
-		if !ok || !isSimpleTokenValid(tokenList, token) {
+		if !ok || !isSimpleTokenValid(TokenList, token) {
 			http.Error(w, http.StatusText(403), 403)
 			return
 		}

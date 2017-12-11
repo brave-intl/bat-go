@@ -22,6 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/wallet"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )
@@ -113,6 +114,55 @@ func submit(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+type createCardRequest struct {
+	Label       string                   `json:"label"`
+	AltCurrency *altcurrency.AltCurrency `json:"currency"`
+	PublicKey   string                   `json:"publicKey"`
+}
+
+// Register a wallet with Uphold with label
+func (w *Wallet) Register(label string) error {
+	reqPayload := createCardRequest{label, w.Info.AltCurrency, hex.EncodeToString(w.PubKey)}
+	payload, err := json.Marshal(reqPayload)
+	if err != nil {
+		return err
+	}
+
+	req, err := newRequest("POST", "/v0/me/cards", bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
+
+	var s httpsignature.Signature
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = "primary"
+	s.Headers = []string{"digest"}
+
+	// FIXME digest calc should move to httpsignature lib
+	var d digest.Instance
+	d.Hash = crypto.SHA256
+	d.Update(payload)
+	req.Header.Add("Digest", d.String())
+
+	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := submit(req)
+	if err != nil {
+		return err
+	}
+
+	var details CardDetails
+	err = json.NewDecoder(resp.Body).Decode(&details)
+	if err != nil {
+		return err
+	}
+	w.Info.ProviderID = details.ID.String()
+	return nil
+}
+
 // CardSettings contains settings corresponding to the Uphold card
 type CardSettings struct {
 	Protected bool `json:"protected,omitempty"`
@@ -120,9 +170,10 @@ type CardSettings struct {
 
 // CardDetails contains details corresponding to the Uphold card
 type CardDetails struct {
-	Currency         altcurrency.AltCurrency `json:"currency"`
-	Balance          decimal.Decimal         `json:"balance"`
 	AvailableBalance decimal.Decimal         `json:"available"`
+	Balance          decimal.Decimal         `json:"balance"`
+	Currency         altcurrency.AltCurrency `json:"currency"`
+	ID               uuid.UUID               `json:"id"`
 	Settings         CardSettings            `json:"settings"`
 }
 
@@ -189,6 +240,26 @@ func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal
 	return req, err
 }
 
+// PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (string, error) {
+	req, err := w.signTransfer(altcurrency, probi, destination)
+	if err != nil {
+		return "", err
+	}
+
+	httpSignedReq, err := encapsulate(req)
+	if err != nil {
+		return "", err
+	}
+
+	b, err := json.Marshal(&httpSignedReq)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
 	req, err := w.signTransfer(altcurrency, probi, destination)
@@ -233,13 +304,13 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("A transaction signature must cover the request body via digest")
 	}
 
-	var digest digest.Instance
-	err = digest.UnmarshalText([]byte(digestHeader))
+	var digestInst digest.Instance
+	err = digestInst.UnmarshalText([]byte(digestHeader))
 	if err != nil {
 		return nil, err
 	}
 
-	if !digest.Verify([]byte(signedTx.Body)) {
+	if !digestInst.Verify([]byte(signedTx.Body)) {
 		return nil, errors.New("The digest header does not match the included body")
 	}
 

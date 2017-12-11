@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"golang.org/x/net/lex/httplex"
@@ -13,8 +14,8 @@ import (
 
 // httpSignedRequest encapsulates a signed HTTP request
 type httpSignedRequest struct {
-	Headers map[string]string `json:"headers",valid:"lowercase"`
-	Body    string            `json:"octets",valid:"-"`
+	Headers map[string]string `json:"headers" valid:"-"`
+	Body    string            `json:"octets" valid:"json"`
 }
 
 // extract an HTTP request from the encapsulated signed request
@@ -44,4 +45,30 @@ func (sr *httpSignedRequest) extract() (*httpsignature.Signature, *http.Request,
 		r.Header.Set(k, v)
 	}
 	return &s, &r, nil
+}
+
+// encapsulate a signed HTTP request
+func encapsulate(req *http.Request) (*httpSignedRequest, error) {
+	var s httpsignature.Signature
+	err := s.UnmarshalText([]byte(req.Header.Get("signature")))
+	if err != nil {
+		return nil, err
+	}
+
+	enc := httpSignedRequest{}
+	enc.Headers = make(map[string]string)
+	for _, k := range s.Headers {
+		values := req.Header[http.CanonicalHeaderKey(k)]
+		enc.Headers[k] = strings.Join(values, ", ")
+	}
+	enc.Headers["signature"] = req.Header.Get("signature")
+
+	// TODO implement pseudo-header
+
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	enc.Body = string(bodyBytes)
+	return &enc, nil
 }

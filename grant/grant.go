@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"time"
@@ -29,11 +30,14 @@ const (
 	lowerTxLimit        = 20
 	upperTxLimit        = 120
 	ninetyDaysInSeconds = 60 * 60 * 24 * 90
+	productionEnv       = "production"
 )
 
 var (
-	settlementDestination        = os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	grantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
+	// SettlementDestination is the address of the settlement wallet
+	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	// GrantSignatorPublicKeyHex is the hex encoded public key of the keypair used to sign grants
+	GrantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
 	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 	grantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
@@ -60,33 +64,47 @@ var (
 
 // InitGrantService initializes the grant service
 func InitGrantService() error {
-	grantPublicKey, _ = hex.DecodeString(grantSignatorPublicKeyHex)
+	var err error
+	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
+	if err != nil {
+		return err
+	}
 
-	if os.Getenv("ENV") == "production" && !refreshBalance {
+	if os.Getenv("ENV") == productionEnv && !refreshBalance {
 		return errors.New("refreshBalance must be true in production")
 	}
-	if os.Getenv("ENV") == "production" && !testSubmit {
+	if os.Getenv("ENV") == productionEnv && !testSubmit {
 		return errors.New("testSubmit must be true in production")
 	}
 
-	var info wallet.Info
-	info.Provider = "uphold"
-	info.ProviderID = grantWalletCardID
-	{
-		tmp := altcurrency.BAT
-		info.AltCurrency = &tmp
-	}
+	if len(grantWalletCardID) > 0 {
+		var info wallet.Info
+		info.Provider = "uphold"
+		info.ProviderID = grantWalletCardID
+		{
+			tmp := altcurrency.BAT
+			info.AltCurrency = &tmp
+		}
 
-	var pubKey httpsignature.Ed25519PubKey
-	var privKey ed25519.PrivateKey
-	var err error
+		var pubKey httpsignature.Ed25519PubKey
+		var privKey ed25519.PrivateKey
+		var err error
 
-	pubKey, _ = hex.DecodeString(grantWalletPublicKeyHex)
-	privKey, _ = hex.DecodeString(grantWalletPrivateKeyHex)
+		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
+		if err != nil {
+			return err
+		}
+		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
+		if err != nil {
+			return err
+		}
 
-	grantWallet, err = uphold.New(info, privKey, pubKey)
-	if err != nil {
-		return err
+		grantWallet, err = uphold.New(info, privKey, pubKey)
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("ENV") == productionEnv {
+		return errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 
 	if registerGrantInstrumentation {
@@ -113,6 +131,43 @@ type ByProbi []Grant
 func (a ByProbi) Len() int           { return len(a) }
 func (a ByProbi) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByProbi) Less(i, j int) bool { return a[i].Probi.LessThan(a[j].Probi) }
+
+// CreateGrants creates the specified number of grants and returns them in compact JWS serialization
+func CreateGrants(
+	signer jose.Signer,
+	promotionUUID uuid.UUID,
+	grantCount uint,
+	altCurrency altcurrency.AltCurrency,
+	value uint,
+	maturityDate time.Time,
+	expiryDate time.Time,
+) []string {
+	grants := make([]string, 0, grantCount)
+	for i := 0; i < int(grantCount); i++ {
+		var grant Grant
+		grant.AltCurrency = &altCurrency
+		grant.GrantID = uuid.NewV4()
+		grant.Probi = altCurrency.ToProbi(decimal.New(int64(value), 0))
+		grant.PromotionID = promotionUUID
+		grant.MaturityTimestamp = maturityDate.Unix()
+		grant.ExpiryTimestamp = expiryDate.Unix()
+
+		serializedGrant, err := json.Marshal(grant)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		jws, err := signer.Sign(serializedGrant)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		serializedJWS, err := jws.CompactSerialize()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		grants = append(grants, serializedJWS)
+	}
+	return grants
+}
 
 // FromCompactJWS parses a Grant object from one stored using compact JWS serialization.
 // It returns a pointer to the parsed Grant object if it is valid and signed by the grantPublicKey.
@@ -241,7 +296,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
 		return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
 	}
-	if txInfo.Destination != settlementDestination {
+	if txInfo.Destination != SettlementDestination {
 		return nil, errors.New("included transactions must have settlement as their destination")
 	}
 

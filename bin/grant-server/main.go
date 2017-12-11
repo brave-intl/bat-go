@@ -25,7 +25,7 @@ var (
 	redisURL = os.Getenv("REDIS_URL")
 )
 
-func main() {
+func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
 	logger := logrus.New()
 
 	//logger.Formatter = &logrus.JSONFormatter{}
@@ -33,11 +33,11 @@ func main() {
 	// Redirect output from the standard logging package "log"
 	lg.RedirectStdlogOutput(logger)
 	lg.DefaultLogger = logger
-	serverCtx := context.Background()
-	serverCtx = lg.WithLoggerContext(serverCtx, logger)
+	ctx = lg.WithLoggerContext(ctx, logger)
+	return ctx, logger
+}
 
-	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
-
+func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *chi.Mux) {
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -46,8 +46,10 @@ func main() {
 	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
-	// Also handles panic recovery
-	r.Use(middleware.RequestLogger(logger))
+	if logger != nil {
+		// Also handles panic recovery
+		r.Use(middleware.RequestLogger(logger))
+	}
 
 	redisAddress := "localhost:6379"
 	if len(redisURL) > 0 {
@@ -58,7 +60,7 @@ func main() {
 		IdleTimeout: 240 * time.Second,
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
-	serverCtx = datastore.WithRedisPool(serverCtx, rp)
+	ctx = datastore.WithRedisPool(ctx, rp)
 
 	err := grant.InitGrantService()
 	if err != nil {
@@ -68,9 +70,18 @@ func main() {
 
 	r.Mount("/v1/grants", controllers.GrantsRouter())
 	r.Get("/metrics", middleware.Metrics())
+	return ctx, r
+}
+
+func main() {
+	serverCtx, logger := setupLogger(context.Background())
+
+	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
+
+	serverCtx, r := setupRouter(serverCtx, logger)
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
-	err = srv.ListenAndServe()
+	err := srv.ListenAndServe()
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)

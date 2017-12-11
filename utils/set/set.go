@@ -34,8 +34,12 @@ func (set *UnsafeSliceSet) Contains(e string) (bool, error) {
 
 // Add a single element to the set, return true if newly added
 func (set *UnsafeSliceSet) Add(e string) (bool, error) {
-	if r, _ := set.Contains(e); r {
-		return false, nil
+	r, err := set.Contains(e)
+	if err != nil {
+		panic(err)
+	}
+	if r {
+		return false, err
 	}
 	set.slice = append(set.slice, e)
 	return true, nil
@@ -75,7 +79,10 @@ func (set *SliceSet) Contains(e string) (bool, error) {
 // Add a single element to the set, return true if newly added
 func (set *SliceSet) Add(e string) (bool, error) {
 	set.Lock()
-	ret, _ := set.u.Add(e)
+	ret, err := set.u.Add(e)
+	if err != nil {
+		panic(err)
+	}
 	set.Unlock()
 	return ret, nil
 }
