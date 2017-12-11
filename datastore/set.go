@@ -9,7 +9,7 @@ import (
 type setDatastoreKey struct{}
 
 var (
-	sliceSets = map[string]sliceset.SliceSet{}
+	sliceSets = map[string]*sliceset.SliceSet{}
 )
 
 // GetSetDatastore gets the set-like datastore configured in context for collection key
@@ -29,10 +29,11 @@ func GetSetDatastore(ctx context.Context, key string) (SetLikeDatastore, error) 
 	case "slice":
 		set, exists := sliceSets[key]
 		if !exists {
-			sliceSets[key] = sliceset.NewSliceSet()
-			set = sliceSets[key]
+			tmp := sliceset.NewSliceSet()
+			sliceSets[key] = &tmp
+			set = &tmp
 		}
-		return &set, nil
+		return set, nil
 	}
 }
 

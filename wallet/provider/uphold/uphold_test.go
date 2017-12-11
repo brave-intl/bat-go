@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -30,11 +31,36 @@ func TestGetCardDetails(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	details, err := wallet.GetBalance(true)
+	_, err = wallet.GetBalance(true)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(details)
+}
+
+func TestRegister(t *testing.T) {
+	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
+		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
+	}
+
+	var info wallet.Info
+	info.Provider = "uphold"
+	info.ProviderID = ""
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wallet := &Wallet{info, privateKey, publicKey}
+	err = wallet.Register("bat-go test card")
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println("> " + wallet.Info.ProviderID)
 }
 
 func TestDecodeTransaction(t *testing.T) {

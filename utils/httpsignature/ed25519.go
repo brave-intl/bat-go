@@ -3,6 +3,7 @@ package httpsignature
 import (
 	"crypto"
 	"errors"
+	"io"
 	"strconv"
 
 	"golang.org/x/crypto/ed25519"
@@ -22,4 +23,13 @@ func (pk Ed25519PubKey) Verify(message, sig []byte, opts crypto.SignerOpts) (boo
 	copy(key, pk)
 
 	return ed25519.Verify(key, message, sig), nil
+}
+
+// GenerateEd25519Key generate an ed25519 keypair and return it
+func GenerateEd25519Key(rand io.Reader) (pubKey Ed25519PubKey, privateKey ed25519.PrivateKey, err error) {
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	key := make([]byte, ed25519.PublicKeySize)
+	copy(key, publicKey)
+	pubKey = key
+	return
 }

@@ -7,7 +7,7 @@ else
 endif
 
 .PHONY: all bins docker test lint clean
-all: bins
+all: test bins
 	
 bins: clean $(BINS)
 
@@ -23,7 +23,7 @@ docker:
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
 
 test:
-	go test ./...
+	go test -v --tags=$(TEST_TAGS) ./...
 
 lint:
 	gometalinter --vendor --disable=gocyclo --deadline=2m ./...

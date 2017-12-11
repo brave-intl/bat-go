@@ -7,6 +7,7 @@
 .LSOverride
 
 # Project specific ignores
+.env
 vendor
 target
 grantTokens.json

@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 	"github.com/square/go-jose"
 	"golang.org/x/crypto/ed25519"
 )
@@ -121,33 +120,7 @@ func main() {
 		}
 	}
 
-	grants := make([]string, 0, *numGrants)
-	for i := 0; i < int(*numGrants); i++ {
-		var grant grant.Grant
-		grant.AltCurrency = &altCurrency
-		grant.GrantID = uuid.NewV4()
-		grant.Probi = altCurrency.ToProbi(decimal.New(int64(*value), 0))
-		grant.PromotionID = promotionUUID
-		grant.MaturityTimestamp = maturityDate.Unix()
-		grant.ExpiryTimestamp = expiryDate.Unix()
-
-		var serializedGrant []byte
-		serializedGrant, err = json.Marshal(grant)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		var jws *jose.JSONWebSignature
-		jws, err = signer.Sign(serializedGrant)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		var serializedJWS string
-		serializedJWS, err = jws.CompactSerialize()
-		if err != nil {
-			log.Fatalln(err)
-		}
-		grants = append(grants, serializedJWS)
-	}
+	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
 	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUUID, 0, false}}
