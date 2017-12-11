@@ -35,21 +35,21 @@ type upholdError struct {
 	Data             json.RawMessage        `json:",omitempty"`
 }
 
-func (err upholdError) ValidationError() bool {
-	return err.Code == "validation_failed"
+func (uhErr upholdError) ValidationError() bool {
+	return uhErr.Code == "validation_failed"
 }
 
-func (err upholdError) DenominationError() bool {
-	return err.ValidationError() && err.ValidationErrors.DenominationErrors.Code == "validation_failed"
+func (uhErr upholdError) DenominationError() bool {
+	return uhErr.ValidationError() && uhErr.ValidationErrors.DenominationErrors.Code == "validation_failed"
 }
 
-func (err upholdError) AmountError() bool {
-	return err.DenominationError() && len(err.ValidationErrors.DenominationErrors.AmountError) > 0
+func (uhErr upholdError) AmountError() bool {
+	return uhErr.DenominationError() && len(uhErr.ValidationErrors.DenominationErrors.AmountError) > 0
 }
 
-func (err upholdError) InsufficientBalance() bool {
-	if err.AmountError() {
-		for _, ae := range err.ValidationErrors.DenominationErrors.AmountError {
+func (uhErr upholdError) InsufficientBalance() bool {
+	if uhErr.AmountError() {
+		for _, ae := range uhErr.ValidationErrors.DenominationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
 				return true
 			}
@@ -58,24 +58,27 @@ func (err upholdError) InsufficientBalance() bool {
 	return false
 }
 
-func (err upholdError) InvalidSignature() bool {
-	return err.ValidationError() && len(err.ValidationErrors.SignatureError) > 0
+func (uhErr upholdError) InvalidSignature() bool {
+	return uhErr.ValidationError() && len(uhErr.ValidationErrors.SignatureError) > 0
 }
 
-func (err upholdError) String() string {
-	if err.InsufficientBalance() {
-		for _, ae := range err.ValidationErrors.DenominationErrors.AmountError {
+func (uhErr upholdError) String() string {
+	if uhErr.InsufficientBalance() {
+		for _, ae := range uhErr.ValidationErrors.DenominationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
 				return ae.Message
 			}
 		}
-	} else if err.InvalidSignature() {
-		return "Signature: " + err.ValidationErrors.SignatureError[0].Message
+	} else if uhErr.InvalidSignature() {
+		return "Signature: " + uhErr.ValidationErrors.SignatureError[0].Message
 	}
-	b, _ := json.Marshal(&err)
+	b, err := json.Marshal(&uhErr)
+	if err != nil {
+		panic(err)
+	}
 	return string(b)
 }
 
-func (err upholdError) Error() string {
-	return "UpholdError: " + err.String()
+func (uhErr upholdError) Error() string {
+	return "UpholdError: " + uhErr.String()
 }

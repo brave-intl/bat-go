@@ -304,13 +304,13 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("A transaction signature must cover the request body via digest")
 	}
 
-	var digest digest.Instance
-	err = digest.UnmarshalText([]byte(digestHeader))
+	var digestInst digest.Instance
+	err = digestInst.UnmarshalText([]byte(digestHeader))
 	if err != nil {
 		return nil, err
 	}
 
-	if !digest.Verify([]byte(signedTx.Body)) {
+	if !digestInst.Verify([]byte(signedTx.Body)) {
 		return nil, errors.New("The digest header does not match the included body")
 	}
 

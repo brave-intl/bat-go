@@ -65,7 +65,10 @@ func encapsulate(req *http.Request) (*httpSignedRequest, error) {
 
 	// TODO implement pseudo-header
 
-	bodyBytes, _ := ioutil.ReadAll(req.Body)
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
 	enc.Body = string(bodyBytes)
 	return &enc, nil
 }

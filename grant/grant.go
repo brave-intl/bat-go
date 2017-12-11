@@ -64,7 +64,11 @@ var (
 
 // InitGrantService initializes the grant service
 func InitGrantService() error {
-	grantPublicKey, _ = hex.DecodeString(GrantSignatorPublicKeyHex)
+	var err error
+	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
+	if err != nil {
+		return err
+	}
 
 	if os.Getenv("ENV") == productionEnv && !refreshBalance {
 		return errors.New("refreshBalance must be true in production")
@@ -86,8 +90,14 @@ func InitGrantService() error {
 		var privKey ed25519.PrivateKey
 		var err error
 
-		pubKey, _ = hex.DecodeString(grantWalletPublicKeyHex)
-		privKey, _ = hex.DecodeString(grantWalletPrivateKeyHex)
+		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
+		if err != nil {
+			return err
+		}
+		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
+		if err != nil {
+			return err
+		}
 
 		grantWallet, err = uphold.New(info, privKey, pubKey)
 		if err != nil {

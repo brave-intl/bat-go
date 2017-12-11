@@ -110,7 +110,11 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("Continue? (y/n): ")
-		text, _ := reader.ReadString('\n')
+		var text string
+		text, err = reader.ReadString('\n')
+		if err != nil {
+			log.Fatalln(err)
+		}
 		if strings.ToLower(strings.TrimSpace(text)) == "n" {
 			log.Fatalln("Exiting...")
 		} else if strings.ToLower(strings.TrimSpace(text)) == "y" {

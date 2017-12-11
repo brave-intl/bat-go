@@ -144,7 +144,10 @@ func ToChecksumETHAddress(str string) string {
 	hex.Encode(hashHex, hash)
 
 	for i, v := range lowerBytes {
-		x, _ := strconv.ParseUint(string([]byte{hashHex[i]}), 16, 8)
+		x, err := strconv.ParseUint(string([]byte{hashHex[i]}), 16, 8)
+		if err != nil {
+			panic(err)
+		}
 		if x >= 8 {
 			lowerBytes[i] = byte(unicode.ToUpper(rune(v)))
 		}
