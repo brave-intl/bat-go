@@ -24,7 +24,7 @@
 
 [[constraint]]
   name = "github.com/shopspring/decimal"
-  branch = "master"
+  version = "1.0.0"
 
 [[constraint]]
   name = "github.com/asaskevich/govalidator"
