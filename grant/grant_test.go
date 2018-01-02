@@ -42,14 +42,15 @@ func TestFromCompactJWS(t *testing.T) {
 }
 
 func TestVerifyAndConsume(t *testing.T) {
-	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
+	GrantSignatorPublicKeyHex = "f03bccbcd2314d721f2375a669e7b817ef61067ab18a5da5df5b24b73feba8b7"
 	SettlementDestination = "foo@bar.com"
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
 	InitGrantService()
 
-	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI5NjE0YWRlNy01OGFmLTRkZjAtODZjNi0yZjcwMDUxYjQzZGUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.OOEBJUHPE21OyFw5Vq1tRTxYQc7aEL-KL5Lb4nb1TZn_3LFkXEPY7bNo0GhJ6k9X2UkZ19rnfBbpXHKuqBupDA"}
+	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiIxOGY3Y2FkYS0yZTljLTRjNmUtYTU0MS1iMjAzMmM0M2E5MmUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.haBAppDcMq0D1NlcxzBatwZGIKRtEGsw9_03PQtUAMTXmkc5LtoyFGgIXeZLIdrYmuowD8jHLIU3K1e8HJhzBA"}
+
 	walletInfo := wallet.Info{}
 	walletInfo.Provider = "uphold"
 	{
@@ -74,7 +75,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	}
 
 	claimReq := ClaimGrantRequest{walletInfo}
-	claimReq.Claim(ctx, "9614ade7-58af-4df0-86c6-2f70051b43de")
+	claimReq.Claim(ctx, "18f7cada-2e9c-4c6e-a541-b2032c43a92e")
 
 	_, err = request.VerifyAndConsume(ctx)
 	if err != nil {
@@ -87,7 +88,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	}
 
 	// another grant from the same promotionId
-	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiJmODdlN2ZiNC0wZjgwLTQwYWQtYjA5Mi04NGY3MGU0NDg0MjEiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.AZ13bwEbmIt-ji2gWqg4ofRd1dQ8D1h0BnypWkg_AsKlfU5ne3LcSnfsMkamwv_0Vz4OgApwDl5feC2lMRHFDg"}
+	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI1MzZjNWZhZC0zYWJiLTQwM2UtOWI5Mi1kNjE5ZDc0YjNhZjQiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.Y5QruXFJVV0qqRauP3ah4UAHk6TgtNPySkbq3VBv3dCKpAvYmSnfBRipKjVCicP2s0lQQn8Rcu3aIP4VDBCjDQ"}
 
 	// claim this grant as well to ensure we are testing re-redeem with same wallet and promotion
 	claimReq.Claim(ctx, "f87e7fb4-0f80-40ad-b092-84f70e448421")
