@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -38,6 +39,7 @@ type Wallet struct {
 var (
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
 	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
 	upholdAPIBase = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
@@ -45,14 +47,29 @@ var (
 	}[environment]
 
 	upholdCertFingerprint = "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc="
-	client                = &http.Client{
+	client                *http.Client
+)
+
+func init() {
+	var proxy func(*http.Request) (*url.URL, error)
+	if len(upholdProxy) > 0 {
+		proxyURL, err := url.Parse(upholdProxy)
+		if err != nil {
+			panic("UPHOLD_HTTP_PROXY is not a valid proxy URL")
+		}
+		proxy = http.ProxyURL(proxyURL)
+	} else {
+		proxy = nil
+	}
+	client = &http.Client{
 		Timeout: time.Second * 10,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
+				Proxy:   proxy,
 				DialTLS: pindialer.MakeDialer(upholdCertFingerprint),
 			}, "uphold"),
 	}
-)
+}
 
 // TODO add context?
 

@@ -18,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	raven "github.com/getsentry/raven-go"
 	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/satori/go.uuid"
@@ -43,9 +44,10 @@ var (
 	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
 	grantPublicKey               ed25519.PublicKey
 	grantWallet                  *uphold.Wallet
-	refreshBalance               = true // for testing we can disable balance refresh
-	testSubmit                   = true // for testing we can disable testing tx submit
-	registerGrantInstrumentation = true // for testing we can disable grant claim / redeem instrumentation registration
+	refreshBalance               = true  // for testing we can disable balance refresh
+	testSubmit                   = true  // for testing we can disable testing tx submit
+	registerGrantInstrumentation = true  // for testing we can disable grant claim / redeem instrumentation registration
+	safeMode                     = false // if set true disables grant redemption
 	claimedGrantsCounter         = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "claimed_grants_total",
@@ -411,6 +413,12 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 
 // Redeem the grants in the included response
 func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
+	log := lg.Log(ctx)
+
+	if safeMode {
+		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
+	}
+
 	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
 	if err != nil {
 		return nil, err
@@ -420,23 +428,37 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
+		safeMode = true
+		log.Errorf("Could not get wallet %s from info after successful VerifyAndConsume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not get wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
 
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
+		safeMode = true
+		log.Errorf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
 
 	// confirm settlement transaction previously sent to wallet provider
-	//
-	// NOTE VerifyAndConsume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
-	// such as including additional fields that are not understood by this wallet provider implementation but may
-	// be understood by the upstream wallet provider.
-	settlementInfo, err := userWallet.ConfirmTransaction(submitID)
-	if err != nil {
-		return nil, err
+	var settlementInfo *wallet.TransactionInfo
+	for tries := 5; tries >= 0; tries-- {
+		if tries == 0 {
+			safeMode = true
+			log.Errorf("Could not submit settlement txn for wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
+			raven.CaptureMessage("Could not submit settlement txn after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+			return nil, err
+		}
+		// NOTE VerifyAndConsume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
+		// such as including additional fields that are not understood by this wallet provider implementation but may
+		// be understood by the upstream wallet provider.
+		settlementInfo, err = userWallet.ConfirmTransaction(submitID)
+		if err == nil {
+			break
+		}
 	}
 
 	return settlementInfo, nil

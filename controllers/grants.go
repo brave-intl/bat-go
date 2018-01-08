@@ -6,12 +6,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils"
 	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
 )
 
@@ -20,6 +22,13 @@ func GrantsRouter() chi.Router {
 	r := chi.NewRouter()
 	if os.Getenv("ENV") == "production" {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)
+	}
+	if len(os.Getenv("THROTTLE_GRANT_REQUESTS")) > 0 {
+		throttle, err := strconv.ParseInt(os.Getenv("THROTTLE_GRANT_REQUESTS"), 10, 0)
+		if err != nil {
+			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
+		}
+		r.Use(chiware.Throttle(int(throttle)))
 	}
 	r.Put("/{grantId}", middleware.InstrumentHandlerFunc("ClaimGrant", ClaimGrant))
 	r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
