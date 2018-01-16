@@ -81,6 +81,8 @@ func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
 // Collect comment
 func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
 	conn := gs.pool.Get()
+	defer conn.Close()
+
 	kv := datastore.GetRedisKv(&conn)
 	ogCount, err := kv.Count("grant:*")
 	if err != nil {
