@@ -72,13 +72,15 @@ type grantService struct {
 	completedGrantCountDesc   *prometheus.Desc
 }
 
-// Describe comment
+// Describe returns all descriptions of the collector.
+// We implement this and the Collect function to fulfill the prometheus.Collector interface
 func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
 	ch <- gs.outstandingGrantCountDesc
 	ch <- gs.completedGrantCountDesc
 }
 
-// Collect comment
+// Collect returns the current state of all metrics of the collector.
+// We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
 	conn := gs.pool.Get()
 	defer utils.PanicCloser(conn)
