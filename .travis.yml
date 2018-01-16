@@ -1,6 +1,9 @@
 language: go
 notifications:
   email: false
+branches:
+  only:
+  - master
 go:
 - 1.9
 - master
