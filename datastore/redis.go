@@ -113,7 +113,7 @@ func (store *RedisKv) Count(pattern string) (int, error) {
 	return redis.Int((*store.conn).Do("EVAL", "return #redis.call('keys', '"+pattern+"')", 0))
 }
 
-// Return the keys matching pattern
+// Keys returns the keys matching pattern
 func (store *RedisKv) Keys(pattern string) ([]string, error) {
 	return redis.Strings((*store.conn).Do("KEYS", pattern))
 }
