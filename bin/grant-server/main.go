@@ -62,7 +62,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	}
 	ctx = datastore.WithRedisPool(ctx, rp)
 
-	err := grant.InitGrantService()
+	err := grant.InitGrantService(rp)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)

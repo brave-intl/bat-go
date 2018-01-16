@@ -16,7 +16,7 @@ import (
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
-	InitGrantService()
+	InitGrantService(nil)
 
 	expectedGrantJSON := []byte(`{"altcurrency":"BAT","grantId":"9614ade7-58af-4df0-86c6-2f70051b43de","probi":"30000000000000000000","promotionId":"880309fc-df27-40a8-8d51-9cf39885e61d","maturityTime":1511769862,"expiryTime":1513843462}`)
 
@@ -47,7 +47,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
-	InitGrantService()
+	InitGrantService(nil)
 
 	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiIxOGY3Y2FkYS0yZTljLTRjNmUtYTU0MS1iMjAzMmM0M2E5MmUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.haBAppDcMq0D1NlcxzBatwZGIKRtEGsw9_03PQtUAMTXmkc5LtoyFGgIXeZLIdrYmuowD8jHLIU3K1e8HJhzBA"}
 

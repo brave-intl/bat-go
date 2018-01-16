@@ -108,6 +108,16 @@ func (store *RedisKv) Delete(key string) (bool, error) {
 	return false, err
 }
 
+// Count the keys matching pattern
+func (store *RedisKv) Count(pattern string) (int, error) {
+	return redis.Int((*store.conn).Do("EVAL", "return #redis.call('keys', '"+pattern+"')", 0))
+}
+
+// Keys returns the keys matching pattern
+func (store *RedisKv) Keys(pattern string) ([]string, error) {
+	return redis.Strings((*store.conn).Do("KEYS", pattern))
+}
+
 // Close the underlying connection to the datastore
 func (store *RedisKv) Close() error {
 	return (*store.conn).Close()

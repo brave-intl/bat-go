@@ -96,4 +96,15 @@ func TestRedisKv(t *testing.T) {
 	if r, err := store.Set("FOO", "DEAD", -1, false); r != true || err != nil {
 		t.Error("Add without upsert should succeed on expired key")
 	}
+
+	if n, err := store.Count("F*"); n != 1 || err != nil {
+		t.Error("Incorrect count on with prefix")
+	}
+	if r, err := store.Set("FUN", "CAFE", -1, false); r != true || err != nil {
+		t.Error("Add without upsert should succeed on expired key")
+	}
+	if n, err := store.Count("F*"); n != 2 || err != nil {
+		t.Error("Incorrect count on with prefix")
+	}
+
 }
