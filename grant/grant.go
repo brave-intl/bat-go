@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
@@ -18,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,21 +53,70 @@ var (
 	claimedGrantsCounter         = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "claimed_grants_total",
-			Help: "Number of claimed grants.",
+			Help: "Number of grants claimed since start.",
 		},
 		[]string{},
 	)
 	redeemedGrantsCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "redeemed_grants_total",
-			Help: "Number of redeemed grants.",
+			Help: "Number of grants redeemed since start.",
 		},
 		[]string{"promotionId"},
 	)
 )
 
+type grantService struct {
+	pool                      *redis.Pool
+	outstandingGrantCountDesc *prometheus.Desc
+	completedGrantCountDesc   *prometheus.Desc
+}
+
+// Describe comment
+func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
+	ch <- gs.outstandingGrantCountDesc
+	ch <- gs.completedGrantCountDesc
+}
+
+// Collect comment
+func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
+	conn := gs.pool.Get()
+	kv := datastore.GetRedisKv(&conn)
+	ogCount, err := kv.Count("grant:*")
+	if err != nil {
+		raven.CaptureError(err, map[string]string{})
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(
+		gs.outstandingGrantCountDesc,
+		prometheus.GaugeValue,
+		float64(ogCount),
+	)
+	promotions, err := kv.Keys("promotion:*:grants")
+	if err != nil {
+		raven.CaptureError(err, map[string]string{})
+		return
+	}
+	for i := 0; i < len(promotions); i++ {
+		promotionSet := datastore.GetRedisSet(&conn, promotions[i])
+		promotionID := strings.TrimSuffix(strings.TrimPrefix(promotions[i], "promotion:"), ":grants")
+		completedCount, err := promotionSet.Cardinality()
+		if err != nil {
+			raven.CaptureError(err, map[string]string{})
+			return
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			gs.completedGrantCountDesc,
+			prometheus.GaugeValue,
+			float64(completedCount),
+			promotionID,
+		)
+	}
+}
+
 // InitGrantService initializes the grant service
-func InitGrantService() error {
+func InitGrantService(pool *redis.Pool) error {
 	var err error
 	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
 	if err != nil {
@@ -110,6 +161,25 @@ func InitGrantService() error {
 	}
 
 	if registerGrantInstrumentation {
+		if pool != nil {
+			gs := &grantService{
+				pool: pool,
+				outstandingGrantCountDesc: prometheus.NewDesc(
+					"outstanding_grants_total",
+					"Outstanding grants that have been claimed and have not expired.",
+					[]string{},
+					prometheus.Labels{},
+				),
+				completedGrantCountDesc: prometheus.NewDesc(
+					"completed_grants_total",
+					"Completed grants that have been redeemed.",
+					[]string{"promotionId"},
+					prometheus.Labels{},
+				),
+			}
+			prometheus.MustRegister(gs)
+		}
+
 		prometheus.MustRegister(claimedGrantsCounter)
 		prometheus.MustRegister(redeemedGrantsCounter)
 	}
