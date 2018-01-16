@@ -25,6 +25,7 @@ before_install:
   -o $GOPATH/bin/dep
 - chmod +x $GOPATH/bin/dep
 - go get -u github.com/alecthomas/gometalinter
+- go get -u github.com/client9/misspell/cmd/misspell
 - gometalinter --install
 install:
 - dep ensure

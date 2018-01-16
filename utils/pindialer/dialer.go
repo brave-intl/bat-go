@@ -11,7 +11,7 @@ import (
 // Dialer is a function connecting to the address on the named network
 type Dialer func(network, addr string) (net.Conn, error)
 
-// MakeDialer returns a Dialer that only suceeds on connection to a TLS secured address with the pinned fingerprint
+// MakeDialer returns a Dialer that only succeeds on connection to a TLS secured address with the pinned fingerprint
 func MakeDialer(fingerprint string) Dialer {
 	return func(network, addr string) (net.Conn, error) {
 		c, err := tls.Dial(network, addr, nil)
