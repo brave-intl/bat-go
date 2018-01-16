@@ -135,7 +135,7 @@ func Keccak256(data ...[]byte) []byte {
 	return d.Sum(nil)
 }
 
-// ToChecksumETHAddress returns the address str with a checksum encoded in the captialization per EIP55
+// ToChecksumETHAddress returns the address str with a checksum encoded in the capitalization per EIP55
 func ToChecksumETHAddress(str string) string {
 	lower := strings.Replace(strings.ToLower(str), "0x", "", 1)
 	lowerBytes := []byte(lower)

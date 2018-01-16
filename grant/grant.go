@@ -233,7 +233,7 @@ type RedeemGrantsRequest struct {
 	Transaction string      `json:"transaction" valid:"base64"`
 }
 
-// VerifyAndConsume one or more grants to fufill the included transaction for wallet
+// VerifyAndConsume one or more grants to fulfill the included transaction for wallet
 // Note that this is destructive, on success consumes grants.
 // Further calls to Verify with the same request will fail as the grants are consumed.
 //
@@ -328,7 +328,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	for _, grant := range grants {
 		if sumProbi.GreaterThanOrEqual(needed) {
 			// 5. Fail if there are leftover grants
-			return nil, errors.New("More grants included than are needed to fufill included transaction")
+			return nil, errors.New("More grants included than are needed to fulfill included transaction")
 		}
 		if *grant.AltCurrency != altcurrency.BAT {
 			return nil, errors.New("All grants must be in BAT")
