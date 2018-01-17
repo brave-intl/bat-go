@@ -214,7 +214,7 @@ func CreateGrants(
 	promotionUUID uuid.UUID,
 	grantCount uint,
 	altCurrency altcurrency.AltCurrency,
-	value uint,
+	value float64,
 	maturityDate time.Time,
 	expiryDate time.Time,
 ) []string {
@@ -223,7 +223,7 @@ func CreateGrants(
 		var grant Grant
 		grant.AltCurrency = &altCurrency
 		grant.GrantID = uuid.NewV4()
-		grant.Probi = altCurrency.ToProbi(decimal.New(int64(value), 0))
+		grant.Probi = altCurrency.ToProbi(decimal.NewFromFloat(value))
 		grant.PromotionID = promotionUUID
 		grant.MaturityTimestamp = maturityDate.Unix()
 		grant.ExpiryTimestamp = expiryDate.Unix()
