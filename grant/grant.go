@@ -376,22 +376,6 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, errors.New("included transactions must have settlement as their destination")
 	}
 
-	var submitID string
-	if testSubmit {
-		var submitInfo *wallet.TransactionInfo
-		// TODO remove this once we can retrieve publicKey info from uphold
-		// NOTE We check the signature on the included transaction by submitting it but not confirming it
-		submitInfo, err = userWallet.SubmitTransaction(req.Transaction, false)
-		if err != nil {
-			if wallet.IsInvalidSignature(err) {
-				return nil, errors.New("the included transaction was signed with the wrong publicKey")
-			} else if !wallet.IsInsufficientBalance(err) {
-				return nil, errors.New("error while test submitting the included transaction: " + err.Error())
-			}
-		}
-		submitID = submitInfo.ID
-	}
-
 	// 3. Sort decoded grants, largest probi to smallest
 	sort.Sort(sort.Reverse(ByProbi(grants)))
 
@@ -408,6 +392,33 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 			return nil, errors.New("All grants must be in BAT")
 		}
 		sumProbi = sumProbi.Add(grant.Probi)
+	}
+
+	// should be reasonable since we limit the redeem endpoint to a maximum of 1 simultaneous in-flight request
+	ugpBalance, err := grantWallet.GetBalance(refreshBalance)
+	if err != nil {
+		return nil, err
+	}
+
+	if sumProbi.GreaterThan(ugpBalance.SpendableProbi) {
+		safeMode = true
+		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
+	}
+
+	var submitID string
+	if testSubmit {
+		var submitInfo *wallet.TransactionInfo
+		// TODO remove this once we can retrieve publicKey info from uphold
+		// NOTE We check the signature on the included transaction by submitting it but not confirming it
+		submitInfo, err = userWallet.SubmitTransaction(req.Transaction, false)
+		if err != nil {
+			if wallet.IsInvalidSignature(err) {
+				return nil, errors.New("the included transaction was signed with the wrong publicKey")
+			} else if !wallet.IsInsufficientBalance(err) {
+				return nil, errors.New("error while test submitting the included transaction: " + err.Error())
+			}
+		}
+		submitID = submitInfo.ID
 	}
 
 	kvDatastore, err := datastore.GetKvDatastore(ctx)
