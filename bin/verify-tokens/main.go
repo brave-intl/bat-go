@@ -31,7 +31,7 @@ type grantRegistration struct {
 
 func main() {
 	if len(grantSignatorPublicKeyHex) == 0 {
-		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
+		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PUBLIC_KEY")
 	}
 	err := grant.InitGrantService(nil)
 	if err != nil {

@@ -28,7 +28,7 @@ const (
 var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
 
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
-var value = flag.Uint("value", 30, "value for the grant [nominal units, not probi]")
+var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
 var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
 var maturityDateStr = flag.String("maturity-date", "now", "datetime when tokens should become redeemable [ISO 8601]")
 var validWeeks = flag.Uint("valid-weeks", defaultValidWeeks, "weeks after the maturity date that tokens are valid before expiring [conflicts with -expiry-date]")
@@ -37,9 +37,10 @@ var promotionID = flag.String("promotion-id", generated, "identifier for this pr
 var outputFile = flag.String("out", "./grantTokens.json", "output file path")
 
 type promotionInfo struct {
-	ID       uuid.UUID `json:"promotionId"`
-	Priority int       `json:"priority"`
-	Active   bool      `json:"active"`
+	ID                        uuid.UUID `json:"promotionId"`
+	Priority                  int       `json:"priority"`
+	Active                    bool      `json:"active"`
+	MinimumReconcileTimestamp int64     `json:"minimumReconcileTimestamp"`
 }
 
 type grantRegistration struct {
@@ -80,7 +81,7 @@ func main() {
 			log.Fatalln("%s is not a valid ISO 8601 datetime", *expiryDateStr)
 		}
 	} else {
-		expiryDate = maturityDate.AddDate(0, 0, int(*validWeeks))
+		expiryDate = maturityDate.AddDate(0, 0, int(*validWeeks)*7)
 	}
 
 	promotionUUID := uuid.NewV4()
@@ -106,7 +107,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	fmt.Printf("Will create %d tokens worth %d %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
+	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("Continue? (y/n): ")
@@ -127,7 +128,7 @@ func main() {
 	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
-	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUUID, 0, false}}
+	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUUID, 0, false, maturityDate.Unix() * 1000}}
 	serializedGrants, err := json.Marshal(grantReg)
 	if err != nil {
 		log.Fatalln(err)

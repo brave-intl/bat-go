@@ -22,6 +22,9 @@ docker:
 	docker build -t bat-go:latest .
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
 
+mac:
+	GOOS=darwin GOARCH=amd64 make bins
+
 test:
 	go test -v --tags=$(TEST_TAGS) ./...
 
