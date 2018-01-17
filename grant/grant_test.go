@@ -8,8 +8,10 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/pressly/lg"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"github.com/sirupsen/logrus"
 )
 
@@ -49,6 +51,30 @@ func TestVerifyAndConsume(t *testing.T) {
 	registerGrantInstrumentation = false
 	InitGrantService(nil)
 
+	// Populate grant wallet balance to pass check
+	oneHundred, err := decimal.NewFromString("100")
+	if err != nil {
+		t.Error(err)
+	}
+	grantWalletInfo := wallet.Info{}
+	grantWalletInfo.LastBalance = &wallet.Balance{
+		TotalProbi:       altcurrency.BAT.ToProbi(oneHundred),
+		SpendableProbi:   altcurrency.BAT.ToProbi(oneHundred),
+		ConfirmedProbi:   altcurrency.BAT.ToProbi(oneHundred),
+		UnconfirmedProbi: decimal.Zero,
+	}
+	grantWalletInfo.Provider = "uphold"
+	{
+		tmp := altcurrency.BAT
+		grantWalletInfo.AltCurrency = &tmp
+	}
+	grantWalletInfo.ProviderID = uuid.NewV4().String()
+
+	grantWallet, err = uphold.FromWalletInfo(grantWalletInfo)
+	if err != nil {
+		t.Error(err)
+	}
+
 	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiIxOGY3Y2FkYS0yZTljLTRjNmUtYTU0MS1iMjAzMmM0M2E5MmUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.haBAppDcMq0D1NlcxzBatwZGIKRtEGsw9_03PQtUAMTXmkc5LtoyFGgIXeZLIdrYmuowD8jHLIU3K1e8HJhzBA"}
 
 	walletInfo := wallet.Info{}
@@ -69,7 +95,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	ctx = lg.WithLoggerContext(ctx, logger)
 
 	request := RedeemGrantsRequest{grants, walletInfo, transaction}
-	_, err := request.VerifyAndConsume(ctx)
+	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("Should not be able to redeem without a valid claim on a grant")
 	}
