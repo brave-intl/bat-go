@@ -85,18 +85,12 @@ func ClaimGrant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn := datastore.GetRedisConn(r.Context())
-
-	if err == nil {
-		// FIXME TODO clean this up via a better abstraction
-		if _, err := redis.Int((*conn).Do("ZINCRBY", "count:claimed:ip", "1", r.RemoteAddr)); err != nil {
-			raven.CaptureMessage("Could not increment claim count for ip.", map[string]string{"IP": r.RemoteAddr})
-		}
-	} else {
+	// FIXME TODO clean this up via a better abstraction
+	if _, err := redis.Int((*conn).Do("ZINCRBY", "count:claimed:ip", "1", r.RemoteAddr)); err != nil {
 		raven.CaptureMessage("Could not increment claim count for ip.", map[string]string{"IP": r.RemoteAddr})
 	}
-	err = (*conn).Close()
-	if err != nil {
-		raven.CaptureMessage("Could not cleanly closed db conn.", map[string]string{})
+	if err = (*conn).Close(); err != nil {
+		raven.CaptureMessage("Could not cleanly close db conn post ip increment.", map[string]string{})
 	}
 
 	w.Header().Set("content-type", "application/json")
