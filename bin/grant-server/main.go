@@ -42,7 +42,14 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 
 	r := chi.NewRouter()
 	r.Use(chiware.RequestID)
+
+	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
+	// provided to us. In particular it uses the first element.
+	// (e.g. with header "X-Forwarded-For: client, proxy1, proxy2" it would yield "client" as the real IP.)
+	// The grant server is only accessed by the ledger service, so headers are semi-trusted.
+	// Consequently we should consider the request IP as primarily "informational".
 	r.Use(chiware.RealIP)
+
 	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
