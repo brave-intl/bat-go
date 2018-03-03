@@ -5,9 +5,9 @@ branches:
   only:
   - master
 go:
-- 1.9
-- 1.10
-- master
+- "1.9"
+- "1.10"
+- "master"
 services:
 - redis-server
 matrix:
