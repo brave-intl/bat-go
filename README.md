@@ -5,7 +5,7 @@ Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://trav
 
 ## Developer Setup
 
-1. [Install Go 1.9](https://golang.org/doc/install)
+1. [Install Go 1.10](https://golang.org/doc/install)
 
 2. Run `go get -d github.com/brave-intl/bat-go`. 
 
