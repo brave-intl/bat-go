@@ -78,7 +78,7 @@ func main() {
 	if len(*expiryDateStr) > 0 {
 		expiryDate, err = time.Parse(dateFormat, *expiryDateStr)
 		if err != nil {
-			log.Fatalln("%s is not a valid ISO 8601 datetime", *expiryDateStr)
+			log.Fatalf("%s is not a valid ISO 8601 datetime\n", *expiryDateStr)
 		}
 	} else {
 		expiryDate = maturityDate.AddDate(0, 0, int(*validWeeks)*7)

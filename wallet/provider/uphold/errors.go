@@ -17,9 +17,9 @@ type upholdDenominationValidationErrors struct {
 }
 
 type upholdDenominationErrors struct {
-	Code                               string `json:"code"`
-	upholdDenominationValidationErrors `json:"errors,omitempty"`
-	Data                               json.RawMessage `json:",omitempty"`
+	Code             string                             `json:"code"`
+	ValidationErrors upholdDenominationValidationErrors `json:"errors,omitempty"`
+	Data             json.RawMessage                    `json:",omitempty"`
 }
 
 type upholdValidationErrors struct {
@@ -44,12 +44,12 @@ func (uhErr upholdError) DenominationError() bool {
 }
 
 func (uhErr upholdError) AmountError() bool {
-	return uhErr.DenominationError() && len(uhErr.ValidationErrors.DenominationErrors.AmountError) > 0
+	return uhErr.DenominationError() && len(uhErr.ValidationErrors.DenominationErrors.ValidationErrors.AmountError) > 0
 }
 
 func (uhErr upholdError) InsufficientBalance() bool {
 	if uhErr.AmountError() {
-		for _, ae := range uhErr.ValidationErrors.DenominationErrors.AmountError {
+		for _, ae := range uhErr.ValidationErrors.DenominationErrors.ValidationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
 				return true
 			}
@@ -64,7 +64,7 @@ func (uhErr upholdError) InvalidSignature() bool {
 
 func (uhErr upholdError) String() string {
 	if uhErr.InsufficientBalance() {
-		for _, ae := range uhErr.ValidationErrors.DenominationErrors.AmountError {
+		for _, ae := range uhErr.ValidationErrors.DenominationErrors.ValidationErrors.AmountError {
 			if ae.Code == "sufficient_funds" {
 				return ae.Message
 			}
