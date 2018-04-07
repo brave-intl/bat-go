@@ -18,7 +18,6 @@ target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@) 
 
 docker:
-	GOOS=linux GOARCH=amd64 make bins
 	docker build -t bat-go:latest .
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
 

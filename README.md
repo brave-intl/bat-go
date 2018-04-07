@@ -3,6 +3,11 @@
 [![Build
 Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://travis-ci.org/brave-intl/bat-go)
 
+## Building using docker
+
+You can build a docker image without installing the go toolchain. Ensure docker
+is installed then run `make docker`.
+
 ## Developer Setup
 
 1. [Install Go 1.10](https://golang.org/doc/install)
