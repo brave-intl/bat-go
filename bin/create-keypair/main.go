@@ -12,6 +12,8 @@ import (
 var envVarOut = flag.Bool("env", false, "Output in env var form [ENV=VALUE]")
 
 func main() {
+	log.SetFlags(0)
+
 	flag.Parse()
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
