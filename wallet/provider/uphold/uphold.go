@@ -32,8 +32,8 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	wallet.Info
-	PrivKey ed25519.PrivateKey
-	PubKey  httpsignature.Ed25519PubKey
+	PrivKey crypto.Signer
+	PubKey  httpsignature.Verifier
 }
 
 var (
@@ -75,7 +75,7 @@ func init() {
 
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
-func New(info wallet.Info, privKey ed25519.PrivateKey, pubKey httpsignature.Ed25519PubKey) (*Wallet, error) {
+func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
 	if info.Provider != "uphold" {
 		return nil, errors.New("The wallet provider must be uphold")
 	}
@@ -139,7 +139,7 @@ type createCardRequest struct {
 
 // Register a wallet with Uphold with label
 func (w *Wallet) Register(label string) error {
-	reqPayload := createCardRequest{label, w.Info.AltCurrency, hex.EncodeToString(w.PubKey)}
+	reqPayload := createCardRequest{label, w.Info.AltCurrency, w.PubKey.String()}
 	payload, err := json.Marshal(reqPayload)
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package httpsignature
 
 import (
 	"crypto"
+	"encoding/hex"
 	"errors"
 	"io"
 	"strconv"
@@ -23,6 +24,10 @@ func (pk Ed25519PubKey) Verify(message, sig []byte, opts crypto.SignerOpts) (boo
 	copy(key, pk)
 
 	return ed25519.Verify(key, message, sig), nil
+}
+
+func (pk Ed25519PubKey) String() string {
+	return hex.EncodeToString(pk)
 }
 
 // GenerateEd25519Key generate an ed25519 keypair and return it

@@ -77,7 +77,9 @@ func TestDecodeTransaction(t *testing.T) {
 		t.Error(err)
 	}
 
-	wallet.PubKey, _ = hex.DecodeString("424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf")
+	var pk httpsignature.Ed25519PubKey
+	pk, _ = hex.DecodeString("424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf")
+	wallet.PubKey = pk
 
 	txnB64 := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
