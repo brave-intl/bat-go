@@ -1,60 +1,18 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"time"
 
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
-	"github.com/hashicorp/vault/helper/jsonutil"
-	"github.com/hashicorp/vault/helper/keysutil"
-	"golang.org/x/crypto/ed25519"
-
-	uuid "github.com/hashicorp/go-uuid"
 )
 
 var privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
 var publicKeyHex = os.Getenv("ED25519_PUBLIC_KEY")
-
-// CreateVaultCompatibleBackup from ED25519 private / public keypair
-func CreateVaultCompatibleBackup(privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, name string) string {
-	key := keysutil.KeyEntry{}
-
-	key.Key = privKey
-
-	pk := base64.StdEncoding.EncodeToString(pubKey)
-	key.FormattedPublicKey = pk
-
-	{
-		tmp, err := uuid.GenerateRandomBytes(32)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		key.HMACKey = tmp
-	}
-
-	key.CreationTime = time.Now()
-	key.DeprecatedCreationTime = key.CreationTime.Unix()
-
-	keyData := keysutil.KeyData{Policy: &keysutil.Policy{Keys: map[string]keysutil.KeyEntry{"1": key}}}
-
-	keyData.Policy.ArchiveVersion = 1
-	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now(), Version: 1}
-	keyData.Policy.LatestVersion = 1
-	keyData.Policy.MinDecryptionVersion = 1
-	keyData.Policy.Name = name
-	keyData.Policy.Type = keysutil.KeyType_ED25519
-
-	encodedBackup, err := jsonutil.EncodeJSON(keyData)
-	if err != nil {
-		log.Fatalln("error:", err)
-	}
-	return base64.StdEncoding.EncodeToString(encodedBackup)
-}
 
 func main() {
 	log.SetFlags(0)
@@ -90,8 +48,6 @@ func main() {
 		log.Fatalln("ERROR: Key material must be passed as hex")
 	}
 
-	backup := CreateVaultCompatibleBackup(privKey, pubKey, args[0])
-
 	config := &api.Config{}
 	err = config.ReadEnvironment()
 
@@ -103,23 +59,8 @@ func main() {
 		client.SetAddress("http://127.0.0.1:8200")
 	}
 
-	mounts, err := client.Sys().ListMounts()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err := client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			log.Fatalln(err)
-		}
-	}
+	_, err = vaultsigner.FromKeypair(client, privKey, pubKey, args[0])
 
-	// Restore the generated key backup
-	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
-		"backup": backup,
-	})
 	if err != nil {
 		log.Fatalln(err)
 	}

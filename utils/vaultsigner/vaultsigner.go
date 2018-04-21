@@ -6,8 +6,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
+	uuid "github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/helper/jsonutil"
+	"github.com/hashicorp/vault/helper/keysutil"
+	"golang.org/x/crypto/ed25519"
 )
 
 type VaultSigner struct {
@@ -39,4 +44,62 @@ func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts)
 	}
 
 	return response.Data["valid"].(bool), nil
+}
+
+func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, importName string) (*VaultSigner, error) {
+	key := keysutil.KeyEntry{}
+
+	key.Key = privKey
+
+	pk := base64.StdEncoding.EncodeToString(pubKey)
+	key.FormattedPublicKey = pk
+
+	{
+		tmp, err := uuid.GenerateRandomBytes(32)
+		if err != nil {
+			return nil, err
+		}
+		key.HMACKey = tmp
+	}
+
+	key.CreationTime = time.Now()
+	key.DeprecatedCreationTime = key.CreationTime.Unix()
+
+	keyData := keysutil.KeyData{Policy: &keysutil.Policy{Keys: map[string]keysutil.KeyEntry{"1": key}}}
+
+	keyData.Policy.ArchiveVersion = 1
+	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now(), Version: 1}
+	keyData.Policy.LatestVersion = 1
+	keyData.Policy.MinDecryptionVersion = 1
+	keyData.Policy.Name = importName
+	keyData.Policy.Type = keysutil.KeyType_ED25519
+
+	encodedBackup, err := jsonutil.EncodeJSON(keyData)
+	if err != nil {
+		return nil, err
+	}
+	backup := base64.StdEncoding.EncodeToString(encodedBackup)
+
+	mounts, err := client.Sys().ListMounts()
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := mounts["transit/"]; !ok {
+		// Mount transit secret backend if not already mounted
+		if err := client.Sys().Mount("transit", &api.MountInput{
+			Type: "transit",
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	// Restore the generated key backup
+	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
+		"backup": backup,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &VaultSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
 }
