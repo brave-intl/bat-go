@@ -56,11 +56,16 @@ func main() {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
-		client.SetAddress("http://127.0.0.1:8200")
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		log.Fatalln(err)
 	}
 
 	_, err = vaultsigner.FromKeypair(client, privKey, pubKey, args[0])
-
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -24,7 +24,13 @@ func TestSign(t *testing.T) {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
-		client.SetAddress("http://127.0.0.1:8200")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
@@ -66,7 +72,13 @@ func TestVerify(t *testing.T) {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
-		client.SetAddress("http://127.0.0.1:8200")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)

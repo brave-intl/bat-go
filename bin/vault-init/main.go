@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path"
 
+	"github.com/brave-intl/bat-go/utils"
 	"github.com/hashicorp/vault/api"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
@@ -22,6 +23,7 @@ var secretThreshold = flag.Uint("key-threshold", 3, "number of shares needed to 
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "A helper for quickly initializing vault.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
@@ -34,6 +36,7 @@ func main() {
 	flag.Parse()
 	gpgKeyFiles := flag.Args()
 
+	/* #nosec */
 	if len(gpgKeyFiles) == 0 {
 		flag.Usage()
 		os.Exit(1)
@@ -51,7 +54,7 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		defer f.Close()
+		defer utils.PanicCloser(f)
 
 		// Vault only accepts keys in binary format, so we normalize the format
 		var entity openpgp.EntityList
@@ -60,7 +63,10 @@ func main() {
 		entity, err = openpgp.ReadArmoredKeyRing(f)
 		if err != nil {
 			// On failure try to read it in binary format
-			f.Seek(0, 0)
+			_, err = f.Seek(0, 0)
+			if err != nil {
+				log.Fatalln(err)
+			}
 			entity, err = openpgp.ReadKeyRing(f)
 			if err != nil {
 				log.Fatalln(err)
@@ -87,8 +93,15 @@ func main() {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
-		client.SetAddress("http://127.0.0.1:8200")
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
 	}
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	req := api.InitRequest{}
 
 	req.PGPKeys = gpgKeys
@@ -102,8 +115,9 @@ func main() {
 
 	fmt.Printf("Success, vault has been initialized\n\n")
 
+	var b []byte
 	for i := range resp.KeysB64 {
-		b, err := base64.StdEncoding.DecodeString(resp.KeysB64[i])
+		b, err = base64.StdEncoding.DecodeString(resp.KeysB64[i])
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -111,8 +125,9 @@ func main() {
 		// Parse the resulting encrypted files to print corresponding key for each
 		buf := bytes.NewBuffer(b)
 		packets := packet.NewReader(buf)
+		var p packet.Packet
 		for {
-			p, err := packets.Next()
+			p, err = packets.Next()
 			if err != nil {
 				break
 			}
@@ -127,15 +142,18 @@ func main() {
 			}
 		}
 
-		err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 600)
+		err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
 		if err != nil {
 			log.Fatalln(err)
 		}
 	}
 
-	usr, _ := user.Current()
+	usr, err := user.Current()
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	err = ioutil.WriteFile(path.Join(usr.HomeDir, ".vault-token"), []byte(resp.RootToken), 600)
+	err = ioutil.WriteFile(path.Join(usr.HomeDir, ".vault-token"), []byte(resp.RootToken), 0600)
 	if err != nil {
 		log.Fatalln(err)
 	}

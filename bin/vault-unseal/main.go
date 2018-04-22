@@ -16,6 +16,7 @@ import (
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "A helper for using pipe output to unseal vault.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
@@ -32,7 +33,13 @@ func main() {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
-		client.SetAddress("http://127.0.0.1:8200")
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		log.Fatalln(err)
 	}
 
 	fi, err := os.Stdin.Stat()
@@ -59,17 +66,23 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintln(w, "Key\tValue")
-	fmt.Fprintln(w, "---\t-----")
-	fmt.Fprintf(w, "Seal Type\t%s\n", status.Type)
-	fmt.Fprintf(w, "Sealed\t%t\n", status.Sealed)
-	fmt.Fprintf(w, "Total Shares\t%d\n", status.N)
-	fmt.Fprintf(w, "Threshold\t%d\n", status.T)
+	/* #nosec */
+	{
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+		fmt.Fprintln(w, "Key\tValue")
+		fmt.Fprintln(w, "---\t-----")
+		fmt.Fprintf(w, "Seal Type\t%s\n", status.Type)
+		fmt.Fprintf(w, "Sealed\t%t\n", status.Sealed)
+		fmt.Fprintf(w, "Total Shares\t%d\n", status.N)
+		fmt.Fprintf(w, "Threshold\t%d\n", status.T)
 
-	if status.Sealed {
-		fmt.Fprintf(w, "Unseal Progress\t%d/%d\n", status.Progress, status.T)
-		fmt.Fprintf(w, "Unseal Nonce\t%s\n", status.Nonce)
+		if status.Sealed {
+			fmt.Fprintf(w, "Unseal Progress\t%d/%d\n", status.Progress, status.T)
+			fmt.Fprintf(w, "Unseal Nonce\t%s\n", status.Nonce)
+		}
+		err = w.Flush()
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
-	w.Flush()
 }

@@ -15,15 +15,17 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
+// VaultSigner an ed25519 signer / verifier that uses the vault transit backend
 type VaultSigner struct {
 	Client     *api.Client
 	KeyName    string
 	KeyVersion uint
 }
 
-func (vs *VaultSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+// Sign the included message using the vault held keypair. rand and opts are not used
+func (vs *VaultSigner) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) ([]byte, error) {
 	response, err := vs.Client.Logical().Write("transit/sign/"+vs.KeyName, map[string]interface{}{
-		"input": base64.StdEncoding.EncodeToString(digest),
+		"input": base64.StdEncoding.EncodeToString(message),
 	})
 	if err != nil {
 		return []byte{}, err
@@ -34,6 +36,7 @@ func (vs *VaultSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 	return base64.StdEncoding.DecodeString(strings.Split(sig, ":")[2])
 }
 
+// Verify the included signature over message using the vault held keypair. opts are not used
 func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts) (bool, error) {
 	response, err := vs.Client.Logical().Write("transit/verify/"+vs.KeyName, map[string]interface{}{
 		"input":     base64.StdEncoding.EncodeToString(message),
@@ -46,6 +49,7 @@ func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts)
 	return response.Data["valid"].(bool), nil
 }
 
+// FromKeypair create a new vault transit key by importing privKey and pubKey under importName
 func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, importName string) (*VaultSigner, error) {
 	key := keysutil.KeyEntry{}
 
@@ -86,7 +90,7 @@ func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.
 	}
 	if _, ok := mounts["transit/"]; !ok {
 		// Mount transit secret backend if not already mounted
-		if err := client.Sys().Mount("transit", &api.MountInput{
+		if err = client.Sys().Mount("transit", &api.MountInput{
 			Type: "transit",
 		}); err != nil {
 			return nil, err
