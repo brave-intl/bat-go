@@ -410,9 +410,23 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 	return &info, err
 }
 
+type upholdTransactionResponseDestinationNode struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 type upholdTransactionResponseDestination struct {
-	Type   string `json:"type"`
-	CardID string `json:"CardId"`
+	Type        string                                   `json:"type"`
+	CardID      string                                   `json:"CardId,omitempty"`
+	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Currency    string                                   `json:"currency"`
+	Amount      decimal.Decimal                          `json:"amount"`
+	ExchangeFee decimal.Decimal                          `json:"commission"`
+	TransferFee decimal.Decimal                          `json:"fee"`
+}
+
+type upholdTransactionResponseParams struct {
+	TTL int64 `json:"ttl"`
 }
 
 type upholdTransactionResponse struct {
@@ -420,11 +434,39 @@ type upholdTransactionResponse struct {
 	ID           string                               `json:"id"`
 	Denomination denomination                         `json:"denomination"`
 	Destination  upholdTransactionResponseDestination `json:"destination"`
+	Params       upholdTransactionResponseParams      `json:"params"`
+}
+
+func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
+	var txInfo wallet.TransactionInfo
+	txInfo.Probi = resp.Denomination.Currency.ToProbi(resp.Denomination.Amount)
+	{
+		tmp := *resp.Denomination.Currency
+		txInfo.AltCurrency = &tmp
+	}
+	if len(resp.Destination.CardID) > 0 {
+		txInfo.Destination = resp.Destination.CardID
+	} else if len(resp.Destination.Node.ID) > 0 {
+		txInfo.Destination = resp.Destination.Node.ID
+	}
+
+	txInfo.DestCurrency = resp.Destination.Currency
+	txInfo.DestAmount = resp.Destination.Amount
+	txInfo.TransferFee = resp.Destination.TransferFee
+	txInfo.ExchangeFee = resp.Destination.ExchangeFee
+	txInfo.Status = resp.Status
+	if txInfo.Status == "pending" {
+		txInfo.ValidUntil = time.Now().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
+	}
+	txInfo.ID = resp.ID
+
+	return &txInfo
 }
 
 // SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
+//   unless confirm is set to true.
 func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet.TransactionInfo, error) {
-	info, err := w.VerifyTransaction(transactionB64)
+	_, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
 	}
@@ -476,11 +518,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	info.Fee = decimal.Zero
-	info.Status = uhResp.Status
-	info.ID = uhResp.ID
-
-	return info, nil
+	return uhResp.ToTransactionInfo(), nil
 }
 
 // ConfirmTransaction confirms a previously submitted transaction, moving funds
@@ -505,18 +543,28 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 		panic("Confirming a non-card transaction is not supported!!!")
 	}
 
-	var txInfo wallet.TransactionInfo
-	txInfo.Probi = uhResp.Denomination.Currency.ToProbi(uhResp.Denomination.Amount)
-	{
-		tmp := *uhResp.Denomination.Currency
-		txInfo.AltCurrency = &tmp
-	}
-	txInfo.Destination = uhResp.Destination.CardID
-	txInfo.Fee = decimal.Zero
-	txInfo.Status = uhResp.Status
-	txInfo.ID = uhResp.ID
+	return uhResp.ToTransactionInfo(), nil
+}
 
-	return &txInfo, nil
+// GetTransaction returns info about a previously confirmed transaction
+func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
+	req, err := newRequest("GET", "/v0/me/transactions/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+	var uhResp upholdTransactionResponse
+	err = json.Unmarshal(respBody, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return uhResp.ToTransactionInfo(), nil
 }
 
 // GetBalance returns the last known balance, if refresh is true then the current balance is fetched

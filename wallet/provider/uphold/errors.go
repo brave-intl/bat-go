@@ -35,6 +35,10 @@ type upholdError struct {
 	Data             json.RawMessage        `json:",omitempty"`
 }
 
+func (uhErr upholdError) NotFoundError() bool {
+	return uhErr.Code == "not_found"
+}
+
 func (uhErr upholdError) ValidationError() bool {
 	return uhErr.Code == "validation_failed"
 }

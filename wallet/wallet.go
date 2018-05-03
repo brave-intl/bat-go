@@ -2,6 +2,8 @@
 package wallet
 
 import (
+	"time"
+
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/shopspring/decimal"
 )
@@ -20,12 +22,16 @@ type Info struct {
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,
 // destination address, status and identifier
 type TransactionInfo struct {
-	Probi       decimal.Decimal          `json:"probi"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
-	Destination string                   `json:"address"`
-	Fee         decimal.Decimal          `json:"fee"`
-	Status      string                   `json:"status"`
-	ID          string                   `json:"id"`
+	Probi        decimal.Decimal          `json:"probi"`
+	AltCurrency  *altcurrency.AltCurrency `json:"altcurrency"`
+	Destination  string                   `json:"address"`
+	TransferFee  decimal.Decimal          `json:"fee"`
+	ExchangeFee  decimal.Decimal          `json:"-,omitempty"`
+	Status       string                   `json:"status"`
+	ID           string                   `json:"id"`
+	DestCurrency string                   `json:"-,omitempty"`
+	DestAmount   decimal.Decimal          `json:"-,omitempty"`
+	ValidUntil   time.Time                `json:"-"`
 }
 
 // Balance holds balance information for a wallet
@@ -54,8 +60,16 @@ type Wallet interface {
 	GetBalance(refresh bool) (*Balance, error)
 }
 
+// IsNotFound is a helper method for determining if an error indicates a missing resource
+func IsNotFound(err error) bool {
+	type notFound interface {
+		NotFoundError() bool
+	}
+	te, ok := err.(notFound)
+	return ok && te.NotFoundError()
+}
+
 // IsInsufficientBalance is a helper method for determining if an error indicates insufficient balance
-// to perform the requested action
 func IsInsufficientBalance(err error) bool {
 	type insufficientBalance interface {
 		InsufficientBalance() bool
@@ -65,7 +79,6 @@ func IsInsufficientBalance(err error) bool {
 }
 
 // IsUnauthorized is a helper method for determining if an error indicates the wallet unauthorized
-// to perform the requested action
 func IsUnauthorized(err error) bool {
 	type unauthorized interface {
 		Unauthorized() bool
