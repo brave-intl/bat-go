@@ -104,7 +104,7 @@ func FromWalletInfo(info wallet.Info) (*Wallet, error) {
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+accessToken)
+		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
 	}
 	return req, err
 }
