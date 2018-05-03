@@ -2,6 +2,7 @@ package vaultsigner
 
 import (
 	"crypto"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	uuid "github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/keysutil"
@@ -84,7 +84,8 @@ func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.
 	key.FormattedPublicKey = pk
 
 	{
-		tmp, err := uuid.GenerateRandomBytes(32)
+		tmp := make([]byte, 32)
+		_, err := rand.Read(tmp)
 		if err != nil {
 			return nil, err
 		}

@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	uuid "github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/vault/api"
+	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -37,12 +37,9 @@ func TestSign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name, err := uuid.GenerateUUID()
-	if err != nil {
-		t.Fatal(err)
-	}
+	name := uuid.NewV4()
 
-	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name)
+	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,12 +82,12 @@ func TestVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name, err := uuid.GenerateUUID()
+	name := uuid.NewV4()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name)
+	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name.String())
 	if err != nil {
 		t.Fatal(err)
 	}
