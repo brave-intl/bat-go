@@ -52,13 +52,13 @@ func TestTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	donorWallet := &uphold.Wallet{donorInfo, donorPrivateKey, donorPublicKey}
+	donorWallet := &uphold.Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
 
 	if len(donorWallet.ID) > 0 {
 		t.Fatal("FIXME")
 	}
 
-	settlementJson := []byte(`
+	settlementJSON := []byte(`
 	[
     {
         "address": "` + usdCard + `",
@@ -75,13 +75,13 @@ func TestTransactions(t *testing.T) {
 	]
 	`)
 
-	var settlements []SettlementTransaction
-	err = json.Unmarshal(settlementJson, &settlements)
+	var settlements []Transaction
+	err = json.Unmarshal(settlementJSON, &settlements)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = PrepareSettlementTransactions(donorWallet, settlements)
+	err = PrepareTransactions(donorWallet, settlements)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,8 @@ func TestTransactions(t *testing.T) {
 	}
 
 	for i := 0; i < len(settlements); i++ {
-		txInfo, err := donorWallet.GetTransaction(settlements[i].ProviderID)
+		var txInfo *wallet.TransactionInfo
+		txInfo, err = donorWallet.GetTransaction(settlements[i].ProviderID)
 		if err != nil {
 			t.Fatal(err)
 		}

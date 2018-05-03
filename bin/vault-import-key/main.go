@@ -18,6 +18,7 @@ var publicKeyHex = os.Getenv("ED25519_PUBLIC_KEY")
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "A helper for importing existing ed25519 keys into vault.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")

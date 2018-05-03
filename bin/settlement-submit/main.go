@@ -22,6 +22,7 @@ var (
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Submit signed settlements to uphold.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
@@ -33,13 +34,13 @@ func main() {
 	logFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
-	settlementJson, err := ioutil.ReadFile(*inputFile)
+	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	var settlementState settlement.SettlementState
-	err = json.Unmarshal(settlementJson, &settlementState)
+	var settlementState settlement.State
+	err = json.Unmarshal(settlementJSON, &settlementState)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -57,7 +58,7 @@ func main() {
 	// Read from the transaction log
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		var tmp settlement.SettlementTransaction
+		var tmp settlement.Transaction
 		err = json.Unmarshal(scanner.Bytes(), &tmp)
 		if err != nil {
 			log.Fatalln(err)
@@ -79,7 +80,8 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		out, err := json.Marshal(settlementTransaction)
+		var out []byte
+		out, err = json.Marshal(settlementTransaction)
 		if err != nil {
 			log.Fatalln(err)
 		}

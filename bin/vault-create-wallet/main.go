@@ -17,6 +17,7 @@ import (
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Create a new wallet backed by vault.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
@@ -75,7 +76,7 @@ func main() {
 
 	fmt.Printf("Generated keypair with public key: %s\n", signer)
 
-	wallet := &uphold.Wallet{info, signer, signer}
+	wallet := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: signer}
 	err = wallet.Register(name)
 	if err != nil {
 		log.Fatalln(err)

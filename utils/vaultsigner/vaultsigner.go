@@ -60,16 +60,16 @@ func (vs *VaultSigner) String() string {
 
 	keys := response.Data["keys"].(map[string]interface{})
 	key := keys[strconv.Itoa(int(vs.KeyVersion))].(map[string]interface{})
-	b64_public_key := key["public_key"].(string)
-	public_key, err := base64.StdEncoding.DecodeString(b64_public_key)
+	b64PublicKey := key["public_key"].(string)
+	publicKey, err := base64.StdEncoding.DecodeString(b64PublicKey)
 	if err != nil {
 		return ""
 	}
 
-	return hex.EncodeToString(public_key)
+	return hex.EncodeToString(publicKey)
 }
 
-// Return the public key
+// Public returns the public key
 func (vs *VaultSigner) Public() crypto.PublicKey {
 	return vs.String()
 }

@@ -26,6 +26,7 @@ var (
 func main() {
 	log.SetFlags(0)
 
+	/* #nosec */
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Use a wallet backed by vault to sign settlements.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n\n")
@@ -88,18 +89,18 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	var settlements []settlement.SettlementTransaction
+	var settlements []settlement.Transaction
 	err = json.Unmarshal(settlementJSON, &settlements)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	err = settlement.PrepareSettlementTransactions(settlementWallet, settlements)
+	err = settlement.PrepareTransactions(settlementWallet, settlements)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	state := settlement.SettlementState{settlementWallet.Info, settlements}
+	state := settlement.State{settlementWallet.Info, settlements}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {
