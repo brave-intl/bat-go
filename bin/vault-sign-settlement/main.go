@@ -63,7 +63,8 @@ func main() {
 
 	helper, err := util.DefaultTokenHelper()
 	if err == nil {
-		token, err := helper.Get()
+		var token string
+		token, err = helper.Get()
 		if err == nil {
 			client.SetToken(token)
 		}
@@ -100,7 +101,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	state := settlement.State{settlementWallet.Info, settlements}
+	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: settlements}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {

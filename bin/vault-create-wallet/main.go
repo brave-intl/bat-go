@@ -63,7 +63,8 @@ func main() {
 
 	helper, err := util.DefaultTokenHelper()
 	if err == nil {
-		token, err := helper.Get()
+		var token string
+		token, err = helper.Get()
 		if err == nil {
 			client.SetToken(token)
 		}

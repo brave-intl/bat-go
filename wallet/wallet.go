@@ -26,11 +26,11 @@ type TransactionInfo struct {
 	AltCurrency  *altcurrency.AltCurrency `json:"altcurrency"`
 	Destination  string                   `json:"address"`
 	TransferFee  decimal.Decimal          `json:"fee"`
-	ExchangeFee  decimal.Decimal          `json:"-,omitempty"`
+	ExchangeFee  decimal.Decimal          `json:"-"`
 	Status       string                   `json:"status"`
 	ID           string                   `json:"id"`
-	DestCurrency string                   `json:"-,omitempty"`
-	DestAmount   decimal.Decimal          `json:"-,omitempty"`
+	DestCurrency string                   `json:"-"`
+	DestAmount   decimal.Decimal          `json:"-"`
 	ValidUntil   time.Time                `json:"-"`
 }
 

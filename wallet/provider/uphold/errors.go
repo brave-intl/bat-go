@@ -12,7 +12,7 @@ type upholdBaseError struct {
 // TODO just use json.RawMessage
 
 type upholdDenominationValidationErrors struct {
-	AmountError []upholdBaseError `json:"amount, omitempty"`
+	AmountError []upholdBaseError `json:"amount,omitempty"`
 	Data        json.RawMessage   `json:",omitempty"`
 }
 
@@ -23,8 +23,8 @@ type upholdDenominationErrors struct {
 }
 
 type upholdValidationErrors struct {
-	SignatureError     []upholdBaseError        `json:"signature, omitempty"`
-	DenominationErrors upholdDenominationErrors `json:"denomination, omitempty"`
+	SignatureError     []upholdBaseError        `json:"signature,omitempty"`
+	DenominationErrors upholdDenominationErrors `json:"denomination,omitempty"`
 	Data               json.RawMessage          `json:",omitempty"`
 }
 
