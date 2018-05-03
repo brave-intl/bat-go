@@ -228,10 +228,11 @@ type denomination struct {
 type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
+	Message      string       `json:"message,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
-	transferReq := transactionRequest{denomination{altcurrency.FromProbi(probi), &altcurrency}, destination}
+func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
+	transferReq := transactionRequest{denomination{altcurrency.FromProbi(probi), &altcurrency}, destination, message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, err
@@ -258,8 +259,8 @@ func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
-func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (string, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination)
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (string, error) {
+	req, err := w.signTransfer(altcurrency, probi, destination, message)
 	if err != nil {
 		return "", err
 	}
@@ -279,7 +280,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination, "")
 	if err != nil {
 		return nil, err
 	}

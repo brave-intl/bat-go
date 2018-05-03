@@ -2,7 +2,6 @@ package uphold
 
 import (
 	"encoding/hex"
-	"fmt"
 	"os"
 	"reflect"
 	"testing"
