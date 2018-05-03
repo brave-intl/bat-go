@@ -15,4 +15,5 @@ grantTokens.json
 /create-keypair
 /create-tokens
 /verify-tokens
+/settlement-submit
 /vault-*
