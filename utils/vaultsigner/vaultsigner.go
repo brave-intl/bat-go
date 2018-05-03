@@ -3,8 +3,10 @@ package vaultsigner
 import (
 	"crypto"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +49,29 @@ func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts)
 	}
 
 	return response.Data["valid"].(bool), nil
+}
+
+// String returns the public key as a hex encoded string
+func (vs *VaultSigner) String() string {
+	response, err := vs.Client.Logical().Read("transit/keys/" + vs.KeyName)
+	if err != nil {
+		return ""
+	}
+
+	keys := response.Data["keys"].(map[string]interface{})
+	key := keys[strconv.Itoa(int(vs.KeyVersion))].(map[string]interface{})
+	b64_public_key := key["public_key"].(string)
+	public_key, err := base64.StdEncoding.DecodeString(b64_public_key)
+	if err != nil {
+		return ""
+	}
+
+	return hex.EncodeToString(public_key)
+}
+
+// Return the public key
+func (vs *VaultSigner) Public() crypto.PublicKey {
+	return vs.String()
 }
 
 // FromKeypair create a new vault transit key by importing privKey and pubKey under importName
@@ -106,4 +131,30 @@ func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.
 	}
 
 	return &VaultSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
+}
+
+// New VaultSigner by generating a keypair with name using vault backend
+func New(client *api.Client, name string) (*VaultSigner, error) {
+	mounts, err := client.Sys().ListMounts()
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := mounts["transit/"]; !ok {
+		// Mount transit secret backend if not already mounted
+		if err = client.Sys().Mount("transit", &api.MountInput{
+			Type: "transit",
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	// Generate a new keypair
+	_, err = client.Logical().Write("transit/keys/"+name, map[string]interface{}{
+		"type": "ed25519",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &VaultSigner{Client: client, KeyName: name, KeyVersion: 1}, nil
 }
