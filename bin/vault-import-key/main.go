@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
+	util "github.com/hashicorp/vault/command/config"
 )
 
 var privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
@@ -63,6 +64,14 @@ func main() {
 	}
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	helper, err := util.DefaultTokenHelper()
+	if err == nil {
+		token, err := helper.Get()
+		if err == nil {
+			client.SetToken(token)
+		}
 	}
 
 	_, err = vaultsigner.FromKeypair(client, privKey, pubKey, args[0])
