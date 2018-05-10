@@ -131,3 +131,117 @@ func TestTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDeterministicSigning(t *testing.T) {
+	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
+		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
+	}
+	if os.Getenv("DONOR_WALLET_PUBLIC_KEY") == "" {
+		t.Skip("skipping test; DONOR_WALLET_PUBLIC_KEY not set")
+	}
+	if os.Getenv("DONOR_WALLET_PRIVATE_KEY") == "" {
+		t.Skip("skipping test; DONOR_WALLET_PRIVATE_KEY not set")
+	}
+	if os.Getenv("DONOR_WALLET_CARD_ID") == "" {
+		t.Skip("skipping test; DONOR_WALLET_CARD_ID not set")
+	}
+	if os.Getenv("QA_PUBLISHER_USD_CARD_ID") == "" {
+		t.Skip("skipping test; QA_PUBLISHER_USD_CARD_ID not set")
+	}
+
+	usdCard := os.Getenv("QA_PUBLISHER_USD_CARD_ID")
+
+	var donorInfo wallet.Info
+	donorInfo.Provider = "uphold"
+	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
+	{
+		tmp := altcurrency.BAT
+		donorInfo.AltCurrency = &tmp
+	}
+
+	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
+	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	var donorPublicKey httpsignature.Ed25519PubKey
+	var donorPrivateKey ed25519.PrivateKey
+	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	donorWallet := &uphold.Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+
+	if len(donorWallet.ID) > 0 {
+		t.Fatal("FIXME")
+	}
+
+	settlementJSON := []byte(`
+	[
+    {
+        "address": "` + usdCard + `",
+        "altcurrency": "BAT",
+        "authority": "github:evq",
+        "currency": "BAT",
+        "fees": "1339169009771847163",
+        "owner": "publishers#uuid:23813236-3f4c-40dc-916e-8f55c8865b5a",
+        "probi": "25444211185665096101",
+        "publisher": "example.com",
+        "transactionId": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8",
+        "type": "referral"
+    }
+	]
+	`)
+
+	bravePaymentToolsSignedSettlement := []byte(`
+	{
+		"config": {
+			"env": "test"
+		},
+		"signedTxs": [
+			{
+				"id": "f042845f-fa62-4022-8117-a476ec583a7b",
+				"requestType": "httpSignature",
+				"signedTx": {
+					"headers": {
+						"digest": "SHA-256=zrtB9DhyDmPLMml/JwBJ3rnVyzBYhBGgoYiGaL5msYI=",
+						"signature": "keyId=\"primary\",algorithm=\"ed25519\",headers=\"digest\",signature=\"FjfDThZP+LYM2YhSvIppt2GxsVxgiDY6eoFpX8buKd6brtxLqTLCXUd+cYDT/1r3v4ARGjpXuGqJlmqvWYlZBA==\""
+					},
+					"body": {
+						"denomination": {
+							"amount": "25.444211185665096101",
+							"currency": "BAT"
+						},
+						"destination": "03aeafb8-555d-4840-90d1-ff0f99426475",
+						"message": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8"
+					},
+					"octets": "{\"denomination\":{\"amount\":\"25.444211185665096101\",\"currency\":\"BAT\"},\"destination\":\"03aeafb8-555d-4840-90d1-ff0f99426475\",\"message\":\"0f7377cc-73ef-4e94-b69a-7086a4f3b2a8\"}"
+				}
+			}
+		],
+		"authenticate": {}
+	}
+  `)
+
+	knownSigs, err := ParseBPTSignedSettlement(bravePaymentToolsSignedSettlement)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var settlements []Transaction
+	err = json.Unmarshal(settlementJSON, &settlements)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = PrepareTransactions(donorWallet, settlements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range settlements {
+		if settlements[i].SignedTx != knownSigs[i] {
+			t.Fatal("Signature does not match equivalent from brave-payment-tools")
+		}
+	}
+}

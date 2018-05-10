@@ -306,7 +306,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, err
 	}
 
-	var signedTx httpSignedRequest
+	var signedTx HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -472,7 +472,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 	}
 
 	b, _ := base64.StdEncoding.DecodeString(transactionB64)
-	var signedTx httpSignedRequest
+	var signedTx HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err

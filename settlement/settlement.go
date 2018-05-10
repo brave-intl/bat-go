@@ -4,6 +4,8 @@ package settlement
 //      due to transient network errors (if retries are enabled)
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -245,4 +247,31 @@ func ConfirmPreparedTransactions(settlementWallet *uphold.Wallet, settlements []
 	}
 
 	return nil
+}
+
+// BPTSignedSettlement is a struct describing the signed output format of brave-payment-tools
+type BPTSignedSettlement struct {
+	SignedTxs []struct {
+		uphold.HTTPSignedRequest `json:"signedTx"`
+	} `json:"signedTxs"`
+}
+
+// ParseBPTSignedSettlement parses the signed output from brave-payment-tools
+//   It returns an array of base64 encoded "extracted" httpsignatures
+func ParseBPTSignedSettlement(jsonIn []byte) ([]string, error) {
+	var s BPTSignedSettlement
+	err := json.Unmarshal(jsonIn, &s)
+	if err != nil {
+		return nil, err
+	}
+	var encoded []string
+	for i := range s.SignedTxs {
+		b, err := json.Marshal(s.SignedTxs[i].HTTPSignedRequest)
+		if err != nil {
+			return nil, err
+		}
+		encoded = append(encoded, base64.StdEncoding.EncodeToString(b))
+	}
+
+	return encoded, nil
 }
