@@ -15,7 +15,7 @@ import (
 )
 
 func fprintf(w io.Writer, format string, a ...interface{}) {
-	_, err := fmt.Fprintf(w, format, a)
+	_, err := fmt.Fprintf(w, format, a...)
 	if err != nil {
 		panic(err)
 	}
