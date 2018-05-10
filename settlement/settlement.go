@@ -6,7 +6,7 @@ package settlement
 import (
 	"errors"
 	"fmt"
-	"os"
+	"log"
 	"strconv"
 	"time"
 
@@ -170,8 +170,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries"
-			/* #nosec */
-			fmt.Fprintf(os.Stderr, "%s for channel %s\n", baseMsg, settlement.Channel)
+			log.Printf("%s for channel %s\n", baseMsg, settlement.Channel)
 			raven.CaptureMessage(baseMsg, map[string]string{
 				"tries":        strconv.Itoa(maxConfirmTries - tries),
 				"channel":      settlement.Channel,
@@ -196,17 +195,15 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 			settlement.TransferFee = upholdInfo.TransferFee
 			settlement.ExchangeFee = upholdInfo.ExchangeFee
 
-			/* #nosec */
 			if !settlement.IsComplete() {
-				fmt.Fprintf(os.Stderr, "error transaction status is: %s\n", upholdInfo.Status)
+				log.Printf("error transaction status is: %s\n", upholdInfo.Status)
 			}
 
 			break
 
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
 			if time.Now().After(settlement.ValidUntil) {
-				/* #nosec */
-				fmt.Fprintf(os.Stderr, "quote has expired, must resubmit transaction for publisher %s\n", settlement.ProviderID)
+				log.Printf("quote has expired, must resubmit transaction for publisher %s\n", settlement.ProviderID)
 				return nil
 			}
 
@@ -227,12 +224,10 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 
 				break
 			} else {
-				/* #nosec */
-				fmt.Fprintf(os.Stderr, "error confirming: %s\n", err)
+				log.Printf("error confirming: %s\n", err)
 			}
 		} else {
-			/* #nosec */
-			fmt.Fprintf(os.Stderr, "error retrieving referenced transaction: %s\n", err)
+			log.Printf("error retrieving referenced transaction: %s\n", err)
 		}
 	}
 	return nil

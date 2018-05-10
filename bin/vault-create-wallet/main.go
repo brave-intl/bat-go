@@ -17,19 +17,18 @@ import (
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Create a new wallet backed by vault.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        %s WALLET_NAME\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  If a vault keypair exists with name WALLET_NAME, it will be used.\n")
-		fmt.Fprintf(os.Stderr, "  Otherwise a new vault keypair with that name will be generated.\n\n")
+		log.Printf("Create a new wallet backed by vault.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s WALLET_NAME\n\n", os.Args[0])
+		log.Printf("  If a vault keypair exists with name WALLET_NAME, it will be used.\n")
+		log.Printf("  Otherwise a new vault keypair with that name will be generated.\n\n")
 	}
 	flag.Parse()
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "ERROR: Must pass a single argument to name generated wallet / keypair\n\n")
+		log.Printf("ERROR: Must pass a single argument to name generated wallet / keypair\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}

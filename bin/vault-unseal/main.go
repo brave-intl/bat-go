@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,14 +14,20 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+func fprintf(w io.Writer, format string, a ...interface{}) {
+	_, err := fmt.Fprintf(w, format, a)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "A helper for using pipe output to unseal vault.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        gpg -d share-0.gpg | %s\n", os.Args[0])
+		log.Printf("A helper for using pipe output to unseal vault.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        gpg -d share-0.gpg | %s\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -66,23 +73,20 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	/* #nosec */
-	{
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintln(w, "Key\tValue")
-		fmt.Fprintln(w, "---\t-----")
-		fmt.Fprintf(w, "Seal Type\t%s\n", status.Type)
-		fmt.Fprintf(w, "Sealed\t%t\n", status.Sealed)
-		fmt.Fprintf(w, "Total Shares\t%d\n", status.N)
-		fmt.Fprintf(w, "Threshold\t%d\n", status.T)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fprintf(w, "Key\tValue\n")
+	fprintf(w, "---\t-----\n")
+	fprintf(w, "Seal Type\t%s\n", status.Type)
+	fprintf(w, "Sealed\t%t\n", status.Sealed)
+	fprintf(w, "Total Shares\t%d\n", status.N)
+	fprintf(w, "Threshold\t%d\n", status.T)
 
-		if status.Sealed {
-			fmt.Fprintf(w, "Unseal Progress\t%d/%d\n", status.Progress, status.T)
-			fmt.Fprintf(w, "Unseal Nonce\t%s\n", status.Nonce)
-		}
-		err = w.Flush()
-		if err != nil {
-			log.Fatalln(err)
-		}
+	if status.Sealed {
+		fprintf(w, "Unseal Progress\t%d/%d\n", status.Progress, status.T)
+		fprintf(w, "Unseal Nonce\t%s\n", status.Nonce)
+	}
+	err = w.Flush()
+	if err != nil {
+		log.Fatalln(err)
 	}
 }

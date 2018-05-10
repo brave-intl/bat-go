@@ -22,11 +22,10 @@ var (
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Submit signed settlements to uphold.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        %s\n\n", os.Args[0])
+		log.Printf("Submit signed settlements to uphold.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()

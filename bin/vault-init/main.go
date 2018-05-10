@@ -23,25 +23,23 @@ var secretThreshold = flag.Uint("key-threshold", 3, "number of shares needed to 
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "A helper for quickly initializing vault.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        %s GPG_PUB_KEY_FILE...\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s initializes vault and writes the encrypted unseal shares to disk.\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  Each share is written as a separate sequental file. Furthermore the initial root\n")
-		fmt.Fprintf(os.Stderr, "  token is saved to ~/.vault-token, meaning the initial `vault login` can be skipped.\n\n")
+		log.Printf("A helper for quickly initializing vault.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s GPG_PUB_KEY_FILE...\n\n", os.Args[0])
+		log.Printf("  %s initializes vault and writes the encrypted unseal shares to disk.\n", os.Args[0])
+		log.Printf("  Each share is written as a separate sequental file. Furthermore the initial root\n")
+		log.Printf("  token is saved to ~/.vault-token, meaning the initial `vault login` can be skipped.\n\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 	gpgKeyFiles := flag.Args()
 
-	/* #nosec */
 	if len(gpgKeyFiles) == 0 {
 		flag.Usage()
 		os.Exit(1)
 	} else if len(gpgKeyFiles) != int(*secretShares) {
-		fmt.Fprintf(os.Stderr, "ERROR: A gpg public key file must be passed for every unseal share\n\n")
+		log.Printf("ERROR: A gpg public key file must be passed for every unseal share\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}

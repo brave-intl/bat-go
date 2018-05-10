@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 
@@ -18,24 +17,23 @@ var publicKeyHex = os.Getenv("ED25519_PUBLIC_KEY")
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "A helper for importing existing ed25519 keys into vault.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        %s VAULT_KEY_NAME\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  Hex key material is read from the environment, ED25519_PUBLIC_KEY and ED25519_PRIVATE_KEY.\n\n")
+		log.Printf("A helper for importing existing ed25519 keys into vault.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s VAULT_KEY_NAME\n\n", os.Args[0])
+		log.Printf("  Hex key material is read from the environment, ED25519_PUBLIC_KEY and ED25519_PRIVATE_KEY.\n\n")
 	}
 	flag.Parse()
 
 	if len(privateKeyHex) == 0 || len(publicKeyHex) == 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: Environment variables ED25519_PRIVATE_KEY and ED25519_PUBLIC_KEY must be passed\n\n")
+		log.Printf("ERROR: Environment variables ED25519_PRIVATE_KEY and ED25519_PUBLIC_KEY must be passed\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "ERROR: Must pass a single argument to name imported keypair\n\n")
+		log.Printf("ERROR: Must pass a single argument to name imported keypair\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}

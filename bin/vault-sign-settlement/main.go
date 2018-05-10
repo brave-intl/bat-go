@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -26,11 +25,10 @@ var (
 func main() {
 	log.SetFlags(0)
 
-	/* #nosec */
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Use a wallet backed by vault to sign settlements.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n\n")
-		fmt.Fprintf(os.Stderr, "        %s WALLET_CARD_ID\n\n", os.Args[0])
+		log.Printf("Use a wallet backed by vault to sign settlements.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s WALLET_CARD_ID\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -39,7 +37,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "ERROR: Must pass a single argument, card id of wallet / keypair\n\n")
+		log.Printf("ERROR: Must pass a single argument, card id of wallet / keypair\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}
