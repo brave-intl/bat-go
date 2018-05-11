@@ -133,34 +133,18 @@ func TestTransactions(t *testing.T) {
 }
 
 func TestDeterministicSigning(t *testing.T) {
-	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
-		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
-	}
-	if os.Getenv("DONOR_WALLET_PUBLIC_KEY") == "" {
-		t.Skip("skipping test; DONOR_WALLET_PUBLIC_KEY not set")
-	}
-	if os.Getenv("DONOR_WALLET_PRIVATE_KEY") == "" {
-		t.Skip("skipping test; DONOR_WALLET_PRIVATE_KEY not set")
-	}
-	if os.Getenv("DONOR_WALLET_CARD_ID") == "" {
-		t.Skip("skipping test; DONOR_WALLET_CARD_ID not set")
-	}
-	if os.Getenv("QA_PUBLISHER_USD_CARD_ID") == "" {
-		t.Skip("skipping test; QA_PUBLISHER_USD_CARD_ID not set")
-	}
-
-	usdCard := os.Getenv("QA_PUBLISHER_USD_CARD_ID")
+	usdCard := "03aeafb8-555d-4840-90d1-ff0f99426475"
 
 	var donorInfo wallet.Info
 	donorInfo.Provider = "uphold"
-	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
+	donorInfo.ProviderID = "aea53308-9b35-4f63-bccd-9f1dffa3d8c0"
 	{
 		tmp := altcurrency.BAT
 		donorInfo.AltCurrency = &tmp
 	}
 
-	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
-	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	donorWalletPublicKeyHex := "10ba999b2b7b9eabc0f44fa26bf122ebbfa98dc6fef31e6251a9c1c58d60bb8d"
+	donorWalletPrivateKeyHex := "8d6a620a566e094cebaec67edca32a68efce962890570157f0b8a5389cc5f6df10ba999b2b7b9eabc0f44fa26bf122ebbfa98dc6fef31e6251a9c1c58d60bb8d"
 	var donorPublicKey httpsignature.Ed25519PubKey
 	var donorPrivateKey ed25519.PrivateKey
 	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
@@ -206,7 +190,7 @@ func TestDeterministicSigning(t *testing.T) {
 				"signedTx": {
 					"headers": {
 						"digest": "SHA-256=zrtB9DhyDmPLMml/JwBJ3rnVyzBYhBGgoYiGaL5msYI=",
-						"signature": "keyId=\"primary\",algorithm=\"ed25519\",headers=\"digest\",signature=\"FjfDThZP+LYM2YhSvIppt2GxsVxgiDY6eoFpX8buKd6brtxLqTLCXUd+cYDT/1r3v4ARGjpXuGqJlmqvWYlZBA==\""
+						"signature": "keyId=\"primary\",algorithm=\"ed25519\",headers=\"digest\",signature=\"1n4soEhMbhhHHk2IZ9xkVsaFRj9ajD6+y4MEzl8FcxZTviy5utHIKugPiFMQvSaktegvA5NIs3wNGFsuk4OtBQ==\""
 					},
 					"body": {
 						"denomination": {
