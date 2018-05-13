@@ -34,7 +34,6 @@ settlement-tools:
 	GOOS=darwin GOARCH=amd64 make target/settlement-tools/vault-import-key
 	GOOS=darwin GOARCH=amd64 make target/settlement-tools/vault-create-wallet
 	GOOS=darwin GOARCH=amd64 make target/settlement-tools/vault-sign-settlement
-	GOOS=darwin GOARCH=amd64 make target/settlement-tools/vault-sign-settlement
 	GOOS=darwin GOARCH=amd64 make download-vault
 
 download-vault:

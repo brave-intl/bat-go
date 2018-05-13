@@ -126,6 +126,11 @@ func main() {
 		log.Fatalln("\nnot all transactions successfully completed, rerun to attempt resubmit")
 	}
 
+	for i := 0; i < len(settlementState.Transactions); i++ {
+		// Redact signed transactions
+		settlementState.Transactions[i].SignedTx = ""
+	}
+
 	// Write out transactions ready to be submitted to eyeshade
 	out, err := json.MarshalIndent(settlementState.Transactions, "", "    ")
 	if err != nil {
