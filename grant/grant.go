@@ -347,7 +347,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, err
 	}
 	// this ensures we have a valid wallet if refreshBalance == true
-	balance, err := userWallet.GetBalance(refreshBalance)
+	_, err = userWallet.GetBalance(refreshBalance)
 	if err != nil {
 		return nil, err
 	}
@@ -366,9 +366,6 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
 		return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
 	}
-	if txInfo.Probi.LessThan(balance.SpendableProbi) {
-		return nil, errors.New("wallet has enough funds to cover transaction")
-	}
 	if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
 		return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
 	}
@@ -380,11 +377,9 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	sort.Sort(sort.Reverse(ByProbi(grants)))
 
 	// 4. Sum from largest to smallest until value is gt transaction amount
-	needed := txInfo.Probi.Sub(balance.SpendableProbi)
-
 	sumProbi := decimal.New(0, 1)
 	for _, grant := range grants {
-		if sumProbi.GreaterThanOrEqual(needed) {
+		if sumProbi.GreaterThanOrEqual(txInfo.Probi) {
 			// 5. Fail if there are leftover grants
 			return nil, errors.New("More grants included than are needed to fulfill included transaction")
 		}
