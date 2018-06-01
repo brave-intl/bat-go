@@ -106,6 +106,7 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 // Verifier is an interface for cryptographic signature verification
 type Verifier interface {
 	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
+	String() string
 }
 
 // Verify the HTTP signature s over HTTP request req using verifier with options opts

@@ -32,8 +32,8 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	wallet.Info
-	PrivKey ed25519.PrivateKey
-	PubKey  httpsignature.Ed25519PubKey
+	PrivKey crypto.Signer
+	PubKey  httpsignature.Verifier
 }
 
 var (
@@ -75,7 +75,7 @@ func init() {
 
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
-func New(info wallet.Info, privKey ed25519.PrivateKey, pubKey httpsignature.Ed25519PubKey) (*Wallet, error) {
+func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
 	if info.Provider != "uphold" {
 		return nil, errors.New("The wallet provider must be uphold")
 	}
@@ -104,7 +104,7 @@ func FromWalletInfo(info wallet.Info) (*Wallet, error) {
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer "+accessToken)
+		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
 	}
 	return req, err
 }
@@ -139,7 +139,7 @@ type createCardRequest struct {
 
 // Register a wallet with Uphold with label
 func (w *Wallet) Register(label string) error {
-	reqPayload := createCardRequest{label, w.Info.AltCurrency, hex.EncodeToString(w.PubKey)}
+	reqPayload := createCardRequest{label, w.Info.AltCurrency, w.PubKey.String()}
 	payload, err := json.Marshal(reqPayload)
 	if err != nil {
 		return err
@@ -228,10 +228,11 @@ type denomination struct {
 type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
+	Message      string       `json:"message,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*http.Request, error) {
-	transferReq := transactionRequest{denomination{altcurrency.FromProbi(probi), &altcurrency}, destination}
+func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
+	transferReq := transactionRequest{denomination{altcurrency.FromProbi(probi), &altcurrency}, destination, message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, err
@@ -258,8 +259,8 @@ func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
-func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (string, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination)
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (string, error) {
+	req, err := w.signTransfer(altcurrency, probi, destination, message)
 	if err != nil {
 		return "", err
 	}
@@ -279,7 +280,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination)
+	req, err := w.signTransfer(altcurrency, probi, destination, "")
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +306,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, err
 	}
 
-	var signedTx httpSignedRequest
+	var signedTx HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -409,9 +410,23 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 	return &info, err
 }
 
+type upholdTransactionResponseDestinationNode struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 type upholdTransactionResponseDestination struct {
-	Type   string `json:"type"`
-	CardID string `json:"CardId"`
+	Type        string                                   `json:"type"`
+	CardID      string                                   `json:"CardId,omitempty"`
+	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Currency    string                                   `json:"currency"`
+	Amount      decimal.Decimal                          `json:"amount"`
+	ExchangeFee decimal.Decimal                          `json:"commission"`
+	TransferFee decimal.Decimal                          `json:"fee"`
+}
+
+type upholdTransactionResponseParams struct {
+	TTL int64 `json:"ttl"`
 }
 
 type upholdTransactionResponse struct {
@@ -419,17 +434,45 @@ type upholdTransactionResponse struct {
 	ID           string                               `json:"id"`
 	Denomination denomination                         `json:"denomination"`
 	Destination  upholdTransactionResponseDestination `json:"destination"`
+	Params       upholdTransactionResponseParams      `json:"params"`
+}
+
+func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
+	var txInfo wallet.TransactionInfo
+	txInfo.Probi = resp.Denomination.Currency.ToProbi(resp.Denomination.Amount)
+	{
+		tmp := *resp.Denomination.Currency
+		txInfo.AltCurrency = &tmp
+	}
+	if len(resp.Destination.CardID) > 0 {
+		txInfo.Destination = resp.Destination.CardID
+	} else if len(resp.Destination.Node.ID) > 0 {
+		txInfo.Destination = resp.Destination.Node.ID
+	}
+
+	txInfo.DestCurrency = resp.Destination.Currency
+	txInfo.DestAmount = resp.Destination.Amount
+	txInfo.TransferFee = resp.Destination.TransferFee
+	txInfo.ExchangeFee = resp.Destination.ExchangeFee
+	txInfo.Status = resp.Status
+	if txInfo.Status == "pending" {
+		txInfo.ValidUntil = time.Now().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
+	}
+	txInfo.ID = resp.ID
+
+	return &txInfo
 }
 
 // SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
+//   unless confirm is set to true.
 func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet.TransactionInfo, error) {
-	info, err := w.VerifyTransaction(transactionB64)
+	_, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
 	}
 
 	b, _ := base64.StdEncoding.DecodeString(transactionB64)
-	var signedTx httpSignedRequest
+	var signedTx HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
 		return nil, err
@@ -475,11 +518,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	info.Fee = decimal.Zero
-	info.Status = uhResp.Status
-	info.ID = uhResp.ID
-
-	return info, nil
+	return uhResp.ToTransactionInfo(), nil
 }
 
 // ConfirmTransaction confirms a previously submitted transaction, moving funds
@@ -504,18 +543,28 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 		panic("Confirming a non-card transaction is not supported!!!")
 	}
 
-	var txInfo wallet.TransactionInfo
-	txInfo.Probi = uhResp.Denomination.Currency.ToProbi(uhResp.Denomination.Amount)
-	{
-		tmp := *uhResp.Denomination.Currency
-		txInfo.AltCurrency = &tmp
-	}
-	txInfo.Destination = uhResp.Destination.CardID
-	txInfo.Fee = decimal.Zero
-	txInfo.Status = uhResp.Status
-	txInfo.ID = uhResp.ID
+	return uhResp.ToTransactionInfo(), nil
+}
 
-	return &txInfo, nil
+// GetTransaction returns info about a previously confirmed transaction
+func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
+	req, err := newRequest("GET", "/v0/me/transactions/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+	var uhResp upholdTransactionResponse
+	err = json.Unmarshal(respBody, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return uhResp.ToTransactionInfo(), nil
 }
 
 // GetBalance returns the last known balance, if refresh is true then the current balance is fetched

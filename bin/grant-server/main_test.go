@@ -164,7 +164,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, g.Probi, grant.SettlementDestination)
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, g.Probi, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}

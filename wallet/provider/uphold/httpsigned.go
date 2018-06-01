@@ -12,14 +12,14 @@ import (
 	"golang.org/x/net/lex/httplex"
 )
 
-// httpSignedRequest encapsulates a signed HTTP request
-type httpSignedRequest struct {
+// HTTPSignedRequest encapsulates a signed HTTP request
+type HTTPSignedRequest struct {
 	Headers map[string]string `json:"headers" valid:"-"`
 	Body    string            `json:"octets" valid:"json"`
 }
 
 // extract an HTTP request from the encapsulated signed request
-func (sr *httpSignedRequest) extract() (*httpsignature.Signature, *http.Request, error) {
+func (sr *HTTPSignedRequest) extract() (*httpsignature.Signature, *http.Request, error) {
 	var s httpsignature.Signature
 	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
 	if err != nil {
@@ -48,14 +48,14 @@ func (sr *httpSignedRequest) extract() (*httpsignature.Signature, *http.Request,
 }
 
 // encapsulate a signed HTTP request
-func encapsulate(req *http.Request) (*httpSignedRequest, error) {
+func encapsulate(req *http.Request) (*HTTPSignedRequest, error) {
 	var s httpsignature.Signature
 	err := s.UnmarshalText([]byte(req.Header.Get("signature")))
 	if err != nil {
 		return nil, err
 	}
 
-	enc := httpSignedRequest{}
+	enc := HTTPSignedRequest{}
 	enc.Headers = make(map[string]string)
 	for _, k := range s.Headers {
 		values := req.Header[http.CanonicalHeaderKey(k)]

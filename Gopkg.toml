@@ -45,3 +45,7 @@
 [[constraint]]
   name = "github.com/getsentry/raven-go"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/hashicorp/vault"
+  version = "0.10.1"

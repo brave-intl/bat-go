@@ -49,6 +49,8 @@ type grantRegistration struct {
 }
 
 func main() {
+	log.SetFlags(0)
+
 	var err error
 	flag.Parse()
 
