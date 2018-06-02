@@ -18,14 +18,17 @@ import (
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
-	InitGrantService(nil)
+	err := InitGrantService(nil)
+	if err != nil {
+		t.Error("unexpected error")
+	}
 
 	expectedGrantJSON := []byte(`{"altcurrency":"BAT","grantId":"9614ade7-58af-4df0-86c6-2f70051b43de","probi":"30000000000000000000","promotionId":"880309fc-df27-40a8-8d51-9cf39885e61d","maturityTime":1511769862,"expiryTime":1513843462}`)
 
 	jwsGrant := "eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI5NjE0YWRlNy01OGFmLTRkZjAtODZjNi0yZjcwMDUxYjQzZGUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.OOEBJUHPE21OyFw5Vq1tRTxYQc7aEL-KL5Lb4nb1TZn_3LFkXEPY7bNo0GhJ6k9X2UkZ19rnfBbpXHKuqBupDA"
 
 	expectedGrant := Grant{}
-	err := json.Unmarshal(expectedGrantJSON, &expectedGrant)
+	err = json.Unmarshal(expectedGrantJSON, &expectedGrant)
 	if err != nil {
 		t.Error("unexpected error")
 	}
@@ -49,7 +52,10 @@ func TestVerifyAndConsume(t *testing.T) {
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
-	InitGrantService(nil)
+	err := InitGrantService(nil)
+	if err != nil {
+		t.Error("unexpected error")
+	}
 
 	// Populate grant wallet balance to pass check
 	oneHundred, err := decimal.NewFromString("100")
@@ -101,7 +107,10 @@ func TestVerifyAndConsume(t *testing.T) {
 	}
 
 	claimReq := ClaimGrantRequest{walletInfo}
-	claimReq.Claim(ctx, "18f7cada-2e9c-4c6e-a541-b2032c43a92e")
+	err = claimReq.Claim(ctx, "18f7cada-2e9c-4c6e-a541-b2032c43a92e")
+	if err != nil {
+		t.Error("Claim failed")
+	}
 
 	_, err = request.VerifyAndConsume(ctx)
 	if err != nil {
@@ -117,7 +126,10 @@ func TestVerifyAndConsume(t *testing.T) {
 	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI1MzZjNWZhZC0zYWJiLTQwM2UtOWI5Mi1kNjE5ZDc0YjNhZjQiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.Y5QruXFJVV0qqRauP3ah4UAHk6TgtNPySkbq3VBv3dCKpAvYmSnfBRipKjVCicP2s0lQQn8Rcu3aIP4VDBCjDQ"}
 
 	// claim this grant as well to ensure we are testing re-redeem with same wallet and promotion
-	claimReq.Claim(ctx, "f87e7fb4-0f80-40ad-b092-84f70e448421")
+	err = claimReq.Claim(ctx, "f87e7fb4-0f80-40ad-b092-84f70e448421")
+	if err != nil {
+		t.Error("Claim failed")
+	}
 
 	request = RedeemGrantsRequest{grants, walletInfo, transaction}
 	_, err = request.VerifyAndConsume(ctx)
