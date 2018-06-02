@@ -48,7 +48,7 @@ test:
 	go test -v --tags=$(TEST_TAGS) ./...
 
 lint:
-	gometalinter --vendor --disable=gocyclo --enable=misspell --deadline=5m ./...
+	golangci-lint run -E gofmt
 
 clean:
 	rm -f $(BINS)
