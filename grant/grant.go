@@ -347,7 +347,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, err
 	}
 	// this ensures we have a valid wallet if refreshBalance == true
-	_, err = userWallet.GetBalance(refreshBalance)
+	balance, err := userWallet.GetBalance(refreshBalance)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +387,10 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 			return nil, errors.New("All grants must be in BAT")
 		}
 		sumProbi = sumProbi.Add(grant.Probi)
+	}
+
+	if txInfo.Probi.GreaterThan(balance.SpendableProbi.Add(sumProbi)) {
+		return nil, errors.New("wallet does not have enough funds to cover transaction")
 	}
 
 	// should be reasonable since we limit the redeem endpoint to a maximum of 1 simultaneous in-flight request
