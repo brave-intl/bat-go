@@ -16,7 +16,7 @@ matrix:
   fast_finish: true
 env:
   matrix:
-  - DEP_VERSION="0.3.2"
+  - DEP_VERSION="0.4.1"
   global:
   - TEST_TAGS="integration"
   - secure: gGqNxojD1sfTk4qnFUTQ2vx5V9ryOLEctChxv6iZa1rxbyRE1cB65IPCFquU8Qo7rN4LcqlwpCvEfJHkRs41mOtrkBuRFUSMA1Z0wp6Gpz3jT7nvygRLfkcWMbfHDa2oKS6c9cTWlmanuGl8KWKxZrWzvl7WwtD0Rqfbr3cH74JmOfq5h05ermhE0YNFNKrnra2WZYQGeS9i/qh2nDvnuVw0nI6pXsGpl7fZ/bMDDUipCqSDtfRyV389UAUA5pab+BCp0/hLrDiUOL/xSB2zIoyenQ8mM01MpM1Hx2vh+PrbCJE880ON1374tPRkyNvPlQMeSYv+eZQBT8zxYsQ+xEmfxVvkqvyGo630X5trV5IVQqn+6xlyIFHwemLIpGqwZMg3DlQ2JujQGy6/xfvfd3tMdnzi6NoTtE1h5CYYJ168tnytAz4d3xJ7nGYl4zGejO4971c97JdUY078PYaKDkbRGA0pCk0MYmA9VnkcsPO9v6vW8kV09VFRgNKBJV0YNycWvdTLBF+i8Xe3/aAGMxfJLsbb+gYPTI4cQiIlIc7AlDpd7LzHUuUMQr8cCvK2IoJNnTsgyqtfZZBIbvJkZlEp6EjbKT0Wawh6oC0u+2+9LXYB4tuLDYkprA6NhN5bna4rh/uB826/BXhX6J5SpC4PzDlf985cazEGpyAwyQQ=
