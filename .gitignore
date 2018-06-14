@@ -17,3 +17,4 @@ grantTokens.json
 /verify-tokens
 /settlement-submit
 /vault-*
+/get-cert-fingerprint

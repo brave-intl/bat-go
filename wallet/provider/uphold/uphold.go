@@ -45,9 +45,12 @@ var (
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
 	}[environment]
-
-	upholdCertFingerprint = "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc="
-	client                *http.Client
+	upholdCertFingerprint = map[string]string{
+		"":        "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc=", // os.Getenv() will return empty string if not set
+		"sandbox": "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc=",
+		"prod":    "U3Ny8QcC3uKPNnMK3a3V4W4nby2YjSeS+/+0XHFhDs4=",
+	}[environment]
+	client *http.Client
 )
 
 func init() {

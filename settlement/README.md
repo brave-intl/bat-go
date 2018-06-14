@@ -8,35 +8,35 @@ echo "export VAULT_ADDR=http://127.0.0.1:8200" >> ~/.profile
 export VAULT_ADDR=http://127.0.0.1:8200
 
 # start vault server
-vault server -config=config.hcl
+./vault server -config=config.hcl
 
 # initialize
-vault-init -key-shares=1 -key-threshold=1 GPG_PUB_KEY_FILE...
+./vault-init -key-shares=1 -key-threshold=1 GPG_PUB_KEY_FILE...
 
 # unseal vault
-gpg -d SHARE.GPG | vault-unseal
+gpg -d SHARE.GPG | ./vault-unseal
 ```
 
 ## Running settlement
 
 On the offline computer, in one window run:
 ```
-vault server -config=config.hcl
+./vault server -config=config.hcl
 ```
 
 In another run:
 ```
-gpg -d SHARE.GPG | vault-unseal
+gpg -d SHARE.GPG | ./vault-unseal
 ```
 
 You are now ready to transact
 ```
-vault-sign-settlement -in <SETTLEMENT_REPORT.JSON> <SETTLEMENT_WALLET_CARD_ID>
+./vault-sign-settlement -in <SETTLEMENT_REPORT.JSON> <SETTLEMENT_WALLET_CARD_ID>
 ```
 
 Finally seal the vault:
 ```
-vault operator seal
+./vault operator seal
 ```
 You can now stop the server instance.
 

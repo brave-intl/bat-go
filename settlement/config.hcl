@@ -1,5 +1,5 @@
 storage "file" {
-  path = "/srv/vault/data"
+  path = "./vault-data"
 }
 
 listener "tcp" {
