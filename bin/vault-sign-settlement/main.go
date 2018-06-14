@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -28,7 +29,7 @@ func main() {
 	flag.Usage = func() {
 		log.Printf("Use a wallet backed by vault to sign settlements.\n\n")
 		log.Printf("Usage:\n\n")
-		log.Printf("        %s WALLET_CARD_ID\n\n", os.Args[0])
+		log.Printf("        %s WALLET_NAME\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -37,7 +38,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		log.Printf("ERROR: Must pass a single argument, card id of wallet / keypair\n\n")
+		log.Printf("ERROR: Must pass a single argument, name of wallet / keypair\n\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -68,7 +69,20 @@ func main() {
 		}
 	}
 
-	signer, err := vaultsigner.New(client, args[0])
+	walletName := args[0]
+
+	response, err := client.Logical().Read("wallets/" + walletName)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(response)
+
+	providerId, ok := response.Data["providerId"]
+	if !ok {
+		log.Fatalln("invalid wallet name")
+	}
+
+	signer, err := vaultsigner.New(client, walletName)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -76,7 +90,7 @@ func main() {
 	var info wallet.Info
 	info.PublicKey = signer.String()
 	info.Provider = "uphold"
-	info.ProviderID = args[0]
+	info.ProviderID = providerId.(string)
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp
