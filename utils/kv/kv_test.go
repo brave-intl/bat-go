@@ -3,7 +3,7 @@ package kv
 import "testing"
 
 func TestMapKv(t *testing.T) {
-	store := UnsafeMapKv{map[string]string{}}
+	store := UnsafeMapKv{m: map[string]string{}}
 
 	if r, err := store.Set("FOO", "BAR", -1, true); !r || err != nil {
 		t.Error("Set to empty kv store should always succeed")

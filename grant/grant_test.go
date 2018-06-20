@@ -100,13 +100,13 @@ func TestVerifyAndConsume(t *testing.T) {
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 
-	request := RedeemGrantsRequest{grants, walletInfo, transaction}
+	request := RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
 	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("Should not be able to redeem without a valid claim on a grant")
 	}
 
-	claimReq := ClaimGrantRequest{walletInfo}
+	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
 	err = claimReq.Claim(ctx, "18f7cada-2e9c-4c6e-a541-b2032c43a92e")
 	if err != nil {
 		t.Error("Claim failed")
@@ -131,7 +131,7 @@ func TestVerifyAndConsume(t *testing.T) {
 		t.Error("Claim failed")
 	}
 
-	request = RedeemGrantsRequest{grants, walletInfo, transaction}
+	request = RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
 	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("expected re-redeem with the same wallet and promotion to fail")

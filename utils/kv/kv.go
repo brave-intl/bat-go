@@ -10,7 +10,7 @@ type UnsafeMapKv struct {
 
 // NewUnsafe creates a new UnsafeMapKv
 func NewUnsafe() *UnsafeMapKv {
-	return &UnsafeMapKv{map[string]string{}}
+	return &UnsafeMapKv{m: map[string]string{}}
 }
 
 // Set the key to value, updating possible existing if upsert is true

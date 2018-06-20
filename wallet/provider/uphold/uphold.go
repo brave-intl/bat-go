@@ -92,7 +92,7 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 	if !info.AltCurrency.IsValid() {
 		return nil, errors.New("A wallet must have a valid altcurrency")
 	}
-	return &Wallet{info, privKey, pubKey}, nil
+	return &Wallet{Info: info, PrivKey: privKey, PubKey: pubKey}, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
@@ -142,7 +142,7 @@ type createCardRequest struct {
 
 // Register a wallet with Uphold with label
 func (w *Wallet) Register(label string) error {
-	reqPayload := createCardRequest{label, w.Info.AltCurrency, w.PubKey.String()}
+	reqPayload := createCardRequest{Label: label, AltCurrency: w.Info.AltCurrency, PublicKey: w.PubKey.String()}
 	payload, err := json.Marshal(reqPayload)
 	if err != nil {
 		return err
@@ -235,7 +235,7 @@ type transactionRequest struct {
 }
 
 func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{denomination{altcurrency.FromProbi(probi), &altcurrency}, destination, message}
+	transferReq := transactionRequest{Denomination: denomination{Amount: altcurrency.FromProbi(probi), Currency: &altcurrency}, Destination: destination, Message: message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, err

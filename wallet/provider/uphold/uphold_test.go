@@ -55,7 +55,7 @@ func TestRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	destWallet := &Wallet{info, privateKey, publicKey}
+	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
 	err = destWallet.Register("bat-go test card")
 	if err != nil {
 		t.Error(err)
@@ -143,7 +143,7 @@ func TestTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	donorWallet := &Wallet{donorInfo, donorPrivateKey, donorPublicKey}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
 
 	var info wallet.Info
 	info.Provider = "uphold"
@@ -158,7 +158,7 @@ func TestTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	destWallet := &Wallet{info, privateKey, publicKey}
+	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
 	err = destWallet.Register("bat-go test transaction card")
 	if err != nil {
 		t.Error(err)
