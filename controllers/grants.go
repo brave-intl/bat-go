@@ -31,10 +31,11 @@ func GrantsRouter() chi.Router {
 		if err != nil {
 			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
 		}
-		r.Use(chiware.Throttle(int(throttle)))
+		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants)))
+	} else {
+		r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
 	}
 	r.Put("/{grantId}", middleware.InstrumentHandlerFunc("ClaimGrant", ClaimGrant))
-	r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
 	return r
 }
 

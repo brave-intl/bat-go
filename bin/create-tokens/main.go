@@ -130,7 +130,7 @@ func main() {
 	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
-	grantReg.Promotions = []promotionInfo{promotionInfo{promotionUUID, 0, false, maturityDate.Unix() * 1000}}
+	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}
 	serializedGrants, err := json.Marshal(grantReg)
 	if err != nil {
 		log.Fatalln(err)

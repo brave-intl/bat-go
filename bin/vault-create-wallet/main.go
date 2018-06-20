@@ -84,4 +84,10 @@ func main() {
 
 	fmt.Printf("Success, registered new keypair and wallet \"%s\"\n", name)
 	fmt.Printf("Uphold card ID %s", wallet.Info.ProviderID)
+	_, err = client.Logical().Write("wallets/"+name, map[string]interface{}{
+		"providerId": wallet.Info.ProviderID,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
