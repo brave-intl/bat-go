@@ -40,6 +40,7 @@ type Transaction struct {
 	TransferFee    decimal.Decimal          `json:"fee"`
 	Type           string                   `json:"type"`
 	ValidUntil     time.Time                `json:"validUntil"`
+	Note           string                   `json:"note"`
 }
 
 // State contains the current state of the settlement, including wallet and transaction status
@@ -58,7 +59,12 @@ func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error
 	for i := 0; i < len(settlements); i++ {
 		settlement := &settlements[i]
 
-		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, settlement.ID)
+		// Use the Note field if it exists, otherwise use the settlement ID
+		message := settlement.ID
+		if len(settlement.Note) > 0 {
+			message = settlement.Note
+		}
+		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, message)
 		if err != nil {
 			return err
 		}
