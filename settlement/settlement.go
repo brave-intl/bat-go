@@ -125,17 +125,17 @@ func CheckPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Tr
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Transaction) error {
 	if settlement.IsComplete() {
-		fmt.Printf("already complete, skipping submit for publisher %s\n", settlement.ProviderID)
+		fmt.Printf("already complete, skipping submit for channel %s\n", settlement.Channel)
 		return nil
 	}
 
 	if len(settlement.ProviderID) > 0 && time.Now().Before(settlement.ValidUntil) {
-		fmt.Printf("already submitted, skipping submit for publisher %s\n", settlement.ProviderID)
+		fmt.Printf("already submitted, skipping submit for channel %s\n", settlement.Channel)
 		return nil
 	}
 
 	if len(settlement.ProviderID) > 0 {
-		fmt.Printf("already submitted, but quote has expired for publisher %s\n", settlement.ProviderID)
+		fmt.Printf("already submitted, but quote has expired for channel %s\n", settlement.Channel)
 	}
 
 	// post the settlement to uphold but do not confirm it
@@ -144,7 +144,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 		return err
 	}
 
-	fmt.Printf("transaction for publisher %s submitted, new quote acquired\n", settlement.ProviderID)
+	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)
 
 	settlement.ProviderID = submitInfo.ID
 	settlement.Status = submitInfo.Status
@@ -190,7 +190,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 		}
 
 		if settlement.IsComplete() {
-			fmt.Printf("already complete, skipping confirm for publisher %s\n", settlement.ProviderID)
+			fmt.Printf("already complete, skipping confirm for channel %s\n", settlement.Channel)
 			return nil
 		}
 
@@ -211,7 +211,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
 			if time.Now().After(settlement.ValidUntil) {
-				log.Printf("quote has expired, must resubmit transaction for publisher %s\n", settlement.ProviderID)
+				log.Printf("quote has expired, must resubmit transaction for channel %s\n", settlement.Channel)
 				return nil
 			}
 

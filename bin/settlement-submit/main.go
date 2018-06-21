@@ -44,6 +44,15 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	channelSet := map[string]bool{}
+	for i := 0; i < len(settlementState.Transactions); i++ {
+		settlementTransaction := &settlementState.Transactions[i]
+		if _, exists := channelSet[settlementTransaction.Channel]; exists {
+			log.Fatalln("Malformed settlement file, duplicate channel detected:", settlementTransaction.Channel)
+		}
+		channelSet[settlementTransaction.Channel] = true
+	}
+
 	settlementWallet, err := uphold.FromWalletInfo(settlementState.WalletInfo)
 	if err != nil {
 		log.Fatalln(err)
@@ -63,8 +72,8 @@ func main() {
 			log.Fatalln(err)
 		}
 		for i := 0; i < len(settlementState.Transactions); i++ {
-			// Only one transaction per publisher is allowed per settlement
-			if settlementState.Transactions[i].Publisher == tmp.Publisher {
+			// Only one transaction per channel is allowed per settlement
+			if settlementState.Transactions[i].Channel == tmp.Channel {
 				settlementState.Transactions[i] = tmp
 			}
 		}
