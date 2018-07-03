@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,10 +12,9 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
-	"github.com/square/go-jose"
-	"golang.org/x/crypto/ed25519"
 )
 
 const (
@@ -25,8 +23,7 @@ const (
 	defaultValidWeeks = 24
 )
 
-var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
-
+var SIGNING_KEY = flag.String("signing-key", "grant-signing-key", "a key to store the new public and private keys against")
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
 var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
 var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
@@ -94,20 +91,12 @@ func main() {
 		}
 	}
 
-	if len(grantSignatorPrivateKeyHex) == 0 {
-		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
-	}
-
-	var grantPrivateKey ed25519.PrivateKey
-	grantPrivateKey, err = hex.DecodeString(grantSignatorPrivateKeyHex)
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: grantPrivateKey}, nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	signer, err := vaultsigner.New(client, *SIGNING_KEY)
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)

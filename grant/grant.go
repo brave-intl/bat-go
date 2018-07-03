@@ -11,11 +11,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"crypto"
+	"crypto/rand"
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -210,7 +213,7 @@ func (a ByProbi) Less(i, j int) bool { return a[i].Probi.LessThan(a[j].Probi) }
 
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization
 func CreateGrants(
-	signer jose.Signer,
+	signer *vaultsigner.VaultSigner,
 	promotionUUID uuid.UUID,
 	grantCount uint,
 	altCurrency altcurrency.AltCurrency,
@@ -232,15 +235,11 @@ func CreateGrants(
 		if err != nil {
 			log.Fatalln(err)
 		}
-		jws, err := signer.Sign(serializedGrant)
+		jws, err := signer.Sign(rand.Reader, serializedGrant, crypto.Hash(0))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		serializedJWS, err := jws.CompactSerialize()
-		if err != nil {
-			log.Fatalln(err)
-		}
-		grants = append(grants, serializedJWS)
+		grants = append(grants, string(jws))
 	}
 	return grants
 }
