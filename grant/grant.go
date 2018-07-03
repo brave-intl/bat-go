@@ -25,8 +25,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/square/go-jose"
 	"golang.org/x/crypto/ed25519"
+	jose "gopkg.in/square/go-jose.v2"
 )
 
 const (

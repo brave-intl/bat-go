@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/api"
+	util "github.com/hashicorp/vault/command/config"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
@@ -158,4 +159,34 @@ func New(client *api.Client, name string) (*VaultSigner, error) {
 	}
 
 	return &VaultSigner{Client: client, KeyName: name, KeyVersion: 1}, nil
+}
+
+// Connect connects to the vaultsigner backend server, sets token written by vault
+func Connect() (client *api.Client, err error) {
+	config := &api.Config{}
+	err = config.ReadEnvironment()
+
+	if err != nil {
+		client, err = api.NewClient(config)
+	} else {
+		client, err = api.NewClient(nil)
+		if err != nil {
+			return nil, err
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	helper, err := util.DefaultTokenHelper()
+	if err == nil {
+		var token string
+		token, err = helper.Get()
+		if err == nil {
+			client.SetToken(token)
+		}
+	}
+
+	return client, err
 }
