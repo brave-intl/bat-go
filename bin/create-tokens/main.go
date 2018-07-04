@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
-	cryptosigner "github.com/square/go-jose/cryptosigner"
+	"gopkg.in/square/go-jose.v2/cryptosigner"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -99,10 +99,10 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-
+	fmt.Println("check")
 	payload, err := vaultsigner.New(client, *grantSigningKey)
 
-	signer, err := cryptosigner.SignPayload(payload, ed25519)
+	signer := cryptosigner.Opaque(payload)
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)
@@ -122,7 +122,7 @@ func main() {
 		}
 	}
 
-	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
+	grants := grant.CreateGrants(signer, ed25519, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
 	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}

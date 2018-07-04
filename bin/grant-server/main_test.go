@@ -24,7 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	jose "github.com/square/go-jose"
+	jose "gopkg.in/square/go-jose.v2"
 	"golang.org/x/crypto/ed25519"
 )
 

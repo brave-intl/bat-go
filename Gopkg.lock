@@ -473,17 +473,18 @@
   version = "v1.11.3"
 
 [[projects]]
+  branch = "v2"
   name = "gopkg.in/square/go-jose.v2"
   packages = [
+    ".",
     "cipher",
     "json"
   ]
-  revision = "f8f38de21b4dcd69d0413faf231983f5fd6634b1"
-  version = "v2.1.3"
+  revision = "8cff744688a872abe564046891b229b71120ae6e"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2552fe12a3279551ea6209b5679e2478012576aee57c93ed83518b150fc3b5e4"
+  inputs-digest = "47cbcebf48df0eaa0e7bb92e01b38ad6940f522bad224b8a8e5cedd68da5dffb"
   solver-name = "gps-cdcl"
   solver-version = 1

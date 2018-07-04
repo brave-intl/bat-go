@@ -31,7 +31,7 @@
   version = "8.0.0"
 
 [[constraint]]
-  name = "github.com/square/go-jose"
+  name = "gopkg.in/square/go-jose.v2"
   branch = "v2"
 
 [[constraint]]
