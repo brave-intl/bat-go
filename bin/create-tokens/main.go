@@ -15,6 +15,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
+	cryptosigner "github.com/square/go-jose/cryptosigner"
+	"golang.org/x/crypto/ed25519"
 )
 
 const (
@@ -23,7 +25,7 @@ const (
 	defaultValidWeeks = 24
 )
 
-var SIGNING_KEY = flag.String("signing-key", "grant-signing-key", "a key to store the new public and private keys against")
+var grantSigningKey = flag.String("grant-signing-key", "grant-signing-key", "a key to store the new public and private keys against")
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
 var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
 var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
@@ -90,13 +92,17 @@ func main() {
 			log.Fatalf("%s is not a valid uuidv4\n", *promotionID)
 		}
 	}
-
+	if err != nil {
+		log.Fatalln(err)
+	}
 	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	signer, err := vaultsigner.New(client, *SIGNING_KEY)
+	payload, err := vaultsigner.New(client, *grantSigningKey)
+
+	signer, err := cryptosigner.SignPayload(payload, ed25519)
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)
