@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -14,9 +13,10 @@ import (
 
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
-	"github.com/square/go-jose"
-	"golang.org/x/crypto/ed25519"
+	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/square/go-jose.v2/cryptosigner"
 )
 
 const (
@@ -25,8 +25,7 @@ const (
 	defaultValidWeeks = 24
 )
 
-var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
-
+var grantSigningKey = flag.String("grant-signing-key", "grant-signing-key", "a key to store the new public and private keys against")
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
 var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
 var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
@@ -93,18 +92,20 @@ func main() {
 			log.Fatalf("%s is not a valid uuidv4\n", *promotionID)
 		}
 	}
-
-	if len(grantSignatorPrivateKeyHex) == 0 {
-		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
+	if err != nil {
+		log.Fatalln(err)
 	}
-
-	var grantPrivateKey ed25519.PrivateKey
-	grantPrivateKey, err = hex.DecodeString(grantSignatorPrivateKeyHex)
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: grantPrivateKey}, nil)
+	vSigner, err := vaultsigner.New(client, *grantSigningKey)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	cSigner := cryptosigner.Opaque(vSigner)
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
