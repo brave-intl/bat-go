@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/hashicorp/vault/api"
+	util "github.com/hashicorp/vault/command/config"
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
-	util "github.com/hashicorp/vault/command/config"
 ) //nolint
 
 // VaultSigner an ed25519 signer / verifier that uses the vault transit backend
