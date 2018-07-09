@@ -358,12 +358,6 @@
   version = "v1.0.3"
 
 [[projects]]
-  branch = "v2"
-  name = "github.com/square/go-jose"
-  packages = ["."]
-  revision = "8cff744688a872abe564046891b229b71120ae6e"
-
-[[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
   packages = [
@@ -478,6 +472,7 @@
   packages = [
     ".",
     "cipher",
+    "cryptosigner",
     "json"
   ]
   revision = "8cff744688a872abe564046891b229b71120ae6e"
@@ -485,6 +480,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "47cbcebf48df0eaa0e7bb92e01b38ad6940f522bad224b8a8e5cedd68da5dffb"
+  inputs-digest = "279f47e7db872fea5dfcbb649bd02a4c583cadbb04b229f350883f1eb3bc8c1e"
   solver-name = "gps-cdcl"
   solver-version = 1
