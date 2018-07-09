@@ -15,8 +15,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
+	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/cryptosigner"
-	"golang.org/x/crypto/ed25519"
 )
 
 const (
@@ -100,7 +100,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	vSigner, err := vaultsigner.New(client, walletName)
+	vSigner, err := vaultsigner.New(client, *grantSigningKey)
   if err != nil {
       log.Fatalln(err)
   }
@@ -128,7 +128,7 @@ func main() {
 		}
 	}
 
-	grants := grant.CreateGrants(signer, ed25519, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
+	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
 	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}
