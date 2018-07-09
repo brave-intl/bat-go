@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/vault/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
 	util "github.com/hashicorp/vault/command/config"
-)
+) //nolint
 
 // VaultSigner an ed25519 signer / verifier that uses the vault transit backend
 type VaultSigner struct {

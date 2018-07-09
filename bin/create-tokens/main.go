@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
-	"github.com/brave-intl/bat-go/utils/vaultsigner"
+	"github.com/brave-intl/bat-go/utils/vaultsigner" //nolint
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
 	"gopkg.in/square/go-jose.v2"
