@@ -99,10 +99,16 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Println("check")
-	payload, err := vaultsigner.New(client, *grantSigningKey)
 
-	signer := cryptosigner.Opaque(payload)
+	vSigner, err := vaultsigner.New(client, walletName)
+  if err != nil {
+      log.Fatalln(err)
+  }
+  cSigner := cryptosigner.Opaque(vSigner)
+  signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}, nil)
+  if err != nil {
+      log.Fatalln(err)
+  }
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	reader := bufio.NewReader(os.Stdin)

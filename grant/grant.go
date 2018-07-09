@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"gopkg.in/square/go-jose.v2"
+	"github.com/square/go-jose"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -210,8 +210,7 @@ func (a ByProbi) Less(i, j int) bool { return a[i].Probi.LessThan(a[j].Probi) }
 
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization
 func CreateGrants(
-	signer jose.OpaqueSigner,
-	algo jose.SignatureAlgorithm,
+	signer jose.Signer,
 	promotionUUID uuid.UUID,
 	grantCount uint,
 	altCurrency altcurrency.AltCurrency,
@@ -233,7 +232,7 @@ func CreateGrants(
 		if err != nil {
 			log.Fatalln(err)
 		}
-		jws, err := signer.SignPayload(serializedGrant, algo)
+		jws, err := signer.Sign(serializedGrant)
 		if err != nil {
 			log.Fatalln(err)
 		}
