@@ -16,7 +16,7 @@ import (
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
-  util "github.com/hashicorp/vault/command/config"
+	util "github.com/hashicorp/vault/command/config"
 )
 
 // VaultSigner an ed25519 signer / verifier that uses the vault transit backend
@@ -163,30 +163,30 @@ func New(client *api.Client, name string) (*VaultSigner, error) {
 }
 
 func Connect() (client *api.Client, err error) {
-  config := &api.Config{}
-  err = config.ReadEnvironment()
+	config := &api.Config{}
+	err = config.ReadEnvironment()
 
-  if err != nil {
-    client, err = api.NewClient(config)
-  } else {
-    client, err = api.NewClient(nil)
-    if err != nil {
-      log.Fatalln(err)
-    }
-    err = client.SetAddress("http://127.0.0.1:8200")
-  }
-  if err != nil {
-    return nil, err
-  }
+	if err != nil {
+		client, err = api.NewClient(config)
+	} else {
+		client, err = api.NewClient(nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = client.SetAddress("http://127.0.0.1:8200")
+	}
+	if err != nil {
+		return nil, err
+	}
 
-  helper, err := util.DefaultTokenHelper()
-  if err == nil {
-    var token string
-    token, err = helper.Get()
-    if err == nil {
-      client.SetToken(token)
-    }
-  }
+	helper, err := util.DefaultTokenHelper()
+	if err == nil {
+		var token string
+		token, err = helper.Get()
+		if err == nil {
+			client.SetToken(token)
+		}
+	}
 
-  return client, err
+	return client, err
 }
