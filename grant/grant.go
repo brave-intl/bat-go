@@ -495,6 +495,22 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	return &redeemTxInfo, nil
 }
 
+func (req *RedeemGrantsRequest) Check(ctx context.Context) (*wallet.TransactionInfo, error) {
+	log := lg.Log(ctx)
+
+	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
+	providerID := req.WalletInfo.ProviderID
+
+	if err != nil {
+		captureOptions := map[string]string{"providerID": providerID}
+		log.Errorf("Could not check settlement txn for wallet %s after successful VerifyAndConsume", providerID)
+		raven.CaptureMessage("Could not check settlement txn after successful VerifyAndConsume", captureOptions)
+		return nil, err
+	}
+
+	return grantFulfillmentInfo, nil
+}
+
 // Redeem the grants in the included response
 func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)

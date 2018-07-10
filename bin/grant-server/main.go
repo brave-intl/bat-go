@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -86,7 +87,7 @@ func main() {
 	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
 
 	serverCtx, r := setupRouter(serverCtx, logger)
-
+	fmt.Println("starting on 3333")
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {

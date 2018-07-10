@@ -36,6 +36,7 @@ func GrantsRouter() chi.Router {
 		r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
 	}
 	r.Put("/{grantId}", middleware.InstrumentHandlerFunc("ClaimGrant", ClaimGrant))
+	r.Get("/{grantId}", middleware.InstrumentHandlerFunc("CheckGrant", CheckGrant))
 	return r
 }
 
@@ -132,6 +133,27 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) {
 		log.Error(errMsg)
 		// FIXME not all errors are 4xx
 		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
+		panic(err)
+	}
+}
+
+func CheckGrant(w http.ResponseWriter, r *http.Request) {
+	context := r.Context()
+	log := lg.Log(context)
+	defer utils.PanicCloser(r.Body)
+
+	var req grant.RedeemGrantsRequest
+	txInfo, err := req.Check(context)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("Grant does not exist: %v", err)
+		log.Error(errMsg)
 		return
 	}
 
