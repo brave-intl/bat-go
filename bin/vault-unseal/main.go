@@ -10,7 +10,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/hashicorp/vault/api"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -32,19 +32,7 @@ func main() {
 	}
 	flag.Parse()
 
-	config := &api.Config{}
-	err := config.ReadEnvironment()
-
-	var client *api.Client
-	if err != nil {
-		client, err = api.NewClient(config)
-	} else {
-		client, err = api.NewClient(nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = client.SetAddress("http://127.0.0.1:8200")
-	}
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}

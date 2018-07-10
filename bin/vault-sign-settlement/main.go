@@ -15,8 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	"github.com/hashicorp/vault/api"
-	util "github.com/hashicorp/vault/command/config"
 )
 
 var (
@@ -43,30 +41,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	config := &api.Config{}
-	err := config.ReadEnvironment()
-
-	var client *api.Client
-	if err != nil {
-		client, err = api.NewClient(config)
-	} else {
-		client, err = api.NewClient(nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = client.SetAddress("http://127.0.0.1:8200")
-	}
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
-	}
-
-	helper, err := util.DefaultTokenHelper()
-	if err == nil {
-		var token string
-		token, err = helper.Get()
-		if err == nil {
-			client.SetToken(token)
-		}
 	}
 
 	walletName := args[0]
