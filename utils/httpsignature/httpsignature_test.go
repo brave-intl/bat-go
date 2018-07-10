@@ -16,7 +16,10 @@ func TestBuildSigningString(t *testing.T) {
 	s.KeyID = "Test"
 	s.Headers = []string{"(request-target)", "host", "date", "cache-control", "x-example"}
 
-	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
+	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
 	r.Header.Set("Host", "example.org")
 	r.Header.Set("Date", "Tue, 07 Jun 2014 20:51:35 GMT")
 
@@ -46,17 +49,23 @@ func TestBuildSigningString(t *testing.T) {
 func TestSign(t *testing.T) {
 	var privKey ed25519.PrivateKey
 	privHex := "96aa9ec42242a9a62196281045705196a64e12b15e9160bbb630e38385b82700e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d"
-	privKey, _ = hex.DecodeString(privHex)
+	privKey, err := hex.DecodeString(privHex)
+	if err != nil {
+		t.Error(err)
+	}
 
 	var s Signature
 	s.Algorithm = ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"foo"}
 
-	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
+	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
 	r.Header.Set("Foo", "bar")
 
-	err := s.Sign(privKey, crypto.Hash(0), r)
+	err = s.Sign(privKey, crypto.Hash(0), r)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
@@ -67,7 +76,10 @@ func TestSign(t *testing.T) {
 
 func TestVerify(t *testing.T) {
 	var pubKey Ed25519PubKey
-	pubKey, _ = hex.DecodeString("e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d")
+	pubKey, err := hex.DecodeString("e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d")
+	if err != nil {
+		t.Error(err)
+	}
 
 	var s Signature
 	s.Algorithm = ED25519
@@ -75,7 +87,11 @@ func TestVerify(t *testing.T) {
 	s.Headers = []string{"foo"}
 	s.Sig = "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
 
-	r, _ := http.NewRequest("GET", "http://example.org/foo", nil)
+	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
 

@@ -99,7 +99,11 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 func FromWalletInfo(info wallet.Info) (*Wallet, error) {
 	var publicKey httpsignature.Ed25519PubKey
 	if len(info.PublicKey) > 0 {
-		publicKey, _ = hex.DecodeString(info.PublicKey)
+		var err error
+		publicKey, err = hex.DecodeString(info.PublicKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return New(info, ed25519.PrivateKey{}, publicKey)
 }
@@ -124,7 +128,10 @@ func submit(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	if resp.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
 		var uhErr upholdError
 		if json.Unmarshal(body, &uhErr) != nil {
 			return nil, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
@@ -474,7 +481,10 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	b, _ := base64.StdEncoding.DecodeString(transactionB64)
+	b, err := base64.StdEncoding.DecodeString(transactionB64)
+	if err != nil {
+		return nil, err
+	}
 	var signedTx HTTPSignedRequest
 	err = json.Unmarshal(b, &signedTx)
 	if err != nil {
@@ -514,7 +524,11 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	var uhResp upholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
@@ -535,7 +549,10 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 		return nil, err
 	}
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	var uhResp upholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
@@ -560,7 +577,11 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 		return nil, err
 	}
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	var uhResp upholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
