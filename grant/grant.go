@@ -293,7 +293,6 @@ func (req *ClaimGrantRequest) Claim(ctx context.Context, grantID string) error {
 		log.Error("Attempt to claim previously claimed grant!")
 		return errors.New("An existing claim to the grant already exists")
 	}
-
 	claimedGrantsCounter.With(prometheus.Labels{}).Inc()
 
 	return nil
@@ -305,6 +304,20 @@ type RedeemGrantsRequest struct {
 	Grants      []string    `json:"grants" valid:"compactjws"`
 	WalletInfo  wallet.Info `json:"wallet" valid:"required"`
 	Transaction string      `json:"transaction" valid:"base64"`
+}
+
+// DecodeGrants decodes grants and sends back a new array
+func DecodeGrants(grants []string) ([]Grant, error) {
+	// 1. Check grant signatures and decode
+	decoded := make([]Grant, 0, len(grants))
+	for _, grantJWS := range grants {
+		grant, err := FromCompactJWS(grantJWS)
+		if err != nil {
+			return nil, err
+		}
+		decoded = append(decoded, *grant)
+	}
+	return decoded, nil
 }
 
 // VerifyAndConsume one or more grants to fulfill the included transaction for wallet
@@ -330,17 +343,11 @@ type RedeemGrantsRequest struct {
 // Returns transaction info for grant fufillment
 func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
-
 	// 1. Check grant signatures and decode
-	grants := make([]Grant, 0, len(req.Grants))
-	for _, grantJWS := range req.Grants {
-		grant, err := FromCompactJWS(grantJWS)
-		if err != nil {
-			return nil, err
-		}
-		grants = append(grants, *grant)
+	grants, err := DecodeGrants(req.Grants)
+	if err != nil {
+		return nil, err
 	}
-
 	// 2. Check transaction signature and decode, enforce transaction checks
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
@@ -495,20 +502,40 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	return &redeemTxInfo, nil
 }
 
-func (req *RedeemGrantsRequest) Check(ctx context.Context) (*wallet.TransactionInfo, error) {
-	log := lg.Log(ctx)
+// GetPromotionGrantsDatastore creates a datastore for a grant claim
+func GetPromotionGrantsDatastore(ctx context.Context, promotionID uuid.UUID) (datastore.SetLikeDatastore, error) {
+	return datastore.GetSetDatastore(ctx, "promotion:"+promotionID.String()+":grants")
+}
 
-	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
-	providerID := req.WalletInfo.ProviderID
+// GetRedeemedIDs returns the redemption status for given grants under a provider id
+func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 
+	// 1. Check grant signatures and decode
+	grants, err := DecodeGrants(Grants)
 	if err != nil {
-		captureOptions := map[string]string{"providerID": providerID}
-		log.Errorf("Could not check settlement txn for wallet %s after successful VerifyAndConsume", providerID)
-		raven.CaptureMessage("Could not check settlement txn after successful VerifyAndConsume", captureOptions)
 		return nil, err
 	}
+	grantCount := len(grants)
+	results := make([]string, 0, grantCount)
 
-	return grantFulfillmentInfo, nil
+	for _, grant := range grants {
+		grantID := grant.GrantID.String()
+		redeemedGrants, err := GetPromotionGrantsDatastore(ctx, grant.PromotionID)
+		if err != nil {
+			return nil, err
+		}
+		defer utils.PanicCloser(redeemedGrants)
+
+		grantRedeemed, err := redeemedGrants.Contains(grantID)
+		if err != nil {
+			return nil, err
+		}
+		if grantRedeemed {
+			results = append(results, grantID)
+		}
+	}
+
+	return results, nil
 }
 
 // Redeem the grants in the included response

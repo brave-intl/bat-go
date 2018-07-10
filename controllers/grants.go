@@ -36,7 +36,6 @@ func GrantsRouter() chi.Router {
 		r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
 	}
 	r.Put("/{grantId}", middleware.InstrumentHandlerFunc("ClaimGrant", ClaimGrant))
-	r.Get("/{grantId}", middleware.InstrumentHandlerFunc("CheckGrant", CheckGrant))
 	return r
 }
 
@@ -127,6 +126,13 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	redeemedIDs, err := grant.GetRedeemedIDs(r.Context(), req.Grants)
+	if err != nil || len(redeemedIDs) > 0 {
+		log.Error("Grants have already been redeemed")
+		respond(w, RedeemError{Err: "alreadyRedeemedError", Data: redeemedIDs})
+		return
+	}
+
 	txInfo, err := req.Redeem(r.Context())
 	if err != nil {
 		errMsg := fmt.Sprintf("Error redeeming grant: %v", err)
@@ -135,31 +141,23 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
-
-	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
-		panic(err)
-	}
+	respond(w, txInfo)
 }
 
-func CheckGrant(w http.ResponseWriter, r *http.Request) {
-	context := r.Context()
-	log := lg.Log(context)
-	defer utils.PanicCloser(r.Body)
+// RedeemError holds error info as well as a data structure
+type RedeemError struct {
+	Err  string   `json:"error"`
+	Data []string `json:"data"`
+}
 
-	var req grant.RedeemGrantsRequest
-	txInfo, err := req.Check(context)
+func (e *RedeemError) Error() string {
+	return fmt.Sprintf("%s: %v", e.Err, e.Data)
+}
 
-	if err != nil {
-		errMsg := fmt.Sprintf("Grant does not exist: %v", err)
-		log.Error(errMsg)
-		return
-	}
-
+func respond(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
+	if err := json.NewEncoder(w).Encode(data); err != nil {
 		panic(err)
 	}
 }
