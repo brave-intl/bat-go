@@ -12,6 +12,7 @@ import (
 	"path"
 
 	"github.com/brave-intl/bat-go/utils"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
@@ -83,19 +84,7 @@ func main() {
 		gpgKeys = append(gpgKeys, base64.StdEncoding.EncodeToString(buf.Bytes()))
 	}
 
-	config := &api.Config{}
-	err := config.ReadEnvironment()
-
-	var client *api.Client
-	if err != nil {
-		client, err = api.NewClient(config)
-	} else {
-		client, err = api.NewClient(nil)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = client.SetAddress("http://127.0.0.1:8200")
-	}
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}

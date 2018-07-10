@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hashicorp/vault/api"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
 )
@@ -16,19 +15,7 @@ func TestSign(t *testing.T) {
 		t.Skip("skipping test; VAULT_TOKEN not set")
 	}
 
-	config := &api.Config{}
-	err := config.ReadEnvironment()
-
-	var client *api.Client
-	if err != nil {
-		client, err = api.NewClient(config)
-	} else {
-		client, err = api.NewClient(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = client.SetAddress("http://127.0.0.1:8200")
-	}
+	client, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,19 +48,7 @@ func TestVerify(t *testing.T) {
 		t.Skip("skipping test; VAULT_TOKEN not set")
 	}
 
-	config := &api.Config{}
-	err := config.ReadEnvironment()
-
-	var client *api.Client
-	if err != nil {
-		client, err = api.NewClient(config)
-	} else {
-		client, err = api.NewClient(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = client.SetAddress("http://127.0.0.1:8200")
-	}
+	client, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}
