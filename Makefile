@@ -60,7 +60,7 @@ test:
 	go test -v --tags=$(TEST_TAGS) ./...
 
 lint:
-	golangci-lint run -E gofmt
+	golangci-lint run -E gofmt -E golint --exclude-use-default=false
 
 clean:
 	rm -f $(BINS)

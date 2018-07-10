@@ -46,16 +46,30 @@ func TestJsonMarshal(t *testing.T) {
 }
 
 func TestFromProbi(t *testing.T) {
-	i, _ := decimal.NewFromString("123456789")
+	i, err := decimal.NewFromString("123456789")
+	if err != nil {
+		t.Error(err)
+	}
 	btc := BTC.FromProbi(i)
-	expectedBtc, _ := decimal.NewFromString("1.23456789")
+	expectedBtc, err := decimal.NewFromString("1.23456789")
+	if err != nil {
+		t.Error(err)
+	}
 	if !btc.Equals(expectedBtc) {
 		t.Error("Expected satoshi value to match BTC value")
 	}
 
-	i, _ = decimal.NewFromString("1234567898765432123")
+	i, err = decimal.NewFromString("1234567898765432123")
+	if err != nil {
+		t.Error(err)
+	}
+
 	eth := ETH.FromProbi(i)
-	expectedEth, _ := decimal.NewFromString("1.234567898765432123")
+	expectedEth, err := decimal.NewFromString("1.234567898765432123")
+	if err != nil {
+		t.Error(err)
+	}
+
 	if !eth.Equals(expectedEth) {
 		t.Error(eth)
 		t.Error(expectedEth)
@@ -64,16 +78,31 @@ func TestFromProbi(t *testing.T) {
 }
 
 func TestToProbi(t *testing.T) {
-	f, _ := decimal.NewFromString("1.23456789")
+	f, err := decimal.NewFromString("1.23456789")
+	if err != nil {
+		t.Error(err)
+	}
 	satoshi := BTC.ToProbi(f)
-	expectedSatoshi, _ := decimal.NewFromString("123456789")
+	expectedSatoshi, err := decimal.NewFromString("123456789")
+	if err != nil {
+		t.Error(err)
+	}
+
 	if !satoshi.Equals(expectedSatoshi) {
 		t.Error("Expected satoshi value to match BTC value")
 	}
 
-	f, _ = decimal.NewFromString("1.234567898765432123")
+	f, err = decimal.NewFromString("1.234567898765432123")
+	if err != nil {
+		t.Error(err)
+	}
+
 	wei := ETH.ToProbi(f)
-	expectedWei, _ := decimal.NewFromString("1234567898765432123")
+	expectedWei, err := decimal.NewFromString("1234567898765432123")
+	if err != nil {
+		t.Error(err)
+	}
+
 	if !wei.Equals(expectedWei) {
 		t.Error("Expected wei value to match ETH value")
 	}

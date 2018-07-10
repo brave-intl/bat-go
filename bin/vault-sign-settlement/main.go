@@ -77,7 +77,7 @@ func main() {
 	}
 	fmt.Println(response)
 
-	providerId, ok := response.Data["providerId"]
+	providerID, ok := response.Data["providerId"]
 	if !ok {
 		log.Fatalln("invalid wallet name")
 	}
@@ -90,7 +90,7 @@ func main() {
 	var info wallet.Info
 	info.PublicKey = signer.String()
 	info.Provider = "uphold"
-	info.ProviderID = providerId.(string)
+	info.ProviderID = providerID.(string)
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp

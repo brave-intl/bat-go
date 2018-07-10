@@ -32,6 +32,7 @@ func MakeDialer(fingerprint string) Dialer {
 	}
 }
 
+// GetFingerprints is a helper for getting the fingerprint needed to update pins
 func GetFingerprints(c *tls.Conn) (map[string]string, error) {
 	connstate := c.ConnectionState()
 

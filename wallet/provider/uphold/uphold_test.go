@@ -77,7 +77,10 @@ func TestDecodeTransaction(t *testing.T) {
 	}
 
 	var pk httpsignature.Ed25519PubKey
-	pk, _ = hex.DecodeString("424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf")
+	pk, err = hex.DecodeString("424073b208e97af51cab7a389bcfe6942a3b7c7520fe9dab84f311f7846f5fcf")
+	if err != nil {
+		t.Error(err)
+	}
 	wallet.PubKey = pk
 
 	txnB64 := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
@@ -89,7 +92,10 @@ func TestDecodeTransaction(t *testing.T) {
 
 	var expected transactionRequest
 	expected.Destination = "foo@bar.com"
-	expected.Denomination.Amount, _ = decimal.NewFromString("25.0")
+	expected.Denomination.Amount, err = decimal.NewFromString("25.0")
+	if err != nil {
+		t.Error(err)
+	}
 	{
 		tmp := altcurrency.BAT
 		expected.Denomination.Currency = &tmp
@@ -164,7 +170,11 @@ func TestTransactions(t *testing.T) {
 		t.Error(err)
 	}
 
-	value, _ := decimal.NewFromString("10")
+	value, err := decimal.NewFromString("10")
+	if err != nil {
+		t.Error(err)
+	}
+
 	tx, err := donorWallet.PrepareTransaction(
 		altcurrency.BAT,
 		altcurrency.BAT.ToProbi(value),
