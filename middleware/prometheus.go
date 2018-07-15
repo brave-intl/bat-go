@@ -98,9 +98,9 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 	)
 }
 
-// InstrumentHandlerFunc instruments an http.HandlerFunc to capture metrics like the number
+// InstrumentHandler instruments an http.Handler to capture metrics like the number
 // the total number of requests served and latency information
-func InstrumentHandlerFunc(name string, h http.HandlerFunc) http.HandlerFunc {
+func InstrumentHandler(name string, h http.Handler) http.Handler {
 	hRequests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:        "api_requests_total",

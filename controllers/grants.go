@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -17,7 +16,6 @@ import (
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	"github.com/pressly/lg"
 )
 
 // GrantsRouter is the router for grant endpoints
@@ -31,57 +29,50 @@ func GrantsRouter() chi.Router {
 		if err != nil {
 			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
 		}
-		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants)))
+		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandler("RedeemGrants", utils.AppHandler(RedeemGrants))))
 	} else {
-		r.Post("/", middleware.InstrumentHandlerFunc("RedeemGrants", RedeemGrants))
+		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", utils.AppHandler(RedeemGrants)))
 	}
-	r.Put("/{grantId}", middleware.InstrumentHandlerFunc("ClaimGrant", ClaimGrant))
+	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", utils.AppHandler(ClaimGrant)))
 	return r
 }
 
 // ClaimGrant is the handler for claiming grants
-func ClaimGrant(w http.ResponseWriter, r *http.Request) {
-	log := lg.Log(r.Context())
+func ClaimGrant(w http.ResponseWriter, r *http.Request) *utils.AppError {
 	defer utils.PanicCloser(r.Body)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
-		return
+		return utils.WrapError("Error reading body", err)
 	}
 
 	var req grant.ClaimGrantRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		errMsg := fmt.Sprintf("Error unmarshalling body: %v", err)
-		log.Error(errMsg)
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
+		return utils.WrapError("Error unmarshalling body", err)
 	}
 	_, err = govalidator.ValidateStruct(req)
 	if err != nil {
-		errMsg := fmt.Sprintf("Error validating request payload: %v", err)
-		log.Error(errMsg)
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
+		return utils.WrapValidationError(err)
 	}
 
 	if grantID := chi.URLParam(r, "grantId"); grantID != "" {
 		if !govalidator.IsUUIDv4(grantID) {
-			errMsg := fmt.Sprintf("Error validating request url parameter: grantId must be a uuidv4")
-			log.Error(errMsg)
-			http.Error(w, errMsg, http.StatusBadRequest)
-			return
+			return &utils.AppError{
+				Message: "Error validating request url parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"grantId": "grantId must be a uuidv4",
+					},
+				},
+			}
 		}
 
 		err = req.Claim(r.Context(), grantID)
 		if err != nil {
-			errMsg := fmt.Sprintf("Error claiming grant: %v", err)
-			log.Error(errMsg)
 			// FIXME not all errors are 4xx
-			http.Error(w, errMsg, http.StatusBadRequest)
-			return
+			utils.WrapError("Error claiming grant", err)
 		}
 	}
 
@@ -94,70 +85,51 @@ func ClaimGrant(w http.ResponseWriter, r *http.Request) {
 		raven.CaptureMessage("Could not cleanly close db conn post ip increment.", map[string]string{})
 	}
 
-	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
 // RedeemGrants is the handler for redeeming one or more grants
-func RedeemGrants(w http.ResponseWriter, r *http.Request) {
-	log := lg.Log(r.Context())
+func RedeemGrants(w http.ResponseWriter, r *http.Request) *utils.AppError {
 	defer utils.PanicCloser(r.Body)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
-		return
+		return utils.WrapError("Error reading body", err)
 	}
 
 	var req grant.RedeemGrantsRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		errMsg := fmt.Sprintf("Error unmarshalling body: %v", err)
-		log.Error(errMsg)
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
+		return utils.WrapError("Error unmarshalling body", err)
 	}
 	_, err = govalidator.ValidateStruct(req)
 	if err != nil {
-		errMsg := fmt.Sprintf("Error validating grant: %v", err)
-		log.Error(errMsg)
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
+		return utils.WrapValidationError(err)
 	}
 
 	redeemedIDs, err := grant.GetRedeemedIDs(r.Context(), req.Grants)
-	if err != nil || len(redeemedIDs) > 0 {
-		log.Error("Grants have already been redeemed")
-		respond(w, RedeemError{Err: "alreadyRedeemedError", Data: redeemedIDs})
-		return
+	if err != nil {
+		return utils.WrapError("Error checking grant redemption status", err)
+	}
+
+	if len(redeemedIDs) > 0 {
+		return &utils.AppError{
+			Message: "One or more grants have already been redeemed",
+			Code:    http.StatusGone,
+			Data:    map[string]interface{}{"redeemedIDs": redeemedIDs},
+		}
 	}
 
 	txInfo, err := req.Redeem(r.Context())
 	if err != nil {
-		errMsg := fmt.Sprintf("Error redeeming grant: %v", err)
-		log.Error(errMsg)
 		// FIXME not all errors are 4xx
-		http.Error(w, errMsg, http.StatusBadRequest)
-		return
+		return utils.WrapError("Error redeeming grant", err)
 	}
+
 	w.WriteHeader(http.StatusOK)
-	respond(w, txInfo)
-}
-
-// RedeemError holds error info as well as a data structure
-type RedeemError struct {
-	Err  string   `json:"error"`
-	Data []string `json:"data"`
-}
-
-func (e *RedeemError) Error() string {
-	return fmt.Sprintf("%s: %v", e.Err, e.Data)
-}
-
-func respond(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("content-type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
 		panic(err)
 	}
+	return nil
 }
