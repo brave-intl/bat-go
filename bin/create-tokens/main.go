@@ -103,6 +103,8 @@ func main() {
 		log.Fatalln(err)
 	}
 	cSigner := cryptosigner.Opaque(vSigner)
+	// signingKey := jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}
+	// signer, err := jose.NewSigner(signingKey, nil)
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}, nil)
 	if err != nil {
 		log.Fatalln(err)

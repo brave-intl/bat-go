@@ -12,7 +12,7 @@ is installed then run `make docker`.
 
 1. [Install Go 1.10](https://golang.org/doc/install) (NOTE: Go 1.9 and earlier will not work!)
 
-2. Run `go get -d github.com/brave-intl/bat-go`. 
+2. Run `go get -d github.com/brave-intl/bat-go`.
 
 3. [dep](https://github.com/golang/dep) is used to install the dependencies.  If you do not have dep, you need to [install it](https://github.com/golang/dep#setup). On mac:
 `brew install dep`
@@ -22,3 +22,4 @@ is installed then run `make docker`.
 5. Build via `make`
 
 6. Run the server executable `./grant-server`
+

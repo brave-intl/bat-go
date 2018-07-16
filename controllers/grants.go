@@ -72,7 +72,7 @@ func ClaimGrant(w http.ResponseWriter, r *http.Request) *utils.AppError {
 		err = req.Claim(r.Context(), grantID)
 		if err != nil {
 			// FIXME not all errors are 4xx
-			utils.WrapError("Error claiming grant", err)
+			return utils.WrapError("Error claiming grant", err)
 		}
 	}
 
