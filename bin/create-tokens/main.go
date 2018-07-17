@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
@@ -45,39 +48,69 @@ type grantRegistration struct {
 	Promotions []promotionInfo `json:"promotions"`
 }
 
+// TokenContext the data to be used to create tokens
+type TokenContext struct {
+	AltCurrency   altcurrency.AltCurrency
+	MaturityDate  time.Time
+	ExpiryDate    time.Time
+	PromotionUUID uuid.UUID
+}
+
 func main() {
 	log.SetFlags(0)
-
-	var err error
 	flag.Parse()
-
-	var altCurrency altcurrency.AltCurrency
-	err = altCurrency.UnmarshalText([]byte(*altCurrencyStr))
+	context, err := BuildContext()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	signer, err := CreateSigner()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
+	accepted, err := ReceiveInput(context)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !accepted {
+		log.Fatalln("rejected creation")
+	}
+
+	err = CreateTokens(signer, context)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
+// BuildContext creates a structure for other functions to referrence
+func BuildContext() (context TokenContext, err error) {
+	var altCurrency altcurrency.AltCurrency
+	err = altCurrency.UnmarshalText([]byte(*altCurrencyStr))
+	if err != nil {
+		return context, err
+	}
+
 	if *value > 1000 {
-		log.Fatalln("value is unreasonably large, did you accidentally provide probi?")
+		return context, errors.New("value is unreasonably large, did you accidentally provide probi?")
 	}
 
 	maturityDate := time.Now()
 	if *maturityDateStr != "now" {
 		maturityDate, err = time.Parse(dateFormat, *maturityDateStr)
 		if err != nil {
-			log.Fatalf("%s is not a valid ISO 8601 datetime\n", *maturityDateStr)
+			return context, fmt.Errorf("%s is not a valid ISO 8601 datetime", *maturityDateStr)
 		}
 	}
 
 	if *validWeeks != defaultValidWeeks && len(*expiryDateStr) > 0 {
-		log.Fatalln("Cannot pass both -expiry-date and -valid-duration")
+		return context, errors.New("Cannot pass both -expiry-date and -valid-duration")
 	}
 
 	var expiryDate time.Time
 	if len(*expiryDateStr) > 0 {
 		expiryDate, err = time.Parse(dateFormat, *expiryDateStr)
 		if err != nil {
-			log.Fatalf("%s is not a valid ISO 8601 datetime\n", *expiryDateStr)
+			return context, fmt.Errorf("%s is not a valid ISO 8601 datetime", *expiryDateStr)
 		}
 	} else {
 		expiryDate = maturityDate.AddDate(0, 0, int(*validWeeks)*7)
@@ -87,45 +120,89 @@ func main() {
 	if *promotionID != generated {
 		promotionUUID, err = uuid.FromString(*promotionID)
 		if err != nil {
-			log.Fatalf("%s is not a valid uuidv4\n", *promotionID)
+			return context, fmt.Errorf("%s is not a valid uuidv4", *promotionID)
 		}
 	}
+	context = TokenContext{
+		AltCurrency:   altCurrency,
+		MaturityDate:  maturityDate,
+		ExpiryDate:    expiryDate,
+		PromotionUUID: promotionUUID,
+	}
+	return context, nil
+}
 
+// CreateSigner creates a signer
+func CreateSigner() (signer jose.Signer, err error) {
 	client, err := vaultsigner.Connect()
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 
 	vSigner, err := vaultsigner.New(client, *grantSigningKey)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
+
 	cSigner := cryptosigner.Opaque(vSigner)
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}, nil)
+	signingKey := jose.SigningKey{Algorithm: jose.EdDSA, Key: cSigner}
+	signer, err = jose.NewSigner(signingKey, nil)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
+	return signer, nil
+}
 
+// ReceiveInput takes in stdin from the buffer reader
+func ReceiveInput(context TokenContext) (result bool, err error) {
+	promotionUUID := context.PromotionUUID
+	altCurrency := context.AltCurrency
+	maturityDate := context.MaturityDate
+	expiryDate := context.ExpiryDate
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
-	fmt.Print("Continue? ")
-	resp, err := utils.PromptBool()
-	if err != nil {
-		log.Fatalln(err)
+	reader := bufio.NewReader(os.Stdin)
+	var text string
+	for {
+		fmt.Print("Continue? (y/n): ")
+		text, err = reader.ReadString('\n')
+		if err != nil {
+			return result, err
+		}
+		accepted, err := CheckInput(text)
+		if err == nil {
+			return accepted, nil
+		}
+		fmt.Println("Input must be \"y\" or \"n\"")
 	}
-	if !resp {
-		log.Fatalln("Exiting...")
-	}
+}
 
+// CheckInput checks the input and gives back
+func CheckInput(text string) (bool, error) {
+	if strings.ToLower(strings.TrimSpace(text)) == "n" {
+		return false, nil
+	} else if strings.ToLower(strings.TrimSpace(text)) == "y" {
+		return true, nil
+	}
+	return false, errors.New("did not match")
+}
+
+// CreateTokens creates tokens from the signer and context object
+func CreateTokens(signer jose.Signer, context TokenContext) error {
+	promotionUUID := context.PromotionUUID
+	altCurrency := context.AltCurrency
+	maturityDate := context.MaturityDate
+	expiryDate := context.ExpiryDate
 	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
 	var grantReg grantRegistration
 	grantReg.Grants = grants
 	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}
 	serializedGrants, err := json.Marshal(grantReg)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	err = ioutil.WriteFile(*outputFile, serializedGrants, 0600)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
+	return nil
 }
