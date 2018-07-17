@@ -37,6 +37,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils"
 	"github.com/getsentry/raven-go"
 	"github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
@@ -76,7 +77,10 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 					)
 					raven.Capture(packet, nil)
 
-					http.Error(ww, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+					utils.AppError{
+						Message: http.StatusText(http.StatusInternalServerError),
+						Code:    http.StatusInternalServerError,
+					}.ServeHTTP(w, r)
 				}
 
 				// Log the entry, the request is complete.

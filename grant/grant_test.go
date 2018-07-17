@@ -82,6 +82,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	}
 
 	grants := []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiIxOGY3Y2FkYS0yZTljLTRjNmUtYTU0MS1iMjAzMmM0M2E5MmUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.haBAppDcMq0D1NlcxzBatwZGIKRtEGsw9_03PQtUAMTXmkc5LtoyFGgIXeZLIdrYmuowD8jHLIU3K1e8HJhzBA"}
+	redeemedGrant := grants
 
 	walletInfo := wallet.Info{}
 	walletInfo.Provider = "uphold"
@@ -96,18 +97,22 @@ func TestVerifyAndConsume(t *testing.T) {
 
 	transaction := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
+	grantID := "18f7cada-2e9c-4c6e-a541-b2032c43a92e"
+
 	logger := logrus.New()
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 
 	request := RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
+
 	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
 		t.Error("Should not be able to redeem without a valid claim on a grant")
+		return
 	}
 
 	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
-	err = claimReq.Claim(ctx, "18f7cada-2e9c-4c6e-a541-b2032c43a92e")
+	err = claimReq.Claim(ctx, grantID)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -137,5 +142,13 @@ func TestVerifyAndConsume(t *testing.T) {
 		t.Error("expected re-redeem with the same wallet and promotion to fail")
 	}
 
+	redeemedIDs, err := GetRedeemedIDs(ctx, redeemedGrant)
+	if err != nil {
+		t.Error("Unable to check RedeemedIDs")
+	}
+	expectedRedeemedIDs := []string{grantID}
+	if !reflect.DeepEqual(redeemedIDs, expectedRedeemedIDs) {
+		t.Error("IDs do not match")
+	}
 	// TODO add more tests
 }
