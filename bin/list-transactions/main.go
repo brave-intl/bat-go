@@ -18,7 +18,7 @@ func main() {
 	log.SetFormatter(&utils.CliFormatter{})
 
 	flag.Usage = func() {
-		log.Printf("A helper for fetching tls fingerprint info for pinning.\n\n")
+		log.Printf("A helper for fetching transaction history.\n\n")
 		log.Printf("Usage:\n\n")
 		log.Printf("        %s PROVIDER_ID\n", os.Args[0])
 		flag.PrintDefaults()
