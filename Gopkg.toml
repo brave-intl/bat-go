@@ -49,3 +49,11 @@
 [[constraint]]
   name = "github.com/hashicorp/vault"
   version = "0.10.2"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/tyler-smith/go-bip39"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/superp00t/niceware"
