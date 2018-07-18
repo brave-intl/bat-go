@@ -53,6 +53,11 @@ func TestDeriveSigningKeysFromSeed(t *testing.T) {
 		t.Error("Unexpected error signing message")
 	}
 
+	// nacl combined signature mode is equivalent to the message with signature prepended
+	if hex.EncodeToString(sig)+hex.EncodeToString(message) != "81d39235e6e1ed07e7d2cee6380aa07f415ab4b43cc4cef4043e61171ac5511253807105aba9b7b9c9cdbb0e84517178176d87f757801275a16477a51013e10de282ac2031323320e38383e38383e38383e38080e38182" {
+		t.Error("Signature did not match expected value from brave/crypto")
+	}
+
 	if !ed25519.Verify(pk, message, sig) {
 		t.Error("Signature verification failed")
 	}
