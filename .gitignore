@@ -18,3 +18,5 @@ grantTokens.json
 /settlement-submit
 /vault-*
 /get-cert-fingerprint
+/transfer-funds
+/list-transactions

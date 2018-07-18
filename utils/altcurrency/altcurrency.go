@@ -95,12 +95,17 @@ func (a *AltCurrency) MarshalText() (text []byte, err error) {
 
 // UnmarshalText unmarshalls the altcurrency from text.
 func (a *AltCurrency) UnmarshalText(text []byte) (err error) {
-	var exists bool
-	*a, exists = altCurrencyID[string(text)]
+	*a, err = FromString(string(text))
+	return err
+}
+
+// FromString returns the corresponding AltCurrency or error if there is none
+func FromString(text string) (AltCurrency, error) {
+	a, exists := altCurrencyID[text]
 	if !exists {
-		return errors.New("Not a valid AltCurrency")
+		return invalid, errors.New("Not a valid AltCurrency")
 	}
-	return nil
+	return a, nil
 }
 
 // GetBTCAddressVersion returns the BTC address version of the address str.

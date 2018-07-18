@@ -2,6 +2,7 @@
 package wallet
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -32,6 +33,14 @@ type TransactionInfo struct {
 	DestCurrency string                   `json:"-"`
 	DestAmount   decimal.Decimal          `json:"-"`
 	ValidUntil   time.Time                `json:"-"`
+	Source       string                   `json:"-"`
+	Time         time.Time                `json:"-"`
+}
+
+// String returns the transaction info as an easily readable string
+func (t TransactionInfo) String() string {
+	return fmt.Sprintf("%s: %s %s sent from %s to %s, charged transfer fee %s and exchange fee %s, destination recieved %s %s", t.Time,
+		t.AltCurrency.FromProbi(t.Probi), t.AltCurrency, t.Source, t.Destination, t.TransferFee, t.ExchangeFee, t.DestAmount, t.DestCurrency)
 }
 
 // Balance holds balance information for a wallet
@@ -58,6 +67,8 @@ type Wallet interface {
 	ConfirmTransaction(id string) (*TransactionInfo, error)
 	// GetBalance returns the last known balance, if refresh is true then the current balance is fetched
 	GetBalance(refresh bool) (*Balance, error)
+	// ListTransactions for this wallet
+	ListTransactions() ([]TransactionInfo, error)
 }
 
 // IsNotFound is a helper method for determining if an error indicates a missing resource
