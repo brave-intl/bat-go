@@ -24,8 +24,8 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	jose "gopkg.in/square/go-jose.v2"
 	"golang.org/x/crypto/ed25519"
+	jose "gopkg.in/square/go-jose.v2"
 )
 
 var handler http.Handler
@@ -123,8 +123,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 		t.Fatal(err)
 	}
 	info.PublicKey = hex.EncodeToString(publicKey)
-
-	newWallet := &uphold.Wallet{info, privateKey, publicKey}
+	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
 	err = newWallet.Register("bat-go test card")
 	if err != nil {
 		t.Fatal(err)
@@ -151,8 +150,11 @@ func TestRedeem(t *testing.T) {
 	// + 1 week
 	expiryDate := maturityDate.AddDate(0, 0, 1)
 
-	grants := grant.CreateGrants(signer, uuid.NewV4(), 1, altcurrency.BAT, 30, maturityDate, expiryDate)
-	g, err := grant.FromCompactJWS(grants[0])
+	grants, err := grant.CreateGrants(signer, uuid.NewV4(), 1, altcurrency.BAT, 30, maturityDate, expiryDate)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	g, err := grant.FromCompactJWS(publicKey, grants[0])
 	if err != nil {
 		log.Fatalln(err)
 	}

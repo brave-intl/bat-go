@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/vault/helper/jsonutil"
 	"github.com/hashicorp/vault/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
-	"gopkg.in/square/go-jose.v2"
 )
 
 // VaultSigner an ed25519 signer / verifier that uses the vault transit backend
@@ -69,11 +68,6 @@ func (vs *VaultSigner) String() string {
 	}
 
 	return hex.EncodeToString(publicKey)
-}
-
-// Algs returns the algs for signing key to check
-func (vs *VaultSigner) Algs() []jose.SignatureAlgorithm {
-	return []jose.SignatureAlgorithm{jose.EdDSA}
 }
 
 // Public returns the public key

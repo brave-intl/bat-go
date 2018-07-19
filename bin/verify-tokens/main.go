@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/utils/set"
 	"github.com/satori/go.uuid"
+	"golang.org/x/crypto/ed25519"
 )
 
 var (
@@ -40,6 +42,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	b, err := hex.DecodeString(grantSignatorPublicKeyHex)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	pubKey := ed25519.PublicKey(b)
+
 	contents, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)
@@ -53,7 +61,7 @@ func main() {
 
 	for i := 0; i < len(grantReg.Grants); i++ {
 		var g *grant.Grant
-		g, err = grant.FromCompactJWS(grantReg.Grants[i])
+		g, err = grant.FromCompactJWS(pubKey, grantReg.Grants[i])
 		if err != nil {
 			log.Fatalln(err)
 		}

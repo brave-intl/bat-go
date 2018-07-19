@@ -33,7 +33,7 @@ func TestFromCompactJWS(t *testing.T) {
 		t.Error("unexpected error")
 	}
 
-	grant, err := FromCompactJWS(jwsGrant)
+	grant, err := FromCompactJWS(grantPublicKey, jwsGrant)
 	if err != nil {
 		t.Error("unexpected error")
 		t.Error(err)

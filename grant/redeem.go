@@ -50,7 +50,7 @@ type RedeemGrantsRequest struct {
 func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 	// 1. Check grant signatures and decode
-	grants, err := DecodeGrants(req.Grants)
+	grants, err := DecodeGrants(grantPublicKey, req.Grants)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 
 	// 1. Check grant signatures and decode
-	grants, err := DecodeGrants(Grants)
+	grants, err := DecodeGrants(grantPublicKey, Grants)
 	if err != nil {
 		return nil, err
 	}

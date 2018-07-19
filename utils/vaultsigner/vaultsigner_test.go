@@ -1,3 +1,5 @@
+// +build integration
+
 package vaultsigner
 
 import (
@@ -6,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hashicorp/vault/api"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
 )
@@ -15,7 +18,8 @@ func TestSign(t *testing.T) {
 		t.Skip("skipping test; VAULT_TOKEN not set")
 	}
 
-	client, err := Connect()
+	config := &api.Config{Address: "http://127.0.0.1:8200"}
+	client, err := api.NewClient(config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +52,8 @@ func TestVerify(t *testing.T) {
 		t.Skip("skipping test; VAULT_TOKEN not set")
 	}
 
-	client, err := Connect()
+	config := &api.Config{Address: "http://127.0.0.1:8200"}
+	client, err := api.NewClient(config)
 	if err != nil {
 		t.Fatal(err)
 	}
