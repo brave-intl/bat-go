@@ -1,17 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
+	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
@@ -109,21 +107,13 @@ func main() {
 	}
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("Continue? (y/n): ")
-		var text string
-		text, err = reader.ReadString('\n')
-		if err != nil {
-			log.Fatalln(err)
-		}
-		if strings.ToLower(strings.TrimSpace(text)) == "n" {
-			log.Fatalln("Exiting...")
-		} else if strings.ToLower(strings.TrimSpace(text)) == "y" {
-			break
-		} else {
-			fmt.Println("Input must be \"y\" or \"n\"")
-		}
+	fmt.Print("Continue? ")
+	resp, err := utils.PromptBool()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if !resp {
+		log.Fatalln("Exiting...")
 	}
 
 	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)

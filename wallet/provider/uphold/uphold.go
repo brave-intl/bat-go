@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -35,6 +37,10 @@ type Wallet struct {
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
 }
+
+const (
+	dateFormat = "2006-01-02T15:04:05.000Z"
+)
 
 var (
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
@@ -116,19 +122,28 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	return req, err
 }
 
-func submit(req *http.Request) (*http.Response, error) {
+func submit(req *http.Request) ([]byte, error) {
 	req.Header.Add("content-type", "application/json")
 
-	// FIXME dump request on debug loglevel
-	//dump, _ := httputil.DumpRequestOut(req, true)
-	//fmt.Println(string(dump))
+	dump, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		panic(err)
+	}
+	log.WithFields(log.Fields{
+		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
+		"type": "http.Request",
+	}).Debug(string(dump))
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	body, err := ioutil.ReadAll(resp.Body)
+	log.WithFields(log.Fields{
+		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
+		"type": "http.Repsonse.Body",
+	}).Debug(string(body))
 	if resp.StatusCode/100 != 2 {
-		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +153,7 @@ func submit(req *http.Request) (*http.Response, error) {
 		}
 		return nil, uhErr
 	}
-	return resp, nil
+	return body, nil
 }
 
 type createCardRequest struct {
@@ -176,13 +191,13 @@ func (w *Wallet) Register(label string) error {
 		return err
 	}
 
-	resp, err := submit(req)
+	body, err := submit(req)
 	if err != nil {
 		return err
 	}
 
 	var details CardDetails
-	err = json.NewDecoder(resp.Body).Decode(&details)
+	err = json.Unmarshal(body, &details)
 	if err != nil {
 		return err
 	}
@@ -210,13 +225,13 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := submit(req)
+	body, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
 	var details CardDetails
-	err = json.NewDecoder(resp.Body).Decode(&details)
+	err = json.Unmarshal(body, &details)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +256,8 @@ type transactionRequest struct {
 	Message      string       `json:"message,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altcurrency.FromProbi(probi), Currency: &altcurrency}, Destination: destination, Message: message}
+func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
+	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, err
@@ -374,7 +389,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	if !govalidator.IsEmail(transaction.Destination) {
 		if !govalidator.IsUUIDv4(transaction.Destination) {
 			if !utils.IsBTCAddress(transaction.Destination) {
-				if !utils.IsETHAddress(transaction.Destination) {
+				if !utils.IsETHAddressNoChecksum(transaction.Destination) {
 					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)
 				}
 			}
@@ -444,7 +459,9 @@ type upholdTransactionResponse struct {
 	ID           string                               `json:"id"`
 	Denomination denomination                         `json:"denomination"`
 	Destination  upholdTransactionResponseDestination `json:"destination"`
+	Origin       upholdTransactionResponseDestination `json:"origin"`
 	Params       upholdTransactionResponseParams      `json:"params"`
+	CreatedAt    string                               `json:"createdAt"`
 }
 
 func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
@@ -458,6 +475,18 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 		txInfo.Destination = resp.Destination.CardID
 	} else if len(resp.Destination.Node.ID) > 0 {
 		txInfo.Destination = resp.Destination.Node.ID
+	}
+
+	if len(resp.Origin.CardID) > 0 {
+		txInfo.Source = resp.Origin.CardID
+	} else if len(resp.Origin.Node.ID) > 0 {
+		txInfo.Source = resp.Origin.Node.ID
+	}
+
+	var err error
+	txInfo.Time, err = time.Parse(dateFormat, resp.CreatedAt)
+	if err != nil {
+		log.Fatalf("%s is not a valid ISO 8601 datetime\n", resp.CreatedAt)
 	}
 
 	txInfo.DestCurrency = resp.Destination.Currency
@@ -519,12 +548,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 	req.Header = headers
 	req.Body = body
 
-	resp, err := submit(req)
-	if err != nil {
-		return nil, err
-	}
-
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -544,17 +568,13 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := submit(req)
+	body, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
 	var uhResp upholdTransactionResponse
-	err = json.Unmarshal(respBody, &uhResp)
+	err = json.Unmarshal(body, &uhResp)
 	if err != nil {
 		return nil, err
 	}
@@ -572,23 +592,42 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := submit(req)
-	if err != nil {
-		return nil, err
-	}
-
-	respBody, err := ioutil.ReadAll(resp.Body)
+	body, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
 	var uhResp upholdTransactionResponse
-	err = json.Unmarshal(respBody, &uhResp)
+	err = json.Unmarshal(body, &uhResp)
 	if err != nil {
 		return nil, err
 	}
 
 	return uhResp.ToTransactionInfo(), nil
+}
+
+// ListTransactions for this wallet, pagination not yet supported
+func (w *Wallet) ListTransactions() ([]wallet.TransactionInfo, error) {
+	req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID+"/transactions", nil)
+	if err != nil {
+		return nil, err
+	}
+	body, err := submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var uhResp []upholdTransactionResponse
+	err = json.Unmarshal(body, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]wallet.TransactionInfo, len(uhResp))
+	for i := 0; i < len(uhResp); i++ {
+		out[i] = *uhResp[i].ToTransactionInfo()
+	}
+	return out, nil
 }
 
 // GetBalance returns the last known balance, if refresh is true then the current balance is fetched

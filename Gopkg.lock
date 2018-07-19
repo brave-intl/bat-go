@@ -3,12 +3,7 @@
 
 [[projects]]
   name = "github.com/SermoDigital/jose"
-  packages = [
-    ".",
-    "crypto",
-    "jws",
-    "jwt"
-  ]
+  packages = [".","crypto","jws","jwt"]
   revision = "f6df55f235c24f236d11dbcf665249a59ac2021f"
   version = "1.1"
 
@@ -62,10 +57,7 @@
 
 [[projects]]
   name = "github.com/garyburd/redigo"
-  packages = [
-    "internal",
-    "redis"
-  ]
+  packages = ["internal","redis"]
   revision = "47dc60e71eed504e3ef8e77ee3c6fe720f3be57f"
   version = "v1.3.0"
 
@@ -77,22 +69,13 @@
 
 [[projects]]
   name = "github.com/go-chi/chi"
-  packages = [
-    ".",
-    "middleware"
-  ]
+  packages = [".","middleware"]
   revision = "f7c66f685bcab06bcce78ac212c5f3553c063d19"
   version = "v3.3.0"
 
 [[projects]]
   name = "github.com/golang/protobuf"
-  packages = [
-    "proto",
-    "ptypes",
-    "ptypes/any",
-    "ptypes/duration",
-    "ptypes/timestamp"
-  ]
+  packages = ["proto","ptypes","ptypes/any","ptypes/duration","ptypes/timestamp"]
   revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
   version = "v1.1.0"
 
@@ -171,54 +154,18 @@
 [[projects]]
   branch = "master"
   name = "github.com/hashicorp/golang-lru"
-  packages = [
-    ".",
-    "simplelru"
-  ]
+  packages = [".","simplelru"]
   revision = "0fb14efe8c47ae851c0034ed7a448854d3d34cf3"
 
 [[projects]]
   branch = "master"
   name = "github.com/hashicorp/hcl"
-  packages = [
-    ".",
-    "hcl/ast",
-    "hcl/parser",
-    "hcl/scanner",
-    "hcl/strconv",
-    "hcl/token",
-    "json/parser",
-    "json/scanner",
-    "json/token"
-  ]
+  packages = [".","hcl/ast","hcl/parser","hcl/scanner","hcl/strconv","hcl/token","json/parser","json/scanner","json/token"]
   revision = "ef8a98b0bbce4a65b5aa4c368430a80ddc533168"
 
 [[projects]]
   name = "github.com/hashicorp/vault"
-  packages = [
-    "api",
-    "command/config",
-    "command/token",
-    "helper/certutil",
-    "helper/compressutil",
-    "helper/consts",
-    "helper/errutil",
-    "helper/jsonutil",
-    "helper/kdf",
-    "helper/keysutil",
-    "helper/locksutil",
-    "helper/logging",
-    "helper/mlock",
-    "helper/parseutil",
-    "helper/pathmanager",
-    "helper/pluginutil",
-    "helper/strutil",
-    "helper/wrapping",
-    "logical",
-    "physical",
-    "physical/inmem",
-    "version"
-  ]
+  packages = ["api","command/config","command/token","helper/certutil","helper/compressutil","helper/consts","helper/errutil","helper/jsonutil","helper/kdf","helper/keysutil","helper/locksutil","helper/logging","helper/mlock","helper/parseutil","helper/pathmanager","helper/pluginutil","helper/strutil","helper/wrapping","logical","physical","physical/inmem","version"]
   revision = "3ee0802ed08cb7f4046c2151ec4671a076b76166"
   version = "v0.10.2"
 
@@ -284,12 +231,7 @@
 
 [[projects]]
   name = "github.com/posener/complete"
-  packages = [
-    ".",
-    "cmd",
-    "cmd/install",
-    "match"
-  ]
+  packages = [".","cmd","cmd/install","match"]
   revision = "98eb9847f27ba2008d380a32c98be474dea55bdf"
   version = "v1.1.1"
 
@@ -301,10 +243,7 @@
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
-  packages = [
-    "prometheus",
-    "prometheus/promhttp"
-  ]
+  packages = ["prometheus","prometheus/promhttp"]
   revision = "967789050ba94deca04a5e84cce8ad472ce313c1"
   version = "v0.9.0-pre1"
 
@@ -317,20 +256,13 @@
 [[projects]]
   branch = "master"
   name = "github.com/prometheus/common"
-  packages = [
-    "expfmt",
-    "internal/bitbucket.org/ww/goautoneg",
-    "model"
-  ]
+  packages = ["expfmt","internal/bitbucket.org/ww/goautoneg","model"]
   revision = "e3fb1a1acd7605367a2b378bc2e2f893c05174b7"
 
 [[projects]]
   branch = "master"
   name = "github.com/prometheus/procfs"
-  packages = [
-    ".",
-    "xfs"
-  ]
+  packages = [".","xfs"]
   revision = "a6e9df898b1336106c743392c48ee0b71f5c4efa"
 
 [[projects]]
@@ -359,67 +291,38 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/superp00t/niceware"
+  packages = [".","words"]
+  revision = "16cb30c384b5609c1cbfa7df1e12d9e569b3cfea"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/tyler-smith/go-bip39"
+  packages = [".","wordlists"]
+  revision = "95c66720ed7ac2f4b78ddb31d940d59193894f49"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/crypto"
-  packages = [
-    "cast5",
-    "chacha20poly1305",
-    "chacha20poly1305/internal/chacha20",
-    "ed25519",
-    "ed25519/internal/edwards25519",
-    "hkdf",
-    "openpgp",
-    "openpgp/armor",
-    "openpgp/elgamal",
-    "openpgp/errors",
-    "openpgp/packet",
-    "openpgp/s2k",
-    "poly1305",
-    "ssh/terminal"
-  ]
-  revision = "6a293f2d4b14b8e6d3f0539e383f6d0d30fce3fd"
+  packages = ["cast5","chacha20poly1305","ed25519","ed25519/internal/edwards25519","hkdf","internal/chacha20","internal/subtle","openpgp","openpgp/armor","openpgp/elgamal","openpgp/errors","openpgp/packet","openpgp/s2k","pbkdf2","poly1305","ssh/terminal"]
+  revision = "a49355c7e3f8fe157a85be2f77e6e269a0f89602"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = [
-    "context",
-    "http2",
-    "http2/hpack",
-    "idna",
-    "internal/timeseries",
-    "lex/httplex",
-    "trace"
-  ]
+  packages = ["context","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
   revision = "a8b9294777976932365dabb6640cf1468d95c70f"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
-  packages = [
-    "unix",
-    "windows"
-  ]
-  revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
+  packages = ["cpu","unix","windows"]
+  revision = "ac767d655b305d4e9612f5f6e33120b9176c4ad4"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
-  packages = [
-    "collate",
-    "collate/build",
-    "internal/colltab",
-    "internal/gen",
-    "internal/tag",
-    "internal/triegen",
-    "internal/ucd",
-    "language",
-    "secure/bidirule",
-    "transform",
-    "unicode/bidi",
-    "unicode/cldr",
-    "unicode/norm",
-    "unicode/rangetable"
-  ]
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
   revision = "75cc3cad82b5f47d3fb229ddda8c5167da14f294"
 
 [[projects]]
@@ -436,50 +339,19 @@
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [
-    ".",
-    "balancer",
-    "balancer/base",
-    "balancer/roundrobin",
-    "codes",
-    "connectivity",
-    "credentials",
-    "encoding",
-    "encoding/proto",
-    "grpclb/grpc_lb_v1/messages",
-    "grpclog",
-    "health",
-    "health/grpc_health_v1",
-    "internal",
-    "keepalive",
-    "metadata",
-    "naming",
-    "peer",
-    "resolver",
-    "resolver/dns",
-    "resolver/passthrough",
-    "stats",
-    "status",
-    "tap",
-    "transport"
-  ]
+  packages = [".","balancer","balancer/base","balancer/roundrobin","codes","connectivity","credentials","encoding","encoding/proto","grpclb/grpc_lb_v1/messages","grpclog","health","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
   revision = "d11072e7ca9811b1100b80ca0269ac831f06d024"
   version = "v1.11.3"
 
 [[projects]]
   branch = "v2"
   name = "gopkg.in/square/go-jose.v2"
-  packages = [
-    ".",
-    "cipher",
-    "cryptosigner",
-    "json"
-  ]
+  packages = [".","cipher","cryptosigner","json"]
   revision = "8cff744688a872abe564046891b229b71120ae6e"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "279f47e7db872fea5dfcbb649bd02a4c583cadbb04b229f350883f1eb3bc8c1e"
+  inputs-digest = "72de83f7e951ec851d9c43c059dfb42a0145d8807b4a28069fce2ffa6127ea3f"
   solver-name = "gps-cdcl"
   solver-version = 1

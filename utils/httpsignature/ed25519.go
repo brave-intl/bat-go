@@ -20,10 +20,7 @@ func (pk Ed25519PubKey) Verify(message, sig []byte, opts crypto.SignerOpts) (boo
 		return false, errors.New("ed25519: bad public key length: " + strconv.Itoa(l))
 	}
 
-	key := make([]byte, ed25519.PublicKeySize)
-	copy(key, pk)
-
-	return ed25519.Verify(key, message, sig), nil
+	return ed25519.Verify(ed25519.PublicKey(pk), message, sig), nil
 }
 
 func (pk Ed25519PubKey) String() string {
@@ -31,10 +28,7 @@ func (pk Ed25519PubKey) String() string {
 }
 
 // GenerateEd25519Key generate an ed25519 keypair and return it
-func GenerateEd25519Key(rand io.Reader) (pubKey Ed25519PubKey, privateKey ed25519.PrivateKey, err error) {
+func GenerateEd25519Key(rand io.Reader) (Ed25519PubKey, ed25519.PrivateKey, error) {
 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
-	key := make([]byte, ed25519.PublicKeySize)
-	copy(key, publicKey)
-	pubKey = key
-	return
+	return Ed25519PubKey(publicKey), privateKey, err
 }
