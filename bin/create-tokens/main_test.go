@@ -54,7 +54,7 @@ func TestNewJoseVaultSigner(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = grant.DecodeGrants(publicKey, grants)
+	_, err = grant.DecodeGrants(vSigner.Public().(ed25519.PublicKey), grants)
 	if err != nil {
 		t.Error(err)
 	}
