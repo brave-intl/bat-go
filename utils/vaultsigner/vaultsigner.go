@@ -54,9 +54,14 @@ func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts)
 
 // String returns the public key as a hex encoded string
 func (vs *VaultSigner) String() string {
+	return hex.EncodeToString(vs.Public().(ed25519.PublicKey))
+}
+
+// Public returns the public key
+func (vs *VaultSigner) Public() crypto.PublicKey {
 	response, err := vs.Client.Logical().Read("transit/keys/" + vs.KeyName)
 	if err != nil {
-		return ""
+		panic(err)
 	}
 
 	keys := response.Data["keys"].(map[string]interface{})
@@ -64,15 +69,10 @@ func (vs *VaultSigner) String() string {
 	b64PublicKey := key["public_key"].(string)
 	publicKey, err := base64.StdEncoding.DecodeString(b64PublicKey)
 	if err != nil {
-		return ""
+		panic(err)
 	}
 
-	return hex.EncodeToString(publicKey)
-}
-
-// Public returns the public key
-func (vs *VaultSigner) Public() crypto.PublicKey {
-	return vs.String()
+	return ed25519.PublicKey(publicKey)
 }
 
 // FromKeypair create a new vault transit key by importing privKey and pubKey under importName

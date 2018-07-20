@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"golang.org/x/crypto/ed25519"
 	jose "gopkg.in/square/go-jose.v2"
 )
 
@@ -40,7 +40,7 @@ func CreateGrants(
 	value float64,
 	maturityDate time.Time,
 	expiryDate time.Time,
-) []string {
+) ([]string, error) {
 	grants := make([]string, 0, grantCount)
 	for i := 0; i < int(grantCount); i++ {
 		var grant Grant
@@ -53,25 +53,25 @@ func CreateGrants(
 
 		serializedGrant, err := json.Marshal(grant)
 		if err != nil {
-			log.Fatalln(err)
+			return nil, err
 		}
 		jws, err := signer.Sign(serializedGrant)
 		if err != nil {
-			log.Fatalln(err)
+			return nil, err
 		}
 		serializedJWS, err := jws.CompactSerialize()
 		if err != nil {
-			log.Fatalln(err)
+			return nil, err
 		}
 		grants = append(grants, serializedJWS)
 	}
-	return grants
+	return grants, nil
 }
 
 // FromCompactJWS parses a Grant object from one stored using compact JWS serialization.
-// It returns a pointer to the parsed Grant object if it is valid and signed by the grantPublicKey.
+// It returns a pointer to the parsed Grant object if it is valid and signed by pubKey.
 // Otherwise an error is returned.
-func FromCompactJWS(s string) (*Grant, error) {
+func FromCompactJWS(pubKey ed25519.PublicKey, s string) (*Grant, error) {
 	jws, err := jose.ParseSigned(s)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func FromCompactJWS(s string) (*Grant, error) {
 			return nil, errors.New("Error unsupported JWS algorithm")
 		}
 	}
-	jwk := jose.JSONWebKey{Key: grantPublicKey}
+	jwk := jose.JSONWebKey{Key: pubKey}
 	grantBytes, err := jws.Verify(jwk)
 	if err != nil {
 		return nil, err
@@ -96,11 +96,11 @@ func FromCompactJWS(s string) (*Grant, error) {
 }
 
 // DecodeGrants checks signatures decodes a list of grants in compact jws form
-func DecodeGrants(grants []string) ([]Grant, error) {
+func DecodeGrants(pubKey ed25519.PublicKey, grants []string) ([]Grant, error) {
 	// 1. Check grant signatures and decode
 	decoded := make([]Grant, 0, len(grants))
 	for _, grantJWS := range grants {
-		grant, err := FromCompactJWS(grantJWS)
+		grant, err := FromCompactJWS(pubKey, grantJWS)
 		if err != nil {
 			return nil, err
 		}

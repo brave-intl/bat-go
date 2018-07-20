@@ -45,6 +45,10 @@ type grantRegistration struct {
 	Promotions []promotionInfo `json:"promotions"`
 }
 
+func newJoseVaultSigner(vSigner *vaultsigner.VaultSigner) (jose.Signer, error) {
+	return jose.NewSigner(jose.SigningKey{Algorithm: jose.EdDSA, Key: cryptosigner.Opaque(vSigner)}, nil)
+}
+
 func main() {
 	log.SetFlags(0)
 
@@ -100,8 +104,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	cSigner := cryptosigner.Opaque(vSigner)
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: cSigner}, nil)
+	signer, err := newJoseVaultSigner(vSigner)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -116,7 +119,10 @@ func main() {
 		log.Fatalln("Exiting...")
 	}
 
-	grants := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
+	grants, err := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	var grantReg grantRegistration
 	grantReg.Grants = grants
 	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}

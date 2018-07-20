@@ -9,6 +9,7 @@ go:
 - "master"
 services:
 - redis-server
+- docker
 matrix:
   allow_failures:
   - go: master
@@ -32,5 +33,9 @@ install:
 - dep ensure
 before_script:
 - make lint
+script:
+- docker run --rm --name bat-go-vault -d -p "8200:8200" vault
+- sleep 3
+- VAULT_TOKEN=$(docker logs bat-go-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) make
 after_script:
 - git diff-index --quiet HEAD --
