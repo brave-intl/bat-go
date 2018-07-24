@@ -43,6 +43,13 @@ func (t TransactionInfo) String() string {
 		t.AltCurrency.FromProbi(t.Probi), t.AltCurrency, t.Source, t.Destination, t.TransferFee, t.ExchangeFee, t.DestAmount, t.DestCurrency)
 }
 
+// ByTime implements sort.Interface for []TransactionInfo based on the Time field.
+type ByTime []TransactionInfo
+
+func (a ByTime) Len() int           { return len(a) }
+func (a ByTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByTime) Less(i, j int) bool { return a[i].Time.Before(a[j].Time) }
+
 // Balance holds balance information for a wallet
 type Balance struct {
 	TotalProbi       decimal.Decimal
