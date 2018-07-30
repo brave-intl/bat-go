@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"os"
+	"sort"
 
 	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -50,6 +51,8 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	sort.Sort(wallet.ByTime(txns))
 
 	for i := 0; i < len(txns); i++ {
 		log.Printf("%s\n", txns[i])
