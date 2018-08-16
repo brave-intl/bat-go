@@ -14,6 +14,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -40,6 +42,7 @@ type Wallet struct {
 
 const (
 	dateFormat = "2006-01-02T15:04:05.000Z"
+	batchSize  = 50
 )
 
 var (
@@ -122,7 +125,7 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	return req, err
 }
 
-func submit(req *http.Request) ([]byte, error) {
+func submit(req *http.Request) ([]byte, *http.Response, error) {
 	req.Header.Add("content-type", "application/json")
 
 	dump, err := httputil.DumpRequestOut(req, true)
@@ -136,24 +139,45 @@ func submit(req *http.Request) ([]byte, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, resp, err
 	}
+
+	log.WithFields(log.Fields{
+		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
+		"type": "http.Repsonse.StatusCode",
+	}).Debug(resp.StatusCode)
+
+	headers := map[string][]string(resp.Header)
+	jsonHeaders, err := json.MarshalIndent(headers, "", "    ")
+	if err != nil {
+		return nil, resp, err
+	}
+
+	log.WithFields(log.Fields{
+		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
+		"type": "http.Repsonse.Header",
+	}).Debug(string(jsonHeaders))
+
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp, err
+	}
 	log.WithFields(log.Fields{
 		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
 		"type": "http.Repsonse.Body",
 	}).Debug(string(body))
+
 	if resp.StatusCode/100 != 2 {
 		if err != nil {
-			return nil, err
+			return nil, resp, err
 		}
 		var uhErr upholdError
 		if json.Unmarshal(body, &uhErr) != nil {
-			return nil, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
+			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
 		}
-		return nil, uhErr
+		return nil, resp, uhErr
 	}
-	return body, nil
+	return body, resp, nil
 }
 
 type createCardRequest struct {
@@ -191,7 +215,7 @@ func (w *Wallet) Register(label string) error {
 		return err
 	}
 
-	body, err := submit(req)
+	body, _, err := submit(req)
 	if err != nil {
 		return err
 	}
@@ -225,7 +249,7 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := submit(req)
+	body, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +333,7 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 	if err != nil {
 		return nil, err
 	}
-	_, err = submit(req)
+	_, _, err = submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -462,6 +486,7 @@ type upholdTransactionResponse struct {
 	Origin       upholdTransactionResponseDestination `json:"origin"`
 	Params       upholdTransactionResponseParams      `json:"params"`
 	CreatedAt    string                               `json:"createdAt"`
+	Message      string                               `json:"message"`
 }
 
 func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
@@ -498,6 +523,7 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 		txInfo.ValidUntil = time.Now().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
 	}
 	txInfo.ID = resp.ID
+	txInfo.Note = resp.Message
 
 	return &txInfo
 }
@@ -548,7 +574,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 	req.Header = headers
 	req.Body = body
 
-	respBody, err := submit(req)
+	respBody, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +594,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	body, err := submit(req)
+	body, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -592,7 +618,7 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := submit(req)
+	body, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
@@ -607,25 +633,60 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 }
 
 // ListTransactions for this wallet, pagination not yet supported
-func (w *Wallet) ListTransactions() ([]wallet.TransactionInfo, error) {
-	req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID+"/transactions", nil)
-	if err != nil {
-		return nil, err
+func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
+	var out []wallet.TransactionInfo
+	if limit > 0 {
+		out = make([]wallet.TransactionInfo, 0, limit)
 	}
-	body, err := submit(req)
-	if err != nil {
-		return nil, err
-	}
+	var totalTransactions int
+	for {
+		req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID+"/transactions", nil)
+		if err != nil {
+			return nil, err
+		}
 
-	var uhResp []upholdTransactionResponse
-	err = json.Unmarshal(body, &uhResp)
-	if err != nil {
-		return nil, err
-	}
+		start := len(out)
+		stop := start + batchSize
+		if limit > 0 && stop >= limit {
+			stop = limit - 1
+		}
+		if totalTransactions != 0 && stop >= totalTransactions {
+			stop = totalTransactions - 1
+		}
 
-	out := make([]wallet.TransactionInfo, len(uhResp))
-	for i := 0; i < len(uhResp); i++ {
-		out[i] = *uhResp[i].ToTransactionInfo()
+		req.Header.Set("Range", fmt.Sprintf("items=%d-%d", start, stop))
+		body, resp, err := submit(req)
+		if err != nil {
+			return nil, err
+		}
+
+		contentRange := resp.Header.Get("Content-Range")
+		parts := strings.Split(contentRange, "/")
+		if len(parts) != 2 {
+			return nil, errors.New("Invalid Content-Range header returned")
+		}
+		tmp, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		totalTransactions = int(tmp)
+
+		var uhResp []upholdTransactionResponse
+		err = json.Unmarshal(body, &uhResp)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := 0; i < len(uhResp); i++ {
+			out = append(out, *uhResp[i].ToTransactionInfo())
+			if len(out) == limit {
+				break
+			}
+		}
+
+		if len(out) == limit || len(out) == totalTransactions {
+			break
+		}
 	}
 	return out, nil
 }
