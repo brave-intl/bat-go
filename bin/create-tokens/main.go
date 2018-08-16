@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
@@ -13,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
+	"golang.org/x/crypto/ed25519"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/cryptosigner"
 )
@@ -23,6 +26,8 @@ const (
 	defaultValidWeeks = 24
 )
 
+var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
+
 var grantSigningKey = flag.String("grant-signing-key", "grant-signing-key", "name of vault transit key to use for signing")
 var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
 var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
@@ -31,6 +36,7 @@ var maturityDateStr = flag.String("maturity-date", "now", "datetime when tokens 
 var validWeeks = flag.Uint("valid-weeks", defaultValidWeeks, "weeks after the maturity date that tokens are valid before expiring [conflicts with -expiry-date]")
 var expiryDateStr = flag.String("expiry-date", "", "datetime when tokens should expire [ISO 8601, conflicts with -valid-duration]")
 var promotionID = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
+var fromEnv = flag.Bool("env", false, "read private key from environment")
 var outputFile = flag.String("out", "./grantTokens.json", "output file path")
 
 type promotionInfo struct {
@@ -95,18 +101,36 @@ func main() {
 		}
 	}
 
-	client, err := vaultsigner.Connect()
-	if err != nil {
-		log.Fatalln(err)
-	}
+	var signer jose.Signer
+	if *fromEnv {
+		if len(grantSignatorPrivateKeyHex) == 0 {
+			log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PRIVATE_KEY")
+		}
 
-	vSigner, err := vaultsigner.New(client, *grantSigningKey)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	signer, err := newJoseVaultSigner(vSigner)
-	if err != nil {
-		log.Fatalln(err)
+		var grantPrivateKey ed25519.PrivateKey
+		grantPrivateKey, err = hex.DecodeString(grantSignatorPrivateKeyHex)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		signer, err = jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: grantPrivateKey}, nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	} else {
+		client, err := vaultsigner.Connect()
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		vSigner, err := vaultsigner.New(client, *grantSigningKey)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		signer, err = newJoseVaultSigner(vSigner)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
