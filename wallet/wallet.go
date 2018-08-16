@@ -35,6 +35,7 @@ type TransactionInfo struct {
 	ValidUntil   time.Time                `json:"-"`
 	Source       string                   `json:"-"`
 	Time         time.Time                `json:"-"`
+	Note         string                   `json:"-"`
 }
 
 // String returns the transaction info as an easily readable string
@@ -74,8 +75,8 @@ type Wallet interface {
 	ConfirmTransaction(id string) (*TransactionInfo, error)
 	// GetBalance returns the last known balance, if refresh is true then the current balance is fetched
 	GetBalance(refresh bool) (*Balance, error)
-	// ListTransactions for this wallet
-	ListTransactions() ([]TransactionInfo, error)
+	// ListTransactions for this wallet, limit number of transactions returned
+	ListTransactions(limit int) ([]TransactionInfo, error)
 }
 
 // IsNotFound is a helper method for determining if an error indicates a missing resource

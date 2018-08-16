@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/csv"
 	"flag"
+	"fmt"
 	"os"
 	"sort"
 
@@ -13,6 +15,8 @@ import (
 )
 
 var verbose = flag.Bool("v", false, "verbose output")
+var csvOut = flag.Bool("csv", false, "csv output")
+var limit = flag.Int("limit", 50, "limit number of transactions returned")
 var walletProvider = flag.String("provider", "uphold", "provider for the source wallet")
 
 func main() {
@@ -47,14 +51,49 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	txns, err := w.ListTransactions()
+	txns, err := w.ListTransactions(*limit)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	sort.Sort(wallet.ByTime(txns))
 
-	for i := 0; i < len(txns); i++ {
-		log.Printf("%s\n", txns[i])
+	if *csvOut {
+		w := csv.NewWriter(os.Stdout)
+		err = w.Write([]string{"date", "description", "probi", "altcurrency", "source", "destination", "transferFee", "exchangeFee", "destAmount", "destCurrency"})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for i := 0; i < len(txns); i++ {
+			t := txns[i]
+			record := []string{
+				t.Time.String(),
+				t.Note,
+				t.AltCurrency.FromProbi(t.Probi).String(),
+				t.AltCurrency.String(),
+				t.Source,
+				t.Destination,
+				t.TransferFee.String(),
+				t.ExchangeFee.String(),
+				t.DestAmount.String(),
+				t.DestCurrency,
+			}
+			if err := w.Write(record); err != nil {
+
+				log.Fatalln("error writing record to csv:", err)
+			}
+		}
+
+		w.Flush()
+
+		if err := w.Error(); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		for i := 0; i < len(txns); i++ {
+			fmt.Printf("%s\n", txns[i])
+		}
 	}
+
 }
