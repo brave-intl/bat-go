@@ -45,6 +45,11 @@ const (
 	batchSize  = 50
 )
 
+const (
+	sandboxFingerprint = "2ybIVXHBE8iTOQej6sJx7MgjvAT5OwFpHyupxPZBcZQ="
+	prodFingerprint    = "U3Ny8QcC3uKPNnMK3a3V4W4nby2YjSeS+/+0XHFhDs4="
+)
+
 var (
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
 	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
@@ -55,9 +60,9 @@ var (
 		"prod":    "https://api.uphold.com",
 	}[environment]
 	upholdCertFingerprint = map[string]string{
-		"":        "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc=", // os.Getenv() will return empty string if not set
-		"sandbox": "YM2Dejq4VOK/7CorxWBIcHnhKlHzvgFgrLYchGroakc=",
-		"prod":    "U3Ny8QcC3uKPNnMK3a3V4W4nby2YjSeS+/+0XHFhDs4=",
+		"":        sandboxFingerprint, // os.Getenv() will return empty string if not set
+		"sandbox": sandboxFingerprint,
+		"prod":    prodFingerprint,
 	}[environment]
 	client *http.Client
 )
