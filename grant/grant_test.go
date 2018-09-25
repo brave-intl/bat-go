@@ -3,9 +3,12 @@ package grant
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 
+	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -103,15 +106,33 @@ func TestVerifyAndConsume(t *testing.T) {
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 
+	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
+	err = claimReq.Claim(ctx, grantID)
+	if err != nil {
+		t.Error("Claim failed")
+	}
+
+	// Claim and redeem request are for different wallets, should fail
+	walletInfo.ProviderID = uuid.NewV4().String()
 	request := RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
 
 	_, err = request.VerifyAndConsume(ctx)
 	if err == nil {
-		t.Error("Should not be able to redeem without a valid claim on a grant")
+		t.Error("Should not be able to redeem a non-matching claim on a grant")
 		return
 	}
 
-	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
+	kvDatastore, err := datastore.GetKvDatastore(ctx)
+	if err != nil {
+		t.Error(err)
+	}
+	// Clear out previous claim
+	_, err = kvDatastore.Delete(fmt.Sprintf(claimKeyFormat, grantID))
+	if err != nil {
+		t.Error(err)
+	}
+
+	claimReq = ClaimGrantRequest{WalletInfo: walletInfo}
 	err = claimReq.Claim(ctx, grantID)
 	if err != nil {
 		t.Error("Claim failed")
@@ -151,4 +172,16 @@ func TestVerifyAndConsume(t *testing.T) {
 		t.Error("IDs do not match")
 	}
 	// TODO add more tests
+}
+
+func TestByExpiryTimestamp(t *testing.T) {
+	grants := []Grant{{ExpiryTimestamp: 12345}, {ExpiryTimestamp: 1234}}
+	sort.Sort(ByExpiryTimestamp(grants))
+	var last int64
+	for _, grant := range grants {
+		if grant.ExpiryTimestamp < last {
+			t.Error("Order is not correct")
+			last = grant.ExpiryTimestamp
+		}
+	}
 }
