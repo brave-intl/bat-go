@@ -31,6 +31,13 @@ func (a ByProbi) Len() int           { return len(a) }
 func (a ByProbi) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByProbi) Less(i, j int) bool { return a[i].Probi.LessThan(a[j].Probi) }
 
+// ByExpiryTimestamp implements sort.Interface for []Grant based on the ExpiryTimestamp field.
+type ByExpiryTimestamp []Grant
+
+func (a ByExpiryTimestamp) Len() int           { return len(a) }
+func (a ByExpiryTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByExpiryTimestamp) Less(i, j int) bool { return a[i].ExpiryTimestamp < a[j].ExpiryTimestamp }
+
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization
 func CreateGrants(
 	signer jose.Signer,

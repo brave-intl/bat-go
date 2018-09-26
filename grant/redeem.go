@@ -34,7 +34,7 @@ type RedeemGrantsRequest struct {
 //
 // 2. Check transaction signature and decode, enforce minimum transaction amount
 //
-// 3. Sort decoded grants, largest probi to smallest
+// 3. Sort decoded grants, closest expiration to furthest
 //
 // 4. Sum from largest to smallest until value is gt transaction amount
 //
@@ -86,10 +86,10 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		return nil, errors.New("included transactions must have settlement as their destination")
 	}
 
-	// 3. Sort decoded grants, largest probi to smallest
-	sort.Sort(sort.Reverse(ByProbi(grants)))
+	// 3. Sort decoded grants, closest expiration to furthest
+	sort.Sort(ByExpiryTimestamp(grants))
 
-	// 4. Sum from largest to smallest until value is gt transaction amount
+	// 4. Sum until value is gt transaction amount
 	sumProbi := decimal.New(0, 1)
 	for _, grant := range grants {
 		if sumProbi.GreaterThanOrEqual(txInfo.Probi) {
@@ -141,16 +141,12 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	// 6. Iterate through grants and check that:
 	for _, grant := range grants {
 		claimedID, err := GetClaimantID(kvDatastore, grant.GrantID.String())
-		if err != nil {
-			errMsg := "Attempt to redeem grant without previous claim or with expired claim"
-			log.Error(errMsg)
-			log.Error(grant.GrantID.String())
-			return nil, errors.New(errMsg)
-		}
-		// the grant was previously claimed for this wallet
-		if req.WalletInfo.ProviderID != claimedID {
-			log.Error("Attempt to redeem previously claimed by another wallet!!!")
-			return nil, errors.New("Grant claim does not match provided wallet")
+		if err == nil {
+			// if claimed it was by this wallet
+			if req.WalletInfo.ProviderID != claimedID {
+				log.Error("Attempt to redeem previously claimed by another wallet!!!")
+				return nil, errors.New("Grant claim does not match provided wallet")
+			}
 		}
 
 		// the grant is mature
