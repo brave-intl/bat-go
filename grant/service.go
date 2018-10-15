@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	lowerTxLimit        = 5
+	lowerTxLimit        = 1
 	upperTxLimit        = 120
 	ninetyDaysInSeconds = 60 * 60 * 24 * 90
 	productionEnv       = "production"
