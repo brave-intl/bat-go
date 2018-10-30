@@ -28,11 +28,7 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // WrapError with an additional message as an AppError
 func WrapError(msg string, err error) *AppError {
-	return &AppError{
-		Error:   err,
-		Message: fmt.Sprintf("%s: %v", msg, err),
-		Code:    http.StatusBadRequest,
-	}
+	return &AppError{Error: err, Message: msg, Code: http.StatusBadRequest}
 }
 
 // WrapValidationError from govalidator
@@ -52,6 +48,9 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	if e := fn(w, r); e != nil {
+		// Combine error with message
+		e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
+
 		log := lg.Log(r.Context())
 		log.Errorf("%s", e.Message)
 
