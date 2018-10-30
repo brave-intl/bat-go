@@ -7,8 +7,8 @@ import (
 	"os"
 	"sort"
 
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/formatters"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	log "github.com/sirupsen/logrus"
@@ -20,7 +20,7 @@ var limit = flag.Int("limit", 50, "limit number of transactions returned")
 var walletProvider = flag.String("provider", "uphold", "provider for the source wallet")
 
 func main() {
-	log.SetFormatter(&utils.CliFormatter{})
+	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
 		log.Printf("A helper for fetching transaction history.\n\n")

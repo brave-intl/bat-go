@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/grant"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
@@ -135,7 +135,7 @@ func main() {
 
 	fmt.Printf("Will create %d tokens worth %f %s each for promotion %s, valid starting on %s and expiring on %s\n", *numGrants, *value, altCurrency.String(), promotionUUID, maturityDate.String(), expiryDate.String())
 	fmt.Print("Continue? ")
-	resp, err := utils.PromptBool()
+	resp, err := prompt.Bool()
 	if err != nil {
 		log.Fatalln(err)
 	}

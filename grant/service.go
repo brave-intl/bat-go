@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/datastore"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -144,7 +144,7 @@ func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
 	conn := gs.pool.Get()
-	defer utils.PanicCloser(conn)
+	defer closers.Panic(conn)
 
 	kv := datastore.GetRedisKv(&conn)
 	ogCount, err := kv.Count("grant:*")

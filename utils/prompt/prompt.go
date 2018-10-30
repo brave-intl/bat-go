@@ -1,4 +1,4 @@
-package utils
+package prompt
 
 import (
 	"bufio"
@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// PromptBool prompts for y/n input returning a bool
-func PromptBool() (bool, error) {
+// Bool prompts for y/n input returning a bool
+func Bool() (bool, error) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("(y/n): ")

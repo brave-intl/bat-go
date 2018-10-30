@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
@@ -137,7 +137,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 	if err != nil {
 		return nil, err
 	}
-	defer utils.PanicCloser(kvDatastore)
+	defer closers.Panic(kvDatastore)
 	// 6. Iterate through grants and check that:
 	for _, grant := range grants {
 		claimedID, err := GetClaimantID(kvDatastore, grant.GrantID.String())
@@ -163,12 +163,12 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		if err != nil {
 			return nil, err
 		}
-		defer utils.PanicCloser(redeemedGrants)
+		defer closers.Panic(redeemedGrants)
 		redeemedWallets, err := GetPromotionWalletsDatastore(ctx, grant.PromotionID.String())
 		if err != nil {
 			return nil, err
 		}
-		defer utils.PanicCloser(redeemedWallets)
+		defer closers.Panic(redeemedWallets)
 
 		result, err := redeemedGrants.Add(grant.GrantID.String())
 		if err != nil {
@@ -221,7 +221,7 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer utils.PanicCloser(redeemedGrants)
+		defer closers.Panic(redeemedGrants)
 
 		grantRedeemed, err := redeemedGrants.Contains(grantID)
 		if err != nil {

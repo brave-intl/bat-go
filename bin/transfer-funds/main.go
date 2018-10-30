@@ -5,10 +5,11 @@ import (
 	"flag"
 	"os"
 
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/formatters"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/passphrase"
+	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -27,7 +28,7 @@ var verbose = flag.Bool("v", false, "verbose output")
 var walletProvider = flag.String("provider", "uphold", "provider for the source wallet")
 
 func main() {
-	log.SetFormatter(&utils.CliFormatter{})
+	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
 		log.Printf("A utility for transferring funds.\n\n")
@@ -135,7 +136,7 @@ func main() {
 			log.Printf("Will transfer %s %s from %s to %s\n", altc.FromProbi(valueProbi).String(), *currency, *from, *to)
 
 			log.Printf("Continue? ")
-			resp, err := utils.PromptBool()
+			resp, err := prompt.Bool()
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -158,7 +159,7 @@ func main() {
 			}
 
 			log.Printf("Confirmation did not appear to go through, retry? ")
-			resp, err = utils.PromptBool()
+			resp, err = prompt.Bool()
 			if err != nil {
 				log.Fatalln(err)
 			}
