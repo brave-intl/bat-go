@@ -48,8 +48,10 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	if e := fn(w, r); e != nil {
-		// Combine error with message
-		e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
+		if e.Error != nil {
+			// Combine error with message
+			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
+		}
 
 		log := lg.Log(r.Context())
 		log.Errorf("%s", e.Message)
