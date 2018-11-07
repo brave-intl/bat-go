@@ -23,3 +23,18 @@ is installed then run `make docker`.
 
 6. Run the server executable `./grant-server`
 
+## Creating Grants
+
+1. Set the appropriate env vars: `GRANT_SIGNATOR_PRIVATE_KEY` and `GRANT_SIGNATOR_PUBLIC_KEY`
+
+2. run the following command, adjusting the number of grants, expiry and maturity dates as needed
+```
+./create-tokens --env=true --num-grants=100 --expiry-date=2022-05-08T00:00:00-0000 --maturity-date=2018-10-01T00:00:00-0000
+```
+
+3. Run the following command to check your newly created tokens are tied to the correct key
+```
+./verify-tokens
+```
+
+
