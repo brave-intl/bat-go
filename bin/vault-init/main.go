@@ -11,7 +11,7 @@ import (
 	"os/user"
 	"path"
 
-	"github.com/brave-intl/bat-go/utils"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
 	"golang.org/x/crypto/openpgp"
@@ -53,7 +53,7 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		defer utils.PanicCloser(f)
+		defer closers.Panic(f)
 
 		// Vault only accepts keys in binary format, so we normalize the format
 		var entity openpgp.EntityList

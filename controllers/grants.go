@@ -11,7 +11,8 @@ import (
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils"
+	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -29,36 +30,36 @@ func GrantsRouter() chi.Router {
 		if err != nil {
 			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
 		}
-		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandler("RedeemGrants", utils.AppHandler(RedeemGrants))))
+		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandler("RedeemGrants", handlers.AppHandler(RedeemGrants))))
 	} else {
-		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", utils.AppHandler(RedeemGrants)))
+		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", handlers.AppHandler(RedeemGrants)))
 	}
-	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", utils.AppHandler(ClaimGrant)))
+	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", handlers.AppHandler(ClaimGrant)))
 	return r
 }
 
 // ClaimGrant is the handler for claiming grants
-func ClaimGrant(w http.ResponseWriter, r *http.Request) *utils.AppError {
-	defer utils.PanicCloser(r.Body)
+func ClaimGrant(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	defer closers.Panic(r.Body)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return utils.WrapError("Error reading body", err)
+		return handlers.WrapError("Error reading body", err)
 	}
 
 	var req grant.ClaimGrantRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		return utils.WrapError("Error unmarshalling body", err)
+		return handlers.WrapError("Error unmarshalling body", err)
 	}
 	_, err = govalidator.ValidateStruct(req)
 	if err != nil {
-		return utils.WrapValidationError(err)
+		return handlers.WrapValidationError(err)
 	}
 
 	if grantID := chi.URLParam(r, "grantId"); grantID != "" {
 		if !govalidator.IsUUIDv4(grantID) {
-			return &utils.AppError{
+			return &handlers.AppError{
 				Message: "Error validating request url parameter",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
@@ -72,7 +73,7 @@ func ClaimGrant(w http.ResponseWriter, r *http.Request) *utils.AppError {
 		err = req.Claim(r.Context(), grantID)
 		if err != nil {
 			// FIXME not all errors are 4xx
-			return utils.WrapError("Error claiming grant", err)
+			return handlers.WrapError("Error claiming grant", err)
 		}
 	}
 
@@ -90,31 +91,31 @@ func ClaimGrant(w http.ResponseWriter, r *http.Request) *utils.AppError {
 }
 
 // RedeemGrants is the handler for redeeming one or more grants
-func RedeemGrants(w http.ResponseWriter, r *http.Request) *utils.AppError {
-	defer utils.PanicCloser(r.Body)
+func RedeemGrants(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	defer closers.Panic(r.Body)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return utils.WrapError("Error reading body", err)
+		return handlers.WrapError("Error reading body", err)
 	}
 
 	var req grant.RedeemGrantsRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		return utils.WrapError("Error unmarshalling body", err)
+		return handlers.WrapError("Error unmarshalling body", err)
 	}
 	_, err = govalidator.ValidateStruct(req)
 	if err != nil {
-		return utils.WrapValidationError(err)
+		return handlers.WrapValidationError(err)
 	}
 
 	redeemedIDs, err := grant.GetRedeemedIDs(r.Context(), req.Grants)
 	if err != nil {
-		return utils.WrapError("Error checking grant redemption status", err)
+		return handlers.WrapError("Error checking grant redemption status", err)
 	}
 
 	if len(redeemedIDs) > 0 {
-		return &utils.AppError{
+		return &handlers.AppError{
 			Message: "One or more grants have already been redeemed",
 			Code:    http.StatusGone,
 			Data:    map[string]interface{}{"redeemedIDs": redeemedIDs},
@@ -124,7 +125,7 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) *utils.AppError {
 	txInfo, err := req.Redeem(r.Context())
 	if err != nil {
 		// FIXME not all errors are 4xx
-		return utils.WrapError("Error redeeming grant", err)
+		return handlers.WrapError("Error redeeming grant", err)
 	}
 
 	w.WriteHeader(http.StatusOK)

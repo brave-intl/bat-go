@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/datastore"
-	"github.com/brave-intl/bat-go/utils"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,7 +30,7 @@ func (req *ClaimGrantRequest) Claim(ctx context.Context, grantID string) error {
 	if err != nil {
 		return err
 	}
-	defer utils.PanicCloser(kvDatastore)
+	defer closers.Panic(kvDatastore)
 
 	_, err = kvDatastore.Set(
 		fmt.Sprintf(claimKeyFormat, grantID),

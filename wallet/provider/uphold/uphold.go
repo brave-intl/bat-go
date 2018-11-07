@@ -20,11 +20,11 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/digest"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/pindialer"
+	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -417,8 +417,8 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 
 	if !govalidator.IsEmail(transaction.Destination) {
 		if !govalidator.IsUUIDv4(transaction.Destination) {
-			if !utils.IsBTCAddress(transaction.Destination) {
-				if !utils.IsETHAddressNoChecksum(transaction.Destination) {
+			if !validators.IsBTCAddress(transaction.Destination) {
+				if !validators.IsETHAddressNoChecksum(transaction.Destination) {
 					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)
 				}
 			}
