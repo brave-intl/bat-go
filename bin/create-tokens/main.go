@@ -38,6 +38,7 @@ var expiryDateStr = flag.String("expiry-date", "", "datetime when tokens should 
 var promotionID = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
 var fromEnv = flag.Bool("env", false, "read private key from environment")
 var outputFile = flag.String("out", "./grantTokens.json", "output file path")
+var example = flag.Bool("example", false, "print examples of how to use this command")
 
 type promotionInfo struct {
 	ID                        uuid.UUID `json:"promotionId"`
@@ -60,6 +61,10 @@ func main() {
 
 	var err error
 	flag.Parse()
+
+	if *example {
+		log.Fatalln("## Creating Grants\n\n1. Set the appropriate env vars: `GRANT_SIGNATOR_PRIVATE_KEY` and `GRANT_SIGNATOR_PUBLIC_KEY`\n\n2. run the following command, adjusting the number of grants, expiry and maturity dates as needed\n./create-tokens --env=true --num-grants=2000 --expiry-date=2022-05-08T00:00:00-0000 --maturity-date=2018-10-01T00:00:00-0000\n\n3. Run the following command to check your newly created tokens are tied to the correct key\n./verify-tokens")
+	}
 
 	var altCurrency altcurrency.AltCurrency
 	err = altCurrency.UnmarshalText([]byte(*altCurrencyStr))
@@ -118,6 +123,10 @@ func main() {
 			log.Fatalln(err)
 		}
 	} else {
+		if len(grantSignatorPrivateKeyHex) == 0 {
+			log.Fatalln("GRANT_SIGNATOR_PRIVATE_KEY cannot be set if not using --env flag")
+		}
+
 		client, err := vaultsigner.Connect()
 		if err != nil {
 			log.Fatalln(err)
