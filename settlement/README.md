@@ -17,7 +17,7 @@ export VAULT_ADDR=http://127.0.0.1:8200
 gpg -d SHARE.GPG | ./vault-unseal
 ```
 
-## Running settlement
+## Bringing up vault
 
 On the offline computer, in one window run:
 ```
@@ -29,7 +29,10 @@ In another run:
 gpg -d SHARE.GPG | ./vault-unseal
 ```
 
-You are now ready to transact
+## Running settlement
+
+First bring up vault as described above.
+
 ```
 ./vault-sign-settlement -in <SETTLEMENT_REPORT.JSON> <SETTLEMENT_WALLET_CARD_ID>
 ```
@@ -56,3 +59,30 @@ allow restoring from errors and to avoid duplicate payouts.
 
 Finally upload the "-finished" output file to eyeshade to account for payout
 transactions that were made.
+
+## Creating a new offline wallet
+
+On the offline machine, first bring up vault as described above.
+
+Run vault-create-wallet, this will sign the registration and store it into 
+a local file:
+```
+vault-create-wallet -offline name-of-new-wallet
+```
+
+Copy the created `name-of-new-wallet-registration.json` file to the online
+machine.
+
+Re-run vault-create-wallet, this will submit the pre-signed registration:
+```
+export UPHOLD_ENVIRONMENT=
+export UPHOLD_HTTP_PROXY=
+export UPHOLD_ACCESS_TOKEN=
+vault-create-wallet -offline name-of-new-wallet
+```
+
+Finally copy `name-of-new-wallet-registration.json` back to the offline
+machine and run vault-create-wallet to record the provider ID in vault:
+```
+vault-create-wallet -offline name-of-new-wallet
+```

@@ -18,33 +18,40 @@ type HTTPSignedRequest struct {
 	Body    string            `json:"octets" valid:"json"`
 }
 
-// extract an HTTP request from the encapsulated signed request
-func (sr *HTTPSignedRequest) extract() (*httpsignature.Signature, *http.Request, error) {
+// extract from the encapsulated signed request
+// into the provided HTTP request
+// NOTE it intentionally does not set the URL
+func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.Signature, error) {
+	if r == nil {
+		return nil, errors.New("r was nil")
+	}
+
 	var s httpsignature.Signature
 	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var r http.Request
 	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
-	r.Header = http.Header{}
+	if r.Header == nil {
+		r.Header = http.Header{}
+	}
 	for k, v := range sr.Headers {
 		if !httplex.ValidHeaderFieldName(k) {
-			return nil, nil, errors.New("invalid encapsulated header name")
+			return nil, errors.New("invalid encapsulated header name")
 		}
 		if !httplex.ValidHeaderFieldValue(v) {
-			return nil, nil, errors.New("invalid encapsulated header value")
+			return nil, errors.New("invalid encapsulated header value")
 		}
 
 		if k == httpsignature.RequestTarget {
 			// TODO implement pseudo-header
-			return nil, nil, fmt.Errorf("%s pseudo-header not implemented", httpsignature.RequestTarget)
+			return nil, fmt.Errorf("%s pseudo-header not implemented", httpsignature.RequestTarget)
 		}
 
 		r.Header.Set(k, v)
 	}
-	return &s, &r, nil
+	return &s, nil
 }
 
 // encapsulate a signed HTTP request

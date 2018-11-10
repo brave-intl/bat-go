@@ -191,17 +191,17 @@ type createCardRequest struct {
 	PublicKey   string                   `json:"publicKey"`
 }
 
-// Register a wallet with Uphold with label
-func (w *Wallet) Register(label string) error {
+// sign registration for this wallet with Uphold with label
+func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	reqPayload := createCardRequest{Label: label, AltCurrency: w.Info.AltCurrency, PublicKey: w.PubKey.String()}
 	payload, err := json.Marshal(reqPayload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req, err := newRequest("POST", "/v0/me/cards", bytes.NewBuffer(payload))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var s httpsignature.Signature
@@ -216,6 +216,16 @@ func (w *Wallet) Register(label string) error {
 	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// Register a wallet with Uphold with label
+func (w *Wallet) Register(label string) error {
+	req, err := w.signRegistration(label)
 	if err != nil {
 		return err
 	}
@@ -232,6 +242,63 @@ func (w *Wallet) Register(label string) error {
 	}
 	w.Info.ProviderID = details.ID.String()
 	return nil
+}
+
+// SubmitRegistration from a b64 encoded signed string
+func (w *Wallet) SubmitRegistration(registrationB64 string) error {
+	b, err := base64.StdEncoding.DecodeString(registrationB64)
+	if err != nil {
+		return err
+	}
+
+	var signedTx HTTPSignedRequest
+	err = json.Unmarshal(b, &signedTx)
+	if err != nil {
+		return err
+	}
+
+	req, err := newRequest("POST", "/v0/me/cards", nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = signedTx.extract(req)
+	if err != nil {
+		return err
+	}
+
+	body, _, err := submit(req)
+	if err != nil {
+		return err
+	}
+
+	var details CardDetails
+	err = json.Unmarshal(body, &details)
+	if err != nil {
+		return err
+	}
+	w.Info.ProviderID = details.ID.String()
+	return nil
+}
+
+// PrepareRegistration returns a b64 encoded serialized signed registration suitable for SubmitRegistration
+func (w *Wallet) PrepareRegistration(label string) (string, error) {
+	req, err := w.signRegistration(label)
+	if err != nil {
+		return "", err
+	}
+
+	httpSignedReq, err := encapsulate(req)
+	if err != nil {
+		return "", err
+	}
+
+	b, err := json.Marshal(&httpSignedReq)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(b), nil
 }
 
 // CardSettings contains settings corresponding to the Uphold card
@@ -386,7 +453,8 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("The digest header does not match the included body")
 	}
 
-	sig, req, err := signedTx.extract()
+	var req http.Request
+	sig, err := signedTx.extract(&req)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +469,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("A transaction signature must cover the request body via digest")
 	}
 
-	valid, err := sig.Verify(w.PubKey, crypto.Hash(0), req)
+	valid, err := sig.Verify(w.PubKey, crypto.Hash(0), &req)
 	if err != nil {
 		return nil, err
 	}
@@ -551,33 +619,20 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	var headers http.Header
-	var body io.ReadCloser
-	{
-		var req *http.Request
-		_, req, err = signedTx.extract()
-		if err != nil {
-			return nil, err
-		}
-		headers = req.Header
-		body = req.Body
-	}
-
 	url := "/v0/me/cards/" + w.ProviderID + "/transactions"
 	if confirm {
 		url = url + "?commit=true"
 	}
+
 	req, err := newRequest("POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Copy headers added from newRequest
-	for k := range req.Header {
-		headers.Set(k, req.Header.Get(k))
+	_, err = signedTx.extract(req)
+	if err != nil {
+		return nil, err
 	}
-	req.Header = headers
-	req.Body = body
 
 	respBody, _, err := submit(req)
 	if err != nil {
@@ -720,4 +775,39 @@ func (w *Wallet) GetBalance(refresh bool) (*wallet.Balance, error) {
 	w.LastBalance = &balance
 
 	return &balance, nil
+}
+
+type createCardAddressRequest struct {
+	Network string `json:"network"`
+}
+
+type createCardAddressResponse struct {
+	ID string `json:"id"`
+}
+
+// CreateCardAddress on network, returning the address
+func (w *Wallet) CreateCardAddress(network string) (string, error) {
+	reqPayload := createCardAddressRequest{Network: network}
+	payload, err := json.Marshal(reqPayload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := newRequest("POST", fmt.Sprintf("/v0/me/cards/%s/addresses", w.ProviderID), bytes.NewBuffer(payload))
+	if err != nil {
+		return "", err
+	}
+
+	body, _, err := submit(req)
+	if err != nil {
+		return "", err
+	}
+
+	var details createCardAddressResponse
+	err = json.Unmarshal(body, &details)
+	if err != nil {
+		return "", err
+	}
+	return details.ID, nil
+
 }
