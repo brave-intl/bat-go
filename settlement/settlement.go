@@ -129,13 +129,29 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 		return nil
 	}
 
-	if len(settlement.ProviderID) > 0 && time.Now().Before(settlement.ValidUntil) {
-		fmt.Printf("already submitted, skipping submit for channel %s\n", settlement.Channel)
-		return nil
-	}
-
 	if len(settlement.ProviderID) > 0 {
-		fmt.Printf("already submitted, but quote has expired for channel %s\n", settlement.Channel)
+		// first check if the transaction has already been confirmed
+		upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
+		if err == nil {
+			settlement.Status = upholdInfo.Status
+			settlement.Currency = upholdInfo.DestCurrency
+			settlement.Amount = upholdInfo.DestAmount
+			settlement.TransferFee = upholdInfo.TransferFee
+			settlement.ExchangeFee = upholdInfo.ExchangeFee
+
+			if settlement.IsComplete() {
+				fmt.Printf("transaction already complete for channel %s\n", settlement.Channel)
+				return nil
+			}
+		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
+			if time.Now().Before(settlement.ValidUntil) {
+				return nil
+			}
+
+			fmt.Printf("already submitted, but quote has expired for channel %s\n", settlement.Channel)
+		} else {
+			return err
+		}
 	}
 
 	// post the settlement to uphold but do not confirm it
