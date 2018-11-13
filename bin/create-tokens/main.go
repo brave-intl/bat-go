@@ -28,16 +28,18 @@ const (
 
 var grantSignatorPrivateKeyHex = os.Getenv("GRANT_SIGNATOR_PRIVATE_KEY")
 
-var grantSigningKey = flag.String("grant-signing-key", "grant-signing-key", "name of vault transit key to use for signing")
-var altCurrencyStr = flag.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
-var value = flag.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
-var numGrants = flag.Uint("num-grants", 50, "number of grants to create")
-var maturityDateStr = flag.String("maturity-date", "now", "datetime when tokens should become redeemable [ISO 8601]")
-var validWeeks = flag.Uint("valid-weeks", defaultValidWeeks, "weeks after the maturity date that tokens are valid before expiring [conflicts with -expiry-date]")
-var expiryDateStr = flag.String("expiry-date", "", "datetime when tokens should expire [ISO 8601, conflicts with -valid-duration]")
-var promotionID = flag.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
-var fromEnv = flag.Bool("env", false, "read private key from environment")
-var outputFile = flag.String("out", "./grantTokens.json", "output file path")
+var flags = flag.NewFlagSet("", flag.ExitOnError)
+
+var grantSigningKey = flags.String("grant-signing-key", "grant-signing-key", "name of vault transit key to use for signing")
+var altCurrencyStr = flags.String("altcurrency", "BAT", "altcurrency for the grant [nominal unit for -value]")
+var value = flags.Float64("value", 30.0, "value for the grant [nominal units, not probi]")
+var numGrants = flags.Uint("num-grants", 50, "number of grants to create")
+var maturityDateStr = flags.String("maturity-date", "now", "datetime when tokens should become redeemable [ISO 8601]")
+var validWeeks = flags.Uint("valid-weeks", defaultValidWeeks, "weeks after the maturity date that tokens are valid before expiring [conflicts with -expiry-date]")
+var expiryDateStr = flags.String("expiry-date", "", "datetime when tokens should expire [ISO 8601, conflicts with -valid-duration]")
+var promotionID = flags.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
+var fromEnv = flags.Bool("env", false, "read private key from environment")
+var outputFile = flags.String("out", "./grantTokens.json", "output file path")
 
 type promotionInfo struct {
 	ID                        uuid.UUID `json:"promotionId"`
@@ -58,8 +60,27 @@ func newJoseVaultSigner(vSigner *vaultsigner.VaultSigner) (jose.Signer, error) {
 func main() {
 	log.SetFlags(0)
 
-	var err error
-	flag.Parse()
+	flags.Usage = func() {
+		log.Printf("Create grant tokens, using vault held private keys or those passed via env vars.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s [options]\n\n", os.Args[0])
+		log.Printf("  Vault keypair exists with name grant-signing-key, it will be used (unless overridden).\n")
+		log.Printf("  Otherwise a new vault keypair with that name will be generated.\n")
+		log.Printf("  When -env is passed, key material is read from GRANT_SIGNATOR_PRIVATE_KEY and GRANT_SIGNATOR_PUBLIC_KEY\n\n")
+		flags.PrintDefaults()
+		log.Printf("\nExamples:\n\n")
+		log.Printf("  Creating grant tokens for testing:\n\n")
+		log.Printf("    1. Set the appropriate env vars: `GRANT_SIGNATOR_PRIVATE_KEY` and `GRANT_SIGNATOR_PUBLIC_KEY`\n")
+		log.Printf("    2. Run the following command, adjusting the number of grants, expiry and maturity dates as needed\n\n")
+		log.Printf("      ./create-tokens --env=true --num-grants=2000 --expiry-date=2022-05-08T00:00:00-0000 --maturity-date=2018-10-01T00:00:00-0000\n\n")
+		log.Printf("    3. Run the following command to check your newly created tokens are tied to the correct key\n\n")
+		log.Printf("      ./verify-tokens")
+	}
+
+	err := flags.Parse(os.Args[1:])
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	var altCurrency altcurrency.AltCurrency
 	err = altCurrency.UnmarshalText([]byte(*altCurrencyStr))
@@ -118,6 +139,10 @@ func main() {
 			log.Fatalln(err)
 		}
 	} else {
+		if len(grantSignatorPrivateKeyHex) > 0 {
+			log.Fatalln("GRANT_SIGNATOR_PRIVATE_KEY should not be set when using vault key (missing --env flag)")
+		}
+
 		client, err := vaultsigner.Connect()
 		if err != nil {
 			log.Fatalln(err)

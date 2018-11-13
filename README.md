@@ -22,4 +22,3 @@ is installed then run `make docker`.
 5. Build via `make`
 
 6. Run the server executable `./grant-server`
-
