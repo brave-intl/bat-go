@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -41,8 +42,9 @@ type Wallet struct {
 }
 
 const (
-	dateFormat = "2006-01-02T15:04:05.000Z"
-	batchSize  = 50
+	dateFormat              = "2006-01-02T15:04:05.000Z"
+	batchSize               = 50
+	listTransactionsRetries = 5
 )
 
 const (
@@ -149,7 +151,7 @@ func submit(req *http.Request) ([]byte, *http.Response, error) {
 
 	log.WithFields(log.Fields{
 		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Repsonse.StatusCode",
+		"type": "http.Response.StatusCode",
 	}).Debug(resp.StatusCode)
 
 	headers := map[string][]string(resp.Header)
@@ -160,7 +162,7 @@ func submit(req *http.Request) ([]byte, *http.Response, error) {
 
 	log.WithFields(log.Fields{
 		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Repsonse.Header",
+		"type": "http.Response.Header",
 	}).Debug(string(jsonHeaders))
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -169,13 +171,10 @@ func submit(req *http.Request) ([]byte, *http.Response, error) {
 	}
 	log.WithFields(log.Fields{
 		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Repsonse.Body",
+		"type": "http.Response.Body",
 	}).Debug(string(body))
 
 	if resp.StatusCode/100 != 2 {
-		if err != nil {
-			return nil, resp, err
-		}
 		var uhErr upholdError
 		if json.Unmarshal(body, &uhErr) != nil {
 			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
@@ -715,7 +714,19 @@ func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
 		}
 
 		req.Header.Set("Range", fmt.Sprintf("items=%d-%d", start, stop))
-		body, resp, err := submit(req)
+		var body []byte
+		var resp *http.Response
+		for i := 0; i < listTransactionsRetries; i++ {
+			body, resp, err = submit(req)
+			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
+				log.WithFields(log.Fields{
+					"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
+					"type": "net.Error",
+				}).Debug("Temporary error occurred, retrying")
+				continue
+			}
+			break
+		}
 		if err != nil {
 			return nil, err
 		}

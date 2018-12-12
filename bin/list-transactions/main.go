@@ -18,6 +18,7 @@ var verbose = flag.Bool("v", false, "verbose output")
 var csvOut = flag.Bool("csv", false, "csv output")
 var limit = flag.Int("limit", 50, "limit number of transactions returned")
 var walletProvider = flag.String("provider", "uphold", "provider for the source wallet")
+var signed = flag.Bool("signed", false, "signed value depending on transaction direction")
 
 func main() {
 	log.SetFormatter(&formatters.CliFormatter{})
@@ -67,10 +68,22 @@ func main() {
 
 		for i := 0; i < len(txns); i++ {
 			t := txns[i]
+
+			value := t.AltCurrency.FromProbi(t.Probi).String()
+			if *signed {
+				if t.Source == info.ProviderID {
+					value = "-" + value
+				} else if t.Destination == info.ProviderID {
+					value = "+" + value
+				} else {
+					panic("Could not determine direction of transaction")
+				}
+			}
+
 			record := []string{
 				t.Time.String(),
 				t.Note,
-				t.AltCurrency.FromProbi(t.Probi).String(),
+				value,
 				t.AltCurrency.String(),
 				t.Source,
 				t.Destination,
