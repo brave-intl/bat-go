@@ -239,7 +239,7 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 
-	if safeMode {
+	if safeMode || breakerTripped {
 		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
@@ -252,7 +252,14 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		safeMode = true
+		b := GetBreakerFromContext(ctx)
+		incErr := b.Increment()
+		if incErr != nil {
+			log.Errorf("Could not increment the breaker!!!")
+			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+			safeMode = true
+		}
+
 		log.Errorf("Could not get wallet %s from info after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not get wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
@@ -261,7 +268,14 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-		safeMode = true
+		b := GetBreakerFromContext(ctx)
+		incErr := b.Increment()
+		if incErr != nil {
+			log.Errorf("Could not increment the breaker!!!")
+			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+			safeMode = true
+		}
+
 		log.Errorf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
@@ -271,7 +285,14 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	var settlementInfo *wallet.TransactionInfo
 	for tries := 5; tries >= 0; tries-- {
 		if tries == 0 {
-			safeMode = true
+			b := GetBreakerFromContext(ctx)
+			incErr := b.Increment()
+			if incErr != nil {
+				log.Errorf("Could not increment the breaker!!!")
+				raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+				safeMode = true
+			}
+
 			log.Errorf("Could not submit settlement txn for wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 			raven.CaptureMessage("Could not submit settlement txn after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 			return nil, err
