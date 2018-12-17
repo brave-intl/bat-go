@@ -116,6 +116,12 @@ func InitGrantService(pool *redis.Pool) error {
 					[]string{"promotionId"},
 					prometheus.Labels{},
 				),
+				grantWalletBalanceDesc: prometheus.NewDesc(
+					"grant_wallet_balance",
+					"A gauge of the grant wallet remaining balance.",
+					[]string{"promotionId"},
+					prometheus.Labels{},
+				),
 			}
 			prometheus.MustRegister(gs)
 		}
@@ -131,6 +137,7 @@ type grantService struct {
 	pool                      *redis.Pool
 	outstandingGrantCountDesc *prometheus.Desc
 	completedGrantCountDesc   *prometheus.Desc
+	grantWalletBalanceDesc    *prometheus.Desc
 }
 
 // Describe returns all descriptions of the collector.
@@ -138,6 +145,7 @@ type grantService struct {
 func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
 	ch <- gs.outstandingGrantCountDesc
 	ch <- gs.completedGrantCountDesc
+	ch <- gs.grantWalletBalanceDesc
 }
 
 // Collect returns the current state of all metrics of the collector.
@@ -178,4 +186,18 @@ func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
 			promotionID,
 		)
 	}
+
+	balance, err := grantWallet.GetBalance(true)
+	if err != nil {
+		raven.CaptureError(err, map[string]string{})
+		return
+	}
+
+	spendable, _ := grantWallet.GetWalletInfo().AltCurrency.FromProbi(balance.SpendableProbi).Float64()
+
+	ch <- prometheus.MustNewConstMetric(
+		gs.grantWalletBalanceDesc,
+		prometheus.GaugeValue,
+		spendable,
+	)
 }
