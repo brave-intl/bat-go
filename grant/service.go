@@ -119,7 +119,7 @@ func InitGrantService(pool *redis.Pool) error {
 				grantWalletBalanceDesc: prometheus.NewDesc(
 					"grant_wallet_balance",
 					"A gauge of the grant wallet remaining balance.",
-					[]string{"promotionId"},
+					[]string{},
 					prometheus.Labels{},
 				),
 			}
