@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -50,7 +51,15 @@ func TestNewJoseVaultSigner(t *testing.T) {
 	// + 1 week
 	expiryDate := maturityDate.AddDate(0, 0, 1)
 
-	grants, err := grant.CreateGrants(signer, uuid.NewV4(), 1, altcurrency.BAT, 30, maturityDate, expiryDate)
+	grantTemplate := grant.Grant{
+		AltCurrency:       &altcurrency.BAT,
+		Probi:             altcurrency.BAT.ToProbi(decimal.NewFromFloat(30)),
+		PromotionID:       uuid.NewV4(),
+		MaturityTimestamp: maturityDate.Unix(),
+		ExpiryTimestamp:   expiryDate.Unix(),
+	}
+
+	grants, err := grant.CreateGrants(signer, grantTemplate, 1)
 	if err != nil {
 		t.Error(err)
 	}

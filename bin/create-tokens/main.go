@@ -15,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/cryptosigner"
@@ -40,6 +41,8 @@ var expiryDateStr = flags.String("expiry-date", "", "datetime when tokens should
 var promotionID = flags.String("promotion-id", generated, "identifier for this promotion [uuidv4]")
 var fromEnv = flags.Bool("env", false, "read private key from environment")
 var outputFile = flags.String("out", "./grantTokens.json", "output file path")
+var providerID = flags.String("provider-id", "", "bind this grant to a particular provider id [uuidv4]")
+var grantType = flags.String("type", "ugp", "type for this grant [ugp|ads]")
 
 type promotionInfo struct {
 	ID                        uuid.UUID `json:"promotionId"`
@@ -122,6 +125,15 @@ func main() {
 		}
 	}
 
+	var providerUUID *uuid.UUID
+	if len(*providerID) > 0 {
+		tmp, err := uuid.FromString(*providerID)
+		if err != nil {
+			log.Fatalf("%s is not a valid uuidv4\n", *providerID)
+		}
+		providerUUID = &tmp
+	}
+
 	var signer jose.Signer
 	if *fromEnv {
 		if len(grantSignatorPrivateKeyHex) == 0 {
@@ -168,7 +180,17 @@ func main() {
 		log.Fatalln("Exiting...")
 	}
 
-	grants, err := grant.CreateGrants(signer, promotionUUID, *numGrants, altCurrency, *value, maturityDate, expiryDate)
+	grantTemplate := grant.Grant{
+		AltCurrency:       &altCurrency,
+		Probi:             altCurrency.ToProbi(decimal.NewFromFloat(*value)),
+		PromotionID:       promotionUUID,
+		MaturityTimestamp: maturityDate.Unix(),
+		ExpiryTimestamp:   expiryDate.Unix(),
+		Type:              *grantType,
+		ProviderID:        providerUUID,
+	}
+
+	grants, err := grant.CreateGrants(signer, grantTemplate, *numGrants)
 	if err != nil {
 		log.Fatalln(err)
 	}

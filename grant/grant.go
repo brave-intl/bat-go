@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -22,6 +21,8 @@ type Grant struct {
 	PromotionID       uuid.UUID                `json:"promotionId"`
 	MaturityTimestamp int64                    `json:"maturityTime"`
 	ExpiryTimestamp   int64                    `json:"expiryTime"`
+	Type              string                   `json:"type,omitempty"`
+	ProviderID        *uuid.UUID               `json:"providerId,omitempty"`
 }
 
 // ByProbi implements sort.Interface for []Grant based on the Probi field.
@@ -41,22 +42,20 @@ func (a ByExpiryTimestamp) Less(i, j int) bool { return a[i].ExpiryTimestamp < a
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization
 func CreateGrants(
 	signer jose.Signer,
-	promotionUUID uuid.UUID,
+	template Grant,
 	grantCount uint,
-	altCurrency altcurrency.AltCurrency,
-	value float64,
-	maturityDate time.Time,
-	expiryDate time.Time,
 ) ([]string, error) {
 	grants := make([]string, 0, grantCount)
 	for i := 0; i < int(grantCount); i++ {
 		var grant Grant
-		grant.AltCurrency = &altCurrency
+		grant.AltCurrency = template.AltCurrency
 		grant.GrantID = uuid.NewV4()
-		grant.Probi = altCurrency.ToProbi(decimal.NewFromFloat(value))
-		grant.PromotionID = promotionUUID
-		grant.MaturityTimestamp = maturityDate.Unix()
-		grant.ExpiryTimestamp = expiryDate.Unix()
+		grant.Probi = template.Probi
+		grant.PromotionID = template.PromotionID
+		grant.MaturityTimestamp = template.MaturityTimestamp
+		grant.ExpiryTimestamp = template.ExpiryTimestamp
+		grant.Type = template.Type
+		grant.ProviderID = template.ProviderID
 
 		serializedGrant, err := json.Marshal(grant)
 		if err != nil {
