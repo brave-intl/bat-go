@@ -51,8 +51,10 @@ func TestNewJoseVaultSigner(t *testing.T) {
 	// + 1 week
 	expiryDate := maturityDate.AddDate(0, 0, 1)
 
+	altCurrency := altcurrency.BAT
+
 	grantTemplate := grant.Grant{
-		AltCurrency:       &altcurrency.BAT,
+		AltCurrency:       &altCurrency,
 		Probi:             altcurrency.BAT.ToProbi(decimal.NewFromFloat(30)),
 		PromotionID:       uuid.NewV4(),
 		MaturityTimestamp: maturityDate.Unix(),
