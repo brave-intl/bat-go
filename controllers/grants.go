@@ -35,7 +35,18 @@ func GrantsRouter() chi.Router {
 		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", handlers.AppHandler(RedeemGrants)))
 	}
 	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", handlers.AppHandler(ClaimGrant)))
+	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
+}
+
+// Status is the handler for checking redemption status
+func Status(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	if !grant.RedemptionDisabled() {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	return nil
 }
 
 // ClaimGrant is the handler for claiming grants

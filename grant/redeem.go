@@ -26,6 +26,11 @@ type RedeemGrantsRequest struct {
 	Transaction string      `json:"transaction" valid:"base64"`
 }
 
+// RedemptionDisabled due to fail safe condition
+func RedemptionDisabled() bool {
+	return safeMode || breakerTripped
+}
+
 // VerifyAndConsume one or more grants to fulfill the included transaction for wallet
 // Note that this is destructive, on success consumes grants.
 // Further calls to Verify with the same request will fail as the grants are consumed.
@@ -114,6 +119,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 
 	if sumProbi.GreaterThan(ugpBalance.SpendableProbi) {
 		safeMode = true
+		raven.CaptureMessage("Hot wallet out of funds!!!", map[string]string{"out-of-funds": "true"})
 		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
 	}
 
@@ -239,7 +245,7 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 
-	if safeMode || breakerTripped {
+	if RedemptionDisabled() {
 		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
@@ -256,7 +262,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 		incErr := b.Increment()
 		if incErr != nil {
 			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
 			safeMode = true
 		}
 
@@ -272,7 +278,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 		incErr := b.Increment()
 		if incErr != nil {
 			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
 			safeMode = true
 		}
 
@@ -289,7 +295,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 			incErr := b.Increment()
 			if incErr != nil {
 				log.Errorf("Could not increment the breaker!!!")
-				raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{})
+				raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
 				safeMode = true
 			}
 

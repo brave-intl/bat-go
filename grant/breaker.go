@@ -6,6 +6,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/garyburd/redigo/redis"
+	raven "github.com/getsentry/raven-go"
 )
 
 const (
@@ -49,6 +50,7 @@ func (b *Breaker) Increment() error {
 	// Breaker is configured to trip if 10 error events occur each separated by 1 minute or less
 	if currentValue >= breakerCountThreshold {
 		breakerTripped = true
+		raven.CaptureMessage("Circuit breaker tripped!!!", map[string]string{"breaker": "true"})
 	}
 	return nil
 }
