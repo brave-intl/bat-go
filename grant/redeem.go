@@ -26,6 +26,11 @@ type RedeemGrantsRequest struct {
 	Transaction string      `json:"transaction" valid:"base64"`
 }
 
+type RedeemGrantsResponse struct {
+  GrantFulfillmentTxInfo *wallet.TransactionInfo `json:"grantFulfillmentTxInfo`
+  SettlementTxInfo       *wallet.TransactionInfo `json:"settlementTxInfo"`
+}
+
 // RedemptionDisabled due to fail safe condition
 func RedemptionDisabled() bool {
 	return safeMode || breakerTripped
@@ -242,16 +247,16 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 }
 
 // Redeem the grants in the included response
-func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
+func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, *wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 
 	if RedemptionDisabled() {
-		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
+		return nil, nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
 	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	submitID := grantFulfillmentInfo.ID
@@ -268,7 +273,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 		log.Errorf("Could not get wallet %s from info after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not get wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
-		return nil, err
+		return nil, nil, err
 	}
 
 	// fund user wallet with probi from grants
@@ -284,7 +289,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 		log.Errorf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
-		return nil, err
+		return nil, nil, err
 	}
 
 	// confirm settlement transaction previously sent to wallet provider
@@ -301,7 +306,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 			log.Errorf("Could not submit settlement txn for wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
 			raven.CaptureMessage("Could not submit settlement txn after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
-			return nil, err
+			return nil, nil, err
 		}
 		// NOTE VerifyAndConsume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
 		// such as including additional fields that are not understood by this wallet provider implementation but may
@@ -310,7 +315,7 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 		if err == nil {
 			break
 		}
-	}
+  }
 
-	return settlementInfo, nil
+	return settlementInfo, grantFulfillmentInfo, nil
 }

@@ -133,15 +133,17 @@ func RedeemGrants(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		}
 	}
 
-	txInfo, err := req.Redeem(r.Context())
+	txInfo, grantFulfillmentInfo, err := req.Redeem(r.Context())
 	if err != nil {
 		// FIXME not all errors are 4xx
 		return handlers.WrapError("Error redeeming grant", err)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(txInfo); err != nil {
-		panic(err)
-	}
+  redeemResponse := &grant.RedeemGrantsResponse{GrantFulfillmentTxInfo: grantFulfillmentInfo, SettlementTxInfo: txInfo }
+  if err := json.NewEncoder(w).Encode(redeemResponse); err != nil {
+    panic(err)
+  }
+
 	return nil
 }
