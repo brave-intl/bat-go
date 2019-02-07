@@ -268,7 +268,7 @@ func TestUnmarshalTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if settlements[1].DocumentId != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
+	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
 		t.Error("DocumentId does not match settlementJSON")
 	}
 }
