@@ -40,6 +40,7 @@ type Transaction struct {
 	TransferFee    decimal.Decimal          `json:"fee"`
 	Type           string                   `json:"type"`
 	ValidUntil     time.Time                `json:"validUntil"`
+	DocumentID     string                   `json:"documentId,omitempty"`
 	Note           string                   `json:"note"`
 }
 

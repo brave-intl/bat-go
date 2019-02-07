@@ -229,3 +229,46 @@ func TestDeterministicSigning(t *testing.T) {
 		}
 	}
 }
+
+func TestUnmarshalTransaction(t *testing.T) {
+	usdCard := os.Getenv("QA_PUBLISHER_USD_CARD_ID")
+	settlementJSON := []byte(`
+  [
+    {
+        "address": "` + usdCard + `",
+        "altcurrency": "BAT",
+        "authority": "github:evq",
+        "currency": "BAT",
+        "fees": "1339169009771847163",
+        "owner": "publishers#uuid:23813236-3f4c-40dc-916e-8f55c8865b5a",
+        "probi": "25444211185665096101",
+        "publisher": "example.com",
+        "transactionId": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8",
+        "type": "referral"
+    },
+    {
+        "address": "` + usdCard + `",
+        "altcurrency": "BAT",
+        "authority": "github:evq",
+        "currency": "BAT",
+        "fees": "1339169009771847163",
+        "owner": "publishers#uuid:23813236-3f4c-40dc-916e-8f55c8865b5a",
+        "probi": "25444211185665096101",
+        "publisher": "example.com",
+        "transactionId": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8",
+        "type": "manual",
+        "documentId": "98440217-3f84-4a71-98df-56a8d7e8aaeb"
+    }
+  ]
+  `)
+
+	var settlements []Transaction
+	err := json.Unmarshal(settlementJSON, &settlements)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
+		t.Error("DocumentId does not match settlementJSON")
+	}
+}
