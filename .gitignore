@@ -20,3 +20,4 @@ grantTokens.json
 /get-cert-fingerprint
 /transfer-funds
 /list-transactions
+/create-wallet
