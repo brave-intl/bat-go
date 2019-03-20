@@ -61,7 +61,7 @@ func main() {
 
 	if *csvOut {
 		w := csv.NewWriter(os.Stdout)
-		err = w.Write([]string{"date", "description", "probi", "altcurrency", "source", "destination", "transferFee", "exchangeFee", "destAmount", "destCurrency"})
+		err = w.Write([]string{"id", "date", "description", "probi", "altcurrency", "source", "destination", "transferFee", "exchangeFee", "destAmount", "destCurrency"})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -81,6 +81,7 @@ func main() {
 			}
 
 			record := []string{
+				t.ID,
 				t.Time.String(),
 				t.Note,
 				value,
