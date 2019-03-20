@@ -43,6 +43,10 @@ func (uhErr upholdError) ValidationError() bool {
 	return uhErr.Code == "validation_failed"
 }
 
+func (uhErr upholdError) AlreadyExistsError() bool {
+	return uhErr.Code == "transaction_already_exists"
+}
+
 func (uhErr upholdError) DenominationError() bool {
 	return uhErr.ValidationError() && uhErr.ValidationErrors.DenominationErrors.Code == "validation_failed"
 }

@@ -247,6 +247,22 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 				}
 
 				break
+			} else if wallet.AlreadyExists(err) {
+				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
+				upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
+				if err == nil {
+					settlement.Status = upholdInfo.Status
+					settlement.Currency = upholdInfo.DestCurrency
+					settlement.Amount = upholdInfo.DestAmount
+					settlement.TransferFee = upholdInfo.TransferFee
+					settlement.ExchangeFee = upholdInfo.ExchangeFee
+
+					if !settlement.IsComplete() {
+						log.Printf("error transaction status is: %s\n", upholdInfo.Status)
+					}
+				}
+				settlement.Status = "complete"
+				break
 			} else {
 				log.Printf("error confirming: %s\n", err)
 			}
