@@ -114,3 +114,12 @@ func IsInvalidSignature(err error) bool {
 	te, ok := err.(invalidSignature)
 	return ok && te.InvalidSignature()
 }
+
+// AlreadyExists is a helper method for determining if an error indicates the resource already exists
+func AlreadyExists(err error) bool {
+	type alreadyExists interface {
+		AlreadyExistsError() bool
+	}
+	te, ok := err.(alreadyExists)
+	return ok && te.AlreadyExistsError()
+}
