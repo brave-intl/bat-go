@@ -45,9 +45,9 @@ var fromEnv = flags.Bool("env", false, "read private key from environment")
 var outputFile = flags.String("out", "./adGrantTokens.json", "output file path")
 var maximumPayoutAmountStr = flags.String("max-payout-amount", "2000", "the maximum amount we will pay an ad viewer")
 
-type AdPayout struct {
-	ProviderID uuid.UUID       `json:"providerId"`
-	Amount     decimal.Decimal `json:"amount"`
+type adPayout struct {
+	providerID uuid.UUID
+	amount     decimal.Decimal
 }
 
 type promotionInfo struct {
@@ -168,10 +168,10 @@ func main() {
 		}
 	}
 
-	totalAmountToBeGranted, err := decimal.NewFromString("0")
+	totalAmountToBeGranted, _ := decimal.NewFromString("0")
 	payoutFile, _ := os.Open(*payoutFilePath)
 	reader := csv.NewReader(bufio.NewReader(payoutFile))
-	var adPayouts []AdPayout
+	var adPayouts []adPayout
 	for {
 		line, error := reader.Read()
 		if error == io.EOF {
@@ -180,7 +180,7 @@ func main() {
 			log.Fatalln(error)
 		}
 
-		providerId, err := uuid.FromString(line[0])
+		providerID, err := uuid.FromString(line[0])
 		if err != nil {
 			log.Fatalln(error)
 		}
@@ -191,9 +191,9 @@ func main() {
 		}
 		totalAmountToBeGranted = totalAmountToBeGranted.Add(amount)
 
-		adPayouts = append(adPayouts, AdPayout{
-			ProviderID: providerId,
-			Amount:     amount,
+		adPayouts = append(adPayouts, adPayout{
+			providerID: providerID,
+			amount:     amount,
 		})
 	}
 
@@ -209,18 +209,18 @@ func main() {
 
 	var signedGrants []string
 	for _, adPayout := range adPayouts {
-		if adPayout.Amount.GreaterThan(maximumPayoutAmount) {
-			log.Fatalf("%s BAT higher than maximum payout amount, %s BAT, for providerId %s", adPayout.Amount, maximumPayoutAmount, adPayout.ProviderID)
+		if adPayout.amount.GreaterThan(maximumPayoutAmount) {
+			log.Fatalf("%s BAT higher than maximum payout amount, %s BAT, for providerId %s", adPayout.amount, maximumPayoutAmount, adPayout.providerID)
 		}
 
 		grantTemplate := grant.Grant{
 			AltCurrency:       &altCurrency,
-			Probi:             altCurrency.ToProbi(adPayout.Amount),
+			Probi:             altCurrency.ToProbi(adPayout.amount),
 			PromotionID:       promotionUUID,
 			MaturityTimestamp: maturityDate.Unix(),
 			ExpiryTimestamp:   expiryDate.Unix(),
 			Type:              "ads",
-			ProviderID:        &adPayout.ProviderID,
+			ProviderID:        &adPayout.providerID,
 		}
 
 		grants, err := grant.CreateGrants(signer, grantTemplate, 1)
