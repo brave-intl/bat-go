@@ -54,6 +54,7 @@ type promotionInfo struct {
 	ID                        uuid.UUID `json:"promotionId"`
 	Priority                  int       `json:"priority"`
 	Active                    bool      `json:"active"`
+	ProtocolVersion           int       `json:"protocolVersion"`
 	MinimumReconcileTimestamp int64     `json:"minimumReconcileTimestamp"`
 }
 
@@ -233,7 +234,7 @@ func main() {
 
 	var grantReg grantRegistration
 	grantReg.Grants = signedGrants
-	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}
+	grantReg.Promotions = []promotionInfo{{ID: promotionUUID, Priority: 0, ProtocolVersion: 4, Active: false, MinimumReconcileTimestamp: maturityDate.Unix() * 1000}}
 	serializedGrants, err := json.Marshal(grantReg)
 	if err != nil {
 		log.Fatalln(err)
