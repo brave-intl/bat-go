@@ -6,21 +6,23 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/formatters"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
+	verbose   = flag.Bool("v", false, "verbose output")
 	inputFile = flag.String("in", "./contributions-signed.json", "input file path")
 )
 
 func main() {
-	log.SetFlags(0)
+	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
 		log.Printf("Submit signed settlements to uphold.\n\n")
@@ -29,6 +31,10 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *verbose {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	logFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
