@@ -10,7 +10,7 @@ is installed then run `make docker`.
 
 ## Developer Setup
 
-1. [Install Go 1.10](https://golang.org/doc/install) (NOTE: Go 1.9 and earlier will not work!)
+1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
 
 2. Run `go get -d github.com/brave-intl/bat-go`.
 
