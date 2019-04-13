@@ -4,7 +4,7 @@ _BINS := $(wildcard bin/*)
 ifdef GOOS
 	BINS := $(_BINS:bin/%=target/$(GOOS)_$(GOARCH)/%)
 else
-	BINS := $(_BINS:bin/%=%)
+	BINS := $(_BINS:bin/%=target/release/%)
 endif
 
 .PHONY: all bins docker test lint clean
