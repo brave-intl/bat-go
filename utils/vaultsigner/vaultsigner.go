@@ -166,7 +166,7 @@ func Connect() (client *api.Client, err error) {
 	config := &api.Config{}
 	err = config.ReadEnvironment()
 
-	if err != nil {
+	if err == nil {
 		client, err = api.NewClient(config)
 	} else {
 		client, err = api.NewClient(nil)
@@ -184,7 +184,9 @@ func Connect() (client *api.Client, err error) {
 		var token string
 		token, err = helper.Get()
 		if err == nil {
-			client.SetToken(token)
+			if token != "" {
+				client.SetToken(token)
+			}
 		}
 	}
 

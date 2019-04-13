@@ -3,14 +3,18 @@
 package httpsignature
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/brave-intl/bat-go/utils/digest"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures
@@ -27,8 +31,10 @@ type Signature struct {
 }
 
 const (
-	// RequestTarget is a pseudo header consisting of the HTTP method and request uri
-	RequestTarget = "(request-target)"
+	// DigestHeader is the header where a digest of the body will be stored
+	DigestHeader = "digest"
+	// RequestTargetHeader is a pseudo header consisting of the HTTP method and request uri
+	RequestTargetHeader = "(request-target)"
 )
 
 var (
@@ -65,12 +71,27 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 	}
 
 	for i, header := range headers {
-		if header == RequestTarget {
+		if header == RequestTargetHeader {
 			if req.URL != nil && len(req.Method) > 0 {
-				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTarget, strings.ToLower(req.Method), req.URL.RequestURI()))...)
+				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTargetHeader, strings.ToLower(req.Method), req.URL.RequestURI()))...)
 			} else {
-				return nil, fmt.Errorf("Request must have a URL and Method to use the %s pseudo-header", RequestTarget)
+				return nil, fmt.Errorf("Request must have a URL and Method to use the %s pseudo-header", RequestTargetHeader)
 			}
+		} else if header == DigestHeader {
+			var d digest.Instance
+			d.Hash = crypto.SHA256
+
+			if req.Body != nil {
+				body, err := ioutil.ReadAll(req.Body)
+				if err != nil {
+					return out, err
+				}
+				req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+				d.Update(body)
+			}
+			req.Header.Add("Digest", d.String())
+
+			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)

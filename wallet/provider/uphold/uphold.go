@@ -208,18 +208,8 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
 
-	// FIXME digest calc should move to httpsignature lib
-	var d digest.Instance
-	d.Hash = crypto.SHA256
-	d.Update(payload)
-	req.Header.Add("Digest", d.String())
-
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
+	return req, err
 }
 
 // Register a wallet with Uphold with label
@@ -367,12 +357,6 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
-
-	// FIXME digest calc should move to httpsignature lib
-	var d digest.Instance
-	d.Hash = crypto.SHA256
-	d.Update(unsignedTransaction)
-	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
 	return req, err

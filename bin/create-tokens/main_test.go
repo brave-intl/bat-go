@@ -10,7 +10,6 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
-	"github.com/hashicorp/vault/api"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
@@ -21,12 +20,7 @@ func init() {
 }
 
 func TestNewJoseVaultSigner(t *testing.T) {
-	if os.Getenv("VAULT_TOKEN") == "" {
-		t.Skip("skipping test; VAULT_TOKEN not set")
-	}
-
-	config := &api.Config{Address: "http://127.0.0.1:8200"}
-	client, err := api.NewClient(config)
+	client, err := vaultsigner.Connect()
 	if err != nil {
 		t.Fatal(err)
 	}

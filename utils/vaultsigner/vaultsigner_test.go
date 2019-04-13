@@ -5,21 +5,14 @@ package vaultsigner
 import (
 	"crypto"
 	"crypto/rand"
-	"os"
 	"testing"
 
-	"github.com/hashicorp/vault/api"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
 )
 
 func TestSign(t *testing.T) {
-	if os.Getenv("VAULT_TOKEN") == "" {
-		t.Skip("skipping test; VAULT_TOKEN not set")
-	}
-
-	config := &api.Config{Address: "http://127.0.0.1:8200"}
-	client, err := api.NewClient(config)
+	client, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,12 +41,7 @@ func TestSign(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	if os.Getenv("VAULT_TOKEN") == "" {
-		t.Skip("skipping test; VAULT_TOKEN not set")
-	}
-
-	config := &api.Config{Address: "http://127.0.0.1:8200"}
-	client, err := api.NewClient(config)
+	client, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}

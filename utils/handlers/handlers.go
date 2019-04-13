@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/pressly/lg"
 )
 
 // AppError is error type for json HTTP responses
@@ -28,6 +27,7 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // WrapError with an additional message as an AppError
 func WrapError(msg string, err error) *AppError {
+	// FIXME err should probably be first
 	return &AppError{Error: err, Message: msg, Code: http.StatusBadRequest}
 }
 
@@ -53,8 +53,8 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
 		}
 
-		log := lg.Log(r.Context())
-		log.Errorf("%s", e.Message)
+		//log := lg.Log(r.Context())
+		//log.Errorf("%s", e.Message)
 
 		e.ServeHTTP(w, r)
 	}
