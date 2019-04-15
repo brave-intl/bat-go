@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
-	"golang.org/x/net/lex/httplex"
+	"golang.org/x/net/http/httpguts"
 )
 
 // HTTPSignedRequest encapsulates a signed HTTP request
@@ -37,10 +37,10 @@ func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.Signature,
 		r.Header = http.Header{}
 	}
 	for k, v := range sr.Headers {
-		if !httplex.ValidHeaderFieldName(k) {
+		if !httpguts.ValidHeaderFieldName(k) {
 			return nil, errors.New("invalid encapsulated header name")
 		}
-		if !httplex.ValidHeaderFieldValue(v) {
+		if !httpguts.ValidHeaderFieldValue(v) {
 			return nil, errors.New("invalid encapsulated header value")
 		}
 

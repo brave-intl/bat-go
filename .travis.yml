@@ -5,7 +5,7 @@ branches:
   only:
   - master
 go:
-- "1.10"
+- "1.12.2"
 - "master"
 services:
 - redis-server
@@ -15,9 +15,8 @@ matrix:
   - go: master
   fast_finish: true
 env:
-  matrix:
-  - DEP_VERSION="0.4.1"
   global:
+  - GO111MODULE=on
   - TEST_TAGS="integration"
   - secure: gGqNxojD1sfTk4qnFUTQ2vx5V9ryOLEctChxv6iZa1rxbyRE1cB65IPCFquU8Qo7rN4LcqlwpCvEfJHkRs41mOtrkBuRFUSMA1Z0wp6Gpz3jT7nvygRLfkcWMbfHDa2oKS6c9cTWlmanuGl8KWKxZrWzvl7WwtD0Rqfbr3cH74JmOfq5h05ermhE0YNFNKrnra2WZYQGeS9i/qh2nDvnuVw0nI6pXsGpl7fZ/bMDDUipCqSDtfRyV389UAUA5pab+BCp0/hLrDiUOL/xSB2zIoyenQ8mM01MpM1Hx2vh+PrbCJE880ON1374tPRkyNvPlQMeSYv+eZQBT8zxYsQ+xEmfxVvkqvyGo630X5trV5IVQqn+6xlyIFHwemLIpGqwZMg3DlQ2JujQGy6/xfvfd3tMdnzi6NoTtE1h5CYYJ168tnytAz4d3xJ7nGYl4zGejO4971c97JdUY078PYaKDkbRGA0pCk0MYmA9VnkcsPO9v6vW8kV09VFRgNKBJV0YNycWvdTLBF+i8Xe3/aAGMxfJLsbb+gYPTI4cQiIlIc7AlDpd7LzHUuUMQr8cCvK2IoJNnTsgyqtfZZBIbvJkZlEp6EjbKT0Wawh6oC0u+2+9LXYB4tuLDYkprA6NhN5bna4rh/uB826/BXhX6J5SpC4PzDlf985cazEGpyAwyQQ=
   - secure: OvxpTKJ4i+BefkUj52NgTmDXK5/Mm3zkIVyf13uXTEWrEXOs0aRsbxHCmQpHgTK4pMVXGeZ4WlUz7way0zi7QFNsW35dWfDUZ3DCUx7zkSpv10Voan7er2VaI5jiWQSyF+s3yDYQFNZRLHJT9uEoGdAGwBIlC/OCUizBMOMj7hu1bRh0hk3cKHOu6NhHERAN5mrhDltsUGa+FiqzEAO3Ulm19IWUO51xYTritqJV5a741vpmQE4oZLmMw9uWRP/PFeAs8nRSCbfKXgQ9RPz9Dd51A5szgbG00lrg4mmCFI+BgTn8BxKdnNubto0pR4GB6IsJlzR8Zf8c7/6qTIoqDT613K8d7rlZyRpsHtLx4V+H5FhLDGxDzgxvgjVz4xv/SFcQjoqf9R2Wbc/A6+eUq7z15A1SoIgUveCkwvKmVCGtOFi21kUVXPeXY2uCbXuw6dZHWGDPT0oYdZtlNL8EGiqKYW7UHpjj3eiAx0lE/jQbYAYRcTT2grKmXdEEItdAM3FTBqkmJeipyFAYzDVixHHyGMP5lXZ0XVYxp3bDWeiW97LvvO7NZMUKIVhEJ/7vqdn+ZaIjQ5E5v7Npf9oftSiT2Rlol+is7qCzbna+hbzYM+ra/bggkcun8yvLDwDZzCJFwIP0InUBk3OifM/tROrH5YyFpNtwCWRSbGMYfaI=
@@ -25,12 +24,7 @@ env:
   - secure: aXUfAxGtqjhBvNwOMyrY5HaWF63ikLgxeiJflG0DJARhpSroVJVAGOQKkCP2vXfbng2DCsXBYuv21PxyRI7ki61sMzN3tXEkvcE42UchWMTGRCHMEf5u8lVMseWu4I3ecfqp7caDZhSyG5rW8QGKkglYPQGcmO+Cryyfd4e0vfUjF9K7/GVXE0R0eFzbCCAWTEy8Ehjos2YyN5Fm+/ZptJY5RCunikSB5ON5Na7z1Jv0gWNeSSLRsUZB7xgj4esUQx9eb/kmMhlWg6XbguxKJgnu6rN0nKw3APoJR7e60srA8s6KpFM0Q691qxSCdG9gMv/5WG3FGdLF4W3W+weqJyLuOJ2on/DcotU7+g5hx7qBCUWtuA0W8GwwK8fEEBKeuTih9GxsmnqpvJEXoNWgDKam92sDKm5mYjjjsFJa4g6UcMVci+pbrXPgDgq4uEz/poQR6MY8B0CvflWNp/RTYjCfzZWz+DinCLvvngXN6bIKfrJh/HlTtmgMDGapq/EVT0htvuM+Hx/4etCZcenSoYGPSK37rEfrThw+yZdI6iZ5AXtxspeGT3sqjSS+sVGFBeZYm4/XpfaSuF0YzRngQnSWO3ihnqpUK9K0p4pO50DPshYjJgGA52Rc7ONwnWCTgDkk4qzmKVLoNDPq2cmMrgDhkTj1Ozv+ewvCPTAoJWg=
   - secure: JBtiqEcRtB9SoZQIJ4f0g8bod9MCl07sZ4q3CtQHwISq+SngT+porpZ33W49OPRbp2j44tCF7xnrgF/tqT2tjVAIy/k3rQ+edmesSLtDkh5GTFUjh9LegDr1uXmVCDgtHxFEipu1Erp5PqebZk2JAjc9jJv5e3RjQQZYNyTt+werpvoP5sH3XQ3n7IpByp5eHfP3E6UV9rh7B9k+7Tu3hfE3IfyFhjxIcS9tJjbSN0K6842QmI7n43Pzhl2VL8rvxPXWwo4MYT/T7dszY+ZuHpa/atxK1l2x20K5KiymWM3+G3i6lbLc8dyOX3Nw2Q9pP4uo4KLSRlJhrh6Io/Y76C156MSCMlSEohW63zq98fstKprOj50Ciop3ftJfPMlSRhoarXM2whIU+iUCCYscfqx7RgZqDrLJR4iWlLRp9n9+kMd4h76tFJ6rMyMsez3C2jp4cp8426pXmw7/xqwAxlueNYV3esZs8MguNS3oA5zE+6BP6/c6uOV1CVB6Rh8v4TzBjQqQCorZKtdAEBOh/Y7i/aQe8eXJKthhk/reC8eAiPYc37rDVXiIbAO8MlO5jm44gbbFjnBUdJBW3PMYEUw5a3TyOoc+FxLOGNleM1vo1CrTSzaDYf2dJOHIDh8VJmU5a5JpWjf6cwANdsrVPbYLxG/T0PIdjz6BjuSPsfU=
 before_install:
-- curl -L -s https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64
-  -o $GOPATH/bin/dep
-- chmod +x $GOPATH/bin/dep
-- go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
-install:
-- dep ensure
+- curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin latest
 before_script:
 - make lint
 script:
