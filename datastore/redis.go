@@ -1,28 +1,10 @@
 package datastore
 
 import (
-	"context"
 	"strconv"
 
 	"github.com/garyburd/redigo/redis"
 )
-
-type redisPoolKey struct{}
-
-// WithRedisPool adds a redis pool and the context to use it as a set-like and kv datastore
-func WithRedisPool(ctx context.Context, pool *redis.Pool) context.Context {
-	ctx = context.WithValue(ctx, setDatastoreKey{}, "redis")
-	ctx = context.WithValue(ctx, kvDatastoreKey{}, "redis")
-	return context.WithValue(ctx, redisPoolKey{}, pool)
-}
-
-// GetRedisConn returns a connection using the redis pool in context
-// Remember to defer conn.Close()
-func GetRedisConn(ctx context.Context) *redis.Conn {
-	pool := ctx.Value(redisPoolKey{}).(*redis.Pool)
-	conn := pool.Get()
-	return &conn
-}
 
 // RedisSet a redis backed implementation of a set-like datastore
 type RedisSet struct {

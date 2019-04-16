@@ -21,7 +21,7 @@ import (
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
-	err := InitGrantService(nil)
+	_, err := InitService(nil, nil)
 	if err != nil {
 		t.Error("unexpected error")
 	}
@@ -55,7 +55,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
-	err := InitGrantService(nil)
+	service, err := InitService(&InMemory{}, nil)
 	if err != nil {
 		t.Error("unexpected error")
 	}
@@ -107,7 +107,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	ctx = lg.WithLoggerContext(ctx, logger)
 
 	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
-	err = claimReq.Claim(ctx, grantID)
+	err = service.Claim(ctx, &claimReq, grantID)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -116,7 +116,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	walletInfo.ProviderID = uuid.NewV4().String()
 	request := RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
 
-	_, err = request.VerifyAndConsume(ctx)
+	_, err = service.VerifyAndConsume(ctx, &request)
 	if err == nil {
 		t.Error("Should not be able to redeem a non-matching claim on a grant")
 		return
@@ -133,17 +133,17 @@ func TestVerifyAndConsume(t *testing.T) {
 	}
 
 	claimReq = ClaimGrantRequest{WalletInfo: walletInfo}
-	err = claimReq.Claim(ctx, grantID)
+	err = service.Claim(ctx, &claimReq, grantID)
 	if err != nil {
 		t.Error("Claim failed")
 	}
 
-	_, err = request.VerifyAndConsume(ctx)
+	_, err = service.VerifyAndConsume(ctx, &request)
 	if err != nil {
 		t.Error(err)
 	}
 
-	_, err = request.VerifyAndConsume(ctx)
+	_, err = service.VerifyAndConsume(ctx, &request)
 	if err == nil {
 		t.Error("expected re-redeem with the same grant to fail")
 	}
@@ -152,18 +152,18 @@ func TestVerifyAndConsume(t *testing.T) {
 	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI1MzZjNWZhZC0zYWJiLTQwM2UtOWI5Mi1kNjE5ZDc0YjNhZjQiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.Y5QruXFJVV0qqRauP3ah4UAHk6TgtNPySkbq3VBv3dCKpAvYmSnfBRipKjVCicP2s0lQQn8Rcu3aIP4VDBCjDQ"}
 
 	// claim this grant as well to ensure we are testing re-redeem with same wallet and promotion
-	err = claimReq.Claim(ctx, "f87e7fb4-0f80-40ad-b092-84f70e448421")
+	err = service.Claim(ctx, &claimReq, "f87e7fb4-0f80-40ad-b092-84f70e448421")
 	if err != nil {
 		t.Error("Claim failed")
 	}
 
 	request = RedeemGrantsRequest{Grants: grants, WalletInfo: walletInfo, Transaction: transaction}
-	_, err = request.VerifyAndConsume(ctx)
+	_, err = service.VerifyAndConsume(ctx, &request)
 	if err == nil {
 		t.Error("expected re-redeem with the same wallet and promotion to fail")
 	}
 
-	redeemedIDs, err := GetRedeemedIDs(ctx, redeemedGrant)
+	redeemedIDs, err := service.GetRedeemedIDs(ctx, redeemedGrant)
 	if err != nil {
 		t.Error("Unable to check RedeemedIDs")
 	}

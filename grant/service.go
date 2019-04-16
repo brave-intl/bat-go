@@ -4,11 +4,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
-	"strings"
 
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -55,19 +52,51 @@ var (
 	)
 )
 
-// InitGrantService initializes the grant service
-func InitGrantService(pool *redis.Pool) error {
+// Service contains datastore and redis connections as well as prometheus metrics
+type Service struct {
+	datastore                 Datastore
+	redisPool                 *redis.Pool
+	outstandingGrantCountDesc *prometheus.Desc
+	completedGrantCountDesc   *prometheus.Desc
+	grantWalletBalanceDesc    *prometheus.Desc
+}
+
+// InitService initializes the grant service
+func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
+	gs := &Service{
+		datastore: datastore,
+		redisPool: redisPool,
+		outstandingGrantCountDesc: prometheus.NewDesc(
+			"outstanding_grants_total",
+			"Outstanding grants that have been claimed and have not expired.",
+			[]string{},
+			prometheus.Labels{},
+		),
+		completedGrantCountDesc: prometheus.NewDesc(
+			"completed_grants_total",
+			"Completed grants that have been redeemed.",
+			[]string{"promotionId"},
+			prometheus.Labels{},
+		),
+		grantWalletBalanceDesc: prometheus.NewDesc(
+			"grant_wallet_balance",
+			"A gauge of the grant wallet remaining balance.",
+			[]string{},
+			prometheus.Labels{},
+		),
+	}
+
 	var err error
 	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if os.Getenv("ENV") == productionEnv && !refreshBalance {
-		return errors.New("refreshBalance must be true in production")
+		return nil, errors.New("refreshBalance must be true in production")
 	}
 	if os.Getenv("ENV") == productionEnv && !testSubmit {
-		return errors.New("testSubmit must be true in production")
+		return nil, errors.New("testSubmit must be true in production")
 	}
 
 	if len(grantWalletCardID) > 0 {
@@ -85,44 +114,23 @@ func InitGrantService(pool *redis.Pool) error {
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		grantWallet, err = uphold.New(info, privKey, pubKey)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else if os.Getenv("ENV") == productionEnv {
-		return errors.New("GRANT_WALLET_CARD_ID must be set in production")
+		return nil, errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 
 	if registerGrantInstrumentation {
-		if pool != nil {
-			gs := &grantService{
-				pool: pool,
-				outstandingGrantCountDesc: prometheus.NewDesc(
-					"outstanding_grants_total",
-					"Outstanding grants that have been claimed and have not expired.",
-					[]string{},
-					prometheus.Labels{},
-				),
-				completedGrantCountDesc: prometheus.NewDesc(
-					"completed_grants_total",
-					"Completed grants that have been redeemed.",
-					[]string{"promotionId"},
-					prometheus.Labels{},
-				),
-				grantWalletBalanceDesc: prometheus.NewDesc(
-					"grant_wallet_balance",
-					"A gauge of the grant wallet remaining balance.",
-					[]string{},
-					prometheus.Labels{},
-				),
-			}
+		if datastore != nil {
 			prometheus.MustRegister(gs)
 		}
 
@@ -130,19 +138,12 @@ func InitGrantService(pool *redis.Pool) error {
 		prometheus.MustRegister(redeemedGrantsCounter)
 	}
 
-	return nil
-}
-
-type grantService struct {
-	pool                      *redis.Pool
-	outstandingGrantCountDesc *prometheus.Desc
-	completedGrantCountDesc   *prometheus.Desc
-	grantWalletBalanceDesc    *prometheus.Desc
+	return gs, nil
 }
 
 // Describe returns all descriptions of the collector.
 // We implement this and the Collect function to fulfill the prometheus.Collector interface
-func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
+func (gs *Service) Describe(ch chan<- *prometheus.Desc) {
 	ch <- gs.outstandingGrantCountDesc
 	ch <- gs.completedGrantCountDesc
 	ch <- gs.grantWalletBalanceDesc
@@ -150,12 +151,8 @@ func (gs *grantService) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
-func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
-	conn := gs.pool.Get()
-	defer closers.Panic(conn)
-
-	kv := datastore.GetRedisKv(&conn)
-	ogCount, err := kv.Count("grant:*")
+func (gs *Service) Collect(ch chan<- prometheus.Metric) {
+	ogCount, err := gs.datastore.GetOutstandingGrantCount()
 	if err != nil {
 		raven.CaptureError(err, map[string]string{})
 		return
@@ -165,20 +162,12 @@ func (gs *grantService) Collect(ch chan<- prometheus.Metric) {
 		prometheus.GaugeValue,
 		float64(ogCount),
 	)
-	promotions, err := kv.Keys("promotion:*:grants")
+	redeemedCounts, err := gs.datastore.GetRedeemedCountByPromotion()
 	if err != nil {
 		raven.CaptureError(err, map[string]string{})
 		return
 	}
-	for i := 0; i < len(promotions); i++ {
-		promotionSet := datastore.GetRedisSet(&conn, promotions[i])
-		promotionID := strings.TrimSuffix(strings.TrimPrefix(promotions[i], "promotion:"), ":grants")
-		completedCount, err := promotionSet.Cardinality()
-		if err != nil {
-			raven.CaptureError(err, map[string]string{})
-			return
-		}
-
+	for promotionID, completedCount := range redeemedCounts {
 		ch <- prometheus.MustNewConstMetric(
 			gs.completedGrantCountDesc,
 			prometheus.GaugeValue,

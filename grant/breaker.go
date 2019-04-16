@@ -1,10 +1,8 @@
 package grant
 
 import (
-	"context"
 	"strconv"
 
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 )
@@ -22,12 +20,6 @@ var (
 // Breaker helps implement a basic circuit-breaker pattern
 type Breaker struct {
 	conn *redis.Conn
-}
-
-// GetBreakerFromContext by getting a redis connection from the context
-func GetBreakerFromContext(ctx context.Context) Breaker {
-	conn := datastore.GetRedisConn(ctx)
-	return GetBreaker(conn)
 }
 
 // GetBreaker from redis connection

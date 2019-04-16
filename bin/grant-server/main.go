@@ -10,11 +10,10 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/controllers"
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/garyburd/redigo/redis"
-	"github.com/getsentry/raven-go"
+	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
@@ -67,15 +66,14 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		IdleTimeout: 240 * time.Second,
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
-	ctx = datastore.WithRedisPool(ctx, rp)
 
-	err := grant.InitGrantService(rp)
+	service, err := grant.InitService(&grant.Redis{Pool: rp}, rp)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)
 	}
 
-	r.Mount("/v1/grants", controllers.GrantsRouter())
+	r.Mount("/v1/grants", controllers.GrantsRouter(service))
 	r.Get("/metrics", middleware.Metrics())
 	return ctx, r
 }

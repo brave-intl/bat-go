@@ -10,7 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/utils/set"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -37,7 +37,7 @@ func main() {
 	if len(grantSignatorPublicKeyHex) == 0 {
 		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PUBLIC_KEY")
 	}
-	err := grant.InitGrantService(nil)
+	_, err := grant.InitService(nil, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}

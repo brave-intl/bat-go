@@ -1,13 +1,11 @@
 package grant
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 	jose "gopkg.in/square/go-jose.v2"
@@ -113,14 +111,4 @@ func DecodeGrants(pubKey ed25519.PublicKey, grants []string) ([]Grant, error) {
 		decoded = append(decoded, *grant)
 	}
 	return decoded, nil
-}
-
-// GetPromotionGrantsDatastore for tracking redemption of specific grants in a promotion
-func GetPromotionGrantsDatastore(ctx context.Context, promotionID string) (datastore.SetLikeDatastore, error) {
-	return datastore.GetSetDatastore(ctx, "promotion:"+promotionID+":grants")
-}
-
-// GetPromotionWalletsDatastore for tracking redemption by specific wallets in a promotion
-func GetPromotionWalletsDatastore(ctx context.Context, promotionID string) (datastore.SetLikeDatastore, error) {
-	return datastore.GetSetDatastore(ctx, "promotion:"+promotionID+":wallets")
 }

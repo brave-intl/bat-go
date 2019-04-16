@@ -20,10 +20,6 @@ func GetKvDatastore(ctx context.Context) (KvDatastore, error) {
 		val = ""
 	}
 	switch val.(string) {
-	case "redis":
-		conn := GetRedisConn(ctx)
-		store := GetRedisKv(conn)
-		return &store, nil
 	default:
 		fallthrough
 	case "map":

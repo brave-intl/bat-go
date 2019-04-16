@@ -11,6 +11,7 @@ require (
 	github.com/garyburd/redigo v1.6.0
 	github.com/getsentry/raven-go v0.2.0
 	github.com/go-chi/chi v4.0.2+incompatible
+	github.com/golang-migrate/migrate/v4 v4.2.5
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
@@ -28,7 +29,6 @@ require (
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pressly/lg v1.1.1
 	github.com/prometheus/client_golang v0.9.2
 	github.com/ryanuber/go-glob v1.0.0 // indirect

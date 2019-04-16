@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
@@ -52,7 +51,7 @@ func RedemptionDisabled() bool {
 // b) this grant has not yet been redeemed by any wallet
 //
 // Returns transaction info for grant fufillment
-func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.TransactionInfo, error) {
+func (service *Service) VerifyAndConsume(ctx context.Context, req *RedeemGrantsRequest) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 	// 1. Check grant signatures and decode
 	grants, err := DecodeGrants(grantPublicKey, req.Grants)
@@ -139,14 +138,9 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 		submitID = submitInfo.ID
 	}
 
-	kvDatastore, err := datastore.GetKvDatastore(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer closers.Panic(kvDatastore)
 	// 6. Iterate through grants and check that:
 	for _, grant := range grants {
-		claimedID, err := GetClaimantID(kvDatastore, grant.GrantID.String())
+		claimedID, err := service.datastore.GetClaimantProviderID(grant)
 		if err == nil {
 			// if claimed it was by this wallet
 			if req.WalletInfo.ProviderID != claimedID {
@@ -165,35 +159,9 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 			return nil, errors.New("Grant is expired")
 		}
 
-		redeemedGrants, err := GetPromotionGrantsDatastore(ctx, grant.PromotionID.String())
+		err = service.datastore.RedeemGrantForWallet(grant, req.WalletInfo)
 		if err != nil {
 			return nil, err
-		}
-		defer closers.Panic(redeemedGrants)
-		redeemedWallets, err := GetPromotionWalletsDatastore(ctx, grant.PromotionID.String())
-		if err != nil {
-			return nil, err
-		}
-		defer closers.Panic(redeemedWallets)
-
-		result, err := redeemedGrants.Add(grant.GrantID.String())
-		if err != nil {
-			return nil, err
-		}
-		if !result {
-			// a) this wallet has not yet redeemed a grant for the given promotionId
-			log.Error("Attempt to redeem previously redeemed grant!!!")
-			return nil, fmt.Errorf("grant %s has already been redeemed", grant.GrantID)
-		}
-
-		result, err = redeemedWallets.Add(req.WalletInfo.ProviderID)
-		if err != nil {
-			return nil, err
-		}
-		if !result {
-			// b) this grant has not yet been redeemed by any wallet
-			log.Error("Attempt to redeem multiple grants from one promotion by the same wallet!!!")
-			return nil, fmt.Errorf("Wallet %s has already redeemed a grant from this promotion", req.WalletInfo.ProviderID)
 		}
 
 		redeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionID.String()}).Inc()
@@ -211,7 +179,7 @@ func (req *RedeemGrantsRequest) VerifyAndConsume(ctx context.Context) (*wallet.T
 }
 
 // GetRedeemedIDs returns a list of any grants that have already been redeemed
-func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
+func (service *Service) GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 
 	// 1. Check grant signatures and decode
 	grants, err := DecodeGrants(grantPublicKey, Grants)
@@ -222,19 +190,12 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 	results := make([]string, 0, grantCount)
 
 	for _, grant := range grants {
-		grantID := grant.GrantID.String()
-		redeemedGrants, err := GetPromotionGrantsDatastore(ctx, grant.PromotionID.String())
-		if err != nil {
-			return nil, err
-		}
-		defer closers.Panic(redeemedGrants)
-
-		grantRedeemed, err := redeemedGrants.Contains(grantID)
+		grantRedeemed, err := service.datastore.HasGrantBeenRedeemed(grant)
 		if err != nil {
 			return nil, err
 		}
 		if grantRedeemed {
-			results = append(results, grantID)
+			results = append(results, grant.GrantID.String())
 		}
 	}
 
@@ -242,14 +203,14 @@ func GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
 }
 
 // Redeem the grants in the included response
-func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.TransactionInfo, error) {
+func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*wallet.TransactionInfo, error) {
 	log := lg.Log(ctx)
 
 	if RedemptionDisabled() {
 		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
-	grantFulfillmentInfo, err := req.VerifyAndConsume(ctx)
+	grantFulfillmentInfo, err := service.VerifyAndConsume(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +219,10 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		b := GetBreakerFromContext(ctx)
+		conn := service.redisPool.Get()
+		defer closers.Panic(conn)
+		b := GetBreaker(&conn)
+
 		incErr := b.Increment()
 		if incErr != nil {
 			log.Errorf("Could not increment the breaker!!!")
@@ -274,7 +238,10 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-		b := GetBreakerFromContext(ctx)
+		conn := service.redisPool.Get()
+		defer closers.Panic(conn)
+		b := GetBreaker(&conn)
+
 		incErr := b.Increment()
 		if incErr != nil {
 			log.Errorf("Could not increment the breaker!!!")
@@ -291,7 +258,10 @@ func (req *RedeemGrantsRequest) Redeem(ctx context.Context) (*wallet.Transaction
 	var settlementInfo *wallet.TransactionInfo
 	for tries := 5; tries >= 0; tries-- {
 		if tries == 0 {
-			b := GetBreakerFromContext(ctx)
+			conn := service.redisPool.Get()
+			defer closers.Panic(conn)
+			b := GetBreaker(&conn)
+
 			incErr := b.Increment()
 			if incErr != nil {
 				log.Errorf("Could not increment the breaker!!!")
