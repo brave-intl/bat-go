@@ -41,7 +41,7 @@ func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Gra
 	err = service.datastore.ClaimGrantForWallet(grant, wallet)
 	if err != nil {
 		log.Ctx(loggerCtx).
-			Info().
+			Error().
 			Msg("Attempt to claim previously claimed grant!")
 		return err
 	}

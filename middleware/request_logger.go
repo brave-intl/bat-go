@@ -34,7 +34,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	// "runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -82,7 +81,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				}
 
 				// Log the entry, the request is complete.
-				entry.Info().
+				entry.Debug().
 					Int("status", ww.Status()).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1))
