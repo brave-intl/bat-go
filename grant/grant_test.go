@@ -12,10 +12,9 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/golang/mock/gomock"
-	"github.com/pressly/lg"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 )
 
 func TestFromCompactJWS(t *testing.T) {
@@ -112,9 +111,10 @@ func TestConsume(t *testing.T) {
 	grant.Probi = grant.AltCurrency.ToProbi(decimal.NewFromFloat(25))
 	grant.ExpiryTimestamp = time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC).Unix()
 
-	logger := logrus.New()
-	ctx := context.Background()
-	ctx = lg.WithLoggerContext(ctx, logger)
+	ctx := log.Logger.WithContext(context.Background())
+	// logger := logrus.New()
+	// ctx := context.Background()
+	// ctx = lg.WithLoggerContext(ctx, logger)
 
 	mockDB.EXPECT().UpsertWallet(gomock.Eq(&walletInfo)).Return(nil)
 	mockDB.EXPECT().ClaimGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)

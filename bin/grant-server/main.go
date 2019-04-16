@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -17,23 +16,20 @@ import (
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	"github.com/pressly/lg"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
+	"github.com/rs/zerolog/log"
 )
 
-func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
-	logger := logrus.New()
-
-	//logger.Formatter = &logrus.JSONFormatter{}
-
-	// Redirect output from the standard logging package "log"
-	lg.RedirectStdlogOutput(logger)
-	lg.DefaultLogger = logger
-	ctx = lg.WithLoggerContext(ctx, logger)
-	return ctx, logger
+func setupLogger() *zerolog.Logger {
+	// set time field to unix
+	zerolog.TimeFieldFormat = ""
+	// always print out timestamp
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	return &log.Logger
 }
 
-func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *chi.Mux, *promotion.Service) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -50,6 +46,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
+	r.Use(hlog.NewHandler(*logger))
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(middleware.RequestLogger(logger))
@@ -70,7 +67,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	pg, err := promotion.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	promotionService, err := promotion.InitService(pg)
@@ -89,7 +86,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
 		if env == "production" {
-			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
+			log.Panic().Err(errors.New("REPUTATION_SERVER is missing in production environment"))
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
@@ -102,11 +99,11 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 }
 
 func main() {
-	serverCtx, logger := setupLogger(context.Background())
-
-	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
-
-	serverCtx, r, service := setupRouter(serverCtx, logger)
+	serverCtx := context.Background()
+	logger := setupLogger()
+	contextLogger := log.Ctx(logger.WithContext(serverCtx))
+	subLog := contextLogger.Info().Str("prefix", "main")
+	subLog.Msg("Starting server")
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -125,6 +122,6 @@ func main() {
 	err := srv.ListenAndServe()
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		contextLogger.Panic().Err(err)
 	}
 }

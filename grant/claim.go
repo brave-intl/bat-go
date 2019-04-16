@@ -6,10 +6,10 @@ import (
 	promotion "github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/pkg/errors"
-	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/rs/zerolog/log"
 )
 
 // ClaimGrantWithGrantIDRequest is a request to claim a grant
@@ -31,7 +31,7 @@ type ClaimResponse struct {
 // Claim registers a claim on behalf of a user wallet to a particular Grant.
 // Registered claims are enforced by RedeemGrantsRequest.Verify.
 func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Grant) error {
-	log := lg.Log(ctx)
+	loggerCtx := log.Logger.WithContext(ctx)
 
 	err := service.datastore.UpsertWallet(&wallet)
 	if err != nil {
@@ -40,7 +40,9 @@ func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Gra
 
 	err = service.datastore.ClaimGrantForWallet(grant, wallet)
 	if err != nil {
-		log.Error("Attempt to claim previously claimed grant!")
+		log.Ctx(loggerCtx).
+			Info().
+			Msg("Attempt to claim previously claimed grant!")
 		return err
 	}
 	claimedGrantsCounter.With(prometheus.Labels{}).Inc()

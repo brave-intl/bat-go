@@ -34,22 +34,20 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"runtime/debug"
+	// "runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/getsentry/raven-go"
 	"github.com/go-chi/chi/middleware"
-	"github.com/pressly/lg"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
 )
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
-// Modified version of RequestLogger from github.com/pressly/lg
+// Modified version of RequestLogger from github.com/rs/zerolog
 // Added support for sending captured panic to Sentry
-func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	httpLogger := &lg.HTTPLogger{Logger: logger}
-
+func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.EscapedPath() == "/metrics" { // Skip logging prometheus metric scrapes
@@ -57,7 +55,7 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 				return
 			}
 
-			entry := httpLogger.NewLogEntry(r)
+			entry := hlog.FromRequest(r)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 			t1 := time.Now()
@@ -66,7 +64,7 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
-					entry.Panic(rec, debug.Stack())
+					entry.Panic().Stack()
 
 					// Send panic info to Sentry
 					recStr := fmt.Sprint(rec)
@@ -84,10 +82,13 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 				}
 
 				// Log the entry, the request is complete.
-				entry.Write(ww.Status(), ww.BytesWritten(), t2.Sub(t1))
+				entry.Info().
+					Int("status", ww.Status()).
+					Int("size", ww.BytesWritten()).
+					Dur("duration", t2.Sub(t1))
 			}()
 
-			r = r.WithContext(lg.WithLogEntry(r.Context(), entry))
+			r = r.WithContext(entry.WithContext(r.Context()))
 			next.ServeHTTP(ww, r)
 		}
 		return http.HandlerFunc(fn)
