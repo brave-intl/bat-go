@@ -20,10 +20,6 @@ func GetSetDatastore(ctx context.Context, key string) (SetLikeDatastore, error) 
 		val = ""
 	}
 	switch val.(string) {
-	case "redis":
-		conn := GetRedisConn(ctx)
-		set := GetRedisSet(conn, key)
-		return &set, nil
 	default:
 		fallthrough
 	case "slice":
