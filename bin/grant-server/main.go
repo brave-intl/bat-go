@@ -21,12 +21,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func setupLogger() *zerolog.Logger {
+
+func setupLogger(ctx context.Context) *zerolog.Logger {
 	// set time field to unix
 	zerolog.TimeFieldFormat = ""
 	// always print out timestamp
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	return &log.Logger
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).WithContext(ctx)
+	return ctx, &log.Logger
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
@@ -99,8 +100,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 func main() {
-	serverCtx := context.Background()
-	logger := setupLogger()
+	serverCtx, logger := setupLogger(context.Background())
 	contextLogger := log.Ctx(logger.WithContext(serverCtx))
 	subLog := contextLogger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
