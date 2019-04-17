@@ -77,7 +77,7 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Combine error with message
 			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
 		}
-		ctx := log.Logger.WithContext(r.Context())
+		ctx := r.Context()
 		log.Ctx(ctx).Error().Msg(e.Message)
 
 		e.ServeHTTP(w, r)

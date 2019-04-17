@@ -111,10 +111,7 @@ func TestConsume(t *testing.T) {
 	grant.Probi = grant.AltCurrency.ToProbi(decimal.NewFromFloat(25))
 	grant.ExpiryTimestamp = time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC).Unix()
 
-	ctx := log.Logger.WithContext(context.Background())
-	// logger := logrus.New()
-	// ctx := context.Background()
-	// ctx = lg.WithLoggerContext(ctx, logger)
+	ctx := context.Background()
 
 	mockDB.EXPECT().UpsertWallet(gomock.Eq(&walletInfo)).Return(nil)
 	mockDB.EXPECT().ClaimGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)

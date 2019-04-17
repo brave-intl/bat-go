@@ -236,8 +236,10 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-		log.Errorf("Could not fund wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not fund wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		log.Ctx(ctx).
+			Error().
+			Msg(fmt.Sprintf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID))
+		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
 
