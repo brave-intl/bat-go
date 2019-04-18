@@ -84,7 +84,8 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				entry.Debug().
 					Int("status", ww.Status()).
 					Int("size", ww.BytesWritten()).
-					Dur("duration", t2.Sub(t1))
+					Dur("duration", t2.Sub(t1)).
+					Msg("request complete")
 			}()
 
 			r = r.WithContext(entry.WithContext(r.Context()))
