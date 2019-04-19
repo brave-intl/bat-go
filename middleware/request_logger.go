@@ -34,8 +34,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
-	"string"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/getsentry/raven-go"
@@ -60,9 +60,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			subLog := entry.Info()
 			t1 := time.Now()
 			for key, list := range r.Header {
-				for _, value := range pair {
-					subLog = subLog.Str(key, string.Join(list))
-				}
+				subLog = subLog.Str(key, strings.Join(list, ","))
 			}
 			subLog.
 				Str("remote_addr", r.RemoteAddr).
