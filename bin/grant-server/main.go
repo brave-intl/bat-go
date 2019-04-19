@@ -50,6 +50,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(hlog.NewHandler(*logger))
 	if logger != nil {
 		// Also handles panic recovery
+		r.Use(hlog.RemoteAddrHandler("ip"))
+		r.Use(hlog.UserAgentHandler("user_agent"))
+		r.Use(hlog.RefererHandler("referer"))
+		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
 	}
 

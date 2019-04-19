@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"string"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/getsentry/raven-go"
@@ -56,8 +57,18 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 			entry := hlog.FromRequest(r)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-
+			subLog := entry.Info()
 			t1 := time.Now()
+			for key, list := range r.Header {
+				for _, value := range pair {
+					subLog = subLog.Str(key, string.Join(list))
+				}
+			}
+			subLog.
+				Str("remote_addr", r.RemoteAddr).
+				Str("http_proto", r.Proto).
+				Str("uri", r.URL.EscapedPath()).
+				Msg("request started")
 			defer func() {
 				t2 := time.Now()
 
@@ -81,7 +92,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				}
 
 				// Log the entry, the request is complete.
-				entry.Debug().
+				subLog.
 					Int("status", ww.Status()).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1)).
