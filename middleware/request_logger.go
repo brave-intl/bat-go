@@ -55,10 +55,10 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				return
 			}
 
-			entry := hlog.FromRequest(r)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			t1 := time.Now()
-			createSubLog(entry, r).
+			entry := hlog.FromRequest(r)
+			createSubLog(r).
 				Msg("request started")
 			defer func() {
 				t2 := time.Now()
@@ -83,7 +83,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				}
 
 				// Log the entry, the request is complete.
-				createSubLog(entry, r).
+				createSubLog(r).
 					Int("status", ww.Status()).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1)).
@@ -97,8 +97,8 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 	}
 }
 
-func createSubLog(entry *zerolog.Logger, r *http.Request) *zerolog.Event {
-	subLog := entry.Info()
+func createSubLog(r *http.Request) *zerolog.Event {
+	subLog := hlog.FromRequest(r).Info()
 	for key, list := range r.Header {
 		subLog = subLog.Str(key, strings.Join(list, ","))
 	}
