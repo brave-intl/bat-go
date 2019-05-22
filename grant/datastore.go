@@ -20,7 +20,7 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	// GetOutstandingGrantCount get the totall number of outstanding grant claims that have not expired
+	// GetOutstandingGrantCount get the total number of outstanding grant claims that have not expired
 	GetOutstandingGrantCount() (int, error)
 	// GetRedeemedCountByPromotion get the count of redeemed grants by promotionID
 	GetRedeemedCountByPromotion() (map[string]int, error)
@@ -66,6 +66,19 @@ func NewPostgres(databaseURL string) (*Postgres, error) {
 	}
 	return &Postgres{db}, nil
 }
+
+// TODO implement postgres datastore
+// Can set up 1:1 correspondance between claim ID and grant ID?
+// Ensure only version < 4 promotions can go through legacy redeem
+//
+// Cutover:
+
+// 1. Disable claim through old API
+// 2. Take db dump of wallets collection
+// 3. Recreate promotions / claims table from wallets collection
+// 4. Take ledger server down
+// 5. Sync redemption status from redis
+// 6. Upgrade grant server?
 
 // Redis is our current datastore
 type Redis struct {

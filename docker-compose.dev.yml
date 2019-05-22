@@ -1,6 +1,16 @@
 version: "3.4"
 
 services:
-  grant-web:
+  web:
     volumes:
       - ".:/src"
+    environment:
+      - "CHALLENGE_BYPASS_DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
+      - "VAULT_ADDR=http://vault:8200"
+      - TEST_TAGS
+      - VAULT_TOKEN
+  vault:
+    container_name: grant-vault
+    image: vault:0.10.2
+    networks:
+      - grant

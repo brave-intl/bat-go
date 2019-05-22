@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -67,13 +68,27 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
 
-	service, err := grant.InitService(&grant.Redis{Pool: rp}, rp)
+	grantService, err := grant.InitService(&grant.Redis{Pool: rp}, rp)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)
 	}
 
-	r.Mount("/v1/grants", controllers.GrantsRouter(service))
+	pg, err := promotion.NewPostgres("", true)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
+
+	promotionService, err := promotion.InitService(pg)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
+
+	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
+	r.Mount("/v1/promotions", promotion.Router(promotionService))
+	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
 	return ctx, r
 }

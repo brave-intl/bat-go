@@ -8,7 +8,6 @@ go:
 - "1.12.2"
 - "master"
 services:
-- redis-server
 - docker
 matrix:
   allow_failures:
@@ -30,8 +29,8 @@ install:
 before_script:
 - make lint
 script:
-- docker run --rm --name bat-go-vault -d -p "8200:8200" vault:0.10.2
+- docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault 
 - sleep 3
-- VAULT_TOKEN=$(docker logs bat-go-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) make
+- VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make 
 after_script:
 - git diff-index --quiet HEAD --

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+
 	"golang.org/x/net/http/httpguts"
 )
 
@@ -44,9 +45,9 @@ func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.Signature,
 			return nil, errors.New("invalid encapsulated header value")
 		}
 
-		if k == httpsignature.RequestTarget {
+		if k == httpsignature.RequestTargetHeader {
 			// TODO implement pseudo-header
-			return nil, fmt.Errorf("%s pseudo-header not implemented", httpsignature.RequestTarget)
+			return nil, fmt.Errorf("%s pseudo-header not implemented", httpsignature.RequestTargetHeader)
 		}
 
 		r.Header.Set(k, v)
