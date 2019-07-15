@@ -76,7 +76,7 @@ type Wallet interface {
 	// GetBalance returns the last known balance, if refresh is true then the current balance is fetched
 	GetBalance(refresh bool) (*Balance, error)
 	// ListTransactions for this wallet, limit number of transactions returned
-	ListTransactions(limit int) ([]TransactionInfo, error)
+	ListTransactions(limit int, startDate time.Time) ([]TransactionInfo, error)
 }
 
 // IsNotFound is a helper method for determining if an error indicates a missing resource

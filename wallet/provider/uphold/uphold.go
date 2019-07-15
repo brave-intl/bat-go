@@ -676,12 +676,13 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 }
 
 // ListTransactions for this wallet, pagination not yet supported
-func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
+func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]wallet.TransactionInfo, error) {
 	var out []wallet.TransactionInfo
 	if limit > 0 {
 		out = make([]wallet.TransactionInfo, 0, limit)
 	}
 	var totalTransactions int
+	toExit := false
 	for {
 		req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID+"/transactions", nil)
 		if err != nil {
@@ -733,13 +734,18 @@ func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
 		}
 
 		for i := 0; i < len(uhResp); i++ {
-			out = append(out, *uhResp[i].ToTransactionInfo())
+			txInfo := *uhResp[i].ToTransactionInfo()
+			if txInfo.Time.Before(startDate) {
+				toExit = true
+				break
+			}
+			out = append(out, txInfo)
 			if len(out) == limit {
 				break
 			}
 		}
 
-		if len(out) == limit || len(out) == totalTransactions {
+		if len(out) == limit || len(out) == totalTransactions || toExit {
 			break
 		}
 	}

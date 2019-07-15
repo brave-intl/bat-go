@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/formatters"
@@ -14,9 +15,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	dateFormat = "2006-01-02T15:04:05-0700"
+)
+
 var verbose = flag.Bool("v", false, "verbose output")
 var csvOut = flag.Bool("csv", false, "csv output")
 var limit = flag.Int("limit", 50, "limit number of transactions returned")
+var startDateStr = flag.String("start-date", "none", "only include transactions after this datetime  [ISO 8601]")
 var walletProvider = flag.String("provider", "uphold", "provider for the source wallet")
 var signed = flag.Bool("signed", false, "signed value depending on transaction direction")
 
@@ -41,6 +47,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	var err error
+	startDate := time.Unix(0, 0)
+	if *startDateStr != "none" {
+		startDate, err = time.Parse(dateFormat, *startDateStr)
+		if err != nil {
+			log.Fatalf("%s is not a valid ISO 8601 datetime\n", *startDateStr)
+		}
+	}
+
 	walletc := altcurrency.BAT
 	info := wallet.Info{
 		Provider:    *walletProvider,
@@ -52,7 +67,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	txns, err := w.ListTransactions(*limit)
+	txns, err := w.ListTransactions(*limit, startDate)
 	if err != nil {
 		log.Fatalln(err)
 	}
