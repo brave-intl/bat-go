@@ -17,7 +17,7 @@ is installed then run `make docker`.
 3. [dep](https://github.com/golang/dep) is used to install the dependencies.  If you do not have dep, you need to [install it](https://github.com/golang/dep#setup). On mac:
 `brew install dep`
 
-4. `cd` into `~/go/github.com/brave-intl/bat-go`, then run `dep ensure` to install the dependencies
+4. `cd` into `$GOPATH/src/github.com/brave-intl/bat-go`, then run `dep ensure` to install the dependencies
 
 5. Build via `make`
 
