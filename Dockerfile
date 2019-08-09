@@ -10,5 +10,6 @@ CMD ["go", "run", "bin/grant-server/main.go"]
 FROM alpine:3.6
 RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/grant-server /bin/
+COPY --from=builder /src/migrations/ /migrations/
 EXPOSE 3333
 CMD ["/bin/grant-server"]
