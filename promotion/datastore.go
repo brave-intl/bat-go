@@ -47,6 +47,7 @@ type Datastore interface {
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
 	*sqlx.DB
+	location string
 }
 
 // NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
@@ -57,8 +58,10 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///src/migrations",
-		"postgres", driver)
+		pg.location,
+		"postgres",
+		driver,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +94,13 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 		return nil, err
 	}
 
-	pg := &Postgres{db}
+	location, valid := os.LookupEnv("PG_MIGRATIONS")
+	if !valid {
+		return nil, errors.New("Invalid env var")
+	}
+	pg := &Postgres{db, location}
 
-	if performMigration {
+	if performMigration && location != "" {
 		err = pg.Migrate()
 		if err != nil {
 			return nil, err
@@ -290,10 +297,10 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info) ([]Promotion, error) {
 	statement := `
-	select 
-		promotions.*, 
+	select
+		promotions.*,
 		promotions.active and promotions.remaining_grants > 0 and (
-			( promotions.promotion_type = 'ugp' and claims.id is null ) or 
+			( promotions.promotion_type = 'ugp' and claims.id is null ) or
 			( ( promotion_type = 'ads' or promotions.version < 5 ) and claims.id is not null and not claims.redeemed )
 		) as available
 	from promotions left join claims on promotions.id = claims.promotion_id and claims.wallet_id = $1;`
