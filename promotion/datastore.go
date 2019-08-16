@@ -47,7 +47,6 @@ type Datastore interface {
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
 	*sqlx.DB
-	location string
 }
 
 // NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
@@ -57,8 +56,9 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 		return nil, err
 	}
 
+	dbMigrationsUrl := os.Getenv("DATABASE_MIGRATIONS_URL")
 	m, err := migrate.NewWithDatabaseInstance(
-		pg.location,
+		dbMigrationsUrl,
 		"postgres",
 		driver,
 	)
@@ -94,13 +94,9 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 		return nil, err
 	}
 
-	location, valid := os.LookupEnv("PG_MIGRATIONS")
-	if !valid {
-		return nil, errors.New("Invalid env var")
-	}
-	pg := &Postgres{db, location}
+	pg := &Postgres{db}
 
-	if performMigration && location != "" {
+	if performMigration {
 		err = pg.Migrate()
 		if err != nil {
 			return nil, err
