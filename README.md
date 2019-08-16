@@ -3,22 +3,35 @@
 [![Build
 Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://travis-ci.org/brave-intl/bat-go)
 
-## Building using docker
-
-You can build a docker image without installing the go toolchain. Ensure docker
-is installed then run `make docker`.
-
 ## Developer Setup
 
 1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
 
-2. Run `go get -d github.com/brave-intl/bat-go`.
+2. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
 
-3. [dep](https://github.com/golang/dep) is used to install the dependencies.  If you do not have dep, you need to [install it](https://github.com/golang/dep#setup). On mac:
-`brew install dep`
+3. Build via `make`
 
-4. `cd` into `~/go/github.com/brave-intl/bat-go`, then run `dep ensure` to install the dependencies
+## Full environment via docker-compose
 
-5. Build via `make`
+Ensure docker and docker-compose are installed. 
 
-6. Run the server executable `./grant-server`
+Ensure that your `.env` file is populated with values for each of the
+env vars that does not have a default in `docker-compose.yml`.
+
+### Local prod-like environment
+
+To bring up a prod-like environment, run `docker-compose up -d`.
+
+### Local dev environment
+
+To bring up a dev environment, run `make docker-up`.
+
+This brings up an additional vault service, used for integration testing of
+some auxiliary binaries.
+
+You can run the unit and integration tests via `make docker-test`
+
+## Building a prod image using docker
+
+You can build a docker image without installing the go toolchain. Ensure docker
+is installed then run `make docker`.

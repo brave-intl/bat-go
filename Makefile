@@ -1,4 +1,5 @@
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
+VAULT_TOKEN := $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 )
 VAULT_VERSION=0.10.1
 _BINS := $(wildcard bin/*)
 ifdef GOOS
@@ -21,6 +22,12 @@ target/%:
 docker:
 	docker build -t bat-go:latest .
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
+
+docker-up-dev:
+	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+docker-test:
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web go test --tags=integration ./...
 
 mac:
 	GOOS=darwin GOARCH=amd64 make bins
