@@ -81,7 +81,7 @@ func init() {
 		proxy = nil
 	}
 	client = &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 60,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
 				Proxy:   proxy,
