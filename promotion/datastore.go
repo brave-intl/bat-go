@@ -56,9 +56,12 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 		return nil, err
 	}
 
+	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///src/migrations",
-		"postgres", driver)
+		dbMigrationsURL,
+		"postgres",
+		driver,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -290,10 +293,10 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info) ([]Promotion, error) {
 	statement := `
-	select 
-		promotions.*, 
+	select
+		promotions.*,
 		promotions.active and promotions.remaining_grants > 0 and (
-			( promotions.promotion_type = 'ugp' and claims.id is null ) or 
+			( promotions.promotion_type = 'ugp' and claims.id is null ) or
 			( ( promotion_type = 'ads' or promotions.version < 5 ) and claims.id is not null and not claims.redeemed )
 		) as available
 	from promotions left join claims on promotions.id = claims.promotion_id and claims.wallet_id = $1;`
