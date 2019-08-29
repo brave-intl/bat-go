@@ -2,7 +2,6 @@ package grant
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/jmoiron/sqlx"
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -31,35 +31,148 @@ type Datastore interface {
 
 // Postgres is a WIP Datastore
 type Postgres struct {
-	*sql.DB
+	*sqlx.DB
+}
+
+// NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
+func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
+	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
+	m, err := migrate.NewWithDatabaseInstance(
+		dbMigrationsURL,
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return m, err
+}
+
+// Migrate the Postgres instance
+func (pg *Postgres) Migrate() error {
+	m, err := pg.NewMigrate()
+	if err != nil {
+		return err
+	}
+
+	err = m.Migrate(1)
+	if err != migrate.ErrNoChange && err != nil {
+		return err
+	}
+	return nil
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string) (*Postgres, error) {
+func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	if len(databaseURL) == 0 {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
 
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := sqlx.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	pg := &Postgres{db}
+
+	if performMigration {
+		err = pg.Migrate()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return pg, nil
+}
+
+// GetClaimantProviderID returns the providerID who has claimed a given grant
+func (pg *Postgres) GetClaimantProviderID(grant Grant) (string, error) {
+	wallet, err := pg.GetClaimant(grant)
+	if wallet != nil {
+		return wallet.ProviderID, err
+	}
+	return "", err
+}
+
+// GetClaimant returns info about the wallet which has claimed a given grant
+func (pg *Postgres) GetClaimant(grant Grant) (*wallet.Info, error) {
+	statement := `
+	select
+		wallets.*
+	from wallets left join claims on wallets.id = claims.wallet_id and claims.id = $1;`
+	wallets := []wallet.Info{}
+
+	err := pg.DB.Select(&wallets, statement, grant.GrantID)
 	if err != nil {
 		return nil, err
 	}
-	m, err := migrate.NewWithDatabaseInstance(
-		"file:///src/migrations",
-		"postgres", driver)
+
+	if len(wallets) > 0 {
+		return &wallets[0], nil
+	}
+
+	return nil, nil
+}
+
+// RedeemGrantForWallet redeems a claimed grant for a wallet
+func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
+	// FIXME should this limit version?
+	statement := `
+	update claims
+	set redeemed = true
+	where grant_id = $1 and promotion_id = $2 and wallet_id = $2
+	returning *`
+
+	res, err := pg.DB.Exec(statement, grant.GrantID, grant.PromotionID, wallet.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	err = m.Migrate(1)
-	if err != migrate.ErrNoChange && err != nil {
-		return nil, err
+
+	grantCount, err := res.RowsAffected()
+	if err != nil {
+		return err
+	} else if grantCount < 1 {
+		return errors.New("no matching claimed grant")
+	} else if grantCount > 1 {
+		return errors.New("more than one matching grant")
 	}
-	return &Postgres{db}, nil
+
+	return nil
+}
+
+// ClaimGrantIDForWallet makes a claim to a particular GrantID by a wallet
+func (pg *Postgres) ClaimGrantIDForWallet(grant Grant, wallet wallet.Info) error {
+	statement := `
+	insert into claims (id, promotion_id, wallet_id, approximate_value)
+	values ($1, $2, $3, $4)
+	returning *`
+
+	value := grant.AltCurrency.FromProbi(grant.Probi)
+
+	_, err := pg.DB.Exec(statement, grant.GrantID, grant.PromotionID, wallet.ID, value)
+	return err
+}
+
+// HasGrantBeenRedeemed checks to see if a grant has been claimed
+func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
+	var redeemed []bool
+
+	err := pg.DB.Select(&redeemed, "select redeemed from claims where grant_id = $1", grant.GrantID)
+	if err != nil {
+		return false, err
+	}
+
+	if len(redeemed) != 1 {
+		return false, errors.New("no matching claimed grant")
+	}
+
+	return redeemed[0], nil
 }
 
 // TODO implement postgres datastore
