@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/utils/closers"
@@ -20,16 +19,12 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	// GetOutstandingGrantCount get the total number of outstanding grant claims that have not expired
-	GetOutstandingGrantCount() (int, error)
-	// GetRedeemedCountByPromotion get the count of redeemed grants by promotionID
-	GetRedeemedCountByPromotion() (map[string]int, error)
 	// GetClaimantID returns the providerID who has claimed a given grant
 	GetClaimantProviderID(grant Grant) (string, error)
 	// RedeemGrantForWallet redeems a claimed grant for a wallet
 	RedeemGrantForWallet(grant Grant, wallet wallet.Info) error
-	// ClaimGrantIDForWallet makes a claim to a particular GrantID by a wallet
-	ClaimGrantIDForWallet(grantID string, wallet wallet.Info) error
+	// ClaimGrantForWallet makes a claim to a particular Grant by a wallet
+	ClaimGrantForWallet(grant Grant, wallet wallet.Info) error
 	// HasGrantBeenRedeemed checks to see if a grant has been claimed
 	HasGrantBeenRedeemed(grant Grant) (bool, error)
 }
@@ -85,39 +80,6 @@ type Redis struct {
 	*redis.Pool
 }
 
-// GetOutstandingGrantCount get the totall number of outstanding grant claims that have not expired
-func (redis *Redis) GetOutstandingGrantCount() (int, error) {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	kv := datastore.GetRedisKv(&conn)
-	return kv.Count("grant:*")
-}
-
-// GetRedeemedCountByPromotion get the count of redeemed grants by promotionID
-func (redis *Redis) GetRedeemedCountByPromotion() (map[string]int, error) {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	kv := datastore.GetRedisKv(&conn)
-
-	promotions, err := kv.Keys("promotion:*:grants")
-	if err != nil {
-		return nil, err
-	}
-
-	m := make(map[string]int)
-	for i := 0; i < len(promotions); i++ {
-		promotionSet := datastore.GetRedisSet(&conn, promotions[i])
-		promotionID := strings.TrimSuffix(strings.TrimPrefix(promotions[i], "promotion:"), ":grants")
-		completedCount, err := promotionSet.Cardinality()
-		if err != nil {
-			return nil, err
-		}
-		m[promotionID] = completedCount
-	}
-
-	return m, nil
-}
-
 // GetClaimantProviderID returns the providerID who has claimed a given grant
 func (redis *Redis) GetClaimantProviderID(grant Grant) (string, error) {
 	conn := redis.Pool.Get()
@@ -162,13 +124,13 @@ func redeemGrantForWallet(redeemedGrants datastore.SetLikeDatastore, redeemedWal
 	return nil
 }
 
-// ClaimGrantIDForWallet makes a claim to a particular GrantID by a wallet
-func (redis *Redis) ClaimGrantIDForWallet(grantID string, wallet wallet.Info) error {
+// ClaimGrantForWallet makes a claim to a particular GrantID by a wallet
+func (redis *Redis) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 	conn := redis.Pool.Get()
 	defer closers.Panic(conn)
 	kv := datastore.GetRedisKv(&conn)
 
-	return claimGrantIDForWallet(&kv, grantID, wallet)
+	return claimGrantIDForWallet(&kv, grant.GrantID.String(), wallet)
 }
 
 func claimGrantIDForWallet(kv datastore.KvDatastore, grantID string, wallet wallet.Info) error {
@@ -201,16 +163,6 @@ func hasGrantBeenRedeemed(redeemedGrants datastore.SetLikeDatastore, grant Grant
 type InMemory struct {
 }
 
-// GetOutstandingGrantCount get the totall number of outstanding grant claims that have not expired
-func (inmem *InMemory) GetOutstandingGrantCount() (int, error) {
-	return 0, nil
-}
-
-// GetRedeemedCountByPromotion get the count of redeemed grants by promotionID
-func (inmem *InMemory) GetRedeemedCountByPromotion() (map[string]int, error) {
-	return make(map[string]int), nil
-}
-
 // GetClaimantProviderID returns the providerID who has claimed a given grant
 func (inmem *InMemory) GetClaimantProviderID(grant Grant) (string, error) {
 	kv, err := datastore.GetKvDatastore(context.Background())
@@ -236,14 +188,14 @@ func (inmem *InMemory) RedeemGrantForWallet(grant Grant, wallet wallet.Info) err
 	return redeemGrantForWallet(redeemedGrants, redeemedWallets, grant, wallet)
 }
 
-// ClaimGrantIDForWallet makes a claim to a particular GrantID by a wallet
-func (inmem *InMemory) ClaimGrantIDForWallet(grantID string, wallet wallet.Info) error {
+// ClaimGrantForWallet makes a claim to a particular Grant by a wallet
+func (inmem *InMemory) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 	kv, err := datastore.GetKvDatastore(context.Background())
 	if err != nil {
 		return err
 	}
 
-	return claimGrantIDForWallet(kv, grantID, wallet)
+	return claimGrantIDForWallet(kv, grant.GrantID.String(), wallet)
 }
 
 // HasGrantBeenRedeemed checks to see if a grant has been claimed

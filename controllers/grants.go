@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
+	uuid "github.com/satori/go.uuid"
 )
 
 // GrantsRouter is the router for grant endpoints
@@ -31,7 +32,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	} else {
 		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service)))
 	}
-	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrant(service)))
+	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
 }
@@ -46,8 +47,8 @@ func Status(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return nil
 }
 
-// ClaimGrant is the handler for claiming grants
-func ClaimGrant(service *grant.Service) handlers.AppHandler {
+// ClaimGrantWithGrantID is the handler for claiming grants
+func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		defer closers.Panic(r.Body)
 
@@ -56,7 +57,7 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error reading body", 0)
 		}
 
-		var req grant.ClaimGrantRequest
+		var req grant.ClaimGrantWithGrantIDRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error unmarshalling body", 0)
@@ -79,7 +80,13 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 				}
 			}
 
-			err = service.Claim(r.Context(), &req, grantID)
+			var grant grant.Grant
+			grant.GrantID, err = uuid.FromString(grantID)
+			if err != nil {
+				return handlers.WrapError("Error claiming grant", err)
+			}
+
+			err = service.Claim(r.Context(), &req, grant)
 			if err != nil {
 				// FIXME not all errors are 4xx
 				return handlers.WrapError(err, "Error claiming grant", 0)

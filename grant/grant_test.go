@@ -100,14 +100,16 @@ func TestVerifyAndConsume(t *testing.T) {
 
 	transaction := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
-	grantID := "18f7cada-2e9c-4c6e-a541-b2032c43a92e"
+	grantID, _ := uuid.FromString("18f7cada-2e9c-4c6e-a541-b2032c43a92e")
+	var grant Grant
+	grant.GrantID = grantID
 
 	logger := logrus.New()
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 
-	claimReq := ClaimGrantRequest{WalletInfo: walletInfo}
-	err = service.Claim(ctx, &claimReq, grantID)
+	claimReq := ClaimGrantWithGrantIDRequest{WalletInfo: walletInfo}
+	err = service.Claim(ctx, &claimReq, grant)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -132,8 +134,8 @@ func TestVerifyAndConsume(t *testing.T) {
 		t.Error(err)
 	}
 
-	claimReq = ClaimGrantRequest{WalletInfo: walletInfo}
-	err = service.Claim(ctx, &claimReq, grantID)
+	claimReq = ClaimGrantWithGrantIDRequest{WalletInfo: walletInfo}
+	err = service.Claim(ctx, &claimReq, grant)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -152,7 +154,10 @@ func TestVerifyAndConsume(t *testing.T) {
 	grants = []string{"eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI1MzZjNWZhZC0zYWJiLTQwM2UtOWI5Mi1kNjE5ZDc0YjNhZjQiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiJmNmQwNDg0Yy1kNzA5LTRjYTYtOWJhMS1lN2Q5MTI3YTQxOTAiLCJtYXR1cml0eVRpbWUiOjE1MTQ5MjM3MTMsImV4cGlyeVRpbWUiOjIyOTI2MTAxMTN9.Y5QruXFJVV0qqRauP3ah4UAHk6TgtNPySkbq3VBv3dCKpAvYmSnfBRipKjVCicP2s0lQQn8Rcu3aIP4VDBCjDQ"}
 
 	// claim this grant as well to ensure we are testing re-redeem with same wallet and promotion
-	err = service.Claim(ctx, &claimReq, "f87e7fb4-0f80-40ad-b092-84f70e448421")
+	grantID2, _ := uuid.FromString("f87e7fb4-0f80-40ad-b092-84f70e448421")
+	var grant2 Grant
+	grant2.GrantID = grantID2
+	err = service.Claim(ctx, &claimReq, grant2)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -167,7 +172,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	if err != nil {
 		t.Error("Unable to check RedeemedIDs")
 	}
-	expectedRedeemedIDs := []string{grantID}
+	expectedRedeemedIDs := []string{grantID.String()}
 	if !reflect.DeepEqual(redeemedIDs, expectedRedeemedIDs) {
 		t.Error("IDs do not match")
 	}
