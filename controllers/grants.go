@@ -32,6 +32,8 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	} else {
 		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service)))
 	}
+	// Hacky compatibility layer between for legacy grants and new datastore
+	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", ClaimGrant(service)))
 	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
@@ -47,7 +49,38 @@ func Status(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return nil
 }
 
-// ClaimGrantWithGrantID is the handler for claiming grants
+// ClaimGrant is the handler for claiming grants
+func ClaimGrant(service *grant.Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		defer closers.Panic(r.Body)
+
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return handlers.WrapError("Error reading body", err)
+		}
+
+		var req grant.ClaimGrantRequest
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			return handlers.WrapError("Error unmarshalling body", err)
+		}
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.Claim(r.Context(), req.WalletInfo, req.Grant)
+		if err != nil {
+			// FIXME not all errors are 4xx
+			return handlers.WrapError("Error claiming grant", err)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
+// ClaimGrantWithGrantID is the handler for claiming grants using only a grant id
 func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		defer closers.Panic(r.Body)
@@ -86,7 +119,7 @@ func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 				return handlers.WrapError("Error claiming grant", err)
 			}
 
-			err = service.Claim(r.Context(), &req, grant)
+			err = service.Claim(r.Context(), req.WalletInfo, grant)
 			if err != nil {
 				// FIXME not all errors are 4xx
 				return handlers.WrapError(err, "Error claiming grant", 0)

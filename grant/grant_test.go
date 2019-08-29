@@ -108,8 +108,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	ctx := context.Background()
 	ctx = lg.WithLoggerContext(ctx, logger)
 
-	claimReq := ClaimGrantWithGrantIDRequest{WalletInfo: walletInfo}
-	err = service.Claim(ctx, &claimReq, grant)
+	err = service.Claim(ctx, walletInfo, grant)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -134,8 +133,7 @@ func TestVerifyAndConsume(t *testing.T) {
 		t.Error(err)
 	}
 
-	claimReq = ClaimGrantWithGrantIDRequest{WalletInfo: walletInfo}
-	err = service.Claim(ctx, &claimReq, grant)
+	err = service.Claim(ctx, walletInfo, grant)
 	if err != nil {
 		t.Error("Claim failed")
 	}
@@ -157,7 +155,7 @@ func TestVerifyAndConsume(t *testing.T) {
 	grantID2, _ := uuid.FromString("f87e7fb4-0f80-40ad-b092-84f70e448421")
 	var grant2 Grant
 	grant2.GrantID = grantID2
-	err = service.Claim(ctx, &claimReq, grant2)
+	err = service.Claim(ctx, walletInfo, grant2)
 	if err != nil {
 		t.Error("Claim failed")
 	}
