@@ -26,9 +26,16 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // WrapError with an additional message as an AppError
-func WrapError(msg string, err error) *AppError {
+func WrapError(err error, msg string, code int) *AppError {
 	// FIXME err should probably be first
-	return &AppError{Error: err, Message: msg, Code: http.StatusBadRequest}
+	if code == 0 {
+		code = http.StatusBadRequest
+	}
+	return &AppError{
+		Error:   err,
+		Message: msg,
+		Code:    code,
+	}
 }
 
 // WrapValidationError from govalidator
