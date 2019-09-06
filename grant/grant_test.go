@@ -23,7 +23,7 @@ func TestFromCompactJWS(t *testing.T) {
 	registerGrantInstrumentation = false
 	_, err := InitService(nil, nil)
 	if err != nil {
-		t.Error("unexpected error")
+		t.Fatal("unexpected error", err)
 	}
 
 	expectedGrantJSON := []byte(`{"altcurrency":"BAT","grantId":"9614ade7-58af-4df0-86c6-2f70051b43de","probi":"30000000000000000000","promotionId":"880309fc-df27-40a8-8d51-9cf39885e61d","maturityTime":1511769862,"expiryTime":1513843462}`)
@@ -33,17 +33,16 @@ func TestFromCompactJWS(t *testing.T) {
 	expectedGrant := Grant{}
 	err = json.Unmarshal(expectedGrantJSON, &expectedGrant)
 	if err != nil {
-		t.Error("unexpected error")
+		t.Fatal("unexpected error", err)
 	}
 
 	grant, err := FromCompactJWS(grantPublicKey, jwsGrant)
 	if err != nil {
-		t.Error("unexpected error")
-		t.Error(err)
+		t.Fatal("unexpected error", err)
 	}
 
 	if !reflect.DeepEqual(*grant, expectedGrant) {
-		t.Error("grant not equal")
+		t.Fatal("grant not equal", err)
 	}
 
 	// TODO add incorrect signature tests

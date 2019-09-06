@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/pkg/errors"
 	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -28,7 +29,12 @@ type ClaimGrantRequest struct {
 func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Grant) error {
 	log := lg.Log(ctx)
 
-	err := service.datastore.ClaimGrantForWallet(grant, wallet)
+	err := service.datastore.UpsertWallet(&wallet)
+	if err != nil {
+		return errors.Wrap(err, "Error saving wallet")
+	}
+
+	err = service.datastore.ClaimGrantForWallet(grant, wallet)
 	if err != nil {
 		log.Error("Attempt to claim previously claimed grant!")
 		return err

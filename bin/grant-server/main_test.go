@@ -18,6 +18,7 @@ import (
 
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
@@ -70,11 +71,25 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func claim(t *testing.T, server *httptest.Server, grantID uuid.UUID, cardID uuid.UUID) error {
-	payload := fmt.Sprintf(`{"wallet": {"altcurrency":"BAT", "provider":"uphold", "providerId":"%s"}}`, cardID.String())
-	claimURL := fmt.Sprintf("%s/v1/grants/%s", server.URL, grantID.String())
+func claim(t *testing.T, server *httptest.Server, grant grant.Grant, wallet wallet.Info) error {
+	payload := fmt.Sprintf(`{
+			"wallet": {
+				"altcurrency": "BAT", 
+				"provider": "uphold", 
+				"paymentId": "%s",
+				"providerId": "%s",
+				"publicKey": "%s"
+			},
+			"grant": {
+				"grantId": "%s",
+				"altcurrency": "BAT",
+				"probi": "%s",
+				"promotionId": "%s"
+			}
+		}`, wallet.ID, wallet.ProviderID, wallet.PublicKey, grant.GrantID.String(), grant.Probi.String(), grant.PromotionID.String())
+	claimURL := fmt.Sprintf("%s/v1/grants/claim", server.URL)
 
-	req, err := http.NewRequest("PUT", claimURL, bytes.NewBuffer([]byte(payload)))
+	req, err := http.NewRequest("POST", claimURL, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return err
 	}
@@ -88,7 +103,11 @@ func claim(t *testing.T, server *httptest.Server, grantID uuid.UUID, cardID uuid
 	}
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("Received non-200 response: %d\n", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			body = []byte("")
+		}
+		return fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
 	}
 	return nil
 }
@@ -97,14 +116,35 @@ func TestClaim(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	grantID := uuid.NewV4()
-	cardID := uuid.NewV4()
-
-	err := claim(t, server, grantID, cardID)
+	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = claim(t, server, grantID, uuid.NewV4())
+
+	value := decimal.NewFromFloat(30.0)
+	numGrants := 10
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var grant grant.Grant
+	grant.GrantID = uuid.NewV4()
+	grant.Probi = altcurrency.BAT.ToProbi(value)
+	grant.PromotionID = promotion.ID
+
+	var wallet wallet.Info
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+
+	err = claim(t, server, grant, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, grant, wallet)
 	if err == nil {
 		t.Fatal("Expected re-claim of the same grant to a different card to fail")
 	}
@@ -112,6 +152,7 @@ func TestClaim(t *testing.T) {
 
 func generateWallet(t *testing.T) *uphold.Wallet {
 	var info wallet.Info
+	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
 	info.ProviderID = ""
 	{
@@ -136,15 +177,23 @@ func TestRedeem(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	userWallet := generateWallet(t)
-	cardID, err := uuid.FromString(userWallet.Info.ProviderID)
+	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
-		log.Fatalln(err)
+		t.Fatal(err)
 	}
+
+	userWallet := generateWallet(t)
 
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: privateKey}, nil)
 	if err != nil {
 		log.Fatalln(err)
+	}
+
+	value := decimal.NewFromFloat(30.0)
+	numGrants := 1
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	maturityDate := time.Now()
@@ -155,8 +204,8 @@ func TestRedeem(t *testing.T) {
 
 	grantTemplate := grant.Grant{
 		AltCurrency:       &altCurrency,
-		Probi:             altcurrency.BAT.ToProbi(decimal.NewFromFloat(30)),
-		PromotionID:       uuid.NewV4(),
+		Probi:             altcurrency.BAT.ToProbi(value),
+		PromotionID:       promotion.ID,
 		MaturityTimestamp: maturityDate.Unix(),
 		ExpiryTimestamp:   expiryDate.Unix(),
 	}
@@ -170,9 +219,7 @@ func TestRedeem(t *testing.T) {
 		log.Fatalln(err)
 	}
 
-	grantID := g.GrantID
-
-	err = claim(t, server, grantID, cardID)
+	err = claim(t, server, *g, userWallet.Info)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,6 +253,8 @@ func TestRedeem(t *testing.T) {
 	}
 
 	if resp.StatusCode != 200 {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		t.Error(string(bodyBytes))
 		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
 	}
 }

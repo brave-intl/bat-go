@@ -13,14 +13,14 @@ import (
 
 // Grant - a "check" good for the amount inscribed, redeemable between maturityTime and expiryTime
 type Grant struct {
-	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency"`
-	GrantID           uuid.UUID                `json:"grantId"`
-	Probi             decimal.Decimal          `json:"probi"`
-	PromotionID       uuid.UUID                `json:"promotionId"`
-	MaturityTimestamp int64                    `json:"maturityTime"`
-	ExpiryTimestamp   int64                    `json:"expiryTime"`
-	Type              string                   `json:"type,omitempty"`
-	ProviderID        *uuid.UUID               `json:"providerId,omitempty"`
+	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
+	GrantID           uuid.UUID                `json:"grantId" valid:"-"`
+	Probi             decimal.Decimal          `json:"probi" valid:"-"`
+	PromotionID       uuid.UUID                `json:"promotionId" valid:"-"`
+	MaturityTimestamp int64                    `json:"maturityTime" valid:"-"`
+	ExpiryTimestamp   int64                    `json:"expiryTime" valid:"-"`
+	Type              string                   `json:"type,omitempty" valid:"-"`
+	ProviderID        *uuid.UUID               `json:"providerId,omitempty" valid:"-"`
 }
 
 // ByProbi implements sort.Interface for []Grant based on the Probi field.

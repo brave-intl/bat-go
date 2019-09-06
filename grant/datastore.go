@@ -19,6 +19,8 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	// UpsertWallet inserts the given wallet
+	UpsertWallet(wallet *wallet.Info) error
 	// GetClaimantID returns the providerID who has claimed a given grant
 	GetClaimantProviderID(grant Grant) (string, error)
 	// RedeemGrantForWallet redeems a claimed grant for a wallet
@@ -91,6 +93,21 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	return pg, nil
 }
 
+// UpsertWallet upserts the given wallet
+func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
+	statement := `
+	insert into wallets (id, provider, provider_id, public_key)
+	values ($1, $2, $3, $4)
+	on conflict do nothing
+	returning *`
+	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetClaimantProviderID returns the providerID who has claimed a given grant
 func (pg *Postgres) GetClaimantProviderID(grant Grant) (string, error) {
 	wallet, err := pg.GetClaimant(grant)
@@ -105,10 +122,10 @@ func (pg *Postgres) GetClaimant(grant Grant) (*wallet.Info, error) {
 	statement := `
 	select
 		wallets.*
-	from wallets left join claims on wallets.id = claims.wallet_id and claims.id = $1;`
+	from wallets left join claims on wallets.id = claims.wallet_id where claims.id = $1;`
 	wallets := []wallet.Info{}
 
-	err := pg.DB.Select(&wallets, statement, grant.GrantID)
+	err := pg.DB.Select(&wallets, statement, grant.GrantID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -126,10 +143,10 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 	statement := `
 	update claims
 	set redeemed = true
-	where grant_id = $1 and promotion_id = $2 and wallet_id = $2
+	where id = $1 and promotion_id = $2 and wallet_id = $3
 	returning *`
 
-	res, err := pg.DB.Exec(statement, grant.GrantID, grant.PromotionID, wallet.ID)
+	res, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID)
 	if err != nil {
 		return err
 	}
@@ -146,8 +163,8 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 	return nil
 }
 
-// ClaimGrantIDForWallet makes a claim to a particular GrantID by a wallet
-func (pg *Postgres) ClaimGrantIDForWallet(grant Grant, wallet wallet.Info) error {
+// ClaimGrantForWallet makes a claim to a particular GrantID by a wallet
+func (pg *Postgres) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 	statement := `
 	insert into claims (id, promotion_id, wallet_id, approximate_value)
 	values ($1, $2, $3, $4)
@@ -155,7 +172,7 @@ func (pg *Postgres) ClaimGrantIDForWallet(grant Grant, wallet wallet.Info) error
 
 	value := grant.AltCurrency.FromProbi(grant.Probi)
 
-	_, err := pg.DB.Exec(statement, grant.GrantID, grant.PromotionID, wallet.ID, value)
+	_, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID, value)
 	return err
 }
 
@@ -163,7 +180,7 @@ func (pg *Postgres) ClaimGrantIDForWallet(grant Grant, wallet wallet.Info) error
 func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	var redeemed []bool
 
-	err := pg.DB.Select(&redeemed, "select redeemed from claims where grant_id = $1", grant.GrantID)
+	err := pg.DB.Select(&redeemed, "select redeemed from claims where id = $1", grant.GrantID.String())
 	if err != nil {
 		return false, err
 	}
@@ -319,4 +336,9 @@ func (inmem *InMemory) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	}
 
 	return hasGrantBeenRedeemed(redeemedGrants, grant)
+}
+
+// UpsertWallet upserts the given wallet
+func (inmem *InMemory) UpsertWallet(wallet *wallet.Info) error {
+	return nil
 }
