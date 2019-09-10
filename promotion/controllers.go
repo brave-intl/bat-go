@@ -20,6 +20,7 @@ import (
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	r.Method("GET", "/{claimType}/grants/total", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	return r
@@ -231,5 +232,36 @@ func GetClaim(service *Service) handlers.AppHandler {
 		}
 		return nil
 
+	})
+}
+
+// GetClaimSummary returns an summary of grants claimed by a given wallet
+func GetClaimSummary(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		claimType := chi.URLParam(r, "claimType")
+		paymentIDQuery := r.URL.Query().Get("paymentID")
+		paymentID, err := uuid.FromString(paymentIDQuery)
+
+		if err != nil {
+			return handlers.ValidationError("query parameter", map[string]string{
+				"paymentID": "must be a uuidv4",
+			})
+		}
+
+		summary, err := service.datastore.GetClaimSummary(paymentID, claimType)
+		if err != nil {
+			return handlers.WrapError(err, "Error aggregating wallet claims", http.StatusInternalServerError)
+		}
+
+		if summary == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(summary); err != nil {
+			panic(err)
+		}
+		return nil
 	})
 }

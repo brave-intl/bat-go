@@ -30,6 +30,10 @@ type ControllersTestSuite struct {
 	suite.Suite
 }
 
+func TestControllersTestSuite(t *testing.T) {
+	suite.Run(t, new(ControllersTestSuite))
+}
+
 func (suite *ControllersTestSuite) SetupSuite() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -250,6 +254,86 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Assert().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
 }
 
-func TestControllersTestSuite(t *testing.T) {
-	suite.Run(t, new(ControllersTestSuite))
+func (suite *ControllersTestSuite) TestGetClaimSummary() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		datastore: pg,
+	}
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	blindedCreds := JSONStringArray([]string{publicKey})
+	walletID := uuid.NewV4().String()
+	w := &wallet.Info{
+		ID:         walletID,
+		Provider:   "uphold",
+		ProviderID: uuid.NewV4().String(),
+		PublicKey:  publicKey,
+	}
+	err = pg.InsertWallet(w)
+	suite.Assert().NoError(err, "the wallet failed to be inserted")
+
+	// no content returns an empty string on protocol level
+	body, code := suite.checkGetClaimSummary(service, walletID, "ads")
+	suite.Assert().Equal("", body)
+	suite.Assert().Equal(http.StatusNoContent, code)
+
+	// not ignored promotion
+	promotion, claim := suite.setupClaim(service, w, 0)
+
+	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	suite.Assert().NoError(err, "apply claim to wallet")
+
+	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
+	suite.Assert().Equal(http.StatusOK, code)
+	suite.Assert().JSONEq(`{
+		"earnings": "30",
+		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
+		"type": "ads"
+	}`, body, "expected a aggregated claim response")
+
+	// not ignored bonus promotion
+	promotion, claim = suite.setupClaim(service, w, 20)
+
+	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	suite.Assert().NoError(err, "apply claim to wallet")
+
+	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
+	suite.Assert().Equal(http.StatusOK, code)
+	suite.Assert().JSONEq(`{
+		"earnings": "40",
+		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
+		"type": "ads"
+	}`, body, "expected a aggregated claim response")
+}
+
+func (suite *ControllersTestSuite) setupClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
+	promoAmount := decimal.NewFromFloat(25.0)
+	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount)
+	suite.Assert().NoError(err, "a promotion could not be created")
+
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Assert().NoError(err, "a promotion should be activated")
+
+	grantAmount := decimal.NewFromFloat(30.0)
+	claim, err := service.datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	suite.Assert().NoError(err, "create a claim for a promotion")
+
+	return promotion, claim
+}
+
+func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {
+	handler := GetClaimSummary(service)
+	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?walletID="+walletID, nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("walletID", walletID)
+	rctx.URLParams.Add("claimType", claimType)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	return rr.Body.String(), rr.Code
 }
