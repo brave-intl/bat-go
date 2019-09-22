@@ -24,7 +24,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)
 	}
 	if len(os.Getenv("THROTTLE_GRANT_REQUESTS")) > 0 {
-		throttle, err := strconv.ParseInt(os.Getenv("THROTTLE_GRANT_REQUESTS"), 10, 0)
+		throttle, err := strconv.ParseInt(os.Getenv("THROTTLE_GRANT_REQUESTS"), 10, http.StatusBadRequest)
 		if err != nil {
 			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
 		}
@@ -56,13 +56,13 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return handlers.WrapError("Error reading body", err)
+			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
 		}
 
 		var req grant.ClaimGrantRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
-			return handlers.WrapError("Error unmarshalling body", err)
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -72,7 +72,7 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 		err = service.Claim(r.Context(), req.WalletInfo, req.Grant)
 		if err != nil {
 			// FIXME not all errors are 4xx
-			return handlers.WrapError("Error claiming grant", err)
+			return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -87,13 +87,13 @@ func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return handlers.WrapError(err, "Error reading body", 0)
+			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
 		}
 
 		var req grant.ClaimGrantWithGrantIDRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", 0)
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -116,13 +116,13 @@ func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 			var grant grant.Grant
 			grant.GrantID, err = uuid.FromString(grantID)
 			if err != nil {
-				return handlers.WrapError("Error claiming grant", err)
+				return handlers.WrapError(err, "Error claiming grant", http.StatusInternalServerError)
 			}
 
 			err = service.Claim(r.Context(), req.WalletInfo, grant)
 			if err != nil {
 				// FIXME not all errors are 4xx
-				return handlers.WrapError(err, "Error claiming grant", 0)
+				return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
 			}
 		}
 
@@ -138,13 +138,13 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			return handlers.WrapError(err, "Error reading body", 0)
+			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
 		}
 
 		var req grant.RedeemGrantsRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", 0)
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -153,7 +153,7 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 
 		redeemedIDs, err := service.GetRedeemedIDs(r.Context(), req.Grants)
 		if err != nil {
-			return handlers.WrapError(err, "Error checking grant redemption status", 0)
+			return handlers.WrapError(err, "Error checking grant redemption status", http.StatusBadRequest)
 		}
 
 		if len(redeemedIDs) > 0 {
@@ -167,7 +167,7 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 		txInfo, err := service.Redeem(r.Context(), &req)
 		if err != nil {
 			// FIXME not all errors are 4xx
-			return handlers.WrapError(err, "Error redeeming grant", 0)
+			return handlers.WrapError(err, "Error redeeming grant", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
