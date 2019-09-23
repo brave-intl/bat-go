@@ -648,7 +648,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 		return nil, err
 	}
 
-	if uhResp.Destination.Type != "card" {
+	if uhResp.Destination.Type != "card" && uhResp.Destination.Type != "anonymous" {
 		panic("Confirming a non-card transaction is not supported!!!")
 	}
 

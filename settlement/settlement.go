@@ -82,7 +82,7 @@ func checkTransactionAgainstSettlement(settlement *Transaction, txInfo *wallet.T
 	if !settlement.Probi.Equals(txInfo.Probi) {
 		return errors.New("embedded signed transaction probi value does not match")
 	}
-	if settlement.Destination != txInfo.Destination {
+	if len(txInfo.Destination) > 0 && settlement.Destination != txInfo.Destination {
 		return errors.New("embedded signed transaction destination address does not match")
 	}
 
