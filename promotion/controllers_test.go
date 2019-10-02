@@ -280,7 +280,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	suite.Assert().Equal(http.StatusNoContent, code)
 
 	// not ignored promotion
-	promotion, claim := suite.setupClaim(service, w, 0)
+	promotion, claim := suite.setupAdsClaim(service, w, 0)
 
 	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
@@ -294,7 +294,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 
 	// not ignored bonus promotion
-	promotion, claim = suite.setupClaim(service, w, 20)
+	promotion, claim = suite.setupAdsClaim(service, w, 20)
 
 	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
@@ -308,7 +308,8 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 }
 
-func (suite *ControllersTestSuite) setupClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
+func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
+	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
 	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount)
 	suite.Assert().NoError(err, "a promotion could not be created")
