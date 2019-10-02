@@ -276,8 +276,20 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 
 	// no content returns an empty string on protocol level
 	body, code := suite.checkGetClaimSummary(service, walletID, "ads")
-	suite.Assert().Equal("", body)
+	suite.Assert().Equal(``, body)
 	suite.Assert().Equal(http.StatusNoContent, code)
+
+	body, code = suite.checkGetClaimSummary(service, "", "ads")
+	suite.Assert().JSONEq(`{
+		"message": "Error validating query parameter",
+		"code": 400,
+		"data": {
+			"validationErrors": {
+				"paymentID": "must be a uuidv4"
+			}
+		}
+	}`, body, "body should return a payment id validation error")
+	suite.Assert().Equal(http.StatusBadRequest, code)
 
 	// not ignored promotion
 	promotion, claim := suite.setupAdsClaim(service, w, 0)
@@ -326,11 +338,11 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Inf
 
 func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {
 	handler := GetClaimSummary(service)
-	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?walletID="+walletID, nil)
+	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?paymentID="+walletID, nil)
 	suite.Require().NoError(err)
 
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("walletID", walletID)
+	rctx.URLParams.Add("paymentID", walletID)
 	rctx.URLParams.Add("claimType", claimType)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
