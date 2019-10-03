@@ -95,7 +95,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	}
 	handler := GetAvailablePromotions(service)
 
-	req, err := http.NewRequest("GET", "/promotions?paymentId="+walletID.String(), nil)
+	req, err := http.NewRequest("GET", "/promotions?walletID="+walletID.String(), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
 	rr := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	claimReq := ClaimRequest{
-		PaymentID:    walletID,
+		WalletID:     walletID,
 		BlindedCreds: make([]string, promotion.SuggestionsPerGrant),
 	}
 
@@ -285,7 +285,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		"code": 400,
 		"data": {
 			"validationErrors": {
-				"paymentID": "must be a uuidv4"
+				"walletID": "must be a uuidv4"
 			}
 		}
 	}`, body, "body should return a payment id validation error")
@@ -338,11 +338,10 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Inf
 
 func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {
 	handler := GetClaimSummary(service)
-	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?paymentID="+walletID, nil)
+	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?walletID="+walletID, nil)
 	suite.Require().NoError(err)
 
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentID", walletID)
 	rctx.URLParams.Add("claimType", claimType)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 

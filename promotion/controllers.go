@@ -62,21 +62,21 @@ type PromotionsResponse struct {
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		paymentID := r.URL.Query().Get("paymentId")
+		walletID := r.URL.Query().Get("walletID")
 
-		if len(paymentID) == 0 || !govalidator.IsUUIDv4(paymentID) {
+		if len(walletID) == 0 || !govalidator.IsUUIDv4(walletID) {
 			return &handlers.AppError{
 				Message: "Error validating request query parameter",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
 					"validationErrors": map[string]string{
-						"paymentId": "paymentId must be a uuidv4",
+						"walletID": "walletID must be a uuidv4",
 					},
 				},
 			}
 		}
 
-		id, err := uuid.FromString(paymentID)
+		id, err := uuid.FromString(walletID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
@@ -96,7 +96,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	PaymentID    uuid.UUID `json:"paymentId"`
+	WalletID     uuid.UUID `json:"walletID"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
@@ -128,13 +128,13 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up http signature info", 0)
 		}
-		if req.PaymentID.String() != keyID {
+		if req.WalletID.String() != keyID {
 			return &handlers.AppError{
 				Message: "Error validating request",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
 					"validationErrors": map[string]string{
-						"paymentId": "paymentId must match signature",
+						"walletID": "walletID must match signature",
 					},
 				},
 			}
@@ -158,7 +158,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error claiming promotion", 0)
 		}
@@ -239,16 +239,16 @@ func GetClaim(service *Service) handlers.AppHandler {
 func GetClaimSummary(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		claimType := chi.URLParam(r, "claimType")
-		paymentIDQuery := r.URL.Query().Get("paymentID")
-		paymentID, err := uuid.FromString(paymentIDQuery)
+		walletIDQuery := r.URL.Query().Get("walletID")
+		walletID, err := uuid.FromString(walletIDQuery)
 
 		if err != nil {
 			return handlers.ValidationError("query parameter", map[string]string{
-				"paymentID": "must be a uuidv4",
+				"walletID": "must be a uuidv4",
 			})
 		}
 
-		summary, err := service.datastore.GetClaimSummary(paymentID, claimType)
+		summary, err := service.datastore.GetClaimSummary(walletID, claimType)
 		if err != nil {
 			return handlers.WrapError(err, "Error aggregating wallet claims", http.StatusInternalServerError)
 		}
