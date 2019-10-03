@@ -69,6 +69,7 @@ type Claim struct {
 	WalletID         uuid.UUID       `db:"wallet_id"`
 	ApproximateValue decimal.Decimal `db:"approximate_value"`
 	Redeemed         bool            `db:"redeemed"`
+	Bonus            decimal.Decimal `db:"bonus"`
 }
 
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim

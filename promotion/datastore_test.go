@@ -179,7 +179,7 @@ func (suite *PostgresTestSuite) TestClaimForWallet() {
 	w = &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.InsertWallet(w), "Save wallet should succeed")
 
-	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0))
+	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	w2 := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
@@ -236,7 +236,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().True(promotions[0].Available)
 	suite.Assert().False(promotions[1].Available)
 
-	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0))
+	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w)

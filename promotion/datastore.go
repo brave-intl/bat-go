@@ -23,7 +23,7 @@ type Datastore interface {
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 	ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal) (*Claim, error)
+	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -42,6 +42,8 @@ type Datastore interface {
 	InsertWallet(wallet *wallet.Info) error
 	// GetWallet by ID
 	GetWallet(id uuid.UUID) (*wallet.Info, error)
+	// GetClaimSummary gets the number of grants for a specific type
+	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -209,13 +211,13 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 }
 
 // CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal) (*Claim, error) {
+func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error) {
 	statement := `
-	insert into claims (promotion_id, wallet_id, approximate_value)
-	values ($1, $2, $3)
+	insert into claims (promotion_id, wallet_id, approximate_value, bonus)
+	values ($1, $2, $3, $4)
 	returning *`
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, statement, promotionID, walletID, value)
+	err := pg.DB.Select(&claims, statement, promotionID, walletID, value, bonus)
 	if err != nil {
 		return nil, err
 	}
@@ -329,4 +331,34 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 	_, err := pg.DB.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
+}
+
+// GetClaimSummary aggregates the values of a single wallet's claims
+func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error) {
+	query := `
+SELECT
+	MAX(claims.created_at) as "last_claim",
+	SUM(claims.approximate_value - claims.bonus) as earnings,
+	promos.promotion_type as type
+FROM claims, (
+	SELECT
+		id,
+		promotion_type
+	FROM promotions
+	WHERE promotion_type = $2
+) AS promos
+WHERE claims.wallet_id = $1
+	AND claims.redeemed = true
+	AND claims.promotion_id = promos.id
+GROUP BY promos.promotion_type;`
+	summaries := []ClaimSummary{}
+	err := pg.DB.Select(&summaries, query, walletID, grantType)
+	if err != nil {
+		return nil, err
+	}
+	if len(summaries) > 0 {
+		return &summaries[0], nil
+	}
+
+	return nil, nil
 }
