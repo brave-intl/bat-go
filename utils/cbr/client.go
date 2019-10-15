@@ -23,6 +23,7 @@ type Client interface {
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
+	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the challenge bypass server
@@ -173,8 +174,8 @@ func (c *HTTPClient) SignCredentials(ctx context.Context, issuer string, creds [
 	return &resp, err
 }
 
-// CredentialsRedeemRequest is a request to redeem tokens toward some payload
-type CredentialsRedeemRequest struct {
+// CredentialRedeemRequest is a request to redeem a single token toward some payload
+type CredentialRedeemRequest struct {
 	TokenPreimage string `json:"t"`
 	Signature     string `json:"signature"`
 	Payload       string `json:"payload"`
@@ -182,7 +183,32 @@ type CredentialsRedeemRequest struct {
 
 // RedeemCredential that was issued by the specified issuer
 func (c *HTTPClient) RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
-	req, err := c.newRequest(ctx, "POST", "v1/blindedToken/"+issuer+"/redemption/", &CredentialsRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload})
+	req, err := c.newRequest(ctx, "POST", "v1/blindedToken/"+issuer+"/redemption/", &CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload})
+	if err != nil {
+		return err
+	}
+
+	_, err = c.do(req, nil)
+
+	return err
+}
+
+// CredentialRedemption includes info needed to redeem a single token
+type CredentialRedemption struct {
+	Issuer        string `json:"issuer"`
+	TokenPreimage string `json:"t"`
+	Signature     string `json:"signature"`
+}
+
+// CredentialsRedeemRequest is a request to redeem one or more tokens toward some payload
+type CredentialsRedeemRequest struct {
+	Credentials []CredentialRedemption `json:"tokens"`
+	Payload     string                 `json:"payload"`
+}
+
+// RedeemCredentials that were issued by the specified issuer
+func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error {
+	req, err := c.newRequest(ctx, "POST", "v1/blindedToken/bulk/redemption/", &CredentialsRedeemRequest{Credentials: credentials, Payload: payload})
 	if err != nil {
 		return err
 	}
