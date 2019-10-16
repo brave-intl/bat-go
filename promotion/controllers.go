@@ -20,9 +20,17 @@ import (
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("GET", "/{claimType}/grants/total", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
+	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
+	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+	return r
+}
+
+// SuggestionsRouter for suggestions endpoints
+func SuggestionsRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
 	return r
 }
 
@@ -262,6 +270,51 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 		if err := json.NewEncoder(w).Encode(summary); err != nil {
 			panic(err)
 		}
+		return nil
+	})
+}
+
+// SuggestionRequest includes a suggestion payload and credentials to be redeemed
+type SuggestionRequest struct {
+	Suggestion  string              `json:"suggestion" valid:"base64"`
+	Credentials []CredentialBinding `json:"credentials" valid:"base64"`
+}
+
+// MakeSuggestion is the handler for making a suggestion using credentials
+func MakeSuggestion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		limit := int64(1024 * 1024 * 10) // 10MiB
+		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
+		if err != nil {
+			// FIXME
+			return handlers.WrapError(err, "Error reading body", 0)
+		}
+
+		var req SuggestionRequest
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			// FIXME
+			return handlers.WrapError(err, "Error unmarshalling body", 0)
+		}
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.Suggest(r.Context(), req.Credentials, req.Suggestion)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME
+				return handlers.WrapError(err, "Error making suggestion", 0)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
 		return nil
 	})
 }

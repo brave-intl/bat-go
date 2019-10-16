@@ -254,6 +254,10 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Assert().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
 }
 
+func (suite *ControllersTestSuite) TestSuggest() {
+	// FIXME
+}
+
 func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
