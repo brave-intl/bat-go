@@ -107,7 +107,24 @@ func (suite *PostgresTestSuite) TestInsertIssuer() {
 }
 
 func (suite *PostgresTestSuite) TestGetIssuer() {
-	// FIXME
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+
+	promotion, err := pg.CreatePromotion("ugp", 10, decimal.NewFromFloat(25.0))
+	suite.Assert().NoError(err, "Create promotion should succeed")
+
+	origIssuer := &Issuer{PromotionID: promotion.ID, Cohort: "test", PublicKey: publicKey}
+	suite.Assert().NoError(pg.InsertIssuer(origIssuer), "Save issuer should succeed")
+
+	issuerByPromoAndCohort, err := pg.GetIssuer(promotion.ID, "test")
+	suite.Assert().NoError(err, "Get issuer should succeed")
+	suite.Assert().Equal(origIssuer, issuerByPromoAndCohort)
+
+	issuerByPublicKey, err := pg.GetIssuerByPublicKey(publicKey)
+	suite.Assert().NoError(err, "Get issuer by public key should succeed")
+	suite.Assert().Equal(origIssuer, issuerByPublicKey)
 }
 
 func (suite *PostgresTestSuite) TestInsertWallet() {
