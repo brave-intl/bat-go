@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/cbr/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
 	"github.com/brave-intl/bat-go/wallet"
@@ -197,52 +199,19 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) TestClaimGrant() {
-	pg, err := NewPostgres("", false)
-	suite.Require().NoError(err, "Failed to get postgres conn")
-
-	cbClient, err := cbr.New()
-	suite.Require().NoError(err, "Failed to create challenge bypass client")
-
-	mockCtrl := gomock.NewController(suite.T())
-	defer mockCtrl.Finish()
-
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	suite.Require().NoError(err, "Failed to create wallet keypair")
-
-	walletID := uuid.NewV4()
-	bat := altcurrency.BAT
-	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
-	}
-
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
-
-	service := &Service{
-		datastore:    pg,
-		cbClient:     cbClient,
-		ledgerClient: mockLedger,
-	}
+func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
-	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
-	suite.Require().NoError(err, "Failed to activate promotion")
+	// promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	// suite.Require().NoError(err, "Failed to create promotion")
+	// err = service.datastore.ActivatePromotion(promotion)
+	// suite.Require().NoError(err, "Failed to activate promotion")
+	walletID, err := uuid.FromString(wallet.ID)
+	suite.Require().NoError(err)
 
 	claimReq := ClaimRequest{
 		PaymentID:    walletID,
-		BlindedCreds: make([]string, promotion.SuggestionsPerGrant),
-	}
-
-	for i := range claimReq.BlindedCreds {
-		claimReq.BlindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
+		BlindedCreds: blindedCreds,
 	}
 
 	body, err := json.Marshal(&claimReq)
@@ -305,8 +274,165 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Assert().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
 }
 
+func (suite *ControllersTestSuite) TestClaimGrant() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	cbClient, err := cbr.New()
+	suite.Require().NoError(err, "Failed to create challenge bypass client")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	wallet := wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	service := &Service{
+		datastore:    pg,
+		cbClient:     cbClient,
+		ledgerClient: mockLedger,
+	}
+
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0))
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	blindedCreds := make([]string, promotion.SuggestionsPerGrant)
+	for i := range blindedCreds {
+		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
+	}
+
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+}
+
 func (suite *ControllersTestSuite) TestSuggest() {
-	// FIXME
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	wallet := wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	ch := make(chan SuggestionEvent)
+	service := &Service{
+		datastore:    pg,
+		cbClient:     mockCB,
+		ledgerClient: mockLedger,
+		eventChannel: ch,
+	}
+
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25))
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokens)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+
+	handler := MakeSuggestion(service)
+
+	suggestion := Suggestion{
+		Type:    "oneoff-tip",
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	suggestionReq := SuggestionRequest{
+		Suggestion: suggestionPayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(suggestionPayload)).Return(nil)
+
+	body, err := json.Marshal(&suggestionReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	// wait for suggestion event
+	suggestionEvent := <-ch
+	suggestionEventJSON, err := json.Marshal(&suggestionEvent)
+	suite.Require().NoError(err)
+
+	suite.Assert().JSONEq(`{
+		"type": "`+suggestion.Type+`",
+		"channel": "`+suggestion.Channel+`",
+		"totalAmount": "0.25",
+		"funding": [
+			{
+				"type": "ugp",
+				"amount": "0.25",
+				"cohort": "control",
+				"promotion": "`+promotion.ID.String()+`"
+			}
+		]
+	}`, string(suggestionEventJSON), "Incorrect suggestion event")
 }
 
 func (suite *ControllersTestSuite) TestGetClaimSummary() {

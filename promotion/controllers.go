@@ -286,7 +286,7 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 // SuggestionRequest includes a suggestion payload and credentials to be redeemed
 type SuggestionRequest struct {
 	Suggestion  string              `json:"suggestion" valid:"base64"`
-	Credentials []CredentialBinding `json:"credentials" valid:"base64"`
+	Credentials []CredentialBinding `json:"credentials"`
 }
 
 // MakeSuggestion is the handler for making a suggestion using credentials

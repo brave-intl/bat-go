@@ -16,8 +16,8 @@ import (
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
 	PublicKey     string `json:"publicKey" valid:"base64"`
-	TokenPreimage string `json:"t" valid:"preimage"`
-	Signature     string `json:"signature" valid:"signature"`
+	TokenPreimage string `json:"t" valid:"base64"`
+	Signature     string `json:"signature" valid:"base64"`
 }
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
@@ -56,17 +56,17 @@ func (s *Suggestion) Base64Decode(text string) error {
 
 // FundingSource describes where funds for this suggestion should come from
 type FundingSource struct {
-	Type        string
-	Amount      decimal.Decimal
-	Cohort      string
-	PromotionID uuid.UUID
+	Type        string          `json:"type"`
+	Amount      decimal.Decimal `json:"amount"`
+	Cohort      string          `json:"cohort"`
+	PromotionID uuid.UUID       `json:"promotion"`
 }
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
 type SuggestionEvent struct {
 	Suggestion
-	TotalAmount decimal.Decimal
-	Funding     []FundingSource
+	TotalAmount decimal.Decimal `json:"totalAmount"`
+	Funding     []FundingSource `json:"funding"`
 }
 
 // Suggest that a contribution is made
@@ -143,5 +143,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		// FIXME
 		fmt.Println(err)
 	}
+
+	service.eventChannel <- suggestion
 	// TODO emit event
 }
