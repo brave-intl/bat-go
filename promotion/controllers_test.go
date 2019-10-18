@@ -103,16 +103,16 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	promotionJSON := func(available bool, promotion *Promotion) string {
 		return `{
-      "approximateValue": "` + promotion.ApproximateValue.String() + `",
-      "available": ` + strconv.FormatBool(available) + `,
-      "createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
-      "expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
-      "id": "` + promotion.ID.String() + `",
-      "platform": "` + promotion.Platform + `",
-      "suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
-      "type": "ugp",
-      "version": 5
-    }`
+			"approximateValue": "` + promotion.ApproximateValue.String() + `",
+			"available": ` + strconv.FormatBool(available) + `,
+			"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
+			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
+			"id": "` + promotion.ID.String() + `",
+			"platform": "` + promotion.Platform + `",
+			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
+			"type": "ugp",
+			"version": 5
+		}`
 	}
 
 	reqFailure, err := http.NewRequest("GET", url("noexist"), nil)
@@ -153,10 +153,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedOSX := `{
-    "promotions": [
-    	` + promotionJSON(false, promotionGeneric) + `,
-    	` + promotionJSON(false, promotionScoped) + `
-    ]
+		"promotions": [
+			` + promotionJSON(false, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
@@ -164,10 +164,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	handler.ServeHTTP(rr, reqAndroid)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedAndroid := `{
-    "promotions": [
-    	` + promotionJSON(false, promotionGeneric) + `,
-    	` + promotionJSON(false, promotionScoped) + `
-    ]
+		"promotions": [
+			` + promotionJSON(false, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 
@@ -178,10 +178,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
-    "promotions": [
-    	` + promotionJSON(true, promotionGeneric) + `,
-    	` + promotionJSON(false, promotionScoped) + `
-    ]
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
@@ -189,10 +189,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	handler.ServeHTTP(rr, reqAndroid)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedAndroid = `{
-    "promotions": [
-	    ` + promotionJSON(true, promotionGeneric) + `,
-    	` + promotionJSON(false, promotionScoped) + `
-    ]
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 }
@@ -248,23 +248,34 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	body, err := json.Marshal(&claimReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
+	generateRequest := func(platform string) *http.Request {
+		url := fmt.Sprintf("/promotion/{promotionId}?platform=%s", platform)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+		suite.Require().NoError(err)
 
-	var s httpsignature.Signature
-	s.Algorithm = httpsignature.ED25519
-	s.KeyID = wallet.ID
-	s.Headers = []string{"digest", "(request-target)"}
+		var s httpsignature.Signature
+		s.Algorithm = httpsignature.ED25519
+		s.KeyID = wallet.ID
+		s.Headers = []string{"digest", "(request-target)"}
 
-	err = s.Sign(privKey, crypto.Hash(0), req)
-	suite.Require().NoError(err)
+		err = s.Sign(privKey, crypto.Hash(0), req)
+		suite.Require().NoError(err)
 
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("promotionId", promotion.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("promotionId", promotion.ID.String())
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		return req
+	}
+
+	reqNoexist := generateRequest("noexist")
+	reqOSX := generateRequest("osx")
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, reqNoexist)
+	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	var claimResp ClaimResponse
@@ -273,9 +284,10 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	handler = GetClaim(service)
 
-	req, err = http.NewRequest("GET", "/promotion/{promotionId}/claims/{claimId}", nil)
+	req, err := http.NewRequest("GET", "/promotion/{promotionId}/claims/{claimId}", nil)
 	suite.Require().NoError(err)
 
+	rctx := chi.NewRouteContext()
 	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
 	rctx.URLParams.Add("claimId", claimResp.ClaimID.String())
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))

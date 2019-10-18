@@ -167,12 +167,17 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			}
 		}
 
+		platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
+		if appError != nil {
+			return appError
+		}
+
 		pID, err := uuid.FromString(promotionID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds, "osx")
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds, platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error claiming promotion", 0)
 		}
@@ -207,11 +212,6 @@ func GetClaim(service *Service) handlers.AppHandler {
 				},
 			}
 		}
-
-		// platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
-		// if appError != nil {
-		// 	return appError
-		// }
 
 		id, err := uuid.FromString(claimID)
 		if err != nil {
