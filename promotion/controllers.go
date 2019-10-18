@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -16,6 +17,14 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
+
+var platforms = map[string]bool{
+	"ios":     true,
+	"android": true,
+	"osx":     true,
+	"windows": true,
+	"linux":   true,
+}
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
@@ -76,12 +85,17 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 		}
 
+		platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
+		if appError != nil {
+			return appError
+		}
+
 		id, err := uuid.FromString(paymentID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), id)
+		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", 0)
 		}
@@ -158,7 +172,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds, "osx")
 		if err != nil {
 			return handlers.WrapError(err, "Error claiming promotion", 0)
 		}
@@ -193,6 +207,11 @@ func GetClaim(service *Service) handlers.AppHandler {
 				},
 			}
 		}
+
+		// platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
+		// if appError != nil {
+		// 	return appError
+		// }
 
 		id, err := uuid.FromString(claimID)
 		if err != nil {
@@ -264,4 +283,19 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 		}
 		return nil
 	})
+}
+
+func verifyPlatform(platform string) (string, *handlers.AppError) {
+	if platforms[platform] {
+		return platform, nil
+	}
+	return platform, &handlers.AppError{
+		Message: "Error validating request query parameter",
+		Code:    http.StatusBadRequest,
+		Data: map[string]interface{}{
+			"validationErrors": map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			},
+		},
+	}
 }

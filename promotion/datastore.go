@@ -25,9 +25,9 @@ type Datastore interface {
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
-	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal) (*Promotion, error)
+	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -109,14 +109,14 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
-func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value decimal.Decimal) (*Promotion, error) {
+func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error) {
 	statement := `
-	insert into promotions (promotion_type, remaining_grants, approximate_value, suggestions_per_grant)
-	values ($1, $2, $3, $4)
+	insert into promotions (promotion_type, remaining_grants, approximate_value, suggestions_per_grant, platform)
+	values ($1, $2, $3, $4, $5)
 	returning *`
 	promotions := []Promotion{}
 	suggestionsPerGrant := value.Div(decimal.NewFromFloat(0.25))
-	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant)
+	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -293,18 +293,21 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
 	statement := `
 	select
 		promotions.*,
 		promotions.active and promotions.remaining_grants > 0 and (
-			( promotions.promotion_type = 'ugp' and claims.id is null ) or
-			( ( promotion_type = 'ads' or promotions.version < 5 ) and claims.id is not null and not claims.redeemed )
+			promotions.platform = '' or promotions.platform = $2
+		) and (
+      ( promotions.promotion_type = 'ugp' and claims.id is null ) or
+      ( ( promotion_type = 'ads' or promotions.version < 5 ) and claims.id is not null and not claims.redeemed )
 		) as available
-	from promotions left join claims on promotions.id = claims.promotion_id and claims.wallet_id = $1;`
+	from promotions left join claims on promotions.id = claims.promotion_id and claims.wallet_id = $1
+	order by promotions.created_at;`
 	promotions := []Promotion{}
 
-	err := pg.DB.Select(&promotions, statement, wallet.ID)
+	err := pg.DB.Select(&promotions, statement, wallet.ID, platform)
 	if err != nil {
 		return promotions, err
 	}
