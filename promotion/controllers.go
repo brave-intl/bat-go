@@ -162,19 +162,12 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			}
 		}
 
-		platform := r.URL.Query().Get("platform")
-		if !validators.IsPlatform(platform) {
-			return handlers.ValidationError("request query parameter", map[string]string{
-				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
-			})
-		}
-
 		pID, err := uuid.FromString(promotionID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds, platform)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error claiming promotion", 0)
 		}

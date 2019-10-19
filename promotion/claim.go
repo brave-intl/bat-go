@@ -84,7 +84,7 @@ type ClaimCreds struct {
 
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
-func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID uuid.UUID, walletID uuid.UUID, blindedCreds []string, platform string) (*uuid.UUID, error) {
+func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID uuid.UUID, walletID uuid.UUID, blindedCreds []string) (*uuid.UUID, error) {
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
@@ -110,11 +110,6 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 
 	if len(blindedCreds) != promotion.SuggestionsPerGrant {
 		return nil, errors.New("wrong number of blinded tokens included")
-	}
-
-	promoPlatform := promotion.Platform
-	if promoPlatform != "" && platform == promoPlatform {
-		return nil, errors.New("platform does not match")
 	}
 
 	claim, err := service.datastore.ClaimForWallet(promotion, wallet, JSONStringArray(blindedCreds))
