@@ -97,7 +97,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	}
 	handler := GetAvailablePromotions(service)
 
-	url := func(platform string) string {
+	urlWithPlatform := func(platform string) string {
 		return fmt.Sprintf("/promotions?paymentId=%s&platform=%s", walletID.String(), platform)
 	}
 
@@ -115,13 +115,13 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		}`
 	}
 
-	reqFailure, err := http.NewRequest("GET", url("noexist"), nil)
+	reqFailure, err := http.NewRequest("GET", urlWithPlatform("noexist"), nil)
 	suite.Require().NoError(err, "Should not be able to create get promotions request")
 
-	reqOSX, err := http.NewRequest("GET", url("osx"), nil)
+	reqOSX, err := http.NewRequest("GET", urlWithPlatform("osx"), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
-	reqAndroid, err := http.NewRequest("GET", url("android"), nil)
+	reqAndroid, err := http.NewRequest("GET", urlWithPlatform("android"), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
 	rr := httptest.NewRecorder()

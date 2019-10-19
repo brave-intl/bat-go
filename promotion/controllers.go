@@ -13,18 +13,11 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
-
-var platforms = map[string]bool{
-	"ios":     true,
-	"android": true,
-	"osx":     true,
-	"windows": true,
-	"linux":   true,
-}
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
@@ -85,9 +78,11 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 		}
 
-		platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
-		if appError != nil {
-			return appError
+		platform := r.URL.Query().Get("platform")
+		if !validators.IsPlatform(platform) {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			})
 		}
 
 		id, err := uuid.FromString(paymentID)
@@ -167,9 +162,11 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			}
 		}
 
-		platform, appError := verifyPlatform(r.URL.Query().Get("platform"))
-		if appError != nil {
-			return appError
+		platform := r.URL.Query().Get("platform")
+		if !validators.IsPlatform(platform) {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			})
 		}
 
 		pID, err := uuid.FromString(promotionID)
@@ -283,19 +280,4 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 		}
 		return nil
 	})
-}
-
-func verifyPlatform(platform string) (string, *handlers.AppError) {
-	if platforms[platform] {
-		return platform, nil
-	}
-	return platform, &handlers.AppError{
-		Message: "Error validating request query parameter",
-		Code:    http.StatusBadRequest,
-		Data: map[string]interface{}{
-			"validationErrors": map[string]string{
-				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
-			},
-		},
-	}
 }
