@@ -14,12 +14,12 @@ import (
 // Grant - a "check" good for the amount inscribed, redeemable between maturityTime and expiryTime
 type Grant struct {
 	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
-	GrantID           uuid.UUID                `json:"grantId" valid:"-"`
+	GrantID           uuid.UUID                `json:"grantId" valid:"-" db:"id"`
 	Probi             decimal.Decimal          `json:"probi" valid:"-"`
-	PromotionID       uuid.UUID                `json:"promotionId" valid:"-"`
+	PromotionID       uuid.UUID                `json:"promotionId" valid:"-" db:"promotion_id"`
 	MaturityTimestamp int64                    `json:"maturityTime" valid:"-"`
 	ExpiryTimestamp   int64                    `json:"expiryTime" valid:"-"`
-	Type              string                   `json:"type,omitempty" valid:"-"`
+	Type              string                   `json:"type,omitempty" valid:"-" db:"promotion_type"`
 	ProviderID        *uuid.UUID               `json:"providerId,omitempty" valid:"-"`
 }
 

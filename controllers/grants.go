@@ -151,19 +151,6 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		redeemedIDs, err := service.GetRedeemedIDs(r.Context(), req.Grants)
-		if err != nil {
-			return handlers.WrapError(err, "Error checking grant redemption status", http.StatusBadRequest)
-		}
-
-		if len(redeemedIDs) > 0 {
-			return &handlers.AppError{
-				Message: "One or more grants have already been redeemed",
-				Code:    http.StatusGone,
-				Data:    map[string]interface{}{"redeemedIDs": redeemedIDs},
-			}
-		}
-
 		txInfo, err := service.Redeem(r.Context(), &req)
 		if err != nil {
 			// FIXME not all errors are 4xx

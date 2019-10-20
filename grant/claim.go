@@ -34,6 +34,9 @@ func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Gra
 		return errors.Wrap(err, "Error saving wallet")
 	}
 
+	// TODO need additional checks against grant to see if it is valid for promotion
+	// TODO make sure works with ads as well
+
 	err = service.datastore.ClaimGrantForWallet(grant, wallet)
 	if err != nil {
 		log.Error("Attempt to claim previously claimed grant!")

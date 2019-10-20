@@ -230,7 +230,6 @@ func TestRedeem(t *testing.T) {
 	}
 
 	var reqPayload grant.RedeemGrantsRequest
-	reqPayload.Grants = grants
 	reqPayload.WalletInfo = userWallet.Info
 	reqPayload.Transaction = txn
 

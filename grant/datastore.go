@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/garyburd/redigo/redis"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
+	"github.com/shopspring/decimal"
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -29,6 +32,8 @@ type Datastore interface {
 	ClaimGrantForWallet(grant Grant, wallet wallet.Info) error
 	// HasGrantBeenRedeemed checks to see if a grant has been claimed
 	HasGrantBeenRedeemed(grant Grant) (bool, error)
+	// GetGrantsOrderedByExpiry returns ordered grant claims
+	GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error)
 }
 
 // Postgres is a WIP Datastore
@@ -143,7 +148,7 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 	statement := `
 	update claims
 	set redeemed = true
-	where id = $1 and promotion_id = $2 and wallet_id = $3
+	where id = $1 and promotion_id = $2 and wallet_id = $3 and redeemed = false
 	returning *`
 
 	res, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID)
@@ -170,6 +175,8 @@ func (pg *Postgres) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 	values ($1, $2, $3, $4)
 	returning *`
 
+	// FIXME
+
 	value := grant.AltCurrency.FromProbi(grant.Probi)
 
 	_, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID, value)
@@ -190,6 +197,36 @@ func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	}
 
 	return redeemed[0], nil
+}
+
+// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
+func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+	type GrantResult struct {
+		Grant
+		ApproximateValue decimal.Decimal `db:"approximate_value"`
+		CreatedAt        time.Time       `json:"createdAt" db:"created_at"`
+		ExpiresAt        time.Time       `json:"expiresAt" db:"expires_at"`
+	}
+	var grantResults []GrantResult
+
+	err := pg.DB.Select(&grantResults, "select claims.id, promotions.approximate_value, claims.promotion_id, promotions.created_at, promotions.expires_at, promotions.promotion_type from claims inner join promotions on claims.promotion_id = promotions.id where claims.wallet_id = $1 and claims.redeemed = false and promotions.expires_at > now() order by promotions.expires_at", wallet.ID)
+	if err != nil {
+		return []Grant{}, err
+	}
+	grants := make([]Grant, len(grantResults))
+
+	for i, grant := range grantResults {
+		{
+			tmp := altcurrency.BAT
+			grant.AltCurrency = &tmp
+		}
+		grant.Probi = grant.AltCurrency.ToProbi(grant.ApproximateValue)
+		grant.MaturityTimestamp = grant.CreatedAt.Unix()
+		grant.ExpiryTimestamp = grant.ExpiresAt.Unix()
+		grants[i] = grant.Grant
+	}
+
+	return grants, nil
 }
 
 // TODO implement postgres datastore
@@ -289,6 +326,11 @@ func hasGrantBeenRedeemed(redeemedGrants datastore.SetLikeDatastore, grant Grant
 	return redeemedGrants.Contains(grant.GrantID.String())
 }
 
+// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
+func (redis *Redis) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+	return []Grant{}, nil
+}
+
 // InMemory is an unsafe Datastore that keeps data in memory, used for testing
 type InMemory struct {
 }
@@ -336,6 +378,11 @@ func (inmem *InMemory) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	}
 
 	return hasGrantBeenRedeemed(redeemedGrants, grant)
+}
+
+// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
+func (inmem *InMemory) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+	return []Grant{}, nil
 }
 
 // UpsertWallet upserts the given wallet
