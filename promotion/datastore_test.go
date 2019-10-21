@@ -112,7 +112,7 @@ func (suite *PostgresTestSuite) TestGetIssuer() {
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 
-	promotion, err := pg.CreatePromotion("ugp", 10, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 10, decimal.NewFromFloat(25.0), "")
 	suite.Assert().NoError(err, "Create promotion should succeed")
 
 	origIssuer := &Issuer{PromotionID: promotion.ID, Cohort: "test", PublicKey: publicKey}

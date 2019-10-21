@@ -202,10 +202,11 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
-	// promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
-	// suite.Require().NoError(err, "Failed to create promotion")
-	// err = service.datastore.ActivatePromotion(promotion)
-	// suite.Require().NoError(err, "Failed to activate promotion")
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
 	walletID, err := uuid.FromString(wallet.ID)
 	suite.Require().NoError(err)
 
@@ -307,7 +308,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		ledgerClient: mockLedger,
 	}
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0))
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create promotion")
 	err = service.datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
@@ -354,7 +355,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		eventChannel: ch,
 	}
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25))
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
 	err = service.datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
