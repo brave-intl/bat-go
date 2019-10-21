@@ -205,14 +205,6 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	walletID, err := uuid.FromString(wallet.ID)
 	suite.Require().NoError(err)
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
-	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
-	suite.Require().NoError(err, "Failed to activate promotion")
-
-	walletID, err := uuid.FromString(wallet.ID)
-	suite.Require().NoError(err)
-
 	claimReq := ClaimRequest{
 		PaymentID:    walletID,
 		BlindedCreds: blindedCreds,
