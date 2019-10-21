@@ -9,8 +9,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -97,58 +99,104 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	}
 	handler := GetAvailablePromotions(service)
 
-	req, err := http.NewRequest("GET", "/promotions?paymentId="+walletID.String(), nil)
+	urlWithPlatform := func(platform string) string {
+		return fmt.Sprintf("/promotions?paymentId=%s&platform=%s", walletID.String(), platform)
+	}
+
+	promotionJSON := func(available bool, promotion *Promotion) string {
+		return `{
+			"approximateValue": "` + promotion.ApproximateValue.String() + `",
+			"available": ` + strconv.FormatBool(available) + `,
+			"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
+			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
+			"id": "` + promotion.ID.String() + `",
+			"platform": "` + promotion.Platform + `",
+			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
+			"type": "ugp",
+			"version": 5
+		}`
+	}
+
+	reqFailure, err := http.NewRequest("GET", urlWithPlatform("noexist"), nil)
+	suite.Require().NoError(err, "Should not be able to create get promotions request")
+
+	reqOSX, err := http.NewRequest("GET", urlWithPlatform("osx"), nil)
+	suite.Require().NoError(err, "Failed to create get promotions request")
+
+	reqAndroid, err := http.NewRequest("GET", urlWithPlatform("android"), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, reqFailure)
+	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+	expectationFailure := `{
+		"code":400,
+		"message": "Error validating request query parameter",
+		"data": {
+			"validationErrors": {
+				"platform": "platform 'noexist' is not supported"
+			}
+		}
+	}`
+	suite.Assert().JSONEq(expectationFailure, rr.Body.String(), "unexpected result")
 
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0))
-	suite.Require().NoError(err, "Failed to create promotion")
+	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	suite.Require().NoError(err, "Failed to create a general promotion")
+
+	promotionScoped, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "osx")
+	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
-	expected := `{
-    "promotions": [
-        {
-            "approximateValue": "15",
-            "available": false,
-            "createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
-            "expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
-            "id": "` + promotion.ID.String() + `",
-            "suggestionsPerGrant": 60,
-            "type": "ugp",
-            "version": 5
-        }
-    ]
+	expectedOSX := `{
+		"promotions": [
+			` + promotionJSON(false, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
-	suite.Assert().JSONEq(expected, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
-	err = service.datastore.ActivatePromotion(promotion)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqAndroid)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+	expectedAndroid := `{
+		"promotions": [
+			` + promotionJSON(false, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
+	}`
+	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
+
+	err = service.datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
-	expected = `{
-    "promotions": [
-        {
-            "approximateValue": "15",
-            "available": true,
-            "createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
-            "expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
-            "id": "` + promotion.ID.String() + `",
-            "suggestionsPerGrant": 60,
-            "type": "ugp",
-            "version": 5
-        }
-    ]
+	expectedOSX = `{
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
 	}`
-	suite.Assert().JSONEq(expected, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqAndroid)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+	expectedAndroid = `{
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(false, promotionScoped) + `
+		]
+	}`
+	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 }
 
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) {
@@ -156,6 +204,11 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 
 	walletID, err := uuid.FromString(wallet.ID)
 	suite.Require().NoError(err)
+
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
 
 	claimReq := ClaimRequest{
 		PaymentID:    walletID,
@@ -201,6 +254,9 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	handler.ServeHTTP(rr, req)
 
 	for rr.Code != http.StatusOK {
+		if rr.Code == http.StatusBadRequest {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			break
@@ -449,7 +505,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
 	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
-	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount)
+	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount, "")
 	suite.Assert().NoError(err, "a promotion could not be created")
 
 	err = service.datastore.ActivatePromotion(promotion)

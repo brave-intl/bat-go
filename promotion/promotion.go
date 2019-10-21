@@ -22,6 +22,7 @@ type Promotion struct {
 	RemainingGrants     int             `json:"-" db:"remaining_grants"`
 	Active              bool            `json:"-" db:"active"`
 	Available           bool            `json:"available" db:"available"`
+	Platform            string          `json:"platform" db:"platform"`
 	//ClaimableUntil      time.Time
 	//PublicKeys          []string
 }
@@ -54,10 +55,10 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 }
 
 // GetAvailablePromotions first looks up the wallet and then retrieves available promotions
-func (service *Service) GetAvailablePromotions(ctx context.Context, walletID uuid.UUID) ([]Promotion, error) {
+func (service *Service) GetAvailablePromotions(ctx context.Context, walletID uuid.UUID, platform string) ([]Promotion, error) {
 	wallet, err := service.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
 		return []Promotion{}, err
 	}
-	return service.datastore.GetAvailablePromotionsForWallet(wallet)
+	return service.datastore.GetAvailablePromotionsForWallet(wallet, platform)
 }

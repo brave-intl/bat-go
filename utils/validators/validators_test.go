@@ -51,3 +51,15 @@ func TestIsETHAddress(t *testing.T) {
 		t.Error("Unexpected error on ETH address with invalid checksum")
 	}
 }
+
+func TestIsPlatform(t *testing.T) {
+	if IsPlatform("notaplatform") {
+		t.Error("non platforms should not pass")
+	}
+	if IsPlatform("") {
+		t.Error("empty strings do not pass")
+	}
+	if !IsPlatform("osx") {
+		t.Error("strings in the list should pass")
+	}
+}
