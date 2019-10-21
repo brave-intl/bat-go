@@ -80,13 +80,8 @@ func claim(t *testing.T, server *httptest.Server, grant grant.Grant, wallet wall
 				"providerId": "%s",
 				"publicKey": "%s"
 			},
-			"grant": {
-				"grantId": "%s",
-				"altcurrency": "BAT",
-				"probi": "%s",
-				"promotionId": "%s"
-			}
-		}`, wallet.ID, wallet.ProviderID, wallet.PublicKey, grant.GrantID.String(), grant.Probi.String(), grant.PromotionID.String())
+			"promotionId": "%s"
+		}`, wallet.ID, wallet.ProviderID, wallet.PublicKey, grant.PromotionID.String())
 	claimURL := fmt.Sprintf("%s/v1/grants/claim", server.URL)
 
 	req, err := http.NewRequest("POST", claimURL, bytes.NewBuffer([]byte(payload)))
@@ -122,8 +117,13 @@ func TestClaim(t *testing.T) {
 	}
 
 	value := decimal.NewFromFloat(30.0)
-	numGrants := 10
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	numGrants := 1
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,12 @@ func TestRedeem(t *testing.T) {
 
 	value := decimal.NewFromFloat(30.0)
 	numGrants := 1
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
 	if err != nil {
 		t.Fatal(err)
 	}

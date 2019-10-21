@@ -25,9 +25,6 @@ docker:
 docker-up-dev:
 	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-docker-dev:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml run web /bin/bash
-
 docker-test:
 	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))

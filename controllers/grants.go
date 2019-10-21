@@ -33,7 +33,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service)))
 	}
 	// Hacky compatibility layer between for legacy grants and new datastore
-	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", ClaimGrant(service)))
+	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
 	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
@@ -49,8 +49,8 @@ func Status(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return nil
 }
 
-// ClaimGrant is the handler for claiming grants
-func ClaimGrant(service *grant.Service) handlers.AppHandler {
+// Claim is the handler for claiming grants
+func Claim(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		defer closers.Panic(r.Body)
 
@@ -59,7 +59,7 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
 		}
 
-		var req grant.ClaimGrantRequest
+		var req grant.ClaimRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
@@ -69,13 +69,16 @@ func ClaimGrant(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.Claim(r.Context(), req.WalletInfo, req.Grant)
+		claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
 		if err != nil {
 			// FIXME not all errors are 4xx
 			return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&grant.ClaimResponse{ApproximateValue: claim.ApproximateValue}); err != nil {
+			panic(err)
+		}
 		return nil
 	})
 }

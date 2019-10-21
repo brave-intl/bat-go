@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore"
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
@@ -15,6 +16,7 @@ import (
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -34,6 +36,10 @@ type Datastore interface {
 	HasGrantBeenRedeemed(grant Grant) (bool, error)
 	// GetGrantsOrderedByExpiry returns ordered grant claims
 	GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error)
+	// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
+	ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error)
+	// GetPromotion by ID
+	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
 }
 
 // Postgres is a WIP Datastore
@@ -144,11 +150,10 @@ func (pg *Postgres) GetClaimant(grant Grant) (*wallet.Info, error) {
 
 // RedeemGrantForWallet redeems a claimed grant for a wallet
 func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
-	// FIXME should this limit version?
 	statement := `
 	update claims
 	set redeemed = true
-	where id = $1 and promotion_id = $2 and wallet_id = $3 and redeemed = false
+	where id = $1 and promotion_id = $2 and wallet_id = $3 and not redeemed and legacy_claimed
 	returning *`
 
 	res, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID)
@@ -171,8 +176,8 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 // ClaimGrantForWallet makes a claim to a particular GrantID by a wallet
 func (pg *Postgres) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 	statement := `
-	insert into claims (id, promotion_id, wallet_id, approximate_value)
-	values ($1, $2, $3, $4)
+	insert into claims (id, promotion_id, wallet_id, approximate_value, legacy_claimed)
+	values ($1, $2, $3, $4, true)
 	returning *`
 
 	// FIXME
@@ -181,6 +186,61 @@ func (pg *Postgres) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
 
 	_, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID, value)
 	return err
+}
+
+// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
+func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return nil, err
+	}
+
+	// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
+	res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promo.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	promotionCount, err := res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	} else if promotionCount != 1 {
+		_ = tx.Rollback()
+		return nil, errors.New("no matching active promotion")
+	}
+
+	claims := []promotion.Claim{}
+
+	if promo.Type == "ads" {
+		statement := `
+		update claims
+		set legacy_claimed = true
+		where promotion_id = $1 and wallet_id = $2
+		returning *`
+		err = tx.Select(&claims, statement, promo.ID, wallet.ID)
+	} else {
+		statement := `
+		insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
+		values ($1, $2, $3, true)
+		returning *`
+		err = tx.Select(&claims, statement, promo.ID, wallet.ID, promo.ApproximateValue)
+	}
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	} else if len(claims) != 1 {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	return &claims[0], nil
 }
 
 // HasGrantBeenRedeemed checks to see if a grant has been claimed
@@ -207,9 +267,27 @@ func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error
 		CreatedAt        time.Time       `json:"createdAt" db:"created_at"`
 		ExpiresAt        time.Time       `json:"expiresAt" db:"expires_at"`
 	}
+
+	statement := `
+select
+	claims.id,
+	promotions.approximate_value,
+	claims.promotion_id,
+	promotions.created_at,
+	promotions.expires_at,
+	promotions.promotion_type
+from claims inner join promotions
+on claims.promotion_id = promotions.id
+where
+	claims.wallet_id = $1 and
+	not claims.redeemed and
+	claims.legacy_claimed
+	and promotions.expires_at > now()
+order by promotions.expires_at`
+
 	var grantResults []GrantResult
 
-	err := pg.DB.Select(&grantResults, "select claims.id, promotions.approximate_value, claims.promotion_id, promotions.created_at, promotions.expires_at, promotions.promotion_type from claims inner join promotions on claims.promotion_id = promotions.id where claims.wallet_id = $1 and claims.redeemed = false and promotions.expires_at > now() order by promotions.expires_at", wallet.ID)
+	err := pg.DB.Select(&grantResults, statement, wallet.ID)
 	if err != nil {
 		return []Grant{}, err
 	}
@@ -229,20 +307,23 @@ func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error
 	return grants, nil
 }
 
-// TODO implement postgres datastore
-// Can set up 1:1 correspondance between claim ID and grant ID?
-// Ensure only version < 4 promotions can go through legacy redeem
-//
-// Cutover:
+// GetPromotion by ID
+func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
+	statement := "select * from promotions where id = $1"
+	promotions := []promotion.Promotion{}
+	err := pg.DB.Select(&promotions, statement, promotionID)
+	if err != nil {
+		return nil, err
+	}
 
-// 1. Disable claim through old API
-// 2. Take db dump of wallets collection
-// 3. Recreate promotions / claims table from wallets collection
-// 4. Take ledger server down
-// 5. Sync redemption status from redis
-// 6. Upgrade grant server?
+	if len(promotions) > 0 {
+		return &promotions[0], nil
+	}
 
-// Redis is our current datastore
+	return nil, nil
+}
+
+// Redis is our legacy datastore
 type Redis struct {
 	*redis.Pool
 }
@@ -313,6 +394,11 @@ func claimGrantIDForWallet(kv datastore.KvDatastore, grantID string, wallet wall
 	return nil
 }
 
+// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
+func (redis *Redis) ClaimPromotionForWallet(promotion *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
+	return nil, nil
+}
+
 // HasGrantBeenRedeemed checks to see if a grant has been claimed
 func (redis *Redis) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	conn := redis.Pool.Get()
@@ -329,6 +415,11 @@ func hasGrantBeenRedeemed(redeemedGrants datastore.SetLikeDatastore, grant Grant
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
 func (redis *Redis) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
 	return []Grant{}, nil
+}
+
+// GetPromotion by ID
+func (redis *Redis) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
+	return nil, nil
 }
 
 // InMemory is an unsafe Datastore that keeps data in memory, used for testing
@@ -370,6 +461,11 @@ func (inmem *InMemory) ClaimGrantForWallet(grant Grant, wallet wallet.Info) erro
 	return claimGrantIDForWallet(kv, grant.GrantID.String(), wallet)
 }
 
+// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
+func (inmem *InMemory) ClaimPromotionForWallet(promotion *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
+	return nil, nil
+}
+
 // HasGrantBeenRedeemed checks to see if a grant has been claimed
 func (inmem *InMemory) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 	redeemedGrants, err := datastore.GetSetDatastore(context.Background(), "promotion:"+grant.PromotionID.String()+":grants")
@@ -388,4 +484,9 @@ func (inmem *InMemory) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, er
 // UpsertWallet upserts the given wallet
 func (inmem *InMemory) UpsertWallet(wallet *wallet.Info) error {
 	return nil
+}
+
+// GetPromotion by ID
+func (inmem *InMemory) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
+	return nil, nil
 }

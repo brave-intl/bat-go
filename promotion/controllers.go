@@ -93,12 +93,18 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			})
 		}
 
+		legacy := false
+		legacyParam := r.URL.Query().Get("legacy")
+		if legacyParam == "true" {
+			legacy = true
+		}
+
 		id, err := uuid.FromString(paymentID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform)
+		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform, legacy)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", 0)
 		}

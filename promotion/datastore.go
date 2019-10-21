@@ -27,7 +27,7 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -255,28 +255,47 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 		return nil, err
 	}
 
-	// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-	res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-	promotionCount, err := res.RowsAffected()
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	} else if promotionCount != 1 {
-		_ = tx.Rollback()
-		return nil, errors.New("no matching active promotion")
-	}
-
 	claims := []Claim{}
 
-	if promotion.Type == "ads" || promotion.Version < 5 {
+	// Get legacy claims
+	err = tx.Select(&claims, `select * from claims where legacy_claimed and promotion_id = $1 and wallet_id = $2`, promotion.ID, wallet.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	legacyClaimExists := false
+	if len(claims) > 1 {
+		_ = tx.Rollback()
+		panic("impossible number of claims")
+	} else if len(claims) == 1 {
+		legacyClaimExists = true
+	}
+
+	if !legacyClaimExists {
+		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
+		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		promotionCount, err := res.RowsAffected()
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		} else if promotionCount != 1 {
+			_ = tx.Rollback()
+			return nil, errors.New("no matching active promotion")
+		}
+	}
+
+	claims = []Claim{}
+
+	if promotion.Type == "ads" || legacyClaimExists {
 		statement := `
-    update claims
+		update claims
 		set redeemed = true
-		where promotion_id = $1 and wallet_id = $2
+		where promotion_id = $1 and wallet_id = $2 and not redeemed
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID)
 	} else {
@@ -286,6 +305,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID, promotion.ApproximateValue)
 	}
+
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -311,18 +331,37 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
 	statement := `
-	select
-		promotions.*,
-		promotions.active and promotions.remaining_grants > 0 and (
-			promotions.platform = '' or promotions.platform = $2
-		) and (
-      ( promotions.promotion_type = 'ugp' and claims.id is null ) or
-      ( ( promotion_type = 'ads' or promotions.version < 5 ) and claims.id is not null and not claims.redeemed )
-		) as available
-	from promotions left join claims on promotions.id = claims.promotion_id and claims.wallet_id = $1
-	order by promotions.created_at;`
+		select
+			promotions.*,
+			promotions.active and wallet_claims.redeemed is distinct from true and 
+			( promotions.platform = '' or promotions.platform = $2) and
+			( wallet_claims.legacy_claimed is true or 
+				( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
+				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
+			) as available
+		from promotions left join (
+      select * from claims where claims.wallet_id = $1
+    ) wallet_claims on promotions.id = wallet_claims.promotion_id 
+		order by promotions.created_at;`
+
+	if legacy {
+		statement = `
+		select
+			promotions.*,
+			( promotions.active and wallet_claims.redeemed is distinct from true and 
+			( promotions.platform = '' or promotions.platform = $2) and
+			wallet_claims.legacy_claimed is distinct from true and
+			( ( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
+				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
+			) as available
+		from promotions left join (
+      select * from claims where claims.wallet_id = $1
+    ) wallet_claims on promotions.id = wallet_claims.promotion_id 
+		order by promotions.created_at;`
+	}
+
 	promotions := []Promotion{}
 
 	err := pg.DB.Select(&promotions, statement, wallet.ID, platform)

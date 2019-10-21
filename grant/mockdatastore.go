@@ -6,8 +6,10 @@ package grant
 import (
 	reflect "reflect"
 
+	promotion "github.com/brave-intl/bat-go/promotion"
 	wallet "github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
+	go_uuid "github.com/satori/go.uuid"
 )
 
 // MockDatastore is a mock of Datastore interface
@@ -118,4 +120,34 @@ func (m *MockDatastore) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, e
 func (mr *MockDatastoreMockRecorder) GetGrantsOrderedByExpiry(wallet interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantsOrderedByExpiry", reflect.TypeOf((*MockDatastore)(nil).GetGrantsOrderedByExpiry), wallet)
+}
+
+// ClaimPromotionForWallet mocks base method
+func (m *MockDatastore) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimPromotionForWallet", promo, wallet)
+	ret0, _ := ret[0].(*promotion.Claim)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimPromotionForWallet indicates an expected call of ClaimPromotionForWallet
+func (mr *MockDatastoreMockRecorder) ClaimPromotionForWallet(promotion, wallet interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPromotionForWallet", reflect.TypeOf((*MockDatastore)(nil).ClaimPromotionForWallet), promotion, wallet)
+}
+
+// GetPromotion mocks base method
+func (m *MockDatastore) GetPromotion(promotionID go_uuid.UUID) (*promotion.Promotion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPromotion", promotionID)
+	ret0, _ := ret[0].(*promotion.Promotion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPromotion indicates an expected call of GetPromotion
+func (mr *MockDatastoreMockRecorder) GetPromotion(promotionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockDatastore)(nil).GetPromotion), promotionID)
 }

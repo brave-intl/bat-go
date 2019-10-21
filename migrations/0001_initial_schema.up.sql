@@ -40,6 +40,7 @@ create table claims (
   promotion_id uuid not null references promotions(id),
   wallet_id uuid not null references wallets(id),
   approximate_value numeric(28, 18) not null check (approximate_value > 0.0),
+  legacy_claimed boolean not null default false,
   redeemed boolean not null default false,
   bonus numeric(28, 18) not null check (bonus >= 0.0) default 0,
   unique (promotion_id, wallet_id)

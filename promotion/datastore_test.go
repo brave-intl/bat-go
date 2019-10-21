@@ -222,14 +222,14 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	w := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.InsertWallet(w), "Save wallet should succeed")
 
-	promotions, err := pg.GetAvailablePromotionsForWallet(w, "")
+	promotions, err := pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions))
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().Equal(*promotion, promotions[0])
@@ -237,7 +237,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Active)
@@ -247,7 +247,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(2, len(promotions))
 	suite.Assert().True(promotions[0].Available)
@@ -256,7 +256,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(2, len(promotions))
 	suite.Assert().True(promotions[0].Available)
