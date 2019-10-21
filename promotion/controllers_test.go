@@ -202,6 +202,9 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
+	walletID, err := uuid.FromString(wallet.ID)
+	suite.Require().NoError(err)
+
 	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create promotion")
 	err = service.datastore.ActivatePromotion(promotion)
