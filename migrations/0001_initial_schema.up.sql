@@ -9,6 +9,7 @@ create table promotions (
   suggestions_per_grant integer not null,
   approximate_value numeric(28, 18) not null check (approximate_value > 0.0),
   remaining_grants integer not null check (remaining_grants >= 0),
+  platform text,
   active boolean not null default false
 );
 

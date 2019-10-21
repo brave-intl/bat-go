@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -76,12 +78,19 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 		}
 
+		platform := r.URL.Query().Get("platform")
+		if !validators.IsPlatform(platform) {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			})
+		}
+
 		id, err := uuid.FromString(paymentID)
 		if err != nil {
 			panic(err) // Should not be possible
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), id)
+		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", 0)
 		}

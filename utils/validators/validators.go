@@ -71,3 +71,9 @@ func IsETHAddress(str string) bool {
 	}
 	return altcurrency.ToChecksumETHAddress(str) == str
 }
+
+// IsPlatform determines whether or not a given string is a recognized platform
+func IsPlatform(platform string) bool {
+	platforms := []string{"ios", "android", "osx", "windows", "linux"}
+	return govalidator.IsIn(platform, platforms...)
+}

@@ -52,7 +52,7 @@ func (suite *PostgresTestSuite) TestCreatePromotion() {
 	value := decimal.NewFromFloat(25.0)
 	numGrants := 10
 
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
 	suite.Assert().NoError(err, "Create promotion should succeed")
 
 	suite.Assert().Equal(numGrants, promotion.RemainingGrants)
@@ -66,7 +66,7 @@ func (suite *PostgresTestSuite) TestGetPromotion() {
 	value := decimal.NewFromFloat(25.0)
 	numGrants := 10
 
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value)
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
 	suite.Assert().NoError(err, "Create promotion should succeed")
 
 	promotion, err = pg.GetPromotion(promotion.ID)
@@ -80,7 +80,7 @@ func (suite *PostgresTestSuite) TestActivatePromotion() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err)
 
-	promotion, err := pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "")
 	suite.Assert().NoError(err, "Create promotion should succeed")
 
 	suite.Assert().False(promotion.Active)
@@ -99,7 +99,7 @@ func (suite *PostgresTestSuite) TestInsertIssuer() {
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 
-	promotion, err := pg.CreatePromotion("ugp", 10, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 10, decimal.NewFromFloat(25.0), "")
 	suite.Assert().NoError(err, "Create promotion should succeed")
 
 	issuer := Issuer{PromotionID: promotion.ID, Cohort: "test", PublicKey: publicKey}
@@ -146,7 +146,7 @@ func (suite *PostgresTestSuite) TestClaimForWallet() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	blindedCreds := JSONStringArray([]string{})
 
-	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
 	w := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
@@ -172,7 +172,7 @@ func (suite *PostgresTestSuite) TestClaimForWallet() {
 	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
 	suite.Assert().Error(err, "Claim for wallet should fail, promotion is active but has no more grants")
 
-	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(25.0))
+	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
@@ -205,14 +205,14 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	w := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.InsertWallet(w), "Save wallet should succeed")
 
-	promotions, err := pg.GetAvailablePromotionsForWallet(w)
+	promotions, err := pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions))
 
-	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w)
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().Equal(*promotion, promotions[0])
@@ -220,17 +220,17 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w)
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Active)
 	suite.Assert().True(promotions[0].Available)
 
-	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(25.0))
+	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w)
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(2, len(promotions))
 	suite.Assert().True(promotions[0].Available)
@@ -239,7 +239,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
-	promotions, err = pg.GetAvailablePromotionsForWallet(w)
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(2, len(promotions))
 	suite.Assert().True(promotions[0].Available)
@@ -253,7 +253,7 @@ func (suite *PostgresTestSuite) TestGetClaimCreds() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	blindedCreds := JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
 
-	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0))
+	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
 	w := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
