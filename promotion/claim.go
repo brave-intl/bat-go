@@ -117,6 +117,7 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, err
 	}
 
+	// FIXME better job drain for retries
 	go service.SignClaimCreds(ctx, claim.ID, *issuer, blindedCreds)
 
 	return &claim.ID, nil

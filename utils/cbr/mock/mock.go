@@ -92,3 +92,17 @@ func (mr *MockClientMockRecorder) RedeemCredential(ctx, issuer, preimage, signat
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredential", reflect.TypeOf((*MockClient)(nil).RedeemCredential), ctx, issuer, preimage, signature, payload)
 }
+
+// RedeemCredentials mocks base method
+func (m *MockClient) RedeemCredentials(ctx context.Context, credentials []x.CredentialRedemption, payload string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RedeemCredentials", ctx, credentials, payload)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RedeemCredentials indicates an expected call of RedeemCredentials
+func (mr *MockClientMockRecorder) RedeemCredentials(ctx, credentials, payload interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredentials", reflect.TypeOf((*MockClient)(nil).RedeemCredentials), ctx, credentials, payload)
+}

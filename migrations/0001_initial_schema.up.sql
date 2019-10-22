@@ -22,6 +22,8 @@ create table issuers (
   primary key (promotion_id, cohort)
 );
 
+create index on issuers(public_key);
+
 create table wallets (
   id uuid primary key not null,
   -- created_at timestamp with time zone not null default current_timestamp,

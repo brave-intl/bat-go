@@ -27,6 +27,11 @@ type Promotion struct {
 	//PublicKeys          []string
 }
 
+// CredentialValue returns the approximate value of a credential
+func (promotion *Promotion) CredentialValue() decimal.Decimal {
+	return promotion.ApproximateValue.Div(decimal.New(int64(promotion.SuggestionsPerGrant), 0))
+}
+
 // GetOrCreateWallet attempts to retrieve wallet info from the local datastore, falling back to the ledger
 func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.datastore.GetWallet(walletID)

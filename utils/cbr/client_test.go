@@ -82,4 +82,11 @@ func TestSignAndRedeemCredentials(t *testing.T) {
 
 	err = client.RedeemCredential(ctx, issuerName, preimage, sig, payload)
 	assert.NoError(t, err, "Should be able to redeem tokens")
+
+	_, err = db.Exec("DELETE from redemptions")
+	assert.NoError(t, err, "Must be able to clear redemptions")
+
+	err = client.RedeemCredentials(ctx, []CredentialRedemption{{Issuer: issuerName, TokenPreimage: preimage, Signature: sig}}, payload)
+	assert.NoError(t, err, "Should be able to bulk redeem tokens")
+
 }

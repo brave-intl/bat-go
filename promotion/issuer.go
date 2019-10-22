@@ -6,6 +6,10 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+const (
+	defaultMaxTokens = 4000000 // ~1M BAT
+)
+
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
 	PromotionID uuid.UUID `db:"promotion_id"`
@@ -17,7 +21,7 @@ type Issuer struct {
 func (service *Service) CreateIssuer(ctx context.Context, promotionID uuid.UUID, cohort string) (*Issuer, error) {
 	issuer := &Issuer{PromotionID: promotionID, Cohort: cohort, PublicKey: ""}
 
-	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), 100)
+	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokens)
 	if err != nil {
 		return nil, err
 	}

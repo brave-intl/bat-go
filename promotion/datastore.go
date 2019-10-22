@@ -38,6 +38,8 @@ type Datastore interface {
 	InsertIssuer(issuer *Issuer) error
 	// GetIssuer by PromotionID and cohort
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
+	// GetIssuerByPublicKey
+	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
 	// InsertWallet inserts the given wallet
 	InsertWallet(wallet *wallet.Info) error
 	// GetWallet by ID
@@ -169,6 +171,22 @@ func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, er
 	statement := "select * from issuers where promotion_id = $1 and cohort = $2"
 	issuers := []Issuer{}
 	err := pg.DB.Select(&issuers, statement, promotionID.String(), cohort)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(issuers) > 0 {
+		return &issuers[0], nil
+	}
+
+	return nil, nil
+}
+
+// GetIssuerByPublicKey or return an error
+func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
+	statement := "select * from issuers where public_key = $1"
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, publicKey)
 	if err != nil {
 		return nil, err
 	}
