@@ -466,6 +466,14 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		datastore: pg,
 	}
 
+	missingWalletID := uuid.NewV4().String()
+	body, code := suite.checkGetClaimSummary(service, missingWalletID, "ads")
+	suite.Assert().Equal(http.StatusNotFound, code, "a 404 is sent back")
+	suite.Assert().JSONEq(`{
+		"code": 404,
+		"message": "Error finding wallet: wallet not found id: '`+missingWalletID+`'"
+	}`, body, "an error is returned")
+
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	blindedCreds := JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
@@ -479,7 +487,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	suite.Assert().NoError(err, "the wallet failed to be inserted")
 
 	// no content returns an empty string on protocol level
-	body, code := suite.checkGetClaimSummary(service, walletID, "ads")
+	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Assert().Equal(``, body)
 	suite.Assert().Equal(http.StatusNoContent, code)
 
