@@ -335,30 +335,32 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 	statement := `
 		select
 			promotions.*,
-			promotions.active and wallet_claims.redeemed is distinct from true and 
+			promotions.active and wallet_claims.redeemed is distinct from true and
 			( promotions.platform = '' or promotions.platform = $2) and
-			( wallet_claims.legacy_claimed is true or 
+			( wallet_claims.legacy_claimed is true or
 				( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
 				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
 			) as available
 		from promotions left join (
       select * from claims where claims.wallet_id = $1
-    ) wallet_claims on promotions.id = wallet_claims.promotion_id 
+    ) wallet_claims on promotions.id = wallet_claims.promotion_id
 		order by promotions.created_at;`
 
 	if legacy {
 		statement = `
 		select
 			promotions.*,
-			( promotions.active and wallet_claims.redeemed is distinct from true and 
+			true as available
+		from promotions left join (
+      select * from claims where claims.wallet_id = $1
+    ) wallet_claims on promotions.id = wallet_claims.promotion_id
+		where
+			promotions.active and wallet_claims.redeemed is distinct from true and
 			( promotions.platform = '' or promotions.platform = $2) and
 			wallet_claims.legacy_claimed is distinct from true and
 			( ( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
 				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
-			) as available
-		from promotions left join (
-      select * from claims where claims.wallet_id = $1
-    ) wallet_claims on promotions.id = wallet_claims.promotion_id 
+			)
 		order by promotions.created_at;`
 	}
 
