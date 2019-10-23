@@ -22,8 +22,6 @@ create table issuers (
   primary key (promotion_id, cohort)
 );
 
-create index on issuers(public_key);
-
 create table wallets (
   id uuid primary key not null,
   -- created_at timestamp with time zone not null default current_timestamp,
@@ -45,6 +43,8 @@ create table claims (
   bonus numeric(28, 18) not null check (bonus >= 0.0) default 0,
   unique (promotion_id, wallet_id)
 );
+
+create index on claims(wallet_id);
 
 create table claim_creds (
   claim_id uuid primary key not null references claims(id),
