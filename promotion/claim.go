@@ -70,7 +70,6 @@ type Claim struct {
 	ApproximateValue decimal.Decimal `db:"approximate_value"`
 	Redeemed         bool            `db:"redeemed"`
 	Bonus            decimal.Decimal `db:"bonus"`
-	Platform         string          `db:"platform"`
 	LegacyClaimed    string          `db:"legacy_claimed"`
 }
 

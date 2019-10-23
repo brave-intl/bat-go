@@ -65,7 +65,7 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 		_, err = pg.DB.Exec("update promotions set created_at = now() - interval '1 month', expires_at = now() + interval '3 months' where id = $1", promotion1.ID)
 		suite.Require().NoError(err, "Changing promotion created_at / expires_at must succeed")
 
-		promotion2, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+		promotion2, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "android")
 		suite.Require().NoError(err, "Create promotion should succeed")
 		suite.Require().NoError(pg.ActivatePromotion(promotion2), "Activate promotion should succeed")
 
@@ -100,6 +100,8 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 	suite.Assert().Equal(grants, grantsSorted)
 
 	suite.Assert().Equal(grant1.GrantID, grants[0].GrantID)
+	// Check legacy grant type compatibility translation
+	suite.Assert().Equal("android", grants[1].Type)
 }
 
 func TestPostgresTestSuite(t *testing.T) {

@@ -144,6 +144,45 @@ func getPromotions(t *testing.T, server *httptest.Server, wallet wallet.Info) ([
 	return promotions, err
 }
 
+func getActive(t *testing.T, server *httptest.Server, wallet wallet.Info) ([]grant.Grant, error) {
+	type grantsResp struct {
+		Grants []grant.Grant
+	}
+	grantsURL := fmt.Sprintf("%s/v1/grants/active?paymentId=%s", server.URL, wallet.ID)
+	grants := []grant.Grant{}
+
+	req, err := http.NewRequest("GET", grantsURL, nil)
+	if err != nil {
+		return grants, err
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return grants, err
+	}
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			body = []byte("")
+		}
+		return grants, fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return grants, err
+	}
+
+	r := grantsResp{}
+	err = json.Unmarshal(body, &r)
+	grants = r.Grants
+	return grants, err
+}
+
 func TestClaim(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -155,7 +194,7 @@ func TestClaim(t *testing.T) {
 
 	value := decimal.NewFromFloat(30.0)
 	numGrants := 1
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +211,20 @@ func TestClaim(t *testing.T) {
 	err = claim(t, server, promotion.ID, wallet)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	grants, err := getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "android" {
+		t.Fatal("Expected one active android grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active android grant worth 30 BAT")
 	}
 
 	wallet.ID = uuid.NewV4().String()
@@ -277,7 +330,20 @@ func TestRedeem(t *testing.T) {
 		t.Fatal("with two active promotions and two claimed, no promos should be advertised")
 	}
 
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(decimal.NewFromFloat(30.0)), grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	totalBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(30.0))
+
+	grants, err := getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 2 {
+		t.Fatal("Expected two active grants")
+	}
+	if !grants[0].Probi.Add(grants[1].Probi).Equals(totalBAT) {
+		t.Fatal("Expected two active android grant worth 30 BAT total")
+	}
+
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,5 +374,13 @@ func TestRedeem(t *testing.T) {
 		bodyBytes, _ := ioutil.ReadAll(resp.Body)
 		t.Error(string(bodyBytes))
 		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	grants, err = getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 0 {
+		t.Fatal("Expected no active grants")
 	}
 }

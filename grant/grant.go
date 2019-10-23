@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
@@ -36,6 +37,11 @@ type ByExpiryTimestamp []Grant
 func (a ByExpiryTimestamp) Len() int           { return len(a) }
 func (a ByExpiryTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByExpiryTimestamp) Less(i, j int) bool { return a[i].ExpiryTimestamp < a[j].ExpiryTimestamp }
+
+// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
+func (service *Service) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+	return service.datastore.GetGrantsOrderedByExpiry(wallet)
+}
 
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization
 func CreateGrants(

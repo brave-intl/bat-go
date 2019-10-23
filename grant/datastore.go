@@ -264,18 +264,20 @@ func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error
 	type GrantResult struct {
 		Grant
 		ApproximateValue decimal.Decimal `db:"approximate_value"`
-		CreatedAt        time.Time       `json:"createdAt" db:"created_at"`
-		ExpiresAt        time.Time       `json:"expiresAt" db:"expires_at"`
+		CreatedAt        time.Time       `db:"created_at"`
+		ExpiresAt        time.Time       `db:"expires_at"`
+		Platform         string          `db:"platform"`
 	}
 
 	statement := `
 select
 	claims.id,
-	promotions.approximate_value,
+	claims.approximate_value,
 	claims.promotion_id,
 	promotions.created_at,
 	promotions.expires_at,
-	promotions.promotion_type
+	promotions.promotion_type,
+	promotions.platform
 from claims inner join promotions
 on claims.promotion_id = promotions.id
 where
@@ -301,6 +303,9 @@ order by promotions.expires_at`
 		grant.Probi = grant.AltCurrency.ToProbi(grant.ApproximateValue)
 		grant.MaturityTimestamp = grant.CreatedAt.Unix()
 		grant.ExpiryTimestamp = grant.ExpiresAt.Unix()
+		if grant.Type == "ugp" && grant.Platform == "android" {
+			grant.Type = "android"
+		}
 		grants[i] = grant.Grant
 	}
 

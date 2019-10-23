@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	uuid "github.com/satori/go.uuid"
@@ -33,6 +34,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service)))
 	}
 	// Hacky compatibility layer between for legacy grants and new datastore
+	r.Method("GET", "/active", middleware.InstrumentHandler("GetActive", GetActive(service)))
 	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
 	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
@@ -47,6 +49,43 @@ func Status(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 	return nil
+}
+
+// ActiveGrantsResponse includes information about currently active grants for a wallet
+type ActiveGrantsResponse struct {
+	Grants []grant.Grant `json:"grants"`
+}
+
+// GetActive is the handler for returning info about active grants
+func GetActive(service *grant.Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		paymentID := r.URL.Query().Get("paymentId")
+
+		if len(paymentID) == 0 || !govalidator.IsUUIDv4(paymentID) {
+			return &handlers.AppError{
+				Message: "Error validating request query parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"paymentId": "paymentId must be a uuidv4",
+					},
+				},
+			}
+		}
+
+		var wallet wallet.Info
+		wallet.ID = paymentID
+		grants, err := service.GetGrantsOrderedByExpiry(wallet)
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up active grants", http.StatusBadRequest)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&ActiveGrantsResponse{Grants: grants}); err != nil {
+			panic(err)
+		}
+		return nil
+	})
 }
 
 // Claim is the handler for claiming grants
