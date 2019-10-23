@@ -68,7 +68,13 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
 
-	grantService, err := grant.InitService(&grant.Redis{Pool: rp}, rp)
+	grantPg, err := grant.NewPostgres("", true)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
+
+	grantService, err := grant.InitService(grantPg, rp)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)

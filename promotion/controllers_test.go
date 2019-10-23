@@ -111,6 +111,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
 			"id": "` + promotion.ID.String() + `",
 			"platform": "` + promotion.Platform + `",
+			"publicKeys" : [],
 			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
 			"type": "ugp",
 			"version": 5
@@ -199,7 +200,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) {
+func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
 	walletID, err := uuid.FromString(wallet.ID)
@@ -268,6 +269,8 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	suite.Assert().NoError(err)
 
 	suite.Assert().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
+
+	return getClaimResp
 }
 
 func (suite *ControllersTestSuite) TestClaimGrant() {
@@ -313,7 +316,31 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	resp := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+
+	handler := GetAvailablePromotions(service)
+	req, err := http.NewRequest("GET", fmt.Sprintf("/promotions?paymentId=%s&platform=osx", walletID.String()), nil)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+	expected := `{
+		"promotions": [
+			{
+				"approximateValue": "` + promotion.ApproximateValue.String() + `",
+				"available": false,
+				"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
+				"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
+				"id": "` + promotion.ID.String() + `",
+				"platform": "` + promotion.Platform + `",
+				"publicKeys" : ["` + resp.PublicKey + `"],
+				"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
+				"type": "ugp",
+				"version": 5
+			}
+		]
+	}`
+	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {
@@ -439,6 +466,14 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		datastore: pg,
 	}
 
+	missingWalletID := uuid.NewV4().String()
+	body, code := suite.checkGetClaimSummary(service, missingWalletID, "ads")
+	suite.Assert().Equal(http.StatusNotFound, code, "a 404 is sent back")
+	suite.Assert().JSONEq(`{
+		"code": 404,
+		"message": "Error finding wallet: wallet not found id: '`+missingWalletID+`'"
+	}`, body, "an error is returned")
+
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	blindedCreds := JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
@@ -452,7 +487,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	suite.Assert().NoError(err, "the wallet failed to be inserted")
 
 	// no content returns an empty string on protocol level
-	body, code := suite.checkGetClaimSummary(service, walletID, "ads")
+	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Assert().Equal(``, body)
 	suite.Assert().Equal(http.StatusNoContent, code)
 
@@ -526,4 +561,44 @@ func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, wallet
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	return rr.Body.String(), rr.Code
+}
+
+func (suite *ControllersTestSuite) TestCreatePromotion() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	ch := make(chan SuggestionEvent)
+	service := &Service{
+		datastore:    pg,
+		cbClient:     mockCB,
+		ledgerClient: mockLedger,
+		eventChannel: ch,
+	}
+
+	handler := CreatePromotion(service)
+
+	createRequest := CreatePromotionRequest{
+		Type:      "ugp",
+		NumGrants: 10,
+		Value:     decimal.NewFromFloat(20.0),
+		Platform:  "",
+		Active:    true,
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
 }

@@ -2,7 +2,6 @@ package grant
 
 import (
 	"encoding/hex"
-	"errors"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -11,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/ed25519"
 )
@@ -54,11 +54,9 @@ var (
 
 // Service contains datastore and redis connections as well as prometheus metrics
 type Service struct {
-	datastore                 Datastore
-	redisPool                 *redis.Pool
-	outstandingGrantCountDesc *prometheus.Desc
-	completedGrantCountDesc   *prometheus.Desc
-	grantWalletBalanceDesc    *prometheus.Desc
+	datastore              Datastore
+	redisPool              *redis.Pool
+	grantWalletBalanceDesc *prometheus.Desc
 }
 
 // InitService initializes the grant service
@@ -66,18 +64,6 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 	gs := &Service{
 		datastore: datastore,
 		redisPool: redisPool,
-		outstandingGrantCountDesc: prometheus.NewDesc(
-			"outstanding_grants_total",
-			"Outstanding grants that have been claimed and have not expired.",
-			[]string{},
-			prometheus.Labels{},
-		),
-		completedGrantCountDesc: prometheus.NewDesc(
-			"completed_grants_total",
-			"Completed grants that have been redeemed.",
-			[]string{"promotionId"},
-			prometheus.Labels{},
-		),
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",
@@ -89,7 +75,7 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 	var err error
 	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "GrantSignatorPublicKeyHex is invalid")
 	}
 
 	if os.Getenv("ENV") == productionEnv && !refreshBalance {
@@ -114,11 +100,11 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
 		grantWallet, err = uphold.New(info, privKey, pubKey)
@@ -144,38 +130,12 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 // Describe returns all descriptions of the collector.
 // We implement this and the Collect function to fulfill the prometheus.Collector interface
 func (gs *Service) Describe(ch chan<- *prometheus.Desc) {
-	ch <- gs.outstandingGrantCountDesc
-	ch <- gs.completedGrantCountDesc
 	ch <- gs.grantWalletBalanceDesc
 }
 
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (gs *Service) Collect(ch chan<- prometheus.Metric) {
-	ogCount, err := gs.datastore.GetOutstandingGrantCount()
-	if err != nil {
-		raven.CaptureError(err, map[string]string{})
-		return
-	}
-	ch <- prometheus.MustNewConstMetric(
-		gs.outstandingGrantCountDesc,
-		prometheus.GaugeValue,
-		float64(ogCount),
-	)
-	redeemedCounts, err := gs.datastore.GetRedeemedCountByPromotion()
-	if err != nil {
-		raven.CaptureError(err, map[string]string{})
-		return
-	}
-	for promotionID, completedCount := range redeemedCounts {
-		ch <- prometheus.MustNewConstMetric(
-			gs.completedGrantCountDesc,
-			prometheus.GaugeValue,
-			float64(completedCount),
-			promotionID,
-		)
-	}
-
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
 		raven.CaptureError(err, map[string]string{})
