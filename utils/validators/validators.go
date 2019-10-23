@@ -14,6 +14,7 @@ func init() {
 	govalidator.TagMap["btcaddress"] = govalidator.Validator(IsBTCAddress)
 	govalidator.TagMap["ethaddressnochecksum"] = govalidator.Validator(IsETHAddressNoChecksum)
 	govalidator.TagMap["ethaddress"] = govalidator.Validator(IsETHAddress)
+	govalidator.TagMap["platform"] = govalidator.Validator(IsPlatform)
 }
 
 const (

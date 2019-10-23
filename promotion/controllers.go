@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -17,11 +18,18 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	if os.Getenv("ENV") == "production" {
+		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
+	} else {
+		r.Method("POST", "/", CreatePromotion(service))
+	}
+
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
@@ -106,7 +114,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform, legacy)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting available promotions", 0)
+			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -134,13 +142,13 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		limit := int64(1024 * 1024 * 10) // 10MiB
 		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
 		if err != nil {
-			return handlers.WrapError(err, "Error reading body", 0)
+			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
 		}
 
 		var req ClaimRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", 0)
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -149,7 +157,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
-			return handlers.WrapError(err, "Error looking up http signature info", 0)
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.PaymentID.String() != keyID {
 			return &handlers.AppError{
@@ -183,7 +191,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds)
 		if err != nil {
-			return handlers.WrapError(err, "Error claiming promotion", 0)
+			return handlers.WrapError(err, "Error claiming promotion", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -224,7 +232,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 
 		claim, err := service.datastore.GetClaimCreds(id)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", 0)
+			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
 
 		if claim == nil {
@@ -302,14 +310,14 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
 		if err != nil {
 			// FIXME
-			return handlers.WrapError(err, "Error reading body", 0)
+			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
 		}
 
 		var req SuggestionRequest
 		err = json.Unmarshal(body, &req)
 		if err != nil {
 			// FIXME
-			return handlers.WrapError(err, "Error unmarshalling body", 0)
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -325,11 +333,65 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 				return handlers.WrapValidationError(err)
 			default:
 				// FIXME
-				return handlers.WrapError(err, "Error making suggestion", 0)
+				return handlers.WrapError(err, "Error making suggestion", http.StatusBadRequest)
 			}
 		}
 
 		w.WriteHeader(http.StatusOK)
 		return nil
+	})
+}
+
+// CreatePromotionRequest includes information needed to create a promotion
+type CreatePromotionRequest struct {
+	Type      string          `json:"type" valid:"in(ads|ugp)"`
+	NumGrants int             `json:"numGrants" valid:"required"`
+	Value     decimal.Decimal `json:"value" valid:"required"`
+	Platform  string          `json:"platform" valid:"platform,optional"`
+	Active    bool            `json:"active" valid:"-"`
+}
+
+// CreatePromotionResponse includes information about the created promotion
+type CreatePromotionResponse struct {
+	Promotion
+}
+
+// CreatePromotion is the handler for creating a promotion
+func CreatePromotion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		limit := int64(1024 * 1024 * 10) // 10MiB
+		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
+		if err != nil {
+			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
+		}
+
+		var req CreatePromotionRequest
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+		}
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		promotion, err := service.datastore.CreatePromotion(req.Type, req.NumGrants, req.Value, req.Platform)
+		if err != nil {
+			return handlers.WrapError(err, "Error creating promotion", http.StatusBadRequest)
+		}
+
+		if req.Active {
+			err = service.datastore.ActivatePromotion(promotion)
+			if err != nil {
+				return handlers.WrapError(err, "Error marking promotion active", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {
+			panic(err)
+		}
+		return nil
+
 	})
 }

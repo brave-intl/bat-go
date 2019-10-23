@@ -554,3 +554,43 @@ func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, wallet
 	handler.ServeHTTP(rr, req)
 	return rr.Body.String(), rr.Code
 }
+
+func (suite *ControllersTestSuite) TestCreatePromotion() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	ch := make(chan SuggestionEvent)
+	service := &Service{
+		datastore:    pg,
+		cbClient:     mockCB,
+		ledgerClient: mockLedger,
+		eventChannel: ch,
+	}
+
+	handler := CreatePromotion(service)
+
+	createRequest := CreatePromotionRequest{
+		Type:      "ugp",
+		NumGrants: 10,
+		Value:     decimal.NewFromFloat(20.0),
+		Platform:  "",
+		Active:    true,
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+}
