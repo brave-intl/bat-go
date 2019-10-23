@@ -228,6 +228,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
+	promotion.PublicKeys = JSONStringArray{}
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")

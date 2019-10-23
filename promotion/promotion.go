@@ -23,8 +23,8 @@ type Promotion struct {
 	Active              bool            `json:"-" db:"active"`
 	Available           bool            `json:"available" db:"available"`
 	Platform            string          `json:"platform" db:"platform"`
+	PublicKeys          JSONStringArray `json:"publicKeys" db:"public_keys"`
 	//ClaimableUntil      time.Time
-	//PublicKeys          []string
 }
 
 // CredentialValue returns the approximate value of a credential
