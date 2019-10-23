@@ -265,6 +265,16 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 			})
 		}
 
+		wallet, err := service.datastore.GetWallet(paymentID)
+		if err != nil {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
+		}
+
+		if wallet == nil {
+			err := errors.New("wallet not found id: '" + paymentID.String() + "'")
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
+
 		summary, err := service.datastore.GetClaimSummary(paymentID, claimType)
 		if err != nil {
 			return handlers.WrapError(err, "Error aggregating wallet claims", http.StatusInternalServerError)
