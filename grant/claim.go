@@ -29,7 +29,7 @@ type ClaimRequest struct {
 
 // ClaimResponse includes information about the claimed grant
 type ClaimResponse struct {
-	ApproximateValue decimal.Decimal `db:"approximate_value"`
+	ApproximateValue decimal.Decimal `json:"approximateValue" db:"approximate_value"`
 }
 
 // Claim registers a claim on behalf of a user wallet to a particular Grant.

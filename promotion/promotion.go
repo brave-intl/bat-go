@@ -54,11 +54,14 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 	return wallet, nil
 }
 
-// GetAvailablePromotions first looks up the wallet and then retrieves available promotions
-func (service *Service) GetAvailablePromotions(ctx context.Context, walletID uuid.UUID, platform string, legacy bool) ([]Promotion, error) {
-	wallet, err := service.GetOrCreateWallet(ctx, walletID)
-	if err != nil {
-		return []Promotion{}, err
+// GetAvailablePromotions first tries to look up the wallet and then retrieves available promotions
+func (service *Service) GetAvailablePromotions(ctx context.Context, walletID *uuid.UUID, platform string, legacy bool) ([]Promotion, error) {
+	if walletID != nil {
+		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
+		if err != nil {
+			return []Promotion{}, err
+		}
+		return service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
 	}
-	return service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
+	return service.datastore.GetAvailablePromotions(platform, legacy)
 }

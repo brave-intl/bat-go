@@ -193,14 +193,14 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		txInfo, err := service.Redeem(r.Context(), &req)
+		redeemInfo, err := service.Redeem(r.Context(), &req)
 		if err != nil {
 			// FIXME not all errors are 4xx
 			return handlers.WrapError(err, "Error redeeming grant", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(txInfo); err != nil {
+		if err := json.NewEncoder(w).Encode(redeemInfo); err != nil {
 			panic(err)
 		}
 		return nil
