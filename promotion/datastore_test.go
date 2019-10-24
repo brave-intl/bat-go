@@ -34,6 +34,10 @@ func (suite *PostgresTestSuite) SetupSuite() {
 }
 
 func (suite *PostgresTestSuite) SetupTest() {
+	suite.CleanDB()
+}
+
+func (suite *PostgresTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 
 	pg, err := NewPostgres("", false)
@@ -217,7 +221,6 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	//blindedCreds := JSONStringArray([]string{})
 
 	w := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.InsertWallet(w), "Save wallet should succeed")
@@ -262,6 +265,70 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().Equal(2, len(promotions))
 	suite.Assert().True(promotions[0].Available)
 	suite.Assert().True(promotions[1].Available)
+}
+
+func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	promotions, err := pg.GetAvailablePromotions("", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	promotion, err := pg.CreatePromotion("ugp", 0, decimal.NewFromFloat(15.0), "")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	promotion.PublicKeys = JSONStringArray{}
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	promotions, err = pg.GetAvailablePromotions("", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions), "Active promo with no grants should not appears in legacy list")
+
+	suite.CleanDB()
+
+	promotion, err = pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	promotion.PublicKeys = JSONStringArray{}
+
+	promotions, err = pg.GetAvailablePromotions("", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+	suite.Assert().Equal(*promotion, promotions[0])
+	suite.Assert().False(promotions[0].Available)
+
+	promotions, err = pg.GetAvailablePromotions("", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	promotions, err = pg.GetAvailablePromotions("", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+	suite.Assert().True(promotions[0].Active)
+	suite.Assert().True(promotions[0].Available)
+
+	promotions, err = pg.GetAvailablePromotions("", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+	suite.Assert().True(promotions[0].Active)
+	suite.Assert().True(promotions[0].Available)
+
+	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(25.0), "")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	promotions, err = pg.GetAvailablePromotions("", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+	suite.Assert().True(promotions[0].Active)
+	suite.Assert().True(promotions[0].Available)
+
+	promotions, err = pg.GetAvailablePromotions("", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+	suite.Assert().True(promotions[0].Active)
+	suite.Assert().True(promotions[0].Available)
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {

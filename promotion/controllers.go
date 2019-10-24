@@ -80,22 +80,31 @@ type PromotionsResponse struct {
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		paymentID := r.URL.Query().Get("paymentId")
+		var paymentID *uuid.UUID
+		paymentIDText := r.URL.Query().Get("paymentId")
 
-		if len(paymentID) == 0 || !govalidator.IsUUIDv4(paymentID) {
-			return &handlers.AppError{
-				Message: "Error validating request query parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"paymentId": "paymentId must be a uuidv4",
+		if len(paymentIDText) > 0 {
+			if !govalidator.IsUUIDv4(paymentIDText) {
+				return &handlers.AppError{
+					Message: "Error validating request query parameter",
+					Code:    http.StatusBadRequest,
+					Data: map[string]interface{}{
+						"validationErrors": map[string]string{
+							"paymentId": "paymentId must be a uuidv4",
+						},
 					},
-				},
+				}
 			}
+
+			tmp, err := uuid.FromString(paymentIDText)
+			if err != nil {
+				panic(err) // Should not be possible
+			}
+			paymentID = &tmp
 		}
 
 		platform := r.URL.Query().Get("platform")
-		if !validators.IsPlatform(platform) {
+		if len(platform) > 0 && !validators.IsPlatform(platform) {
 			return handlers.ValidationError("request query parameter", map[string]string{
 				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
 			})
@@ -107,12 +116,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			legacy = true
 		}
 
-		id, err := uuid.FromString(paymentID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
-
-		promotions, err := service.GetAvailablePromotions(r.Context(), id, platform, legacy)
+		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -396,6 +400,8 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error marking promotion active", http.StatusBadRequest)
 			}
 		}
+
+		// TODO create issuer
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {

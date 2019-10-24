@@ -185,8 +185,14 @@ func (service *Service) GetRedeemedIDs(ctx context.Context, Grants []string) ([]
 	return results, nil
 }
 
+// RedeemGrantsResponse includes information about the transaction to settlement and the grant funds used
+type RedeemGrantsResponse struct {
+	wallet.TransactionInfo
+	GrantTotal decimal.Decimal `json:"grantTotal"`
+}
+
 // Redeem the grants in the included response
-func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*wallet.TransactionInfo, error) {
+func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*RedeemGrantsResponse, error) {
 	log := lg.Log(ctx)
 
 	if RedemptionDisabled() {
@@ -265,5 +271,5 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 		}
 	}
 
-	return settlementInfo, nil
+	return &RedeemGrantsResponse{TransactionInfo: *settlementInfo, GrantTotal: grantFulfillmentInfo.Probi}, nil
 }

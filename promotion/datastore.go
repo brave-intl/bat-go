@@ -28,6 +28,8 @@ type Datastore interface {
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	// GetAvailablePromotions returns the list of available promotions for all wallets
+	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -375,6 +377,47 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 	promotions := []Promotion{}
 
 	err := pg.DB.Select(&promotions, statement, wallet.ID, platform)
+	if err != nil {
+		return promotions, err
+	}
+
+	return promotions, nil
+}
+
+// GetAvailablePromotions returns the list of available promotions for all wallets
+func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+	statement := `
+		select
+			promotions.*,
+			promotions.active and
+			promotions.remaining_grants > 0 and
+			( promotions.platform = '' or promotions.platform = $1)
+			as available,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.promotion_type = 'ugp'
+		group by promotions.id
+		order by promotions.created_at;`
+
+	if legacy {
+		statement = `
+		select
+			promotions.*,
+			true as available,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.promotion_type = 'ugp' and promotions.active and
+			promotions.remaining_grants > 0 and
+			( promotions.platform = '' or promotions.platform = $1 )
+		group by promotions.id
+		order by promotions.created_at;`
+	}
+
+	promotions := []Promotion{}
+
+	err := pg.DB.Select(&promotions, statement, platform)
 	if err != nil {
 		return promotions, err
 	}
