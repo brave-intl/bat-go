@@ -18,8 +18,9 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// Client abstracts over the underlying client
 type Client interface {
-  IsWalletReputable(ctx context.Context, id uuid.UUID) (bool, error)
+	IsWalletReputable(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -30,7 +31,7 @@ type HTTPClient struct {
 	client *http.Client
 }
 
-// New returns a new HTTPClient, retrieving the base URL from the 
+// New returns a new HTTPClient, retrieving the base URL from the
 // environment
 func New() (*HTTPClient, error) {
 	serverURL := os.Getenv("REPUATION_SERVER")
@@ -55,10 +56,10 @@ func New() (*HTTPClient, error) {
 }
 
 func (c *HTTPClient) newRequest(
-  ctx context.Context,
-  method,
-  path string,
-  body interface{},
+	ctx context.Context,
+	method,
+	path string,
+	body interface{},
 ) (*http.Request, error) {
 	url := c.BaseURL.ResolveReference(&url.URL{Path: path})
 
@@ -114,30 +115,33 @@ func (c *HTTPClient) do(req *http.Request, v interface{}) (*http.Response, error
 	return resp, fmt.Errorf("Request error: %d", resp.StatusCode)
 }
 
-
 // IsWalletReputableResponse is what the reputation server
 // will send back when we ask if a wallet is reputable
 type IsWalletReputableResponse struct {
-  IsReputable bool `json:"isReputable"`
+	IsReputable bool `json:"isReputable"`
 }
 
-
+// IsWalletReputable makes the request to the repuation server
+// and reutrns whether a paymentId has enough reputation
+// to claim a grant
 func (c *HTTPClient) IsWalletReputable(
-  ctx context.Context,
-  paymentID uuid.UUID,
+	ctx context.Context,
+	paymentID uuid.UUID,
 ) (bool, error) {
 	req, err := c.newRequest(
-    ctx, 
-    "GET", "v1/reputation/" + paymentID.String(),
-    nil,
-  )
+		ctx,
+		"GET", "v1/reputation/"+paymentID.String(),
+		nil,
+	)
 	if err != nil {
 		return false, err
 	}
 
 	var resp IsWalletReputableResponse
 	_, err = c.do(req, &resp)
+	if err != nil {
+		return false, err
+	}
 
 	return resp.IsReputable, nil
 }
-
