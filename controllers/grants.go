@@ -35,6 +35,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	}
 	// Hacky compatibility layer between for legacy grants and new datastore
 	r.Method("GET", "/active", middleware.InstrumentHandler("GetActive", GetActive(service)))
+	r.Method("POST", "/drain", middleware.InstrumentHandler("DrainGrants", DrainGrants(service)))
 	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
 	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
@@ -203,6 +204,37 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 		if err := json.NewEncoder(w).Encode(redeemInfo); err != nil {
 			panic(err)
 		}
+		return nil
+	})
+}
+
+// DrainGrants is the handler for draining all grants in a wallet into a linked uphold account
+func DrainGrants(service *grant.Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		defer closers.Panic(r.Body)
+
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
+		}
+
+		var req grant.DrainGrantsRequest
+		err = json.Unmarshal(body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+		}
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.Drain(r.Context(), &req)
+		if err != nil {
+			// FIXME not all errors are 4xx
+			return handlers.WrapError(err, "Error redeeming grant", http.StatusBadRequest)
+		}
+
+		w.WriteHeader(http.StatusOK)
 		return nil
 	})
 }

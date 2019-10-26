@@ -127,13 +127,13 @@ func TestConsume(t *testing.T) {
 
 	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{grant}, nil)
 	mockDB.EXPECT().RedeemGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)
-	_, err = service.Consume(ctx, &request)
+	_, err = service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err != nil {
 		t.Error(err)
 	}
 
 	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{}, nil)
-	_, err = service.Consume(ctx, &request)
+	_, err = service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err == nil {
 		t.Error("expected re-redeem (attempt to use same grant) to fail")
 	}
