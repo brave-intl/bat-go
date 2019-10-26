@@ -11,6 +11,8 @@ import (
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+  "github.com/segmentio/kafka-go"
+  "github.com/linkedin/goavro"
 )
 
 // CredentialBinding includes info needed to redeem a single credential
@@ -167,7 +169,57 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	service.eventChannel <- suggestion
-	// TODO emit event
 
-	return nil
+  // kafka event producer below - this could probably put into a generic module
+
+  w := kafka.NewWriter(kafka.WriterConfig{
+    Brokers: []string{"localhost:9092"}, // put in cfg
+    Topic:   "suggestion", // put in cfg
+    Balancer: &kafka.LeastBytes{},
+  })
+
+  // move to repo / tighten this up
+  codec, err := goavro.NewCodec(`
+      {
+        "type": "record",
+        "name": "suggestion",
+        "fields" : [
+          {
+            "type": "string",
+            "channel": "string",
+            "totalAmount": "string",
+            "funding": [
+              {
+                "type": "string",
+                "amount": "string",
+                "cohort": "string",
+                "promotion": "string"
+              }
+            ]
+          }
+        ]
+      }`)
+  if err != nil {
+    return err
+  }
+  // read go object here
+  textual := []byte(`{"type": "auto-contribue"}`)
+  native, _, err := codec.NativeFromTextual(textual)
+  if err != nil {
+    return err
+  }
+
+  binary, err := codec.BinaryFromNative(nil, native)
+  if err != nil {
+    return err
+  }
+
+  w.WriteMessages(context.Background(),
+    kafka.Message{
+      Value: []byte(binary),
+    },
+  )
+
+  w.Close()
+  return nil
 }

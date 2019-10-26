@@ -37,6 +37,7 @@ require (
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.2.0
+	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-colorable v0.1.1 // indirect
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
@@ -51,6 +52,7 @@ require (
 	github.com/rs/zerolog v1.14.0
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0
+	github.com/segmentio/kafka-go v0.3.4
 	github.com/shopspring/decimal v0.0.0-20190905144223-a36b5d85f337
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
