@@ -336,7 +336,19 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
 	statement := `
 		select
-			promos.*,
+			promos.id,
+			promos.promotion_type,
+			promos.created_at,
+			promos.expires_at,
+			promos.version,
+			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
+			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+				promos.approximate_value * 
+				promos.suggestions_per_grant )::int as suggestions_per_grant,
+			promos.remaining_grants,
+			promos.platform,
+			promos.active,
+			promos.public_keys,
 			promos.active and wallet_claims.redeemed is distinct from true and
 			( promos.platform = '' or promos.platform = $2) and
 			( wallet_claims.legacy_claimed is true or
