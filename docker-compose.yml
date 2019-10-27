@@ -16,6 +16,7 @@ services:
     environment:
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
+      - "ADS_SERVER=https://ads-serve.bravesoftware.com"
       - "REDIS_URL=redis://redis:6379"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - BAT_SETTLEMENT_ADDRESS
