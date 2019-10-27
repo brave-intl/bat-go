@@ -18,10 +18,10 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/cbr"
-	mockcb "github.com/brave-intl/bat-go/utils/cbr/mock"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
-	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"

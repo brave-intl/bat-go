@@ -1,8 +1,8 @@
 package promotion
 
 import (
-	"github.com/brave-intl/bat-go/utils/cbr"
-	"github.com/brave-intl/bat-go/utils/ledger"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/ledger"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections

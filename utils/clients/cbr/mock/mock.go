@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	x "github.com/brave-intl/bat-go/utils/cbr"
+	x "github.com/brave-intl/bat-go/utils/clients/cbr"
 	gomock "github.com/golang/mock/gomock"
 )
 
