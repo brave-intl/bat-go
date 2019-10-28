@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -51,6 +52,10 @@ type Datastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// RunNextClaimJob to sign claim credentials if there is a claim waiting
 	RunNextClaimJob(ctx context.Context, worker ClaimWorker) error
+	// InsertSuggestion inserts a transaction awaiting validation
+	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
+	// RunNextSuggestionJob to process a suggestion if there is one waiting
+	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -533,6 +538,87 @@ on claim_cred.issuer_id = issuers.id`
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// InsertSuggestion inserts a transaction awaiting validation
+func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestionEvent []byte) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	statement := `
+	insert into suggestion_drain (credentials, suggestion_text, suggestion_event)
+	values ($1, $2, $3)
+	returning *`
+	_, err = pg.DB.Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RunNextSuggestionJob to process a suggestion if there is one waiting
+func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error {
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// FIXME
+	type SuggestionJob struct {
+		ID              uuid.UUID `db:"id"`
+		Credentials     string    `db:"credentials"`
+		SuggestionText  string    `db:"suggestion_text"`
+		SuggestionEvent []byte    `db:"suggestion_event"`
+	}
+
+	statement := `
+select *
+from suggestion_drain
+for update skip locked
+limit 1`
+
+	jobs := []SuggestionJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return nil
+	}
+
+	job := jobs[0]
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err

@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -122,7 +122,8 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		err := service.datastore.RunNextClaimJob(ctx, service)
 		// FIXME
 		if err != nil {
-			fmt.Println(err)
+			logger := log.Ctx(ctx)
+			logger.Error().Err(err).Msg("error processing claim job")
 		}
 	}()
 

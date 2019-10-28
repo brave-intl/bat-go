@@ -57,3 +57,10 @@ create table claim_creds (
 );
 
 create index on claim_creds(batch_proof);
+
+create table suggestion_drain (
+  id uuid primary key not null default uuid_generate_v4(),
+  credentials json not null,
+  suggestion_text text not null,
+  suggestion_event bytea not null
+);

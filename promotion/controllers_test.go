@@ -369,7 +369,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan SuggestionEvent)
+	ch := make(chan []byte)
 	service := &Service{
 		datastore:    pg,
 		cbClient:     mockCB,
@@ -390,7 +390,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
 	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
 
-	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokens)).Return(nil)
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
 	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
 		Name:      issuerName,
 		PublicKey: issuerPublicKey,
@@ -439,8 +439,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	// wait for suggestion event
-	suggestionEvent := <-ch
-	suggestionEventJSON, err := json.Marshal(&suggestionEvent)
+	suggestionEventJSON := <-ch
 	suite.Require().NoError(err)
 
 	suite.Assert().JSONEq(`{
@@ -579,7 +578,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan SuggestionEvent)
+	ch := make(chan []byte)
 	service := &Service{
 		datastore:    pg,
 		cbClient:     mockCB,
