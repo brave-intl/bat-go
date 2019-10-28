@@ -24,8 +24,7 @@ import (
 )
 
 var (
-	redisURL      = os.Getenv("REDIS_URL")
-	reputationURL = os.Getenv("REPUTATION_SERVER")
+	redisURL = os.Getenv("REDIS_URL")
 )
 
 func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
@@ -101,7 +100,8 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Get("/metrics", middleware.Metrics())
 
 	// Setup reverse proxy for reputation endpoints for clients
-	proxyURL, err := url.Parse(reputationURL)
+	reputationServer := os.Getenv("REPUTATION_SERVER")
+	proxyURL, err := url.Parse(reputationServer)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)
