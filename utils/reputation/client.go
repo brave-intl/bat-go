@@ -34,10 +34,10 @@ type HTTPClient struct {
 // New returns a new HTTPClient, retrieving the base URL from the
 // environment
 func New() (*HTTPClient, error) {
-	serverURL := os.Getenv("REPUATION_SERVER")
+	serverURL := os.Getenv("REPUTATION_SERVER")
 
 	if len(serverURL) == 0 {
-		return nil, errors.New("REPUATION_SERVER was empty")
+		return nil, errors.New("REPUTATION_SERVER was empty")
 	}
 
 	baseURL, err := url.Parse(serverURL)
@@ -121,7 +121,7 @@ type IsWalletReputableResponse struct {
 	IsReputable bool `json:"isReputable"`
 }
 
-// IsWalletReputable makes the request to the repuation server
+// IsWalletReputable makes the request to the reputation server
 // and reutrns whether a paymentId has enough reputation
 // to claim a grant
 func (c *HTTPClient) IsWalletReputable(

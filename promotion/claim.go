@@ -84,7 +84,12 @@ type ClaimCreds struct {
 
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
-func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID uuid.UUID, walletID uuid.UUID, blindedCreds []string) (*uuid.UUID, error) {
+func (service *Service) ClaimPromotionForWallet(
+	ctx context.Context,
+	promotionID uuid.UUID,
+	walletID uuid.UUID,
+	blindedCreds []string,
+) (*uuid.UUID, error) {
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
@@ -99,8 +104,14 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 	}
 
 	// TODO lookup and return existing claim if exists?
+	walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID)
+	if err != nil {
+		return nil, err
+	}
 
-	// TODO lookup reputation server
+	if !walletIsReputable {
+		return nil, errors.New("Insufficient wallet reputation for grant claim")
+	}
 
 	cohort := "control"
 	issuer, err := service.GetOrCreateIssuer(ctx, promotionID, cohort)
