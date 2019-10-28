@@ -25,7 +25,7 @@ services:
       - GRANT_WALLET_PUBLIC_KEY
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - "REDIS_URL=redis://redis:6379"
-      - "REPUTATION_SERVER=https://reputation.rewards.brave.software"
+      - REPUTATION_SERVER
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
     depends_on:
@@ -67,37 +67,5 @@ services:
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
     depends_on:
       - challenge-bypass-postgres
-    networks:
-      - grant
-  reputation-postgres-grant:
-    container_name: reputation-postgres-grant
-    image: postgres:10.7
-    environment:
-      - "POSTGRES_USER=reputation"
-      - "POSTGRES_PASSWORD=password"
-      - "POSTGRES_DB=reputation"
-    networks:
-      - grant
-  reputation-web-grant:
-    container_name: reputation-web-grant
-    image: bat-reputation:latest
-    # restart: always
-    ports:
-      - 3334:3334
-    environment:
-      - "ALLOW_DEBUG_APK=1"
-      - "API_APPLE_KEY_ID=1"
-      - "API_APPLE_BASE_URL=https://api.development.devicecheck.apple.com"
-      - "API_APPLE_PRIVATE_KEY=1"
-      - "API_APPLE_TEAM_ID=1"
-      - "DATABASE_URL=postgres://reputation:password@reputation-postgres:5432/reputation?sslmode=disable"
-      - "DATABASE_MIGRATIONS_URL=file:///src/services/datastore/migrations"
-      - "GRPC_ENABLED=1"
-      - "IOS_ENROLLMENT_WAIT_HOURS=720h"
-      - "TOKEN_LIST=foobarfoobar"
-      - "TEST_TAGS=integration"
-      - "GOTEST=go test"
-    depends_on:
-      - reputation-postgres-grant
     networks:
       - grant
