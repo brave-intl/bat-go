@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -22,7 +24,8 @@ import (
 )
 
 var (
-	redisURL = os.Getenv("REDIS_URL")
+	redisURL      = os.Getenv("REDIS_URL")
+	reputationURL = os.Getenv("REPUTATION_SERVER")
 )
 
 func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
@@ -96,6 +99,18 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
+
+	// Setup reverse proxy for reputation endpoints for clients
+	proxyURL, err := url.Parse(reputationURL)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic(err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
+	r.Mount("/v1/devicecheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxy.ServeHTTP(w, r)
+	}))
+
 	return ctx, r
 }
 
