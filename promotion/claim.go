@@ -98,7 +98,15 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
 
-	// TODO lookup and return existing claim if exists?
+  claim, err := service.datastore.GetClaimByWalletAndPromotionID(wallet, promotion)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
+	}
+
+  // If this wallet already claimed, return the previously claimed promotion
+	if claim != nil {
+	  return &claim.ID, nil
+	}
 
 	// TODO lookup reputation server
 
@@ -112,7 +120,7 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.New("wrong number of blinded tokens included")
 	}
 
-	claim, err := service.datastore.ClaimForWallet(promotion, wallet, JSONStringArray(blindedCreds))
+	claim, err = service.datastore.ClaimForWallet(promotion, wallet, JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
