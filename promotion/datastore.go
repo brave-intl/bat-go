@@ -1,6 +1,7 @@
 package promotion
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -37,7 +38,7 @@ type Datastore interface {
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
 	// InsertIssuer inserts the given issuer
-	InsertIssuer(issuer *Issuer) error
+	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	// GetIssuer by PromotionID and cohort
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
@@ -48,6 +49,8 @@ type Datastore interface {
 	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
+	// RunNextClaimJob to sign claim credentials if there is a claim waiting
+	RunNextClaimJob(ctx context.Context, worker ClaimWorker) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -155,17 +158,22 @@ func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
 }
 
 // InsertIssuer inserts the given issuer
-func (pg *Postgres) InsertIssuer(issuer *Issuer) error {
+func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	statement := `
 	insert into issuers (promotion_id, cohort, public_key)
 	values ($1, $2, $3)
 	returning *`
-	_, err := pg.DB.Exec(statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	if len(issuers) != 1 {
+		return nil, errors.New("Unexpected number of issuers returned")
+	}
+
+	return &issuers[0], nil
 }
 
 // GetIssuer by PromotionID and cohort
@@ -246,7 +254,7 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -318,7 +326,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 	claim := claims[0]
 
 	// This will error if user has already claimed due to uniqueness constraint
-	_, err = tx.Exec(`insert into claim_creds (claim_id, blinded_creds) values ($1, $2)`, claim.ID, blindedCredsJSON)
+	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -448,24 +456,24 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 
 // GetClaimSummary aggregates the values of a single wallet's claims
 func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error) {
-	query := `
-SELECT
-	MAX(claims.created_at) as "last_claim",
-	SUM(claims.approximate_value - claims.bonus) as earnings,
+	statement := `
+select
+	max(claims.created_at) as "last_claim",
+	sum(claims.approximate_value - claims.bonus) as earnings,
 	promos.promotion_type as type
-FROM claims, (
-	SELECT
+from claims, (
+	select
 		id,
 		promotion_type
-	FROM promotions
-	WHERE promotion_type = $2
-) AS promos
-WHERE claims.wallet_id = $1
-	AND claims.redeemed = true
-	AND claims.promotion_id = promos.id
-GROUP BY promos.promotion_type;`
+	from promotions
+	where promotion_type = $2
+) as promos
+where claims.wallet_id = $1
+	and claims.redeemed = true
+	and claims.promotion_id = promos.id
+group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
-	err := pg.DB.Select(&summaries, query, walletID, grantType)
+	err := pg.DB.Select(&summaries, statement, walletID, grantType)
 	if err != nil {
 		return nil, err
 	}
@@ -474,4 +482,66 @@ GROUP BY promos.promotion_type;`
 	}
 
 	return nil, nil
+}
+
+// RunNextClaimJob to sign claim credentials if there is a claim waiting
+func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) error {
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	type SigningJob struct {
+		Issuer
+		ClaimID      uuid.UUID       `db:"claim_id"`
+		BlindedCreds JSONStringArray `db:"blinded_creds"`
+	}
+
+	statement := `
+select
+	issuers.*,
+	claim_cred.claim_id,
+	claim_cred.blinded_creds
+from 
+	(select *
+	from claim_creds
+	where batch_proof is null
+	for update skip locked
+	limit 1
+) claim_cred
+inner join issuers
+on claim_cred.issuer_id = issuers.id`
+
+	jobs := []SigningJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return nil
+	}
+
+	job := jobs[0]
+
+	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

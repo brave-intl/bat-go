@@ -504,9 +504,9 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	suite.Assert().Equal(http.StatusBadRequest, code)
 
 	// not ignored promotion
-	promotion, claim := suite.setupAdsClaim(service, w, 0)
+	promotion, issuer, claim := suite.setupAdsClaim(service, w, 0)
 
-	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -518,9 +518,9 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 
 	// not ignored bonus promotion
-	promotion, claim = suite.setupAdsClaim(service, w, 20)
+	promotion, issuer, claim = suite.setupAdsClaim(service, w, 20)
 
-	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -532,11 +532,16 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 }
 
-func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
+func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Issuer, *Claim) {
 	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
 	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount, "")
 	suite.Assert().NoError(err, "a promotion could not be created")
+
+	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = service.datastore.InsertIssuer(issuer)
+	suite.Assert().NoError(err, "Insert issuer should succeed")
 
 	err = service.datastore.ActivatePromotion(promotion)
 	suite.Assert().NoError(err, "a promotion should be activated")
@@ -545,7 +550,7 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Inf
 	claim, err := service.datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
 	suite.Assert().NoError(err, "create a claim for a promotion")
 
-	return promotion, claim
+	return promotion, issuer, claim
 }
 
 func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {

@@ -16,10 +16,11 @@ create table promotions (
 alter table promotions add constraint check_promotion_type check (promotion_type in ('ugp', 'ads'));
 
 create table issuers (
+  id uuid primary key not null default uuid_generate_v4(),
   promotion_id uuid not null references promotions(id),
   cohort text not null,
   public_key text not null,
-  primary key (promotion_id, cohort)
+  unique (promotion_id, cohort)
 );
 
 create table wallets (
@@ -48,8 +49,11 @@ create index on claims(wallet_id);
 
 create table claim_creds (
   claim_id uuid primary key not null references claims(id),
+  issuer_id uuid not null references issuers(id),
   blinded_creds json not null,
   signed_creds json,
   batch_proof text,
   public_key text
 );
+
+create index on claim_creds(batch_proof);
