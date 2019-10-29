@@ -64,6 +64,7 @@ type FundingSource struct {
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
 type SuggestionEvent struct {
+	ID uuid.UUID `json:"id"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
 	Funding     []FundingSource `json:"funding"`
@@ -130,7 +131,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+	event := SuggestionEvent{ID: uuid.NewV4(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
 
 	for _, v := range fundingSources {
 		event.Funding = append(event.Funding, v)

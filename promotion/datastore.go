@@ -533,6 +533,7 @@ on claim_cred.issuer_id = issuers.id`
 
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
+		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
 		return err
 	}
@@ -614,6 +615,7 @@ limit 1`
 
 	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 	if err != nil {
+		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
 		return err
 	}
