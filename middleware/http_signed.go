@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	raven "github.com/getsentry/raven-go"
 )
 
 type httpSignedKeyID struct{}
@@ -45,6 +46,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			pubKey, err := ks.LookupPublicKey(ctx, s.KeyID)
 
 			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
 				http.Error(w, http.StatusText(500), 500)
 				return
 			}
@@ -56,6 +58,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			valid, err := s.Verify(*pubKey, crypto.Hash(0), r)
 
 			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
 				http.Error(w, http.StatusText(500), 500)
 				return
 			}
