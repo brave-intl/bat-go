@@ -34,6 +34,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			var s httpsignature.Signature
 			err := s.UnmarshalText([]byte(r.Header.Get("Signature")))
 			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
 				http.Error(w, http.StatusText(400), 400)
 				return
 			}
