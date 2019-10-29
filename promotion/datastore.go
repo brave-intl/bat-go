@@ -50,7 +50,7 @@ type Datastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
   // GetClaimByWalletAndPromotionID gets whether a wallet has a claimed grants
   // with the given promotionID and returns the grant if so
-  GetClaimByWalletAndPromotionID(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+  GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -480,20 +480,20 @@ GROUP BY promos.promotion_type;`
 }
 
 
-func (pg *Postgres) GetClaimByWalletAndPromotionID(
+func (pg *Postgres) GetClaimByWalletAndPromotion(
   wallet *wallet.Info,
-  promotionID *Promotion,
+  promotion *Promotion,
 ) (*Claim, error) {
   query := `
 SELECT
   *
 FROM claims
-WHERE payment_id = $1
+WHERE wallet_id = $1
   AND promotion_id = $2
 ORDER BY created_at DESC
 `
   claims := []Claim{}
-	err := pg.DB.Select(&claims, query, wallet.ID, promotionID)
+	err := pg.DB.Select(&claims, query, wallet.ID, promotion.ID)
 	if err != nil {
 		return nil, err
 	}

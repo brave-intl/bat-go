@@ -98,7 +98,7 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
 
-  claim, err := service.datastore.GetClaimByWalletAndPromotionID(wallet, promotion)
+  claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
 	}

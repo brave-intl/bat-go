@@ -441,6 +441,49 @@ func (suite *PostgresTestSuite) TestGetClaimCreds() {
 	suite.Assert().Equal(blindedCreds, claimCreds.BlindedCreds)
 }
 
+func (suite *PostgresTestSuite) TestGetClaimByWalletAndPromotion() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+  w := &wallet.Info{
+    ID: uuid.NewV4().String(),
+    Provider: "uphold",
+    ProviderID: uuid.NewV4().String(),
+    PublicKey: publicKey,
+  }
+  err = pg.InsertWallet(w)
+
+  // Create promotion
+	promotion, err := pg.CreatePromotion(
+    "ugp",
+    2,
+    decimal.NewFromFloat(50.0),
+    "",
+  )
+	suite.Assert().NoError(err, "Create promotion should succeed")
+
+  _, err = pg.CreateClaim(
+    promotion.ID,
+    w.ID,
+    decimal.NewFromFloat(25.0),
+    decimal.NewFromFloat(0),
+  )
+	suite.Assert().NoError(err, "Claim creation should succeed")
+
+  // First try to look up a a claim for a wallet that doesn't have one
+  fakeWallet := &wallet.Info{ID: uuid.NewV4().String()}
+  claim, err := pg.GetClaimByWalletAndPromotion(fakeWallet, promotion)
+	suite.Assert().NoError(err, "Get claim by wallet and promotion should succeed")
+  suite.Assert().Nil(claim)
+
+  // Now look up claim for wallet that does have one
+  claim, err = pg.GetClaimByWalletAndPromotion(w, promotion)
+	suite.Assert().NoError(err, "Get claim by wallet and promotion should succeed")
+  suite.Assert().Equal(claim.PromotionID, promotion.ID)
+  suite.Assert().Equal(claim.WalletID.String(), w.ID)
+}
+
 func (suite *PostgresTestSuite) TestSaveClaimCreds() {
 	// FIXME
 }
