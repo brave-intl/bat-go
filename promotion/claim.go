@@ -98,14 +98,14 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
 
-  claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
 	}
 
-  // If this wallet already claimed, return the previously claimed promotion
+	// If this wallet already claimed, return the previously claimed promotion
 	if claim != nil {
-	  return &claim.ID, nil
+		return &claim.ID, nil
 	}
 
 	// TODO lookup reputation server
