@@ -383,4 +383,13 @@ func TestRedeem(t *testing.T) {
 	if len(grants) != 0 {
 		t.Fatal("Expected no active grants")
 	}
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != 204 {
+		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
+	}
 }
