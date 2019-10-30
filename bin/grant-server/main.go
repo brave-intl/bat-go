@@ -107,6 +107,16 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		log.Panic(err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
+	proxy.Director = func(req *http.Request) {
+		req.Header.Add("X-Forwarded-Host", req.Host)
+		req.Header.Add("X-Origin-Host", proxyURL.Host)
+		req.Header.Add("Authorization", os.Getenv("REPUTATION_TOKEN"))
+		req.URL.Scheme = proxyURL.Scheme
+		req.URL.Host = proxyURL.Host
+
+	  logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Addd authorization header")
+	}
+
 	r.Mount("/v1/devicecheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxy.ServeHTTP(w, r)
 	}))
