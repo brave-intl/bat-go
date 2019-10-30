@@ -25,7 +25,6 @@ services:
       - GRANT_WALLET_PUBLIC_KEY
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - "REDIS_URL=redis://redis:6379"
-      - "REPUTATION_SERVER=https://reputation.rewards.brave.software"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
     depends_on:
