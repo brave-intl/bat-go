@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
@@ -208,17 +207,6 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		conn := service.redisPool.Get()
-		defer closers.Panic(conn)
-		b := GetBreaker(&conn)
-
-		incErr := b.Increment()
-		if incErr != nil {
-			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
-			safeMode = true
-		}
-
 		log.Errorf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not get wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
@@ -227,16 +215,6 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-		conn := service.redisPool.Get()
-		defer closers.Panic(conn)
-		b := GetBreaker(&conn)
-
-		incErr := b.Increment()
-		if incErr != nil {
-			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
-			safeMode = true
-		}
 
 		log.Errorf("Could not fund wallet %s after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not fund wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
@@ -246,22 +224,6 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	// confirm settlement transaction previously sent to wallet provider
 	var settlementInfo *wallet.TransactionInfo
 	for tries := 5; tries >= 0; tries-- {
-		if tries == 0 {
-			conn := service.redisPool.Get()
-			defer closers.Panic(conn)
-			b := GetBreaker(&conn)
-
-			incErr := b.Increment()
-			if incErr != nil {
-				log.Errorf("Could not increment the breaker!!!")
-				raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
-				safeMode = true
-			}
-
-			log.Errorf("Could not submit settlement txn for wallet %s after successful Consume", req.WalletInfo.ProviderID)
-			raven.CaptureMessage("Could not submit settlement txn after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
-			return nil, err
-		}
 		// NOTE Consume (by way of VerifyTransaction) guards against transactions that seek to exploit parser differences
 		// such as including additional fields that are not understood by this wallet provider implementation but may
 		// be understood by the upstream wallet provider.
