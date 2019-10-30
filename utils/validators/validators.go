@@ -5,6 +5,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	uuid "github.com/satori/go.uuid"
 )
 
 func init() {
@@ -15,6 +16,8 @@ func init() {
 	govalidator.TagMap["ethaddressnochecksum"] = govalidator.Validator(IsETHAddressNoChecksum)
 	govalidator.TagMap["ethaddress"] = govalidator.Validator(IsETHAddress)
 	govalidator.TagMap["platform"] = govalidator.Validator(IsPlatform)
+	govalidator.CustomTypeTagMap.Set("requiredUUID", govalidator.CustomTypeValidator(IsRequiredUUID))
+
 }
 
 const (
@@ -77,4 +80,14 @@ func IsETHAddress(str string) bool {
 func IsPlatform(platform string) bool {
 	platforms := []string{"ios", "android", "osx", "windows", "linux"}
 	return govalidator.IsIn(platform, platforms...)
+}
+
+// IsRequiredUUID checks if the uuid is present
+func IsRequiredUUID(i interface{}, context interface{}) bool {
+	switch v := i.(type) { // you can type switch on the context interface being validated
+	case uuid.UUID:
+		return !uuid.Equal(v, uuid.Nil)
+	default:
+		panic("invalid type recieved in IsUUID")
+	}
 }

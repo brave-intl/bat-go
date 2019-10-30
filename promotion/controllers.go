@@ -131,7 +131,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	PaymentID    uuid.UUID `json:"paymentId" valid:"-"`
+	PaymentID    uuid.UUID `json:"paymentId" valid:"requiredUUID"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
