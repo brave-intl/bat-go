@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/utils/reputation"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -100,27 +99,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
 
-	// Setup reverse proxy for reputation endpoints for clients
-	reputationServer := os.Getenv("REPUTATION_SERVER")
-	proxyURL, err := url.Parse(reputationServer)
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
-	}
-	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
-	proxy.Director = func(req *http.Request) {
-		req.Header.Add("X-Forwarded-Host", req.Host)
-		req.Header.Add("X-Origin-Host", proxyURL.Host)
-		req.Header.Add("Authorization", os.Getenv("REPUTATION_TOKEN"))
-		req.URL.Scheme = proxyURL.Scheme
-		req.URL.Host = proxyURL.Host
-
-		logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Addd authorization header")
-	}
-
-	r.Mount("/v1/devicecheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		proxy.ServeHTTP(w, r)
-	}))
+	r.Mount("/v1/devicecheck", reputation.ProxyRouter())
 
 	return ctx, r
 }
