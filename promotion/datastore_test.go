@@ -258,7 +258,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().False(promotions[1].Available)
 
 	adClaimValue := decimal.NewFromFloat(30.0)
-	adSuggestionsPerGrant := 30 * 4
+	adSuggestionsPerGrant := int(30 * decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue).IntPart())
 	_, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
