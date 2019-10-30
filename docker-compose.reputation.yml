@@ -16,7 +16,7 @@ services:
       - grant
   reputation-web-grant:
     container_name: reputation-web-grant
-    image: reputation-web-builder
+    image: reputation-web
     # restart: always
     ports:
       - 3334:3334
@@ -27,7 +27,7 @@ services:
       - "API_APPLE_PRIVATE_KEY=1"
       - "API_APPLE_TEAM_ID=1"
       - "DATABASE_URL=postgres://reputation:password@reputation-postgres-grant:5432/reputation?sslmode=disable"
-      - "DATABASE_MIGRATIONS_URL=file:///src/services/datastore/migrations"
+      - "DATABASE_MIGRATIONS_URL=file://migrations"
       - "GRPC_ENABLED=1"
       - "IOS_ENROLLMENT_WAIT_HOURS=720h"
       - "TOKEN_LIST=foobarfoobar"
