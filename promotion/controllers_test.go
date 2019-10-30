@@ -442,7 +442,12 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	suggestionEventJSON := <-ch
 	suite.Require().NoError(err)
 
+	var event SuggestionEvent
+	err = json.Unmarshal(suggestionEventJSON, &event)
+	suite.Require().NoError(err)
+
 	suite.Assert().JSONEq(`{
+    "id": "`+event.ID.String()+`",
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
