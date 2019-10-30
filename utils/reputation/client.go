@@ -36,8 +36,8 @@ type HTTPClient struct {
 func New() (*HTTPClient, error) {
 	serverURL := os.Getenv("REPUTATION_SERVER")
 
-	if len(serverURL) == 0 {
-		return nil, errors.New("REPUTATION_SERVER was empty")
+	if len(serverURL) == 0 && os.Getenv("ENV") == "production" {
+		return nil, errors.New("REPUTATION_SERVER is missing in production environment")
 	}
 
 	baseURL, err := url.Parse(serverURL)

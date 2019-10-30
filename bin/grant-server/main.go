@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -99,7 +100,13 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
 
-	r.Mount("/v1/devicecheck", reputation.ProxyRouter())
+	if len(os.Getenv("REPUTATION_SERVER")) == 0 {
+		if os.Getenv("ENV") == "production" {
+			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
+		}
+	} else {
+		r.Mount("/v1/devicecheck", reputation.ProxyRouter())
+	}
 
 	return ctx, r
 }

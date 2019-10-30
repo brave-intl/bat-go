@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/brave-intl/bat-go/grant"
@@ -34,8 +33,6 @@ var publicKey ed25519.PublicKey
 var privateKey ed25519.PrivateKey
 
 func init() {
-	os.Setenv("ENV", "production")
-
 	accessToken = uuid.NewV4().String()
 	middleware.TokenList = []string{accessToken}
 
