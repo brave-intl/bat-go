@@ -115,7 +115,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		req.URL.Scheme = proxyURL.Scheme
 		req.URL.Host = proxyURL.Host
 
-	  logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Addd authorization header")
+		logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Addd authorization header")
 	}
 
 	r.Mount("/v1/devicecheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
