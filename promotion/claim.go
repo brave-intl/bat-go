@@ -85,7 +85,12 @@ type ClaimCreds struct {
 
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
-func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID uuid.UUID, walletID uuid.UUID, blindedCreds []string) (*uuid.UUID, error) {
+func (service *Service) ClaimPromotionForWallet(
+	ctx context.Context,
+	promotionID uuid.UUID,
+	walletID uuid.UUID,
+	blindedCreds []string,
+) (*uuid.UUID, error) {
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
@@ -99,9 +104,24 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
 
-	// TODO lookup and return existing claim if exists?
+	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
+	}
 
-	// TODO lookup reputation server
+	// If this wallet already claimed, return the previously claimed promotion
+	if claim != nil {
+		return &claim.ID, nil
+	}
+
+	walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !walletIsReputable {
+		return nil, errors.New("Insufficient wallet reputation for grant claim")
+	}
 
 	cohort := "control"
 	issuer, err := service.GetOrCreateIssuer(ctx, promotionID, cohort)
@@ -113,7 +133,7 @@ func (service *Service) ClaimPromotionForWallet(ctx context.Context, promotionID
 		return nil, errors.New("wrong number of blinded tokens included")
 	}
 
-	claim, err := service.datastore.ClaimForWallet(promotion, issuer, wallet, JSONStringArray(blindedCreds))
+	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}

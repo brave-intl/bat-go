@@ -22,6 +22,7 @@ import (
 	mockcb "github.com/brave-intl/bat-go/utils/cbr/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
+	mockreputation "github.com/brave-intl/bat-go/utils/reputation/mock"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
@@ -297,13 +298,22 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		LastBalance: nil,
 	}
 
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
 	mockLedger := mockledger.NewMockClient(mockCtrl)
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore:    pg,
-		cbClient:     cbClient,
-		ledgerClient: mockLedger,
+		datastore:        pg,
+		cbClient:         cbClient,
+		ledgerClient:     mockLedger,
+		reputationClient: mockReputation,
 	}
 
 	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
@@ -364,6 +374,14 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		LastBalance: nil,
 	}
 
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
 	mockLedger := mockledger.NewMockClient(mockCtrl)
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
@@ -371,10 +389,11 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	ch := make(chan []byte)
 	service := &Service{
-		datastore:    pg,
-		cbClient:     mockCB,
-		ledgerClient: mockLedger,
-		eventChannel: ch,
+		datastore:        pg,
+		cbClient:         mockCB,
+		ledgerClient:     mockLedger,
+		reputationClient: mockReputation,
+		eventChannel:     ch,
 	}
 
 	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
