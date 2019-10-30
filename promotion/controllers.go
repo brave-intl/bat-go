@@ -137,7 +137,7 @@ type ClaimRequest struct {
 
 // ClaimResponse includes a ClaimID which can later be used to check the status of the claim
 type ClaimResponse struct {
-	ClaimID uuid.UUID `json:"claim_id"`
+	ClaimID uuid.UUID `json:"claimId"`
 }
 
 // ClaimPromotion is the handler for claiming a particular promotion by a wallet
