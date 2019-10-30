@@ -83,6 +83,10 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
 	}
 
+	if len(unredeemedGrants) == 0 {
+		return nil, nil
+	}
+
 	// 3. Sum until value is gt transaction amount
 	var grants []Grant
 	sumProbi := decimal.New(0, 1)
@@ -201,6 +205,10 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	grantFulfillmentInfo, err := service.Consume(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+
+	if grantFulfillmentInfo == nil {
+		return nil, nil
 	}
 
 	submitID := grantFulfillmentInfo.ID
