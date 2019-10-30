@@ -4,20 +4,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 
 	raven "github.com/getsentry/raven-go"
 	log "github.com/sirupsen/logrus"
 )
 
 // ProxyRouter is a reverse proxy to reputation endpoints for client access
-func ProxyRouter() http.HandlerFunc {
-	reputationServer := os.Getenv("REPUTATION_SERVER")
-	reputationToken := os.Getenv("REPUTATION_TOKEN")
-	if len(reputationServer) == 0 || len(reputationToken) == 0 {
-		panic("Must set REPUTATION_SERVER and REPUTATION_TOKEN")
-	}
-
+func ProxyRouter(
+	reputationServer string,
+	reputationToken string,
+) http.HandlerFunc {
 	proxyURL, err := url.Parse(reputationServer)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)

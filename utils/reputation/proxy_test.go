@@ -16,8 +16,7 @@ func TestProxyRouter(t *testing.T) {
 		t.Skip("skipping test; REPUTATION_SERVER or REPUTATION_TOKEN not set")
 	}
 
-	handler := ProxyRouter()
-
+	handler := ProxyRouter(reputationServer, reputationToken)
 	req, err := http.NewRequest("POST", "/v1/devicecheck/attestations", nil)
 	if err != nil {
 		t.Fatal("Error creating request")
