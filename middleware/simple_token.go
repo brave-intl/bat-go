@@ -43,13 +43,19 @@ func isSimpleTokenValid(list []string, token string) bool {
 	return false
 }
 
+func isSimpleTokenInContext(ctx context.Context) bool {
+	token, ok := ctx.Value(bearerTokenKey{}).(string)
+	if !ok || !isSimpleTokenValid(TokenList, token) {
+		return false
+	}
+	return true
+}
+
 // SimpleTokenAuthorizedOnly is a middleware that restricts access to requests with a valid bearer token via context
 // NOTE the valid token is populated via BearerToken
 func SimpleTokenAuthorizedOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		token, ok := ctx.Value(bearerTokenKey{}).(string)
-		if !ok || !isSimpleTokenValid(TokenList, token) {
+		if !isSimpleTokenInContext(r.Context()) {
 			http.Error(w, http.StatusText(403), 403)
 			return
 		}
