@@ -260,17 +260,26 @@ type DrainGrantsRequest struct {
 	AnonymousAddress uuid.UUID   `json:"anonymousAddress" valid:"required"`
 }
 
+// DrainGrantsResponse includes info about how much grants were drained
+type DrainGrantsResponse struct {
+	GrantTotal decimal.Decimal `json:"grantTotal"`
+}
+
 // Drain the grants for the wallet in the included response
-func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) error {
+func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
 	log := lg.Log(ctx)
 
 	if RedemptionDisabled() {
-		return errors.New("Grant redemption has been disabled due to fail-safe condition")
+		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	if grantFulfillmentInfo == nil {
+		return &DrainGrantsResponse{decimal.Zero}, nil
 	}
 
 	// drain probi from grants into user wallet
@@ -289,7 +298,7 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) erro
 
 		log.Errorf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
-		return err
+		return nil, err
 	}
-	return nil
+	return &DrainGrantsResponse{grantFulfillmentInfo.Probi}, nil
 }

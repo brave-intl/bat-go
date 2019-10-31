@@ -533,10 +533,20 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	bodyBytes, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
 		t.Error(string(bodyBytes))
 		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	var respPayload grant.DrainGrantsResponse
+	json.Unmarshal(bodyBytes, &respPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !respPayload.GrantTotal.Equals(totalBAT) {
+		t.Fatal("Expected redeemed grants to equal 20 BAT total")
 	}
 
 	grants, err = getActive(t, server, userWallet.Info)
@@ -557,7 +567,17 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp.StatusCode != 204 {
-		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
+	bodyBytes, _ = ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	json.Unmarshal(bodyBytes, &respPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !respPayload.GrantTotal.Equals(decimal.Zero) {
+		t.Fatal("Expected redeemed grants to equal 0 BAT")
 	}
 }

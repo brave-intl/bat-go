@@ -233,13 +233,16 @@ func DrainGrants(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.Drain(r.Context(), &req)
+		drainInfo, err := service.Drain(r.Context(), &req)
 		if err != nil {
 			// FIXME not all errors are 4xx
 			return handlers.WrapError(err, "Error redeeming grant", http.StatusBadRequest)
 		}
 
 		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(drainInfo); err != nil {
+			panic(err)
+		}
 		return nil
 	})
 }
