@@ -55,6 +55,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
+	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
 	golang.org/x/crypto v0.0.0-20190909091759-094676da4a83
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b

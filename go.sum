@@ -296,6 +296,8 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 h1:UOKr78K7smMjkKuwZjbOCzIFTUhIUzXc5+tYeaPRirE=
 github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5/go.mod h1:asllDl3XCEQ1lFPD4Y1juAn5p35Zd4ghNGcDKN7U7dU=
+github.com/throttled/throttled v2.2.4+incompatible h1:aVKdoH/qT5Mo1Lm/678OkX2pFg7aRpHlTn1tfgaSKxs=
+github.com/throttled/throttled v2.2.4+incompatible/go.mod h1:0BjlrEGQmvxps+HuXLsyRdqpSRvJpq0PNIsOtqP9Nos=
 github.com/tidwall/pretty v0.0.0-20180105212114-65a9db5fad51/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhVysOjyk=
 github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a h1:F21jMjYNPHd0O+0xzq6C9isWiLu9H+L1MU0I/1AJ4+Y=
 github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a/go.mod h1:sJ5fKU0s6JVwZjjcUEX2zFOnvq0ASQ2K9Zr6cf67kNs=

@@ -200,6 +200,11 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error redeeming grant", http.StatusBadRequest)
 		}
 
+		if redeemInfo == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		}
+
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(redeemInfo); err != nil {
 			panic(err)

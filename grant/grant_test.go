@@ -133,9 +133,12 @@ func TestConsume(t *testing.T) {
 	}
 
 	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{}, nil)
-	_, err = service.Consume(ctx, request.WalletInfo, request.Transaction)
-	if err == nil {
-		t.Error("expected re-redeem (attempt to use same grant) to fail")
+	txnInfo, err := service.Consume(ctx, request.WalletInfo, request.Transaction)
+	if err != nil {
+		t.Error(err)
+	}
+	if txnInfo != nil {
+		t.Error("expected redeem without grants to return no transaction")
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -35,8 +34,6 @@ var publicKey ed25519.PublicKey
 var privateKey ed25519.PrivateKey
 
 func init() {
-	os.Setenv("ENV", "production")
-
 	accessToken = uuid.NewV4().String()
 	middleware.TokenList = []string{accessToken}
 
@@ -553,5 +550,14 @@ func TestDrain(t *testing.T) {
 	_, err = userWallet.Transfer(altcurrency.BAT, totalBAT, grant.SettlementDestination)
 	if err != nil {
 		t.Log(err)
+	}
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != 204 {
+		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
 	}
 }
