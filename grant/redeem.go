@@ -31,9 +31,9 @@ func RedemptionDisabled() bool {
 // Note that this is destructive, on success consumes grants.
 // Further calls to Verify with the same request will fail as the grants are consumed.
 //
-// 1. Enforce transaction checks and verify transaction signature
+// 1. Sort grants, closest expiration to furthest, short circuit if no grants
 //
-// 2. Sort the wallet's unredeemed grants, nearest expiration to furthest
+// 2. Enforce transaction checks and verify transaction signature
 //
 // 3. Sum from largest to smallest until value is gt transaction amount
 //
@@ -45,7 +45,17 @@ func RedemptionDisabled() bool {
 //
 // Returns transaction info for grant fufillment
 func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (*wallet.TransactionInfo, error) {
-	// 1. Enforce transaction checks and verify transaction signature
+	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
+	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(req.WalletInfo)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
+	}
+
+	if len(unredeemedGrants) == 0 {
+		return nil, nil
+	}
+
+	// 2. Enforce transaction checks and verify transaction signature
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
 		return nil, err
@@ -75,16 +85,6 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 	}
 	if txInfo.Destination != SettlementDestination {
 		return nil, errors.New("included transactions must have settlement as their destination")
-	}
-
-	// 2. Sort grants, closest expiration to furthest
-	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(req.WalletInfo)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
-	}
-
-	if len(unredeemedGrants) == 0 {
-		return nil, nil
 	}
 
 	// 3. Sum until value is gt transaction amount
