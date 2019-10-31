@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/validators"
-	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -119,10 +118,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy)
 		if err != nil {
-			errStr := "Error getting available promotions"
-			err = errors.Wrap(err, errStr)
-			raven.CaptureError(err, map[string]string{})
-			return handlers.WrapError(err, errStr, http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
 
 		w.WriteHeader(http.StatusOK)
