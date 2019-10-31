@@ -16,6 +16,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
@@ -337,6 +339,11 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
 		select
 			promos.*,
@@ -389,58 +396,38 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
 func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
-    SELECT
-      promotions.*,
-      promotions.active
-      AND promotions.remaining_grants > 0
-      AND (
-        promotions.platform = '' 
-        OR (CASE 
-              WHEN $1 = 'desktop'
-              THEN (
-                platform = 'osx'
-                OR platform = 'windows'
-                OR platform = 'linux'
-                OR platform = 'desktop'
-              )
-              ELSE platform = $1
-             END)
-      ) AS available,
-      array_to_json(array_remove(array_agg(issuers.public_key), null)) AS public_keys
-      FROM
-    promotions LEFT JOIN issuers ON promotions.id = issuers.promotion_id
-    WHERE promotions.promotion_type = 'ugp'
-    GROUP BY promotions.id
-    ORDER BY promotions.created_at;`
+		select
+			promotions.*,
+			promotions.active and
+			promotions.remaining_grants > 0 and
+			( promotions.platform = '' or promotions.platform = $1)
+			as available,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.promotion_type = 'ugp'
+		group by promotions.id
+		order by promotions.created_at;`
 
 	if legacy {
 		statement = `
-      SELECT
-        promotions.*,
-        true AS available,
-        array_to_json(array_remove(array_agg(issuers.public_key), null)) AS public_keys
-      FROM promotions
-      LEFT JOIN issuers
-        ON promotions.id = issuers.promotion_id
-      WHERE promotions.promotion_type = 'ugp'
-        AND promotions.active
-        AND promotions.remaining_grants > 0
-        AND (
-          promotions.platform = '' 
-          OR CASE
-               WHEN $1 = 'desktop'
-               THEN (
-                 platform = 'osx'
-                 OR platform = 'windows'
-                 OR platform = 'linux'
-                 OR platform = 'desktop'
-               )
-               ELSE platform = $1 
-             END
-        )
-      GROUP BY promotions.id
-      ORDER BY promotions.created_at;`
+		select
+			promotions.*,
+			true as available,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.promotion_type = 'ugp' and promotions.active and
+			promotions.remaining_grants > 0 and
+			( promotions.platform = '' or promotions.platform = $1 )
+		group by promotions.id
+		order by promotions.created_at;`
 	}
 
 	promotions := []Promotion{}

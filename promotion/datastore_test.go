@@ -330,62 +330,60 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	suite.Assert().True(promotions[0].Active)
 	suite.Assert().True(promotions[0].Available)
 
-
-  // Test platform='desktop' returns all desktop grants for non-legacy 
-  // GetAvailablePromotions endpoint w/o paymentID
+	// Test platform='desktop' returns all desktop grants for non-legacy
+	// GetAvailablePromotions endpoint w/o paymentID
 	suite.CleanDB()
 
-  // Create all types of desktop promotions
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "osx")
-	suite.Require().NoError(err, "Create promotion should succeed")
-
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "linux")
-	suite.Require().NoError(err, "Create promotion should succeed")
-
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "windows")
-	suite.Require().NoError(err, "Create promotion should succeed")
-
+	// Create desktop promotion
 	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
-  // Ensure they are all returned
+	// Ensure they are all returned
 	promotions, err = pg.GetAvailablePromotions("desktop", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(len(promotions), 4)
+	suite.Assert().Equal(len(promotions), 1)
 
-  // Test platform='desktop' returns all desktop grants for legacy 
-  // GetAvailablePromotions endpoint without paymentID
+	promotions, err = pg.GetAvailablePromotions("osx", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("linux", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("windows", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	// Test platform='desktop' returns all desktop grants for legacy
+	// GetAvailablePromotions endpoint without paymentID
 	suite.CleanDB()
-
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "osx")
-	suite.Require().NoError(err, "Create promotion should succeed")
-	err = pg.ActivatePromotion(promotion)
-	suite.Require().NoError(err, "Activate promotion should succeed")
-
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "linux")
-	suite.Require().NoError(err, "Create promotion should succeed")
-	err = pg.ActivatePromotion(promotion)
-	suite.Require().NoError(err, "Activate promotion should succeed")
-
-	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "windows")
-	suite.Require().NoError(err, "Create promotion should succeed")
-	err = pg.ActivatePromotion(promotion)
-	suite.Require().NoError(err, "Activate promotion should succeed")
 
 	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	err = pg.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Activate promotion should succeed")
 
-  // Ensure they are all returned
-  // Legacy endpoints only return active
+	// Ensure they are all returned
+	// Legacy endpoints only return active
 	err = pg.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Activate promotion should succeed")
 
 	promotions, err = pg.GetAvailablePromotions("desktop", true)
 	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(len(promotions), 4)
+	suite.Assert().Equal(len(promotions), 1)
 
+	promotions, err = pg.GetAvailablePromotions("osx", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("linux", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("windows", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
