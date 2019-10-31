@@ -97,7 +97,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
-	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
+	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")
