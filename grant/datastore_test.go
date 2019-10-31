@@ -88,6 +88,9 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 	err = pg.ClaimGrantForWallet(grant1, w)
 	suite.Assert().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
 
+	err = pg.ClaimGrantForWallet(grant1, w)
+	suite.Assert().Error(err, "Re-claim for wallet should fail")
+
 	err = pg.ClaimGrantForWallet(grant2, w)
 	suite.Assert().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
 
