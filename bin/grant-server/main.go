@@ -107,7 +107,10 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
 		}
 	} else {
-		r.Mount("/v1/devicecheck", middleware.RateLimiter()(reputation.ProxyRouter(reputationServer, reputationToken)))
+		proxyRouter := middleware.RateLimiter()(reputation.ProxyRouter(reputationServer, reputationToken))
+		r.Mount("/v1/devicecheck", proxyRouter)
+		r.Mount("/v1/captchas", proxyRouter)
+		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
 	return ctx, r
