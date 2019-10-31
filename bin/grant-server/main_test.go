@@ -224,6 +224,11 @@ func TestClaim(t *testing.T) {
 		t.Fatal("Expected one active android grant worth 30 BAT")
 	}
 
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected re-claim of the same grant to fail")
+	}
+
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
 	err = claim(t, server, promotion.ID, wallet)
