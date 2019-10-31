@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-  "github.com/segmentio/kafka-go"
-  "github.com/linkedin/goavro"
 )
 
 // CredentialBinding includes info needed to redeem a single credential
@@ -168,58 +170,59 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return nil
 	}
 
+	// kafka event producer below - this could probably put into a generic module
+
+	w := kafka.NewWriter(kafka.WriterConfig{
+		Brokers:  []string{"kafka:9092"}, // put in cfg
+		Topic:    "suggestion",           // put in cfg
+		Balancer: &kafka.LeastBytes{},
+	})
+
+	// any further tightening? are these types ok?  in the example they are all strings
+	// are all fields required?
+	// "type" might be an enum
+	// we can break these into 2 if funding is to be reused
+	schema, err := ioutil.ReadFile("suggestion.avsc")
+	if err != nil {
+		return err
+	}
+	codec, err := goavro.NewCodec(string(schema))
+	if err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+	// not thrilled with double encoding here- alternative is to find a nice way to turn this into a map
+	// and use codec.BinaryFromNative.
+	b, err := json.Marshal(suggestion)
+	fmt.Println(string(b))
+
+	if err != nil {
+		return err
+	}
+	textual := []byte(b)
+
+	// above generated into native
+	native, _, err := codec.NativeFromTextual(textual)
+	if err != nil {
+		return err
+	}
+
+	// get the avro binary
+	binary, err := codec.BinaryFromNative(nil, native)
+	if err != nil {
+		return err
+	}
+
+	// write the message
+	w.WriteMessages(ctx,
+		kafka.Message{
+			Value: []byte(binary),
+		},
+	)
+	w.Close()
 	service.eventChannel <- suggestion
-
-  // kafka event producer below - this could probably put into a generic module
-
-  w := kafka.NewWriter(kafka.WriterConfig{
-    Brokers: []string{"localhost:9092"}, // put in cfg
-    Topic:   "suggestion", // put in cfg
-    Balancer: &kafka.LeastBytes{},
-  })
-
-  // move to repo / tighten this up
-  codec, err := goavro.NewCodec(`
-      {
-        "type": "record",
-        "name": "suggestion",
-        "fields" : [
-          {
-            "type": "string",
-            "channel": "string",
-            "totalAmount": "string",
-            "funding": [
-              {
-                "type": "string",
-                "amount": "string",
-                "cohort": "string",
-                "promotion": "string"
-              }
-            ]
-          }
-        ]
-      }`)
-  if err != nil {
-    return err
-  }
-  // read go object here
-  textual := []byte(`{"type": "auto-contribue"}`)
-  native, _, err := codec.NativeFromTextual(textual)
-  if err != nil {
-    return err
-  }
-
-  binary, err := codec.BinaryFromNative(nil, native)
-  if err != nil {
-    return err
-  }
-
-  w.WriteMessages(context.Background(),
-    kafka.Message{
-      Value: []byte(binary),
-    },
-  )
-
-  w.Close()
-  return nil
+	return nil
 }
