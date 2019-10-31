@@ -24,6 +24,8 @@ type Datastore interface {
 	ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -243,6 +245,21 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 	}
 
 	return &claims[0], nil
+}
+
+// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error) {
+	claims := []Claim{}
+	err := pg.DB.Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(claims) > 0 {
+		return &claims[0], nil
+	}
+
+	return nil, nil
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
