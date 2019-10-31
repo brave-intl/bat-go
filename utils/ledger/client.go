@@ -87,7 +87,7 @@ func (c *HTTPClient) newRequest(ctx context.Context, method, path string, body i
 
 	logger.Debug().Str("type", "http.Request").Msg(string(dump))
 
-	req.Header.Set("authorization", "Bearer: "+c.AuthToken)
+	req.Header.Set("authorization", "Bearer "+c.AuthToken)
 
 	return req, err
 }
