@@ -15,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/validators"
+	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -118,7 +119,10 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
+			errStr := "Error getting available promotions"
+			err = errors.Wrap(err, errStr)
+			raven.CaptureError(err, map[string]string{})
+			return handlers.WrapError(err, errStr, http.StatusInternalServerError)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -131,7 +135,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	PaymentID    uuid.UUID `json:"paymentId" valid:"requiredUUID"`
+	PaymentID    uuid.UUID `json:"paymentId" valid:"-"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
