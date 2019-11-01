@@ -16,6 +16,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
@@ -50,6 +52,9 @@ type Datastore interface {
 	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
+	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
+	// with the given promotion and returns the grant if so
+	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -351,6 +356,11 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
 		select
 			promos.id,
@@ -415,6 +425,11 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
 func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
 		select
 			promotions.*,
@@ -500,6 +515,32 @@ GROUP BY promos.promotion_type;`
 	}
 	if len(summaries) > 0 {
 		return &summaries[0], nil
+	}
+
+	return nil, nil
+}
+
+// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
+// with the given promotion and returns the grant if so
+func (pg *Postgres) GetClaimByWalletAndPromotion(
+	wallet *wallet.Info,
+	promotion *Promotion,
+) (*Claim, error) {
+	query := `
+SELECT
+  *
+FROM claims
+WHERE wallet_id = $1
+  AND promotion_id = $2
+ORDER BY created_at DESC
+`
+	claims := []Claim{}
+	err := pg.DB.Select(&claims, query, wallet.ID, promotion.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(claims) > 0 {
+		return &claims[0], nil
 	}
 
 	return nil, nil

@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/brave-intl/bat-go/grant"
@@ -34,8 +33,6 @@ var publicKey ed25519.PublicKey
 var privateKey ed25519.PrivateKey
 
 func init() {
-	os.Setenv("ENV", "production")
-
 	accessToken = uuid.NewV4().String()
 	middleware.TokenList = []string{accessToken}
 
@@ -231,7 +228,57 @@ func TestClaim(t *testing.T) {
 	wallet.ProviderID = uuid.NewV4().String()
 	err = claim(t, server, promotion.ID, wallet)
 	if err == nil {
-		t.Fatal("Expected re-claim of the same grant to a different card to fail")
+		t.Fatal("Expected re-claim of unavailable promotion to a different card to fail")
+	}
+
+	value = decimal.NewFromFloat(35.0)
+	numGrants = 2
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err = getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "ugp" {
+		t.Fatal("Expected one active ugp grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active ugp grant worth 35 BAT")
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected re-claim of the same grant to fail despite available grants")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected new claim of the same promotion to fail as there are no more grants")
 	}
 }
 
@@ -382,5 +429,14 @@ func TestRedeem(t *testing.T) {
 	}
 	if len(grants) != 0 {
 		t.Fatal("Expected no active grants")
+	}
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != 204 {
+		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
 	}
 }

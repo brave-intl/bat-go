@@ -367,6 +367,61 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Active)
 	suite.Assert().True(promotions[0].Available)
+
+	// Test platform='desktop' returns all desktop grants for non-legacy
+	// GetAvailablePromotions endpoint w/o paymentID
+	suite.CleanDB()
+
+	// Create desktop promotion
+	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")
+	suite.Require().NoError(err, "Create promotion should succeed")
+
+	// Ensure they are all returned
+	promotions, err = pg.GetAvailablePromotions("desktop", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("osx", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("linux", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("windows", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	// Test platform='desktop' returns all desktop grants for legacy
+	// GetAvailablePromotions endpoint without paymentID
+	suite.CleanDB()
+
+	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	err = pg.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Activate promotion should succeed")
+
+	// Ensure they are all returned
+	// Legacy endpoints only return active
+	err = pg.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Activate promotion should succeed")
+
+	promotions, err = pg.GetAvailablePromotions("desktop", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("osx", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("linux", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
+
+	promotions, err = pg.GetAvailablePromotions("windows", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(len(promotions), 1)
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
@@ -477,6 +532,49 @@ func (suite *PostgresTestSuite) TestGetClaimCreds() {
 	suite.Assert().NoError(err, "Get claim creds should succeed")
 
 	suite.Assert().Equal(blindedCreds, claimCreds.BlindedCreds)
+}
+
+func (suite *PostgresTestSuite) TestGetClaimByWalletAndPromotion() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	w := &wallet.Info{
+		ID:         uuid.NewV4().String(),
+		Provider:   "uphold",
+		ProviderID: uuid.NewV4().String(),
+		PublicKey:  publicKey,
+	}
+	err = pg.InsertWallet(w)
+
+	// Create promotion
+	promotion, err := pg.CreatePromotion(
+		"ugp",
+		2,
+		decimal.NewFromFloat(50.0),
+		"",
+	)
+	suite.Assert().NoError(err, "Create promotion should succeed")
+
+	_, err = pg.CreateClaim(
+		promotion.ID,
+		w.ID,
+		decimal.NewFromFloat(25.0),
+		decimal.NewFromFloat(0),
+	)
+	suite.Assert().NoError(err, "Claim creation should succeed")
+
+	// First try to look up a a claim for a wallet that doesn't have one
+	fakeWallet := &wallet.Info{ID: uuid.NewV4().String()}
+	claim, err := pg.GetClaimByWalletAndPromotion(fakeWallet, promotion)
+	suite.Assert().NoError(err, "Get claim by wallet and promotion should succeed")
+	suite.Assert().Nil(claim)
+
+	// Now look up claim for wallet that does have one
+	claim, err = pg.GetClaimByWalletAndPromotion(w, promotion)
+	suite.Assert().NoError(err, "Get claim by wallet and promotion should succeed")
+	suite.Assert().Equal(claim.PromotionID, promotion.ID)
+	suite.Assert().Equal(claim.WalletID.String(), w.ID)
 }
 
 func (suite *PostgresTestSuite) TestSaveClaimCreds() {

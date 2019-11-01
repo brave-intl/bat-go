@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/utils/reputation"
 	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -53,6 +55,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
+	r.Use(middleware.RateLimiter)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(middleware.RequestLogger(logger))
@@ -94,8 +97,23 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
-	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
+	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
+
+	env := os.Getenv("ENV")
+	reputationServer := os.Getenv("REPUTATION_SERVER")
+	reputationToken := os.Getenv("REPUTATION_TOKEN")
+	if len(reputationServer) == 0 {
+		if env == "production" {
+			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
+		}
+	} else {
+		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
+		r.Mount("/v1/devicecheck", proxyRouter)
+		r.Mount("/v1/captchas", proxyRouter)
+		r.Mount("/v2/attestations/safetynet", proxyRouter)
+	}
+
 	return ctx, r
 }
 
