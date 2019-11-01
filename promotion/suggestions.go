@@ -9,6 +9,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
@@ -178,6 +179,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		Topic:    "suggestion",
 		Balancer: &kafka.LeastBytes{},
 	})
+	defer closers.Panic(kafkaWriter)
 
 	// possible that this schema could be tightened more
 	// also, are all fields required?
@@ -213,12 +215,14 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	// write the message
-	kafkaWriter.WriteMessages(ctx,
+	err = kafkaWriter.WriteMessages(ctx,
 		kafka.Message{
 			Value: []byte(binary),
 		},
 	)
-	kafkaWriter.Close()
+	if err != nil {
+		return err
+	}
 	service.eventChannel <- suggestion
 	return nil
 }
