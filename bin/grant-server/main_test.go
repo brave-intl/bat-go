@@ -273,6 +273,13 @@ func TestClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
 	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected new claim of the same promotion to fail as there are no more grants")
+	}
 }
 
 func generateWallet(t *testing.T) *uphold.Wallet {
