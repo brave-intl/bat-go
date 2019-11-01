@@ -518,7 +518,7 @@ from claims, (
 	where promotion_type = $2
 ) as promos
 where claims.wallet_id = $1
-	and claims.redeemed = true
+	and (claims.redeemed = true or claims.legacy_claimed = true)
 	and claims.promotion_id = promos.id
 group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
