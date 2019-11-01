@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/pressly/lg"
 )
 
 // AppError is error type for json HTTP responses
@@ -27,16 +26,31 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // WrapError with an additional message as an AppError
-func WrapError(msg string, err error) *AppError {
-	return &AppError{Error: err, Message: msg, Code: http.StatusBadRequest}
+func WrapError(err error, msg string, code int) *AppError {
+	// FIXME err should probably be first
+	if code == 0 {
+		code = http.StatusBadRequest
+	}
+	return &AppError{
+		Error:   err,
+		Message: msg,
+		Code:    code,
+	}
 }
 
 // WrapValidationError from govalidator
 func WrapValidationError(err error) *AppError {
+	return ValidationError("request body", govalidator.ErrorsByField(err))
+}
+
+// ValidationError creates an error to communicate a bad request was formed
+func ValidationError(message string, validationErrors interface{}) *AppError {
 	return &AppError{
-		Message: "Error validating request body",
+		Message: "Error validating " + message,
 		Code:    http.StatusBadRequest,
-		Data:    map[string]interface{}{"validationErrors": govalidator.ErrorsByField(err)},
+		Data: map[string]interface{}{
+			"validationErrors": validationErrors,
+		},
 	}
 }
 
@@ -53,8 +67,8 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
 		}
 
-		log := lg.Log(r.Context())
-		log.Errorf("%s", e.Message)
+		//log := lg.Log(r.Context())
+		//log.Errorf("%s", e.Message)
 
 		e.ServeHTTP(w, r)
 	}

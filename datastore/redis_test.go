@@ -3,14 +3,29 @@
 package datastore
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
+var (
+	redisURL = os.Getenv("REDIS_URL")
+)
+
+func testConnectRedis() (redis.Conn, error) {
+	redisAddress := "localhost:6379"
+	if len(redisURL) > 0 {
+		redisAddress = strings.TrimPrefix(redisURL, "redis://")
+	}
+
+	return redis.Dial("tcp", redisAddress)
+}
+
 func TestRedisSet(t *testing.T) {
-	c, err := redis.Dial("tcp", ":6379")
+	c, err := testConnectRedis()
 	if err != nil {
 		t.Error(err)
 	}
@@ -45,7 +60,7 @@ func TestRedisSet(t *testing.T) {
 }
 
 func TestRedisKv(t *testing.T) {
-	c, err := redis.Dial("tcp", ":6379")
+	c, err := testConnectRedis()
 	if err != nil {
 		t.Error(err)
 	}

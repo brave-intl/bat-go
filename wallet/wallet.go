@@ -12,11 +12,11 @@ import (
 // Info contains information about a wallet like associated identifiers, the denomination,
 // the last known balance and provider
 type Info struct {
-	ID          string                   `json:"paymentId" valid:"uuidv4,optional"`
-	Provider    string                   `json:"provider" valid:"in(uphold)"`
-	ProviderID  string                   `json:"providerId" valid:"uuidv4"`
+	ID          string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
+	Provider    string                   `json:"provider" valid:"in(uphold)" db:"provider"`
+	ProviderID  string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
 	AltCurrency *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
-	PublicKey   string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional"`
+	PublicKey   string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
 	LastBalance *Balance                 `json:"balances,omitempty" valid:"-"`
 }
 
@@ -76,7 +76,7 @@ type Wallet interface {
 	// GetBalance returns the last known balance, if refresh is true then the current balance is fetched
 	GetBalance(refresh bool) (*Balance, error)
 	// ListTransactions for this wallet, limit number of transactions returned
-	ListTransactions(limit int) ([]TransactionInfo, error)
+	ListTransactions(limit int, startDate time.Time) ([]TransactionInfo, error)
 }
 
 // IsNotFound is a helper method for determining if an error indicates a missing resource

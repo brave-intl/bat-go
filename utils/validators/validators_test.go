@@ -2,6 +2,9 @@ package validators
 
 import (
 	"testing"
+
+	"github.com/asaskevich/govalidator"
+	uuid "github.com/satori/go.uuid"
 )
 
 func TestIsBase64Url(t *testing.T) {
@@ -50,4 +53,43 @@ func TestIsETHAddress(t *testing.T) {
 	if IsETHAddress("0xF1A61415e12DB93ABACE8704855A4795934FF992") {
 		t.Error("Unexpected error on ETH address with invalid checksum")
 	}
+}
+
+func TestIsPlatform(t *testing.T) {
+	if IsPlatform("notaplatform") {
+		t.Error("non platforms should not pass")
+	}
+	if IsPlatform("") {
+		t.Error("empty strings do not pass")
+	}
+	if !IsPlatform("osx") {
+		t.Error("strings in the list should pass")
+	}
+}
+
+func TestIsEmptyUUID(t *testing.T) {
+	type TestRequest struct {
+		ID uuid.UUID `valid:"requiredUUID"`
+	}
+
+	request := &TestRequest{uuid.FromStringOrNil("01e42e30-a823-4a91-a114-00fd0d47f7d0")}
+
+	isValid, err := govalidator.ValidateStruct(request)
+	if err != nil {
+		t.Error("should not error")
+	}
+	if !isValid {
+		t.Error("should be valid uuid")
+	}
+
+	request.ID = uuid.Nil
+
+	isValid, err = govalidator.ValidateStruct(request)
+	if err == nil {
+		t.Error("should error", err)
+	}
+	if isValid {
+		t.Error("should not be a valid uuid")
+	}
+
 }

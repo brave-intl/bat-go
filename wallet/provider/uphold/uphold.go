@@ -81,7 +81,7 @@ func init() {
 		proxy = nil
 	}
 	client = &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 60,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
 				Proxy:   proxy,
@@ -208,18 +208,8 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
 
-	// FIXME digest calc should move to httpsignature lib
-	var d digest.Instance
-	d.Hash = crypto.SHA256
-	d.Update(payload)
-	req.Header.Add("Digest", d.String())
-
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
+	return req, err
 }
 
 // Register a wallet with Uphold with label
@@ -367,12 +357,6 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
-
-	// FIXME digest calc should move to httpsignature lib
-	var d digest.Instance
-	d.Hash = crypto.SHA256
-	d.Update(unsignedTransaction)
-	req.Header.Add("Digest", d.String())
 
 	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
 	return req, err
@@ -664,7 +648,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 		return nil, err
 	}
 
-	if uhResp.Destination.Type != "card" {
+	if uhResp.Destination.Type != "card" && uhResp.Destination.Type != "anonymous" {
 		panic("Confirming a non-card transaction is not supported!!!")
 	}
 
@@ -692,12 +676,13 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 }
 
 // ListTransactions for this wallet, pagination not yet supported
-func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
+func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]wallet.TransactionInfo, error) {
 	var out []wallet.TransactionInfo
 	if limit > 0 {
 		out = make([]wallet.TransactionInfo, 0, limit)
 	}
 	var totalTransactions int
+	toExit := false
 	for {
 		req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID+"/transactions", nil)
 		if err != nil {
@@ -749,13 +734,18 @@ func (w *Wallet) ListTransactions(limit int) ([]wallet.TransactionInfo, error) {
 		}
 
 		for i := 0; i < len(uhResp); i++ {
-			out = append(out, *uhResp[i].ToTransactionInfo())
+			txInfo := *uhResp[i].ToTransactionInfo()
+			if txInfo.Time.Before(startDate) {
+				toExit = true
+				break
+			}
+			out = append(out, txInfo)
 			if len(out) == limit {
 				break
 			}
 		}
 
-		if len(out) == limit || len(out) == totalTransactions {
+		if len(out) == limit || len(out) == totalTransactions || toExit {
 			break
 		}
 	}

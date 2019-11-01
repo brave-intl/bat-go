@@ -12,12 +12,11 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
@@ -26,7 +25,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
-	jose "gopkg.in/square/go-jose.v2"
 )
 
 var handler http.Handler
@@ -35,8 +33,6 @@ var publicKey ed25519.PublicKey
 var privateKey ed25519.PrivateKey
 
 func init() {
-	os.Setenv("ENV", "production")
-
 	accessToken = uuid.NewV4().String()
 	middleware.TokenList = []string{accessToken}
 
@@ -70,11 +66,20 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func claim(t *testing.T, server *httptest.Server, grantID uuid.UUID, cardID uuid.UUID) error {
-	payload := fmt.Sprintf(`{"wallet": {"altcurrency":"BAT", "provider":"uphold", "providerId":"%s"}}`, cardID.String())
-	claimURL := fmt.Sprintf("%s/v1/grants/%s", server.URL, grantID.String())
+func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet wallet.Info) error {
+	payload := fmt.Sprintf(`{
+			"wallet": {
+				"altcurrency": "BAT", 
+				"provider": "uphold", 
+				"paymentId": "%s",
+				"providerId": "%s",
+				"publicKey": "%s"
+			},
+			"promotionId": "%s"
+		}`, wallet.ID, wallet.ProviderID, wallet.PublicKey, promotionID.String())
+	claimURL := fmt.Sprintf("%s/v1/grants/claim", server.URL)
 
-	req, err := http.NewRequest("PUT", claimURL, bytes.NewBuffer([]byte(payload)))
+	req, err := http.NewRequest("POST", claimURL, bytes.NewBuffer([]byte(payload)))
 	if err != nil {
 		return err
 	}
@@ -88,30 +93,198 @@ func claim(t *testing.T, server *httptest.Server, grantID uuid.UUID, cardID uuid
 	}
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("Received non-200 response: %d\n", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			body = []byte("")
+		}
+		return fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
 	}
 	return nil
+}
+
+func getPromotions(t *testing.T, server *httptest.Server, wallet wallet.Info) ([]promotion.Promotion, error) {
+	type promotionsResp struct {
+		Promotions []promotion.Promotion
+	}
+	promotionsURL := fmt.Sprintf("%s/v1/promotions?legacy=true&paymentId=%s&platform=%s", server.URL, wallet.ID, "osx")
+	promotions := []promotion.Promotion{}
+
+	req, err := http.NewRequest("GET", promotionsURL, nil)
+	if err != nil {
+		return promotions, err
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return promotions, err
+	}
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			body = []byte("")
+		}
+		return promotions, fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return promotions, err
+	}
+
+	promoResp := promotionsResp{}
+	err = json.Unmarshal(body, &promoResp)
+	promotions = promoResp.Promotions
+	return promotions, err
+}
+
+func getActive(t *testing.T, server *httptest.Server, wallet wallet.Info) ([]grant.Grant, error) {
+	type grantsResp struct {
+		Grants []grant.Grant
+	}
+	grantsURL := fmt.Sprintf("%s/v1/grants/active?paymentId=%s", server.URL, wallet.ID)
+	grants := []grant.Grant{}
+
+	req, err := http.NewRequest("GET", grantsURL, nil)
+	if err != nil {
+		return grants, err
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return grants, err
+	}
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			body = []byte("")
+		}
+		return grants, fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return grants, err
+	}
+
+	r := grantsResp{}
+	err = json.Unmarshal(body, &r)
+	grants = r.Grants
+	return grants, err
 }
 
 func TestClaim(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	grantID := uuid.NewV4()
-	cardID := uuid.NewV4()
-
-	err := claim(t, server, grantID, cardID)
+	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = claim(t, server, grantID, uuid.NewV4())
+
+	value := decimal.NewFromFloat(30.0)
+	numGrants := 1
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wallet wallet.Info
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err := getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "android" {
+		t.Fatal("Expected one active android grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active android grant worth 30 BAT")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
 	if err == nil {
-		t.Fatal("Expected re-claim of the same grant to a different card to fail")
+		t.Fatal("Expected re-claim of unavailable promotion to a different card to fail")
+	}
+
+	value = decimal.NewFromFloat(35.0)
+	numGrants = 2
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err = getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "ugp" {
+		t.Fatal("Expected one active ugp grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active ugp grant worth 35 BAT")
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected re-claim of the same grant to fail despite available grants")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected new claim of the same promotion to fail as there are no more grants")
 	}
 }
 
 func generateWallet(t *testing.T) *uphold.Wallet {
 	var info wallet.Info
+	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
 	info.ProviderID = ""
 	{
@@ -136,54 +309,93 @@ func TestRedeem(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	userWallet := generateWallet(t)
-	cardID, err := uuid.FromString(userWallet.Info.ProviderID)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: "EdDSA", Key: privateKey}, nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	maturityDate := time.Now()
-	// + 1 week
-	expiryDate := maturityDate.AddDate(0, 0, 1)
-
-	altCurrency := altcurrency.BAT
-
-	grantTemplate := grant.Grant{
-		AltCurrency:       &altCurrency,
-		Probi:             altcurrency.BAT.ToProbi(decimal.NewFromFloat(30)),
-		PromotionID:       uuid.NewV4(),
-		MaturityTimestamp: maturityDate.Unix(),
-		ExpiryTimestamp:   expiryDate.Unix(),
-	}
-
-	grants, err := grant.CreateGrants(signer, grantTemplate, 1)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	g, err := grant.FromCompactJWS(publicKey, grants[0])
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	grantID := g.GrantID
-
-	err = claim(t, server, grantID, cardID)
+	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, g.Probi, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	for _, table := range tables {
+		_, err = pg.DB.Exec("delete from " + table)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	userWallet := generateWallet(t)
+
+	value := decimal.NewFromFloat(10.0)
+	numGrants := 1
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value = decimal.NewFromFloat(20.0)
+	numGrants = 1
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	promotions, err := getPromotions(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(promotions) != 1 {
+		t.Fatal("with two active promotions and one claimed, exactly one promo should be advertised")
+	}
+	if promotions[0].ID != promotion.ID {
+		t.Fatal("promotion id did not match!")
+	}
+
+	err = claim(t, server, promotion.ID, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	promotions, err = getPromotions(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(promotions) != 0 {
+		t.Fatal("with two active promotions and two claimed, no promos should be advertised")
+	}
+
+	totalBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(30.0))
+
+	grants, err := getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 2 {
+		t.Fatal("Expected two active grants")
+	}
+	if !grants[0].Probi.Add(grants[1].Probi).Equals(totalBAT) {
+		t.Fatal("Expected two active android grant worth 30 BAT total")
+	}
+
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var reqPayload grant.RedeemGrantsRequest
-	reqPayload.Grants = grants
 	reqPayload.WalletInfo = userWallet.Info
 	reqPayload.Transaction = txn
 
@@ -206,6 +418,25 @@ func TestRedeem(t *testing.T) {
 	}
 
 	if resp.StatusCode != 200 {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		t.Error(string(bodyBytes))
 		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	grants, err = getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 0 {
+		t.Fatal("Expected no active grants")
+	}
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != 204 {
+		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
 	}
 }
