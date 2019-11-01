@@ -129,8 +129,24 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, err
 	}
 
-	if len(blindedCreds) != promotion.SuggestionsPerGrant {
-		return nil, errors.New("wrong number of blinded tokens included")
+	if promotion.Type == "ads" {
+		claim, err := service.datastore.GetPreClaim(promotionID, wallet.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if claim == nil {
+			return nil, errors.New("you cannot claim this promotion")
+		}
+
+		suggestionsNeeded := int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).IntPart())
+		if len(blindedCreds) != suggestionsNeeded {
+			return nil, errors.New("wrong number of blinded tokens included")
+		}
+	} else {
+		if len(blindedCreds) != promotion.SuggestionsPerGrant {
+			return nil, errors.New("wrong number of blinded tokens included")
+		}
 	}
 
 	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, JSONStringArray(blindedCreds))

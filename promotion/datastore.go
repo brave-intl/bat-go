@@ -28,6 +28,8 @@ type Datastore interface {
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -263,6 +265,21 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 	return &claims[0], nil
 }
 
+// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error) {
+	claims := []Claim{}
+	err := pg.DB.Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(claims) > 0 {
+		return &claims[0], nil
+	}
+
+	return nil, nil
+}
+
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
@@ -359,7 +376,19 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 	}
 	statement := `
 		select
-			promos.*,
+			promos.id,
+			promos.promotion_type,
+			promos.created_at,
+			promos.expires_at,
+			promos.version,
+			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
+			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+				promos.approximate_value * 
+				promos.suggestions_per_grant )::int as suggestions_per_grant,
+			promos.remaining_grants,
+			promos.platform,
+			promos.active,
+			promos.public_keys,
 			promos.active and wallet_claims.redeemed is distinct from true and
 			( promos.platform = '' or promos.platform = $2) and
 			( wallet_claims.legacy_claimed is true or
@@ -516,6 +545,7 @@ SELECT
 FROM claims
 WHERE wallet_id = $1
   AND promotion_id = $2
+	AND (legacy_claimed or redeemed)
 ORDER BY created_at DESC
 `
 	claims := []Claim{}
