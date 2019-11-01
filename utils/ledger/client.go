@@ -125,7 +125,7 @@ type WalletResponse struct {
 
 // GetWallet retrieves wallet information
 func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error) {
-	req, err := c.newRequest(ctx, "GET", "v2/wallet/"+id.String(), nil)
+	req, err := c.newRequest(ctx, "GET", "v2/wallet/"+id.String()+"/info", nil)
 	if err != nil {
 		return nil, err
 	}
