@@ -224,16 +224,54 @@ func TestClaim(t *testing.T) {
 		t.Fatal("Expected one active android grant worth 30 BAT")
 	}
 
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
 	err = claim(t, server, promotion.ID, wallet)
 	if err == nil {
-		t.Fatal("Expected re-claim of the same grant to fail")
+		t.Fatal("Expected re-claim of unavailable promotion to a different card to fail")
+	}
+
+	value = decimal.NewFromFloat(35.0)
+	numGrants = 2
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err = getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "ugp" {
+		t.Fatal("Expected one active ugp grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active ugp grant worth 35 BAT")
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected re-claim of the same grant to fail despite available grants")
 	}
 
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
 	err = claim(t, server, promotion.ID, wallet)
-	if err == nil {
-		t.Fatal("Expected re-claim of the same grant to a different card to fail")
+	if err != nil {
+		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
 	}
 }
 
