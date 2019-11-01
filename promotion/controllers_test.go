@@ -352,6 +352,14 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	}`
 	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
 
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+
 	promotion, claim := suite.setupAdsClaim(service, &wallet, 0)
 
 	handler2 := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
@@ -384,6 +392,14 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	handler2.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
 	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
+
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
 
 	blindedCreds = make([]string, int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).IntPart()))
 	for i := range blindedCreds {

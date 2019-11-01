@@ -532,6 +532,7 @@ SELECT
 FROM claims
 WHERE wallet_id = $1
   AND promotion_id = $2
+	AND (legacy_claimed or redeemed)
 ORDER BY created_at DESC
 `
 	claims := []Claim{}
