@@ -12,7 +12,7 @@ type Service struct {
 	cbClient         cbr.Client
 	ledgerClient     ledger.Client
 	reputationClient reputation.Client
-	eventChannel     chan SuggestionEvent
+	eventChannel     chan []byte
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment

@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -76,6 +76,7 @@ type Claim struct {
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
 type ClaimCreds struct {
 	ID           uuid.UUID        `db:"claim_id"`
+	IssuerID     uuid.UUID        `db:"issuer_id"`
 	BlindedCreds JSONStringArray  `db:"blinded_creds"`
 	SignedCreds  *JSONStringArray `db:"signed_creds"`
 	BatchProof   *string          `db:"batch_proof"`
@@ -132,23 +133,33 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errors.New("wrong number of blinded tokens included")
 	}
 
-	claim, err = service.datastore.ClaimForWallet(promotion, wallet, JSONStringArray(blindedCreds))
+	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
 
-	// FIXME better job drain for retries
-	go service.SignClaimCreds(ctx, claim.ID, *issuer, blindedCreds)
+	go func() {
+		err := service.datastore.RunNextClaimJob(ctx, service)
+		// FIXME
+		if err != nil {
+			logger := log.Ctx(ctx)
+			logger.Error().Err(err).Msg("error processing claim job")
+		}
+	}()
 
 	return &claim.ID, nil
 }
 
-// SignClaimCreds signs the blinded credentials and updates the claim creds in the datastore
-func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, issuer Issuer, blindedCreds []string) {
+// ClaimWorker attempts to work on a claim job by signing the blinded credentials of the client
+type ClaimWorker interface {
+	SignClaimCreds(ctx context.Context, claimID uuid.UUID, issuer Issuer, blindedCreds []string) (*ClaimCreds, error)
+}
+
+// SignClaimCreds signs the blinded credentials
+func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, issuer Issuer, blindedCreds []string) (*ClaimCreds, error) {
 	resp, err := service.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
-		// FIXME
-		fmt.Println(err)
+		return nil, err
 	}
 
 	signedTokens := JSONStringArray(resp.SignedTokens)
@@ -161,9 +172,5 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 		PublicKey:    &issuer.PublicKey,
 	}
 
-	err = service.datastore.SaveClaimCreds(creds)
-	if err != nil {
-		// FIXME
-		fmt.Println(err)
-	}
+	return creds, nil
 }
