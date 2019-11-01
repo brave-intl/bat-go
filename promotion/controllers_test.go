@@ -360,7 +360,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		nil,
 	)
 
-	promotion, claim := suite.setupAdsClaim(service, &wallet, 0)
+	promotion, _, claim := suite.setupAdsClaim(service, &wallet, 0)
 
 	handler2 := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
