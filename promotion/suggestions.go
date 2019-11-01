@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
@@ -171,38 +171,34 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	// kafka event producer below - this could probably put into a generic module
-
-	w := kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  []string{"kafka:9092"}, // put in cfg
-		Topic:    "suggestion",           // put in cfg
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
+		// by default we are waitng for acks from all nodes
+		Brokers:  []string{kafkaBrokers},
+		Topic:    "suggestion",
 		Balancer: &kafka.LeastBytes{},
 	})
 
-	// any further tightening? are these types ok?  in the example they are all strings
-	// are all fields required?
-	// "type" might be an enum
-	// we can break these into 2 if funding is to be reused
-	schema, err := ioutil.ReadFile("suggestion.avsc")
+	// possible that this schema could be tightened more
+	// also, are all fields required?
+	// we re-read this file every time which is decidedly not fantastic
+	schema, err := ioutil.ReadFile("../schema-registry/grant/suggestion.avsc")
 	if err != nil {
 		return err
 	}
+
 	codec, err := goavro.NewCodec(string(schema))
 	if err != nil {
 		return err
 	}
 
-	if err != nil {
-		return err
-	}
-	// not thrilled with double encoding here- alternative is to find a nice way to turn this into a map
+	// not thrilled with double encoding here; alternative is to find a nice way to turn this into a map
 	// and use codec.BinaryFromNative.
-	b, err := json.Marshal(suggestion)
-	fmt.Println(string(b))
-
+	jsonMsg, err := json.Marshal(suggestion)
 	if err != nil {
 		return err
 	}
-	textual := []byte(b)
+	textual := []byte(jsonMsg)
 
 	// above generated into native
 	native, _, err := codec.NativeFromTextual(textual)
@@ -217,12 +213,12 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	// write the message
-	w.WriteMessages(ctx,
+	kafkaWriter.WriteMessages(ctx,
 		kafka.Message{
 			Value: []byte(binary),
 		},
 	)
-	w.Close()
+	kafkaWriter.Close()
 	service.eventChannel <- suggestion
 	return nil
 }
