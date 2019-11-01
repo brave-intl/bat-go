@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	raven "github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
 )
 
 // AppError is error type for json HTTP responses
@@ -62,13 +64,18 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 
 	if e := fn(w, r); e != nil {
+		if e.Code >= 500 && e.Code <= 599 {
+			if e.Error != nil {
+				raven.CaptureError(errors.Wrap(e.Error, e.Message), map[string]string{})
+			} else {
+				raven.CaptureMessage(e.Message, map[string]string{})
+			}
+		}
+
 		if e.Error != nil {
 			// Combine error with message
 			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
 		}
-
-		//log := lg.Log(r.Context())
-		//log.Errorf("%s", e.Message)
 
 		e.ServeHTTP(w, r)
 	}

@@ -16,6 +16,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
@@ -337,6 +339,11 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
 		select
 			promos.*,
@@ -389,6 +396,11 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
 func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
 	statement := `
 		select
 			promotions.*,
