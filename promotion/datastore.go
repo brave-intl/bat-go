@@ -1,11 +1,13 @@
 package promotion
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 
+	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -23,9 +25,11 @@ type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -39,7 +43,7 @@ type Datastore interface {
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
 	// InsertIssuer inserts the given issuer
-	InsertIssuer(issuer *Issuer) error
+	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	// GetIssuer by PromotionID and cohort
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
@@ -53,6 +57,12 @@ type Datastore interface {
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	// RunNextClaimJob to sign claim credentials if there is a claim waiting
+	RunNextClaimJob(ctx context.Context, worker ClaimWorker) error
+	// InsertSuggestion inserts a transaction awaiting validation
+	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
+	// RunNextSuggestionJob to process a suggestion if there is one waiting
+	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -87,7 +97,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(1)
+	err = m.Migrate(2)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
@@ -160,17 +170,22 @@ func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
 }
 
 // InsertIssuer inserts the given issuer
-func (pg *Postgres) InsertIssuer(issuer *Issuer) error {
+func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	statement := `
 	insert into issuers (promotion_id, cohort, public_key)
 	values ($1, $2, $3)
 	returning *`
-	_, err := pg.DB.Exec(statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	if len(issuers) != 1 {
+		return nil, errors.New("Unexpected number of issuers returned")
+	}
+
+	return &issuers[0], nil
 }
 
 // GetIssuer by PromotionID and cohort
@@ -250,8 +265,23 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 	return &claims[0], nil
 }
 
+// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error) {
+	claims := []Claim{}
+	err := pg.DB.Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(claims) > 0 {
+		return &claims[0], nil
+	}
+
+	return nil, nil
+}
+
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -323,7 +353,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, wallet *wallet.Info, bl
 	claim := claims[0]
 
 	// This will error if user has already claimed due to uniqueness constraint
-	_, err = tx.Exec(`insert into claim_creds (claim_id, blinded_creds) values ($1, $2)`, claim.ID, blindedCredsJSON)
+	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
@@ -346,7 +376,19 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 	}
 	statement := `
 		select
-			promos.*,
+			promos.id,
+			promos.promotion_type,
+			promos.created_at,
+			promos.expires_at,
+			promos.version,
+			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
+			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+				promos.approximate_value * 
+				promos.suggestions_per_grant )::int as suggestions_per_grant,
+			promos.remaining_grants,
+			promos.platform,
+			promos.active,
+			promos.public_keys,
 			promos.active and wallet_claims.redeemed is distinct from true and
 			( promos.platform = '' or promos.platform = $2) and
 			( wallet_claims.legacy_claimed is true or
@@ -463,24 +505,24 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 
 // GetClaimSummary aggregates the values of a single wallet's claims
 func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error) {
-	query := `
-SELECT
-	MAX(claims.created_at) as "last_claim",
-	SUM(claims.approximate_value - claims.bonus) as earnings,
+	statement := `
+select
+	max(claims.created_at) as "last_claim",
+	sum(claims.approximate_value - claims.bonus) as earnings,
 	promos.promotion_type as type
-FROM claims, (
-	SELECT
+from claims, (
+	select
 		id,
 		promotion_type
-	FROM promotions
-	WHERE promotion_type = $2
-) AS promos
-WHERE claims.wallet_id = $1
-	AND claims.redeemed = true
-	AND claims.promotion_id = promos.id
-GROUP BY promos.promotion_type;`
+	from promotions
+	where promotion_type = $2
+) as promos
+where claims.wallet_id = $1
+	and (claims.redeemed = true or claims.legacy_claimed = true)
+	and claims.promotion_id = promos.id
+group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
-	err := pg.DB.Select(&summaries, query, walletID, grantType)
+	err := pg.DB.Select(&summaries, statement, walletID, grantType)
 	if err != nil {
 		return nil, err
 	}
@@ -503,6 +545,7 @@ SELECT
 FROM claims
 WHERE wallet_id = $1
   AND promotion_id = $2
+	AND (legacy_claimed or redeemed)
 ORDER BY created_at DESC
 `
 	claims := []Claim{}
@@ -515,4 +558,149 @@ ORDER BY created_at DESC
 	}
 
 	return nil, nil
+}
+
+// RunNextClaimJob to sign claim credentials if there is a claim waiting
+func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) error {
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	type SigningJob struct {
+		Issuer
+		ClaimID      uuid.UUID       `db:"claim_id"`
+		BlindedCreds JSONStringArray `db:"blinded_creds"`
+	}
+
+	statement := `
+select
+	issuers.*,
+	claim_cred.claim_id,
+	claim_cred.blinded_creds
+from 
+	(select *
+	from claim_creds
+	where batch_proof is null
+	for update skip locked
+	limit 1
+) claim_cred
+inner join issuers
+on claim_cred.issuer_id = issuers.id`
+
+	jobs := []SigningJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return nil
+	}
+
+	job := jobs[0]
+
+	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
+	if err != nil {
+		// FIXME certain errors are not recoverable
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// InsertSuggestion inserts a transaction awaiting validation
+func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestionEvent []byte) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	statement := `
+	insert into suggestion_drain (credentials, suggestion_text, suggestion_event)
+	values ($1, $2, $3)
+	returning *`
+	_, err = pg.DB.Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RunNextSuggestionJob to process a suggestion if there is one waiting
+func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error {
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	// FIXME
+	type SuggestionJob struct {
+		ID              uuid.UUID `db:"id"`
+		Credentials     string    `db:"credentials"`
+		SuggestionText  string    `db:"suggestion_text"`
+		SuggestionEvent []byte    `db:"suggestion_event"`
+	}
+
+	statement := `
+select *
+from suggestion_drain
+for update skip locked
+limit 1`
+
+	jobs := []SuggestionJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return nil
+	}
+
+	job := jobs[0]
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+	if err != nil {
+		// FIXME certain errors are not recoverable
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

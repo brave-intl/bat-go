@@ -6,7 +6,7 @@ branches:
   - master
   - prod
 go:
-- "1.12.2"
+- "1.13.4"
 - "master"
 services:
 - docker

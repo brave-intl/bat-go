@@ -351,6 +351,79 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		]
 	}`
 	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
+
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+
+	promotion, _, claim := suite.setupAdsClaim(service, &wallet, 0)
+
+	handler2 := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
+
+	// blindedCreds should be the wrong length
+	claimReq := ClaimRequest{
+		PaymentID:    walletID,
+		BlindedCreds: blindedCreds,
+	}
+
+	body, err := json.Marshal(&claimReq)
+	suite.Require().NoError(err)
+
+	req, err = http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	var s httpsignature.Signature
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = wallet.ID
+	s.Headers = []string{"digest", "(request-target)"}
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("promotionId", promotion.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler2.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
+
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+
+	blindedCreds = make([]string, int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).IntPart()))
+	for i := range blindedCreds {
+		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
+	}
+
+	claimReq.BlindedCreds = blindedCreds
+
+	body, err = json.Marshal(&claimReq)
+	suite.Require().NoError(err)
+
+	req, err = http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("promotionId", promotion.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler2.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {
@@ -387,7 +460,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan SuggestionEvent)
+	ch := make(chan []byte)
 	service := &Service{
 		datastore:        pg,
 		cbClient:         mockCB,
@@ -409,7 +482,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
 	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
 
-	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokens)).Return(nil)
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
 	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
 		Name:      issuerName,
 		PublicKey: issuerPublicKey,
@@ -458,11 +531,15 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	// wait for suggestion event
-	suggestionEvent := <-ch
-	suggestionEventJSON, err := json.Marshal(&suggestionEvent)
+	suggestionEventJSON := <-ch
+	suite.Require().NoError(err)
+
+	var event SuggestionEvent
+	err = json.Unmarshal(suggestionEventJSON, &event)
 	suite.Require().NoError(err)
 
 	suite.Assert().JSONEq(`{
+    "id": "`+event.ID.String()+`",
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
@@ -523,9 +600,9 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	suite.Assert().Equal(http.StatusBadRequest, code)
 
 	// not ignored promotion
-	promotion, claim := suite.setupAdsClaim(service, w, 0)
+	promotion, issuer, claim := suite.setupAdsClaim(service, w, 0)
 
-	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -537,9 +614,9 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 
 	// not ignored bonus promotion
-	promotion, claim = suite.setupAdsClaim(service, w, 20)
+	promotion, issuer, claim = suite.setupAdsClaim(service, w, 20)
 
-	_, err = pg.ClaimForWallet(promotion, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
 	suite.Assert().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -551,11 +628,16 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "expected a aggregated claim response")
 }
 
-func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Claim) {
+func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Issuer, *Claim) {
 	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
 	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount, "")
 	suite.Assert().NoError(err, "a promotion could not be created")
+
+	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = service.datastore.InsertIssuer(issuer)
+	suite.Assert().NoError(err, "Insert issuer should succeed")
 
 	err = service.datastore.ActivatePromotion(promotion)
 	suite.Assert().NoError(err, "a promotion should be activated")
@@ -564,7 +646,7 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Inf
 	claim, err := service.datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
 	suite.Assert().NoError(err, "create a claim for a promotion")
 
-	return promotion, claim
+	return promotion, issuer, claim
 }
 
 func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {
@@ -593,7 +675,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan SuggestionEvent)
+	ch := make(chan []byte)
 	service := &Service{
 		datastore:    pg,
 		cbClient:     mockCB,
