@@ -55,6 +55,8 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	}
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
+
+	enableSuggestionJob = true
 }
 
 func (suite *ControllersTestSuite) SetupTest() {
