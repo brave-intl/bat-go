@@ -122,7 +122,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	}
 
 	reqFailure, err := http.NewRequest("GET", urlWithPlatform("noexist"), nil)
-	suite.Require().NoError(err, "Should not be able to create get promotions request")
+	suite.Require().NoError(err, "Failed to create get promotions request")
 
 	reqOSX, err := http.NewRequest("GET", urlWithPlatform("osx"), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
@@ -152,7 +152,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
-	promotionScoped, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "osx")
+	promotionScoped, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
@@ -171,8 +171,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedAndroid := `{
 		"promotions": [
-			` + promotionJSON(false, promotionGeneric) + `,
-			` + promotionJSON(false, promotionScoped) + `
+			` + promotionJSON(false, promotionGeneric) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
@@ -196,8 +195,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedAndroid = `{
 		"promotions": [
-			` + promotionJSON(true, promotionGeneric) + `,
-			` + promotionJSON(false, promotionScoped) + `
+			` + promotionJSON(true, promotionGeneric) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
