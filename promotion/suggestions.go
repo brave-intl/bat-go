@@ -13,6 +13,9 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// FIXME temporary until event producer is hooked up
+var enableSuggestionJob = false
+
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
 	PublicKey     string `json:"publicKey" valid:"base64"`
@@ -147,14 +150,16 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
-	go func() {
-		err := service.datastore.RunNextSuggestionJob(ctx, service)
-		if err != nil {
-			// FIXME
-			logger := log.Ctx(ctx)
-			logger.Error().Err(err).Msg("error processing suggestion job")
-		}
-	}()
+	if enableSuggestionJob {
+		go func() {
+			err := service.datastore.RunNextSuggestionJob(ctx, service)
+			if err != nil {
+				// FIXME
+				logger := log.Ctx(ctx)
+				logger.Error().Err(err).Msg("error processing suggestion job")
+			}
+		}()
+	}
 
 	return nil
 }
