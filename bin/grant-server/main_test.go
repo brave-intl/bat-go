@@ -440,3 +440,47 @@ func TestRedeem(t *testing.T) {
 		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
 	}
 }
+
+// This is to try to test a very stubborn validation issue with promotionID
+func TestClaimValidation(t *testing.T) {
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	pg, err := promotion.NewPostgres("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w wallet.Info
+	w.ID = uuid.NewV4().String()
+	w.ProviderID = uuid.NewV4().String()
+
+	err = claim(t, server, uuid.Nil, w)
+	if err == nil {
+		t.Fatal("Must fail if no promotion id is passed")
+	}
+
+	for i := 0; i < 100; i++ {
+		value := decimal.NewFromFloat(30.0)
+		numGrants := 1
+		promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = pg.ActivatePromotion(promotion)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var wallet wallet.Info
+		wallet.ID = uuid.NewV4().String()
+		wallet.ProviderID = uuid.NewV4().String()
+
+		err = claim(t, server, promotion.ID, wallet)
+		if err != nil {
+			t.Error(promotion.ID)
+			t.Fatal(err)
+		}
+	}
+}
