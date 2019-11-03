@@ -222,9 +222,11 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 
 // InsertWallet inserts the given wallet
 func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
+	// NOTE on conflict do nothing because none of the wallet information is updateable
 	statement := `
 	insert into wallets (id, provider, provider_id, public_key)
 	values ($1, $2, $3, $4)
+	on conflict do nothing
 	returning *`
 	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
 	if err != nil {
