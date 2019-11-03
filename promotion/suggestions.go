@@ -176,6 +176,9 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return nil
 	}
 
+	// FIXME remove this and have the test check Kafka
+	service.eventChannel <- suggestion
+
 	// kafka event producer below - this could probably put into a generic module
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
