@@ -49,7 +49,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 				return
 			}
 			if pubKey == nil {
-				http.Error(w, http.StatusText(403), 403)
+				http.Error(w, http.StatusText(404), 404)
 				return
 			}
 
