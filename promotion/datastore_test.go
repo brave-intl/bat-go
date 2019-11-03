@@ -431,6 +431,33 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	promotions, err = pg.GetAvailablePromotions("windows", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(len(promotions), 1)
+
+	suite.CleanDB()
+
+	// Create desktop promotion
+	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "ios")
+	suite.Require().NoError(err, "Create promotion should succeed")
+
+	// Desktop should not see an iOS grant
+	promotions, err = pg.GetAvailablePromotions("desktop", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	// But iOS should
+	promotions, err = pg.GetAvailablePromotions("ios", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+
+	// But it should not be in the legacy list until activated
+	promotions, err = pg.GetAvailablePromotions("ios", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	err = pg.ActivatePromotion(promotion)
+
+	promotions, err = pg.GetAvailablePromotions("ios", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {

@@ -222,9 +222,11 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 
 // InsertWallet inserts the given wallet
 func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
+	// NOTE on conflict do nothing because none of the wallet information is updateable
 	statement := `
 	insert into wallets (id, provider, provider_id, public_key)
 	values ($1, $2, $3, $4)
+	on conflict do nothing
 	returning *`
 	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
 	if err != nil {
@@ -390,7 +392,6 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.active,
 			promos.public_keys,
 			promos.active and wallet_claims.redeemed is distinct from true and
-			( promos.platform = '' or promos.platform = $2) and
 			( wallet_claims.legacy_claimed is true or
 				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
 				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
@@ -402,6 +403,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 				from
 				promotions left join issuers on promotions.id = issuers.promotion_id
+				where ( promotions.platform = '' or promotions.platform = $2)
 				group by promotions.id
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
@@ -446,14 +448,12 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			promotions.active and
-			promotions.remaining_grants > 0 and
-			( promotions.platform = '' or promotions.platform = $1)
-			as available,
+			promotions.active and promotions.remaining_grants > 0 as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
 		promotions left join issuers on promotions.id = issuers.promotion_id
-		where promotions.promotion_type = 'ugp'
+		where promotions.promotion_type = 'ugp' and
+			( promotions.platform = '' or promotions.platform = $1)
 		group by promotions.id
 		order by promotions.created_at;`
 
@@ -518,7 +518,7 @@ from claims, (
 	where promotion_type = $2
 ) as promos
 where claims.wallet_id = $1
-	and claims.redeemed = true
+	and (claims.redeemed = true or claims.legacy_claimed = true)
 	and claims.promotion_id = promos.id
 group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
