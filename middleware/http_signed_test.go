@@ -56,7 +56,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusForbidden, rr.Code, "request with signature from wrong keyID should fail")
+	assert.Equal(t, http.StatusNotFound, rr.Code, "request with signature from wrong keyID should fail")
 
 	s.KeyID = "primary"
 
