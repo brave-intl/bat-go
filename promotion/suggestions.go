@@ -19,14 +19,14 @@ var enableSuggestionJob = false
 
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
-	PublicKey     string `json:"publicKey" valid:"base64"`
+	PublicKey			string `json:"publicKey" valid:"base64"`
 	TokenPreimage string `json:"t" valid:"base64"`
-	Signature     string `json:"signature" valid:"base64"`
+	Signature			string `json:"signature" valid:"base64"`
 }
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
-	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
+	Type		string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
 	Channel string `json:"channel" valid:"-"`
 }
 
@@ -44,26 +44,26 @@ func (s *Suggestion) Base64Decode(text string) error {
 
 /*
 {
-  "type": "auto-contribute",
-  "channel": "coinmarketcap.com",
-  "totalAmount": "15.0",
-  "funding": [
-    {
-      "type": "ugp",
-      "amount": "15.0",
-      "cohort": "control",
-      "promotion": "{{promotionId}}"
-    }
-  ]
+	"type": "auto-contribute",
+	"channel": "coinmarketcap.com",
+	"totalAmount": "15.0",
+	"funding": [
+		{
+			"type": "ugp",
+			"amount": "15.0",
+			"cohort": "control",
+			"promotion": "{{promotionId}}"
+		}
+	]
 }
 */
 
 // FundingSource describes where funds for this suggestion should come from
 type FundingSource struct {
-	Type        string          `json:"type"`
-	Amount      decimal.Decimal `json:"amount"`
-	Cohort      string          `json:"cohort"`
-	PromotionID uuid.UUID       `json:"promotion"`
+	Type				string					`json:"type"`
+	Amount			decimal.Decimal `json:"amount"`
+	Cohort			string					`json:"cohort"`
+	PromotionID uuid.UUID				`json:"promotion"`
 }
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
@@ -71,7 +71,7 @@ type SuggestionEvent struct {
 	ID uuid.UUID `json:"id"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
-	Funding     []FundingSource `json:"funding"`
+	Funding			[]FundingSource `json:"funding"`
 }
 
 // SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
