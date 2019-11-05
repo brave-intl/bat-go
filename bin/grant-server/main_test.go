@@ -510,7 +510,7 @@ func TestDrain(t *testing.T) {
 
 	userWallet := generateWallet(t)
 
-	value := decimal.NewFromFloat(10.0)
+	value := decimal.NewFromFloat(15.0)
 	numGrants := 1
 	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
@@ -527,14 +527,19 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value = decimal.NewFromFloat(10.0)
+	value = decimal.NewFromFloat(5.0)
 	numGrants = 1
-	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	promotion, err = pg.CreatePromotion("ads", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = pg.CreateClaim(promotion.ID, userWallet.Info.ID, value, decimal.Zero)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +559,7 @@ func TestDrain(t *testing.T) {
 		t.Fatal("Expected two active grants")
 	}
 	if !grants[0].Probi.Add(grants[1].Probi).Equals(totalBAT) {
-		t.Fatal("Expected two active android grant worth 20 BAT total")
+		t.Fatal("Expected two active grants worth 20 BAT total")
 	}
 
 	var reqPayload grant.DrainGrantsRequest
@@ -595,19 +600,21 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !respPayload.GrantTotal.Equals(totalBAT) {
-		t.Fatal("Expected redeemed grants to equal 20 BAT total")
+	expectedBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(5.0))
+	if !respPayload.GrantTotal.Equals(expectedBAT) {
+
+		t.Fatal("Expected redeemed grants to equal 5 BAT total", respPayload)
 	}
 
 	grants, err = getActive(t, server, userWallet.Info)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(grants) != 0 {
+	if len(grants) != 1 {
 		t.Fatal("Expected zero active grants")
 	}
 
-	_, err = userWallet.Transfer(altcurrency.BAT, totalBAT, grant.SettlementDestination)
+	_, err = userWallet.Transfer(altcurrency.BAT, expectedBAT, grant.SettlementDestination)
 	if err != nil {
 		t.Log(err)
 	}
@@ -627,8 +634,9 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	expectedBAT = altcurrency.BAT.ToProbi(decimal.NewFromFloat(15.0))
 	if !respPayload.GrantTotal.Equals(decimal.Zero) {
-		t.Fatal("Expected redeemed grants to equal 0 BAT")
+		t.Fatal("Expected redeemed grants to equal 15 BAT")
 	}
 }
 
