@@ -1,25 +1,25 @@
 package promotion
 
 import (
-	"io/ioutil"
-	"os"
 	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/linkedin/goavro"
 	kafka "github.com/segmentio/kafka-go"
+	"io/ioutil"
+	"os"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
-	datastore				 Datastore
-	cbClient				 cbr.Client
-	ledgerClient		 ledger.Client
+	datastore        Datastore
+	cbClient         cbr.Client
+	ledgerClient     ledger.Client
 	reputationClient reputation.Client
-	eventChannel		 chan []byte
-	codec						 *goavro.Codec
-	kafkaWriter			 *kafka.Writer
+	eventChannel     chan []byte
+	codec            *goavro.Codec
+	kafkaWriter      *kafka.Writer
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -41,8 +41,8 @@ func InitService(datastore Datastore) (*Service, error) {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
-		Brokers:	[]string{kafkaBrokers},
-		Topic:		"suggestion",
+		Brokers:  []string{kafkaBrokers},
+		Topic:    "suggestion",
 		Balancer: &kafka.LeastBytes{},
 	})
 	defer closers.Panic(kafkaWriter)
@@ -58,11 +58,11 @@ func InitService(datastore Datastore) (*Service, error) {
 	}
 
 	return &Service{
-		datastore:				datastore,
-		cbClient:					cbClient,
-		ledgerClient:			ledgerClient,
+		datastore:        datastore,
+		cbClient:         cbClient,
+		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
-		kafkaWriter:			kafkaWriter,
-		codec:						codec,
+		kafkaWriter:      kafkaWriter,
+		codec:            codec,
 	}, nil
 }
