@@ -94,7 +94,7 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 	err = pg.ClaimGrantForWallet(grant2, w)
 	suite.Assert().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
 
-	grants, err := pg.GetGrantsOrderedByExpiry(w)
+	grants, err := pg.GetGrantsOrderedByExpiry(w, "")
 	suite.Assert().NoError(err, "Get grants ordered by expiry should succeed")
 
 	grantsSorted := make([]Grant, len(grants))
