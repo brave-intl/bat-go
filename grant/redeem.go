@@ -54,8 +54,13 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 		redeemTxInfo.AltCurrency = &tmp
 	}
 
+	promotionType := ""
+	if len(transaction) == 0 { // We are draining ad grants
+		promotionType = "{ads}"
+	}
+
 	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
-	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo)
+	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo, promotionType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
 	}
@@ -257,7 +262,7 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 // DrainGrantsRequest a request to drain a wallets grains to a linked uphold account
 type DrainGrantsRequest struct {
 	WalletInfo       wallet.Info `json:"wallet" valid:"required"`
-	AnonymousAddress uuid.UUID   `json:"anonymousAddress" valid:"required"`
+	AnonymousAddress uuid.UUID   `json:"anonymousAddress" valid:"-"`
 }
 
 // DrainGrantsResponse includes info about how much grants were drained

@@ -125,14 +125,14 @@ func TestConsume(t *testing.T) {
 
 	request := RedeemGrantsRequest{WalletInfo: walletInfo, Transaction: transaction}
 
-	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{grant}, nil)
+	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo), gomock.Eq("")).Return([]Grant{grant}, nil)
 	mockDB.EXPECT().RedeemGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)
 	_, err = service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err != nil {
 		t.Error(err)
 	}
 
-	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{}, nil)
+	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo), gomock.Eq("")).Return([]Grant{}, nil)
 	txnInfo, err := service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err != nil {
 		t.Error(err)

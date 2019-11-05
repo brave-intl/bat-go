@@ -34,8 +34,8 @@ type Datastore interface {
 	ClaimGrantForWallet(grant Grant, wallet wallet.Info) error
 	// HasGrantBeenRedeemed checks to see if a grant has been claimed
 	HasGrantBeenRedeemed(grant Grant) (bool, error)
-	// GetGrantsOrderedByExpiry returns ordered grant claims
-	GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error)
+	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
+	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
 	// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
 	ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error)
 	// GetPromotion by ID
@@ -260,13 +260,17 @@ func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 }
 
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error) {
 	type GrantResult struct {
 		Grant
 		ApproximateValue decimal.Decimal `db:"approximate_value"`
 		CreatedAt        time.Time       `db:"created_at"`
 		ExpiresAt        time.Time       `db:"expires_at"`
 		Platform         string          `db:"platform"`
+	}
+
+	if len(promotionType) == 0 {
+		promotionType = "{ads,ugp}"
 	}
 
 	statement := `
@@ -283,13 +287,14 @@ on claims.promotion_id = promotions.id
 where
 	claims.wallet_id = $1 and
 	not claims.redeemed and
-	claims.legacy_claimed
-	and promotions.expires_at > now()
+	claims.legacy_claimed and 
+	promotions.promotion_type = any($2::text[]) and
+	promotions.expires_at > now()
 order by promotions.expires_at`
 
 	var grantResults []GrantResult
 
-	err := pg.DB.Select(&grantResults, statement, wallet.ID)
+	err := pg.DB.Select(&grantResults, statement, wallet.ID, promotionType)
 	if err != nil {
 		return []Grant{}, err
 	}

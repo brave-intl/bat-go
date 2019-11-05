@@ -76,7 +76,7 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 
 		var wallet wallet.Info
 		wallet.ID = paymentID
-		grants, err := service.GetGrantsOrderedByExpiry(wallet)
+		grants, err := service.GetGrantsOrderedByExpiry(wallet, "")
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up active grants", http.StatusBadRequest)
 		}
