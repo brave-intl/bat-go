@@ -38,9 +38,9 @@ func (a ByExpiryTimestamp) Len() int           { return len(a) }
 func (a ByExpiryTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByExpiryTimestamp) Less(i, j int) bool { return a[i].ExpiryTimestamp < a[j].ExpiryTimestamp }
 
-// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (service *Service) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
-	return service.datastore.GetGrantsOrderedByExpiry(wallet)
+// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet with optional promotionType filter
+func (service *Service) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error) {
+	return service.datastore.GetGrantsOrderedByExpiry(wallet, promotionType)
 }
 
 // CreateGrants creates the specified number of grants and returns them in compact JWS serialization

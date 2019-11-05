@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -44,9 +46,21 @@ func RedemptionDisabled() bool {
 // b) this grant has not yet been redeemed by any wallet
 //
 // Returns transaction info for grant fufillment
-func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (*wallet.TransactionInfo, error) {
+func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, transaction string) (*wallet.TransactionInfo, error) {
+	var txProbi *decimal.Decimal
+	var redeemTxInfo wallet.TransactionInfo
+	{
+		tmp := altcurrency.BAT
+		redeemTxInfo.AltCurrency = &tmp
+	}
+
+	promotionType := ""
+	if len(transaction) == 0 { // We are draining ad grants
+		promotionType = "{ads}"
+	}
+
 	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
-	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(req.WalletInfo)
+	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo, promotionType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
 	}
@@ -56,7 +70,7 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 	}
 
 	// 2. Enforce transaction checks and verify transaction signature
-	userWallet, err := provider.GetWallet(req.WalletInfo)
+	userWallet, err := provider.GetWallet(walletInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -65,34 +79,42 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 	if err != nil {
 		return nil, err
 	}
-	// NOTE for uphold provider we currently check against user provided publicKey
-	//      thus this check does not protect us from a valid fake signature
-	txInfo, err := userWallet.VerifyTransaction(req.Transaction)
-	if err != nil {
-		return nil, err
-	}
-	if *txInfo.AltCurrency != altcurrency.BAT {
-		return nil, errors.New("only grants submitted with BAT transactions are supported")
-	}
-	if txInfo.Probi.LessThan(decimal.Zero) {
-		return nil, errors.New("included transaction cannot be for negative BAT")
-	}
-	if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
-		return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
-	}
-	if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
-		return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
-	}
-	if txInfo.Destination != SettlementDestination {
-		return nil, errors.New("included transactions must have settlement as their destination")
+
+	if len(transaction) > 0 {
+		// 1. Enforce transaction checks and verify transaction signature
+		// NOTE for uphold provider we currently check against user provided publicKey
+		//      thus this check does not protect us from a valid fake signature
+		txInfo, err := userWallet.VerifyTransaction(transaction)
+		if err != nil {
+			return nil, err
+		}
+		if *txInfo.AltCurrency != altcurrency.BAT {
+			return nil, errors.New("only grants submitted with BAT transactions are supported")
+		}
+		if txInfo.Probi.LessThan(decimal.Zero) {
+			return nil, errors.New("included transaction cannot be for negative BAT")
+		}
+		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
+			return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
+		}
+		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
+			return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
+		}
+		if txInfo.Destination != SettlementDestination {
+			return nil, errors.New("included transactions must have settlement as their destination")
+		}
+
+		txProbi = &txInfo.Probi
 	}
 
 	// 3. Sum until value is gt transaction amount
 	var grants []Grant
 	sumProbi := decimal.New(0, 1)
 	for _, grant := range unredeemedGrants {
-		if sumProbi.GreaterThanOrEqual(txInfo.Probi) {
-			break
+		if txProbi != nil {
+			if sumProbi.GreaterThanOrEqual(*txProbi) {
+				break
+			}
 		}
 		if *grant.AltCurrency != altcurrency.BAT {
 			return nil, errors.New("All grants must be in BAT")
@@ -101,7 +123,7 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 		grants = append(grants, grant)
 	}
 
-	if txInfo.Probi.GreaterThan(balance.SpendableProbi.Add(sumProbi)) {
+	if txProbi != nil && txProbi.GreaterThan(balance.SpendableProbi.Add(sumProbi)) {
 		return nil, errors.New("wallet does not have enough funds to cover transaction")
 	}
 
@@ -117,12 +139,11 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
 	}
 
-	var submitID string
-	if testSubmit {
+	if len(transaction) > 0 && testSubmit {
 		var submitInfo *wallet.TransactionInfo
 		// TODO remove this once we can retrieve publicKey info from uphold
 		// NOTE We check the signature on the included transaction by submitting it but not confirming it
-		submitInfo, err = userWallet.SubmitTransaction(req.Transaction, false)
+		submitInfo, err = userWallet.SubmitTransaction(transaction, false)
 		if err != nil {
 			if wallet.IsInvalidSignature(err) {
 				return nil, errors.New("the included transaction was signed with the wrong publicKey")
@@ -130,7 +151,7 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 				return nil, errors.New("error while test submitting the included transaction: " + err.Error())
 			}
 		}
-		submitID = submitInfo.ID
+		redeemTxInfo.ID = submitInfo.ID
 	}
 
 	// 4. Iterate through grants and check that:
@@ -145,7 +166,7 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 			return nil, errors.New("Grant is expired")
 		}
 
-		err = service.datastore.RedeemGrantForWallet(grant, req.WalletInfo)
+		err = service.datastore.RedeemGrantForWallet(grant, walletInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -153,14 +174,8 @@ func (service *Service) Consume(ctx context.Context, req *RedeemGrantsRequest) (
 		redeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionID.String()}).Inc()
 	}
 
-	var redeemTxInfo wallet.TransactionInfo
-	{
-		tmp := altcurrency.BAT
-		redeemTxInfo.AltCurrency = &tmp
-	}
 	redeemTxInfo.Probi = sumProbi
-	redeemTxInfo.Destination = req.WalletInfo.ProviderID
-	redeemTxInfo.ID = submitID
+	redeemTxInfo.Destination = walletInfo.ProviderID
 	return &redeemTxInfo, nil
 }
 
@@ -202,7 +217,7 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
 	}
 
-	grantFulfillmentInfo, err := service.Consume(ctx, req)
+	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, req.Transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -242,4 +257,53 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	}
 
 	return &RedeemGrantsResponse{TransactionInfo: *settlementInfo, GrantTotal: grantFulfillmentInfo.Probi}, nil
+}
+
+// DrainGrantsRequest a request to drain a wallets grains to a linked uphold account
+type DrainGrantsRequest struct {
+	WalletInfo       wallet.Info `json:"wallet" valid:"required"`
+	AnonymousAddress uuid.UUID   `json:"anonymousAddress" valid:"-"`
+}
+
+// DrainGrantsResponse includes info about how much grants were drained
+type DrainGrantsResponse struct {
+	GrantTotal decimal.Decimal `json:"grantTotal"`
+}
+
+// Drain the grants for the wallet in the included response
+func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
+	log := lg.Log(ctx)
+
+	if RedemptionDisabled() {
+		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
+	}
+
+	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if grantFulfillmentInfo == nil {
+		return &DrainGrantsResponse{decimal.Zero}, nil
+	}
+
+	// drain probi from grants into user wallet
+	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, req.AnonymousAddress.String())
+	if err != nil {
+		conn := service.redisPool.Get()
+		defer closers.Panic(conn)
+		b := GetBreaker(&conn)
+
+		incErr := b.Increment()
+		if incErr != nil {
+			log.Errorf("Could not increment the breaker!!!")
+			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
+			safeMode = true
+		}
+
+		log.Errorf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		return nil, err
+	}
+	return &DrainGrantsResponse{grantFulfillmentInfo.Probi}, nil
 }

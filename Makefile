@@ -31,7 +31,7 @@ docker-up-dev-rep:
 docker-test:
 	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web go test --tags=integration ./...
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make test
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -73,7 +73,7 @@ download-vault:
 	cd target/settlement-tools && unzip -o vault_$(VAULT_VERSION)_$(GOOS)_$(GOARCH).zip vault && rm vault_$(VAULT_VERSION)_*
 
 test:
-	go test -v --tags=$(TEST_TAGS) ./...
+	go test -v -p 1 --tags=$(TEST_TAGS) ./...
 
 lint:
 	golangci-lint run -E gofmt -E golint --exclude-use-default=false
