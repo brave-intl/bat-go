@@ -4,13 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
-	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -179,29 +175,6 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	// FIXME remove this and have the test check Kafka
 	service.eventChannel <- suggestion
 
-	// kafka event producer below - this could probably put into a generic module
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
-	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		// by default we are waitng for acks from all nodes
-		Brokers:  []string{kafkaBrokers},
-		Topic:    "suggestion",
-		Balancer: &kafka.LeastBytes{},
-	})
-	defer closers.Panic(kafkaWriter)
-
-	// possible that this schema could be tightened more
-	// also, are all fields required?
-	// we re-read this file every time which is decidedly not fantastic
-	schema, err := ioutil.ReadFile("../schema-registry/grant/suggestion.avsc")
-	if err != nil {
-		return err
-	}
-
-	codec, err := goavro.NewCodec(string(schema))
-	if err != nil {
-		return err
-	}
-
 	// not thrilled with double encoding here; alternative is to find a nice way to turn this into a map
 	// and use codec.BinaryFromNative.
 	jsonMsg, err := json.Marshal(suggestion)
@@ -211,19 +184,19 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	textual := []byte(jsonMsg)
 
 	// above generated into native
-	native, _, err := codec.NativeFromTextual(textual)
+	native, _, err := service.codec.NativeFromTextual(textual)
 	if err != nil {
 		return err
 	}
 
 	// get the avro binary
-	binary, err := codec.BinaryFromNative(nil, native)
+	binary, err := service.codec.BinaryFromNative(nil, native)
 	if err != nil {
 		return err
 	}
 
 	// write the message
-	err = kafkaWriter.WriteMessages(ctx,
+	err = service.kafkaWriter.WriteMessages(ctx,
 		kafka.Message{
 			Value: []byte(binary),
 		},

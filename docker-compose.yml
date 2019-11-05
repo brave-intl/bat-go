@@ -23,6 +23,7 @@ services:
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
+      - KAFKA_BROKERS_STRING=kafka:9092
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - "REDIS_URL=redis://redis:6379"
       - TOKEN_LIST
