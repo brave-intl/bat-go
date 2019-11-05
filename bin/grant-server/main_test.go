@@ -229,7 +229,57 @@ func TestClaim(t *testing.T) {
 	wallet.ProviderID = uuid.NewV4().String()
 	err = claim(t, server, promotion.ID, wallet)
 	if err == nil {
-		t.Fatal("Expected re-claim of the same grant to a different card to fail")
+		t.Fatal("Expected re-claim of unavailable promotion to a different card to fail")
+	}
+
+	value = decimal.NewFromFloat(35.0)
+	numGrants = 2
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "desktop")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grants, err = getActive(t, server, wallet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grant")
+	}
+	if grants[0].Type != "ugp" {
+		t.Fatal("Expected one active ugp grant")
+	}
+	if !grants[0].Probi.Equals(altcurrency.BAT.ToProbi(value)) {
+		t.Fatal("Expected one active ugp grant worth 35 BAT")
+	}
+
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected re-claim of the same grant to fail despite available grants")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err != nil {
+		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
+	}
+
+	wallet.ID = uuid.NewV4().String()
+	wallet.ProviderID = uuid.NewV4().String()
+	err = claim(t, server, promotion.ID, wallet)
+	if err == nil {
+		t.Fatal("Expected new claim of the same promotion to fail as there are no more grants")
 	}
 }
 
@@ -579,5 +629,49 @@ func TestDrain(t *testing.T) {
 
 	if !respPayload.GrantTotal.Equals(decimal.Zero) {
 		t.Fatal("Expected redeemed grants to equal 0 BAT")
+	}
+}
+
+// This is to try to test a very stubborn validation issue with promotionID
+func TestClaimValidation(t *testing.T) {
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	pg, err := promotion.NewPostgres("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w wallet.Info
+	w.ID = uuid.NewV4().String()
+	w.ProviderID = uuid.NewV4().String()
+
+	err = claim(t, server, uuid.Nil, w)
+	if err == nil {
+		t.Fatal("Must fail if no promotion id is passed")
+	}
+
+	for i := 0; i < 100; i++ {
+		value := decimal.NewFromFloat(30.0)
+		numGrants := 1
+		promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = pg.ActivatePromotion(promotion)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var wallet wallet.Info
+		wallet.ID = uuid.NewV4().String()
+		wallet.ProviderID = uuid.NewV4().String()
+
+		err = claim(t, server, promotion.ID, wallet)
+		if err != nil {
+			t.Error(promotion.ID)
+			t.Fatal(err)
+		}
 	}
 }

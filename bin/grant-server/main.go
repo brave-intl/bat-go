@@ -55,6 +55,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
+	r.Use(middleware.RateLimiter)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(middleware.RequestLogger(logger))
@@ -96,7 +97,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
-	//r.Mount("/v1/suggestions", promotion.SuggestionRouter(promotionService))
+	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")
@@ -107,7 +108,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
 		}
 	} else {
-		proxyRouter := middleware.RateLimiter()(reputation.ProxyRouter(reputationServer, reputationToken))
+		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
 		r.Mount("/v1/devicecheck", proxyRouter)
 		r.Mount("/v1/captchas", proxyRouter)
 		r.Mount("/v2/attestations/safetynet", proxyRouter)

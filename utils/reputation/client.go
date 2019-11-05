@@ -91,7 +91,7 @@ func (c *HTTPClient) newRequest(
 
 	logger.Debug().Str("type", "http.Request").Msg(string(dump))
 
-	req.Header.Set("authorization", "Bearer: "+c.AuthToken)
+	req.Header.Set("authorization", "Bearer "+c.AuthToken)
 
 	return req, err
 }

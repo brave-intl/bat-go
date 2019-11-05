@@ -78,7 +78,7 @@ func IsETHAddress(str string) bool {
 
 // IsPlatform determines whether or not a given string is a recognized platform
 func IsPlatform(platform string) bool {
-	platforms := []string{"ios", "android", "osx", "windows", "linux"}
+	platforms := []string{"ios", "android", "osx", "windows", "linux", "desktop"}
 	return govalidator.IsIn(platform, platforms...)
 }
 

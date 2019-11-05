@@ -23,7 +23,7 @@ type ClaimGrantWithGrantIDRequest struct {
 
 // ClaimRequest is a request to claim a grant
 type ClaimRequest struct {
-	PromotionID uuid.UUID   `json:"promotionId" valid:"requiredUUID"`
+	PromotionID uuid.UUID   `json:"promotionId" valid:"-"`
 	WalletInfo  wallet.Info `json:"wallet" valid:"required"`
 }
 

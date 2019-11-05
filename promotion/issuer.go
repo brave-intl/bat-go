@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	defaultMaxTokens = 4000000 // ~1M BAT
+	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
 )
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
+	ID          uuid.UUID `db:"id"`
 	PromotionID uuid.UUID `db:"promotion_id"`
 	Cohort      string
 	PublicKey   string `db:"public_key"`
@@ -21,7 +22,7 @@ type Issuer struct {
 func (service *Service) CreateIssuer(ctx context.Context, promotionID uuid.UUID, cohort string) (*Issuer, error) {
 	issuer := &Issuer{PromotionID: promotionID, Cohort: cohort, PublicKey: ""}
 
-	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokens)
+	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokensPerIssuer)
 	if err != nil {
 		return nil, err
 	}
@@ -33,12 +34,7 @@ func (service *Service) CreateIssuer(ctx context.Context, promotionID uuid.UUID,
 
 	issuer.PublicKey = resp.PublicKey
 
-	err = service.datastore.InsertIssuer(issuer)
-	if err != nil {
-		return nil, err
-	}
-
-	return issuer, nil
+	return service.datastore.InsertIssuer(issuer)
 }
 
 // Name returns the name of the issuer as known by the challenge bypass server

@@ -87,7 +87,7 @@ func (c *HTTPClient) newRequest(ctx context.Context, method, path string, body i
 
 	logger.Debug().Str("type", "http.Request").Msg(string(dump))
 
-	req.Header.Set("authorization", "Bearer: "+c.AuthToken)
+	req.Header.Set("authorization", "Bearer "+c.AuthToken)
 
 	return req, err
 }
@@ -103,7 +103,7 @@ func (c *HTTPClient) do(req *http.Request, v interface{}) (*http.Response, error
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)
 			if err != nil {
-				return nil, err
+				return resp, err
 			}
 		}
 		return resp, nil
@@ -125,20 +125,27 @@ type WalletResponse struct {
 
 // GetWallet retrieves wallet information
 func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error) {
-	req, err := c.newRequest(ctx, "GET", "v2/wallet/"+id.String(), nil)
+	req, err := c.newRequest(ctx, "GET", "v2/wallet/"+id.String()+"/info", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var resp WalletResponse
-	_, err = c.do(req, &resp)
+	var walletResponse WalletResponse
+	resp, err := c.do(req, &walletResponse)
+
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return nil, nil
+		}
+		return nil, err
+	}
 
 	info := wallet.Info{
 		ID:          id.String(),
 		Provider:    "uphold",
-		ProviderID:  resp.Addresses.ProviderID.String(),
-		AltCurrency: resp.AltCurrency,
-		PublicKey:   resp.PublicKey,
+		ProviderID:  walletResponse.Addresses.ProviderID.String(),
+		AltCurrency: walletResponse.AltCurrency,
+		PublicKey:   walletResponse.PublicKey,
 		LastBalance: nil,
 	}
 

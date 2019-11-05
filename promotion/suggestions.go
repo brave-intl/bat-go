@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
+
+// FIXME temporary until event producer is hooked up
+var enableSuggestionJob = false
 
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
@@ -23,7 +26,7 @@ type CredentialBinding struct {
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
 	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel string `json:"channel"`
+	Channel string `json:"channel" valid:"-"`
 }
 
 // Base64Decode unmarshalls the suggestion from a string.
@@ -64,9 +67,15 @@ type FundingSource struct {
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
 type SuggestionEvent struct {
+	ID uuid.UUID `json:"id"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
 	Funding     []FundingSource `json:"funding"`
+}
+
+// SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
+type SuggestionWorker interface {
+	RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 }
 
 // Suggest that a contribution is made
@@ -125,25 +134,45 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+	event := SuggestionEvent{ID: uuid.NewV4(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
 
 	for _, v := range fundingSources {
 		event.Funding = append(event.Funding, v)
 	}
 
-	// FIXME enqueue in job drain table
-	go service.RedeemAndCreateSuggestionEvent(ctx, requestCredentials, suggestionText, event)
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventJSON)
+	if err != nil {
+		return err
+	}
+
+	if enableSuggestionJob {
+		go func() {
+			err := service.datastore.RunNextSuggestionJob(ctx, service)
+			if err != nil {
+				// FIXME
+				logger := log.Ctx(ctx)
+				logger.Error().Err(err).Msg("error processing suggestion job")
+			}
+		}()
+	}
+
 	return nil
 }
 
 // RedeemAndCreateSuggestionEvent after validating that all the credential bindings
-func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion SuggestionEvent) {
+func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error {
 	err := service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 	if err != nil {
-		// FIXME
-		fmt.Println(err)
+		return nil
 	}
 
 	service.eventChannel <- suggestion
 	// TODO emit event
+
+	return nil
 }
