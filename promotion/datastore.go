@@ -391,11 +391,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.platform,
 			promos.active,
 			promos.public_keys,
-			promos.active and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
-			) as available
+			true as available
 		from
 		  (
 				select
@@ -408,6 +404,12 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
+		where
+			promos.active and wallet_claims.redeemed is distinct from true and
+			( wallet_claims.legacy_claimed is true or
+				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			) 
 		order by promos.created_at;`
 
 	if legacy {
@@ -448,12 +450,13 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			promotions.active and promotions.remaining_grants > 0 as available,
+			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
 		promotions left join issuers on promotions.id = issuers.promotion_id
 		where promotions.promotion_type = 'ugp' and
-			( promotions.platform = '' or promotions.platform = $1)
+			( promotions.platform = '' or promotions.platform = $1) and
+			promotions.active and promotions.remaining_grants > 0
 		group by promotions.id
 		order by promotions.created_at;`
 
