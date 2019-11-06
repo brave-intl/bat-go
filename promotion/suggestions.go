@@ -19,14 +19,14 @@ var enableSuggestionJob = false
 
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
-	PublicKey			string `json:"publicKey" valid:"base64"`
+	PublicKey     string `json:"publicKey" valid:"base64"`
 	TokenPreimage string `json:"t" valid:"base64"`
-	Signature			string `json:"signature" valid:"base64"`
+	Signature     string `json:"signature" valid:"base64"`
 }
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
-	Type		string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
+	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
 	Channel string `json:"channel" valid:"-"`
 }
 
@@ -60,10 +60,10 @@ func (s *Suggestion) Base64Decode(text string) error {
 
 // FundingSource describes where funds for this suggestion should come from
 type FundingSource struct {
-	Type				string					`json:"type"`
-	Amount			decimal.Decimal `json:"amount"`
-	Cohort			string					`json:"cohort"`
-	PromotionID uuid.UUID				`json:"promotion"`
+	Type        string          `json:"type"`
+	Amount      decimal.Decimal `json:"amount"`
+	Cohort      string          `json:"cohort"`
+	PromotionID uuid.UUID       `json:"promotion"`
 }
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
@@ -71,7 +71,7 @@ type SuggestionEvent struct {
 	ID uuid.UUID `json:"id"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
-	Funding			[]FundingSource `json:"funding"`
+	Funding     []FundingSource `json:"funding"`
 }
 
 // SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
@@ -184,13 +184,13 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	textual := []byte(jsonMsg)
 
 	// above generated into native
-	native, _, err := service.codec.NativeFromTextual(textual)
+	native, _, err := service.suggestionCodec.NativeFromTextual(textual)
 	if err != nil {
 		return err
 	}
 
 	// get the avro binary
-	binary, err := service.codec.BinaryFromNative(nil, native)
+	binary, err := service.suggestionCodec.BinaryFromNative(nil, native)
 	if err != nil {
 		return err
 	}

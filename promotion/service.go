@@ -1,14 +1,15 @@
 package promotion
 
 import (
+	"io/ioutil"
+	"os"
+
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
 	"github.com/linkedin/goavro"
 	kafka "github.com/segmentio/kafka-go"
-	"io/ioutil"
-	"os"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections
@@ -18,8 +19,36 @@ type Service struct {
 	ledgerClient     ledger.Client
 	reputationClient reputation.Client
 	eventChannel     chan []byte
-	codec            *goavro.Codec
+	suggestionCodec  *goavro.Codec
 	kafkaWriter      *kafka.Writer
+}
+
+// InitKafka by creating a kafka writer and creating local copies of codecs
+func (service *Service) InitKafka() error {
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
+		// by default we are waitng for acks from all nodes
+		Brokers:  []string{kafkaBrokers},
+		Topic:    "suggestion",
+		Balancer: &kafka.LeastBytes{},
+	})
+	defer closers.Panic(kafkaWriter)
+
+	// FIXME
+	schema, err := ioutil.ReadFile("/src/schema-registry/grant/suggestion.avsc")
+	if err != nil {
+		return err
+	}
+
+	codec, err := goavro.NewCodec(string(schema))
+	if err != nil {
+		return err
+	}
+
+	service.kafkaWriter = kafkaWriter
+	service.suggestionCodec = codec
+
+	return nil
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -38,31 +67,15 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
-	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		// by default we are waitng for acks from all nodes
-		Brokers:  []string{kafkaBrokers},
-		Topic:    "suggestion",
-		Balancer: &kafka.LeastBytes{},
-	})
-	defer closers.Panic(kafkaWriter)
-
-	schema, err := ioutil.ReadFile("../../schema-registry/grant/suggestion.avsc")
-	if err != nil {
-		return nil, err
-	}
-
-	codec, err := goavro.NewCodec(string(schema))
-	if err != nil {
-		return nil, err
-	}
-
-	return &Service{
+	service := &Service{
 		datastore:        datastore,
 		cbClient:         cbClient,
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
-		kafkaWriter:      kafkaWriter,
-		codec:            codec,
-	}, nil
+	}
+	err = service.InitKafka()
+	if err != nil {
+		return nil, err
+	}
+	return service, nil
 }

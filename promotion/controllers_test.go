@@ -469,6 +469,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		eventChannel:     ch,
 	}
 
+	err = service.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
 	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
 	err = service.datastore.ActivatePromotion(promotion)
