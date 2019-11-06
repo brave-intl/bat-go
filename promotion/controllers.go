@@ -50,8 +50,8 @@ func SuggestionsRouter(service *Service) chi.Router {
 	return r
 }
 
-// LookupPublicKey based on the HTTP signing keyID, which in our case is the walletID
-func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+// GetPublicKey based on the HTTP signing keyID, which in our case is the walletID
+func (service *Service) GetPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "KeyID format is invalid")

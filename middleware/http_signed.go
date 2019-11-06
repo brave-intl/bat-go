@@ -13,8 +13,8 @@ type httpSignedKeyID struct{}
 
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
 type Keystore interface {
-	// LookupPublicKey based on the keyID
-	LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error)
+	// GetPublicKey based on the keyID
+	GetPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error)
 }
 
 // GetKeyID retrieves the http signing keyID from the context
@@ -42,7 +42,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			s.Headers = []string{"digest", "(request-target)"}
 
 			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, s.KeyID)
-			pubKey, err := ks.LookupPublicKey(ctx, s.KeyID)
+			pubKey, err := ks.GetPublicKey(ctx, s.KeyID)
 
 			if err != nil {
 				http.Error(w, http.StatusText(500), 500)

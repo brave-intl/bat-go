@@ -17,7 +17,7 @@ type mockKeystore struct {
 	httpsignature.Verifier
 }
 
-func (m *mockKeystore) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+func (m *mockKeystore) GetPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	if keyID == "primary" {
 		return &m.Verifier, nil
 	}

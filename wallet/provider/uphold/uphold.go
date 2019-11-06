@@ -832,3 +832,31 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 	return details.ID, nil
 
 }
+
+// GenerateWallet creates a new uphold wallet
+func GenerateWallet(name string) (*Wallet, error) {
+	var info wallet.Info
+	info.ID = uuid.NewV4().String()
+	info.Provider = "uphold"
+	info.ProviderID = ""
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	if err != nil {
+		return nil, err
+	}
+	info.PublicKey = hex.EncodeToString(publicKey)
+	newWallet := &Wallet{
+		Info:    info,
+		PrivKey: privateKey,
+		PubKey:  publicKey,
+	}
+	err = newWallet.Register(name)
+	if err != nil {
+		return nil, err
+	}
+	return newWallet, nil
+}
