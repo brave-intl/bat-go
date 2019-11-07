@@ -8,6 +8,7 @@ import (
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/jmoiron/sqlx/types"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -71,6 +72,7 @@ type Claim struct {
 	Redeemed         bool            `db:"redeemed"`
 	Bonus            decimal.Decimal `db:"bonus"`
 	LegacyClaimed    string          `db:"legacy_claimed"`
+	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
 }
 
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
@@ -187,4 +189,10 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 	}
 
 	return creds, nil
+}
+
+// IsRedeemed checks whether the claim is solved
+func (claim Claim) IsRedeemed() bool {
+	solvedAt, err := claim.RedeemedAt.Value()
+	return err == nil && solvedAt != nil
 }

@@ -34,6 +34,8 @@ services:
   postgres:
     container_name: grant-postgres
     image: postgres:10.4
+    ports:
+      - "3401:5432"
     environment:
       - "POSTGRES_USER=grants"
       - "POSTGRES_PASSWORD=password"

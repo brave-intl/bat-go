@@ -97,7 +97,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(2)
+	err = m.Migrate(3)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
