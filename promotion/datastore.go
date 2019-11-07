@@ -385,7 +385,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
 			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
-				promos.approximate_value * 
+				promos.approximate_value *
 				promos.suggestions_per_grant )::int as suggestions_per_grant,
 			promos.remaining_grants,
 			promos.platform,
@@ -409,7 +409,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			( wallet_claims.legacy_claimed is true or
 				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
 				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
-			) 
+			)
 		order by promos.created_at;`
 
 	if legacy {
@@ -581,7 +581,7 @@ select
 	issuers.*,
 	claim_cred.claim_id,
 	claim_cred.blinded_creds
-from 
+from
 	(select *
 	from claim_creds
 	where batch_proof is null

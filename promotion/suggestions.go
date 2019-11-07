@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
@@ -69,6 +70,7 @@ type FundingSource struct {
 type SuggestionEvent struct {
 	ID uuid.UUID `json:"id"`
 	Suggestion
+	CreatedAt   time.Time       `json:"createdAt"`
 	TotalAmount decimal.Decimal `json:"totalAmount"`
 	Funding     []FundingSource `json:"funding"`
 }
@@ -134,7 +136,13 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{ID: uuid.NewV4(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+	event := SuggestionEvent{
+		ID:          uuid.NewV4(),
+		Suggestion:  suggestion,
+		CreatedAt:   time.Now(),
+		TotalAmount: total,
+		Funding:     []FundingSource{},
+	}
 
 	for _, v := range fundingSources {
 		event.Funding = append(event.Funding, v)

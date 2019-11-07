@@ -524,6 +524,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	suite.Assert().JSONEq(`{
     "id": "`+event.ID.String()+`",
 		"type": "`+suggestion.Type+`",
+		"createdAt": "`+event.CreatedAt.Format(time.RFC3339Nano)+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
 		"funding": [
