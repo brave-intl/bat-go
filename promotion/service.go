@@ -1,6 +1,9 @@
 package promotion
 
 import (
+	"context"
+	"time"
+
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
@@ -37,4 +40,20 @@ func InitService(datastore Datastore) (*Service, error) {
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
 	}, nil
+}
+
+// CheckJobs starts check for unfinished jobs on a ticker
+func (service *Service) CheckJobs(ctx context.Context) {
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	for {
+		attempted, err := service.datastore.RunNextClaimJob(ctx, service)
+		if err != nil {
+			// log to sentry
+			break
+		}
+		if !attempted {
+			break
+		}
+		_ = <-ticker.C
+	}
 }

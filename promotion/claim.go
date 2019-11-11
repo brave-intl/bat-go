@@ -155,7 +155,7 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 
 	go func() {
-		err := service.datastore.RunNextClaimJob(ctx, service)
+		_, err := service.datastore.RunNextClaimJob(ctx, service)
 		// FIXME
 		if err != nil {
 			logger := log.Ctx(ctx)
