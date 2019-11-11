@@ -8,7 +8,6 @@ import (
 
 	"github.com/jmoiron/sqlx/types"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -154,14 +153,7 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, err
 	}
 
-	go func() {
-		_, err := service.datastore.RunNextClaimJob(ctx, service)
-		// FIXME
-		if err != nil {
-			logger := log.Ctx(ctx)
-			logger.Error().Err(err).Msg("error processing claim job")
-		}
-	}()
+	go service.CheckJobs(ctx, false)
 
 	return &claim.ID, nil
 }

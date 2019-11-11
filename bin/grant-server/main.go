@@ -114,7 +114,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	go promotionService.CheckJobs(ctx)
+	go promotionService.CheckJobs(ctx, true)
 
 	return ctx, r
 }

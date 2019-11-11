@@ -7,6 +7,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
+	"github.com/rs/zerolog/log"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections
@@ -43,15 +44,20 @@ func InitService(datastore Datastore) (*Service, error) {
 }
 
 // CheckJobs starts check for unfinished jobs on a ticker
-func (service *Service) CheckJobs(ctx context.Context) {
+func (service *Service) CheckJobs(ctx context.Context, shouldLoop bool) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	for {
 		attempted, err := service.datastore.RunNextClaimJob(ctx, service)
 		if err != nil {
 			// log to sentry
+			logger := log.Ctx(ctx)
+			logger.Error().Err(err).Msg("error processing claim job")
 			break
 		}
 		if !attempted {
+			break
+		}
+		if !shouldLoop {
 			break
 		}
 		_ = <-ticker.C
