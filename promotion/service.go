@@ -7,7 +7,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
-	"github.com/rs/zerolog/log"
+	raven "github.com/getsentry/raven-go"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections
@@ -49,12 +49,11 @@ func (service *Service) CheckJobs(ctx context.Context, shouldLoop bool) {
 	for {
 		attempted, err := service.datastore.RunNextClaimJob(ctx, service)
 		if err != nil {
-			// log to sentry
-			logger := log.Ctx(ctx)
-			logger.Error().Err(err).Msg("error processing claim job")
+			raven.CaptureErrorAndWait(err, nil)
 			break
 		}
 		if !attempted {
+			raven.CaptureMessageAndWait("unable to attempt process claim job", nil)
 			break
 		}
 		if !shouldLoop {
