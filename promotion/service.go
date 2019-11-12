@@ -60,6 +60,6 @@ func (service *Service) CheckJobs(ctx context.Context, shouldLoop bool) {
 		if !shouldLoop {
 			break
 		}
-		_ = <-ticker.C
+		<-ticker.C
 	}
 }
