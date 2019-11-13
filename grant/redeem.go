@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
@@ -26,7 +25,7 @@ type RedeemGrantsRequest struct {
 
 // RedemptionDisabled due to fail safe condition
 func RedemptionDisabled() bool {
-	return safeMode || breakerTripped
+	return safeMode
 }
 
 // Consume one or more grants to fulfill the included transaction for wallet
@@ -213,10 +212,6 @@ type RedeemGrantsResponse struct {
 func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*RedeemGrantsResponse, error) {
 	log := lg.Log(ctx)
 
-	if RedemptionDisabled() {
-		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
-	}
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -274,10 +269,6 @@ type DrainGrantsResponse struct {
 func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
 	log := lg.Log(ctx)
 
-	if RedemptionDisabled() {
-		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
-	}
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
 	if err != nil {
 		return nil, err
@@ -290,19 +281,10 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*Dr
 	// drain probi from grants into user wallet
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, req.AnonymousAddress.String())
 	if err != nil {
-		conn := service.redisPool.Get()
-		defer closers.Panic(conn)
-		b := GetBreaker(&conn)
-
-		incErr := b.Increment()
-		if incErr != nil {
-			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
-			safeMode = true
-		}
-
 		log.Errorf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{
+			"providerId": req.WalletInfo.ProviderID,
+		})
 		return nil, err
 	}
 	return &DrainGrantsResponse{grantFulfillmentInfo.Probi}, nil

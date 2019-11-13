@@ -37,7 +37,7 @@ func main() {
 	if len(grantSignatorPublicKeyHex) == 0 {
 		log.Fatalln("Must pass grant signing key via env var GRANT_SIGNATOR_PUBLIC_KEY")
 	}
-	_, err := grant.InitService(nil, nil)
+	_, err := grant.InitService(nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
