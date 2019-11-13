@@ -1,3 +1,0 @@
-[submodule "schema-registry"]
-	path = schema-registry
-	url = git@github.com:brave-intl/schema-registry.git

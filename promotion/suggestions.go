@@ -184,13 +184,13 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	textual := []byte(jsonMsg)
 
 	// above generated into native
-	native, _, err := service.suggestionCodec.NativeFromTextual(textual)
+	native, _, err := service.codecs["suggestions"].NativeFromTextual(textual)
 	if err != nil {
 		return err
 	}
 
 	// get the avro binary
-	binary, err := service.suggestionCodec.BinaryFromNative(nil, native)
+	binary, err := service.codecs["suggestions"].BinaryFromNative(nil, native)
 	if err != nil {
 		return err
 	}
