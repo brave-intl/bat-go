@@ -117,7 +117,10 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		for {
-			attempted, _ := promotionService.CheckJobs(ctx)
+			attempted, err := promotionService.RunNextClaimJob(ctx)
+			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
+			}
 			if !attempted {
 				<-ticker.C
 			}

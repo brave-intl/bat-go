@@ -1,12 +1,9 @@
 package promotion
 
 import (
-	"context"
-
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
-	raven "github.com/getsentry/raven-go"
 )
 
 // Service contains datastore and challenge bypass / ledger client connections
@@ -40,15 +37,4 @@ func InitService(datastore Datastore) (*Service, error) {
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
 	}, nil
-}
-
-// CheckJobs starts check for unfinished jobs on a ticker
-func (service *Service) CheckJobs(
-	ctx context.Context,
-) (bool, error) {
-	attempted, err := service.datastore.RunNextClaimJob(ctx, service)
-	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
-	}
-	return attempted, err
 }

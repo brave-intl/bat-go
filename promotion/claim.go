@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -154,7 +155,10 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 
 	go func() {
-		_, _ = service.CheckJobs(ctx)
+		_, err := service.RunNextClaimJob(ctx)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
 	}()
 
 	return &claim.ID, nil
