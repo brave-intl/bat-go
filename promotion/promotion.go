@@ -2,11 +2,25 @@ package promotion
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"time"
 
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
+
+var walletCooldownTime time.Time
+
+func init() {
+	env := os.Getenv("WALLET_COOLDOWN_SECONDS")
+	walletCooldownSeconds, err := strconv.ParseInt(env, 10, 64)
+	if err != nil {
+		panic("env: WALLET_COOLDOWN_SECONDS must be a number")
+	}
+	walletCooldownTime := time.Unix(walletCooldownSeconds, 0)
+}
 
 // Promotion includes information about a particular promotion
 type Promotion struct {
@@ -45,9 +59,18 @@ func (service *Service) GetAvailablePromotions(
 		if wallet == nil {
 			return nil, nil
 		}
+		if !isWalletCooledDown(wallet.CreatedAt) {
+			return nil, errors.New("promotions not available")
+		}
 		promos, err := service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
 		return &promos, err
 	}
 	promos, err := service.datastore.GetAvailablePromotions(platform, legacy)
 	return &promos, err
+}
+
+func isWalletCooledDown(createdAt time.Time) bool {
+	now := time.Now()
+	// minCreatedAt := .Sub(walletCooldownTime)
+	return createdAt.Before(time.Now())
 }
