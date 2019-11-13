@@ -114,7 +114,15 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	go promotionService.CheckJobs(ctx, true)
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		for {
+			attempted, _ := promotionService.CheckJobs(ctx)
+			if !attempted {
+				<-ticker.C
+			}
+		}
+	}()
 
 	return ctx, r
 }

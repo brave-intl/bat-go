@@ -2,7 +2,6 @@ package promotion
 
 import (
 	"context"
-	"time"
 
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/ledger"
@@ -44,21 +43,12 @@ func InitService(datastore Datastore) (*Service, error) {
 }
 
 // CheckJobs starts check for unfinished jobs on a ticker
-func (service *Service) CheckJobs(ctx context.Context, shouldLoop bool) {
-	ticker := time.NewTicker(1000 * time.Millisecond)
-	for {
-		attempted, err := service.datastore.RunNextClaimJob(ctx, service)
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-			break
-		}
-		if !attempted {
-			raven.CaptureMessageAndWait("unable to attempt process claim job", nil)
-			break
-		}
-		if !shouldLoop {
-			break
-		}
-		<-ticker.C
+func (service *Service) CheckJobs(
+	ctx context.Context,
+) (bool, error) {
+	attempted, err := service.datastore.RunNextClaimJob(ctx, service)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
 	}
+	return attempted, err
 }

@@ -153,7 +153,9 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, err
 	}
 
-	go service.CheckJobs(ctx, false)
+	go func() {
+		_, _ = service.CheckJobs(ctx)
+	}()
 
 	return &claim.ID, nil
 }
