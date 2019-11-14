@@ -11,7 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var walletCooldownTime time.Time
+var walletCooldown int64
 
 func init() {
 	env := os.Getenv("WALLET_COOLDOWN_SECONDS")
@@ -19,7 +19,7 @@ func init() {
 	if err != nil {
 		panic("env: WALLET_COOLDOWN_SECONDS must be a number")
 	}
-	walletCooldownTime := time.Unix(walletCooldownSeconds, 0)
+	walletCooldown = walletCooldownSeconds
 }
 
 // Promotion includes information about a particular promotion
@@ -59,7 +59,7 @@ func (service *Service) GetAvailablePromotions(
 		if wallet == nil {
 			return nil, nil
 		}
-		if !isWalletCooledDown(wallet.CreatedAt) {
+		if int64(time.Since(time.Now()).Seconds()) < walletCooldown {
 			return nil, errors.New("promotions not available")
 		}
 		promos, err := service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
@@ -67,10 +67,4 @@ func (service *Service) GetAvailablePromotions(
 	}
 	promos, err := service.datastore.GetAvailablePromotions(platform, legacy)
 	return &promos, err
-}
-
-func isWalletCooledDown(createdAt time.Time) bool {
-	now := time.Now()
-	// minCreatedAt := .Sub(walletCooldownTime)
-	return createdAt.Before(time.Now())
 }
