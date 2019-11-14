@@ -131,7 +131,7 @@ func main() {
 			if err != nil {
 				raven.CaptureErrorAndWait(err, nil)
 			}
-			if !attempted && err != nil {
+			if !attempted || err != nil {
 				<-ticker.C
 			}
 		}
