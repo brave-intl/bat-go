@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -137,23 +138,33 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	//event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
-  eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": map[string]interface{}{"type": suggestion.Type, "channel": suggestion.Channel}, "totalAmount": total, "funding": fundingSources}
+	createdAt, err := time.Now().UTC().MarshalText()
+	if err != nil {
+		return err
+	}
 
-	//for _, v := range fundingSources {
-	//event.Funding = append(event.Funding, v)
-	//	eventMap["Funding"] = append(eventMap.Funding, v)
-	//}
+	fundings := []map[string]interface{}{}
+	for _, v := range fundingSources {
+		fundings = append(fundings, map[string]interface{}{
+			"type":      v.Type,
+			"cohort":    v.Cohort,
+			"amount":    v.Amount.String(),
+			"promotion": v.PromotionID.String(),
+		})
+	}
 
-	/*
-		eventJSON, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
-	*/
+	eventMap := map[string]interface{}{
+		"id":          uuid.NewV4().String(),
+		"createdAt":   string(createdAt),
+		"channel":     suggestion.Channel,
+		"type":        suggestion.Type,
+		"totalAmount": total.String(),
+		"funding":     fundings,
+	}
 
 	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 
@@ -183,24 +194,10 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return nil
 	}
 
-	// above generated into native
-  /*
-	native, _, err := service.codecs["suggestion"].NativeFromTextual([]byte(suggestion))
-	if err != nil {
-		return err
-	}
-  */
-
-	// get the avro binary
-	/* binary, err := service.codecs["suggestion"].BinaryFromNative(nil, native)
-	if err != nil {
-		return err
-	} */
-
 	// write the message
 	err = service.kafkaWriter.WriteMessages(ctx,
 		kafka.Message{
-			Value: []byte(suggestion),
+			Value: suggestion,
 		},
 	)
 	if err != nil {
