@@ -138,21 +138,21 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	//event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
-  eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": suggestion, "totalAmount": total, "funding": fundingSources}
+	eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": suggestion, "totalAmount": total, "funding": fundingSources}
 
 	//for _, v := range fundingSources {
-		//event.Funding = append(event.Funding, v)
+	//event.Funding = append(event.Funding, v)
 	//	eventMap["Funding"] = append(eventMap.Funding, v)
 	//}
 
-  /*
-	eventJSON, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-  */
+	/*
+		eventJSON, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+	*/
 
-  eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
+	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
 	if err != nil {
 		return err
 	}

@@ -28,9 +28,12 @@ type Service struct {
 	kafkaDialer      *kafka.Dialer
 }
 
-func readFileFromEnvLoc(env string) ([]byte, error) {
+func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	loc := os.Getenv(env)
 	if len(loc) == 0 {
+		if !required {
+			return []byte{}, nil
+		}
 		return []byte{}, errors.New(env + " must be passed")
 	}
 	buf, err := ioutil.ReadFile(loc)
@@ -47,12 +50,17 @@ func tlsDialer() (*kafka.Dialer, error) {
 		return nil, errors.New(keyPasswordEnv + " must be passed")
 	}
 
-	certPEM, err := readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION")
+	caPEM, err := readFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
 	if err != nil {
 		return nil, err
 	}
 
-	encryptedKeyPEM, err := readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION")
+	certPEM, err := readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedKeyPEM, err := readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
 	if err != nil {
 		return nil, err
 	}
@@ -74,20 +82,22 @@ func tlsDialer() (*kafka.Dialer, error) {
 		return nil, err
 	}
 
-	//caCertPool := x509.NewCertPool()
-	//if ok := caCertPool.AppendCertsFromPEM([]byte(caPEM)); !ok {
-	//t.Error(err)
-	//t.FailNow()
-	//}
+	config := &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+	}
+
+	if len(caPEM) > 0 {
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM([]byte(caPEM)); !ok {
+			return nil, errors.New("Could not add custom CA from KAFKA_SSL_CA_LOCATION")
+		}
+		config.RootCAs = caCertPool
+	}
 
 	return &kafka.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
-		TLS: &tls.Config{
-			Certificates: []tls.Certificate{certificate},
-			//RootCAs:            caCertPool,
-			InsecureSkipVerify: true,
-		}}, nil
+		TLS:       config}, nil
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
