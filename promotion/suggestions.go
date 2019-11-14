@@ -138,7 +138,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	//event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
-	eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": suggestion, "totalAmount": total, "funding": fundingSources}
+  eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": map[string]interface{}{"type": suggestion.Type, "channel": suggestion.Channel}, "totalAmount": total, "funding": fundingSources}
 
 	//for _, v := range fundingSources {
 	//event.Funding = append(event.Funding, v)
@@ -184,21 +184,23 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	// above generated into native
+  /*
 	native, _, err := service.codecs["suggestion"].NativeFromTextual([]byte(suggestion))
 	if err != nil {
 		return err
 	}
+  */
 
 	// get the avro binary
-	binary, err := service.codecs["suggestion"].BinaryFromNative(nil, native)
+	/* binary, err := service.codecs["suggestion"].BinaryFromNative(nil, native)
 	if err != nil {
 		return err
-	}
+	} */
 
 	// write the message
 	err = service.kafkaWriter.WriteMessages(ctx,
 		kafka.Message{
-			Value: []byte(binary),
+			Value: []byte(suggestion),
 		},
 	)
 	if err != nil {
