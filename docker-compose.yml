@@ -24,18 +24,11 @@ services:
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
-      - "REDIS_URL=redis://redis:6379"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
     depends_on:
-      - redis
       - postgres
       - challenge-bypass
-    networks:
-      - grant
-  redis:
-    container_name: grant-redis
-    image: redis:latest
     networks:
       - grant
   postgres:

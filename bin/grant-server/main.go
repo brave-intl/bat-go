@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -15,16 +14,11 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/reputation"
-	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/pressly/lg"
 	"github.com/sirupsen/logrus"
-)
-
-var (
-	redisURL = os.Getenv("REDIS_URL")
 )
 
 func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
@@ -61,23 +55,13 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		r.Use(middleware.RequestLogger(logger))
 	}
 
-	redisAddress := "localhost:6379"
-	if len(redisURL) > 0 {
-		redisAddress = strings.TrimPrefix(redisURL, "redis://")
-	}
-	rp := &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
-	}
-
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)
 	}
 
-	grantService, err := grant.InitService(grantPg, rp)
+	grantService, err := grant.InitService(grantPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic(err)
