@@ -24,9 +24,9 @@ services:
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
       - KAFKA_BROKERS_STRING=kafka:9092
-      - KAFKA_SSL_CA_LOCATION=test/secrets/snakeoil-ca-1.crt
-      - KAFKA_SSL_CERTIFICATE_LOCATION=test/secrets/consumer-ca1-signed.pem
-      - KAFKA_SSL_KEY_LOCATION=test/secrets/consumer.client.key
+      - KAFKA_SSL_CA_LOCATION=/src/test/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/src/test/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/src/test/secrets/consumer.client.key
       - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"

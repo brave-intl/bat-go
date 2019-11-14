@@ -3,6 +3,10 @@ package promotion
 import (
 	"io/ioutil"
 	"os"
+  "crypto/tls"
+  "crypto/x509"
+  "encoding/pem"
+  "time"
 
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/closers"
@@ -26,11 +30,38 @@ type Service struct {
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (service *Service) InitKafka() error {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+  certFile := os.Getenv("KAFKA_SSL_CERTIFICATE_LOCATION")
+  keyFile := os.Getenv("KAFKA_SSL_KEY_LOCATION")
+  keyData, err := ioutil.ReadFile(keyFile)
+  if err != nil {
+    return err
+  }
+  certPEM, err := ioutil.ReadFile(certFile)
+  if err != nil {
+    return err
+  }
+  block, _ := pem.Decode(keyData)
+  keyDER, err := x509.DecryptPEMBlock(block, []byte(os.Getenv("KAFKA_SSL_KEY_PASSWORD")))
+  keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
+
+  cert, err := tls.X509KeyPair(certPEM, keyPEM)
+  if err != nil {
+    return err
+  }
+  tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert},}
+
+  dialer := &kafka.Dialer{
+    Timeout:   10 * time.Second,
+    DualStack: true,
+    TLS:       tlsConfig,
+  }
+
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
 		Brokers:  []string{kafkaBrokers},
 		Topic:    "suggestion",
 		Balancer: &kafka.LeastBytes{},
+    Dialer:   dialer,
 	})
 	defer closers.Panic(kafkaWriter)
 
