@@ -137,18 +137,27 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+	//event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+  eventMap := map[string]interface{}{"id": uuid.NewV4(), "createdAt": time.Now().UTC(), "suggestion": suggestion, "totalAmount": total, "funding": fundingSources}
 
-	for _, v := range fundingSources {
-		event.Funding = append(event.Funding, v)
-	}
+	//for _, v := range fundingSources {
+		//event.Funding = append(event.Funding, v)
+	//	eventMap["Funding"] = append(eventMap.Funding, v)
+	//}
 
+  /*
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
+  */
 
-	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventJSON)
+  eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
+	if err != nil {
+		return err
+	}
+
+	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
 	if err != nil {
 		return err
 	}
