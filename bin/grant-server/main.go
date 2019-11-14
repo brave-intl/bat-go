@@ -39,7 +39,7 @@ func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
 	return ctx, logger
 }
 
-func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *chi.Mux) {
+func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *chi.Mux, *promotion.Service) {
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -114,20 +114,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		for {
-			attempted, err := promotionService.RunNextClaimJob(ctx)
-			if err != nil {
-				raven.CaptureErrorAndWait(err, nil)
-			}
-			if !attempted {
-				<-ticker.C
-			}
-		}
-	}()
-
-	return ctx, r
+	return ctx, r, promotionService
 }
 
 func main() {
@@ -135,7 +122,20 @@ func main() {
 
 	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
 
-	serverCtx, r := setupRouter(serverCtx, logger)
+	serverCtx, r, service := setupRouter(serverCtx, logger)
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		for {
+			attempted, err := service.RunNextClaimJob(serverCtx)
+			if err != nil {
+				raven.CaptureErrorAndWait(err, nil)
+			}
+			if !attempted && err == nil {
+				<-ticker.C
+			}
+		}
+	}()
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
