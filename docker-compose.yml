@@ -24,6 +24,11 @@ services:
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
       - KAFKA_BROKERS_STRING=kafka:9092
+      - KAFKA_SSL_CA_LOCATION=test/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=test/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=test/secrets/consumer.client.key
+      - KAFKA_SSL_KEY_PASSWORD=confluent
+      - KAFKA_REQUIRED_ACKS=1
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - "REDIS_URL=redis://redis:6379"
       - TOKEN_LIST
@@ -87,7 +92,20 @@ services:
     environment:
       KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      #KAFKA_ADVERTISED_LISTENERS: SSL://kafka:9092,SSL2://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL,SSL2:SSL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka.broker1.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: broker1_keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: broker1_sslkey_creds
+      KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.broker1.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: broker1_truststore_creds
+      KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: " "
+      KAFKA_SSL_CLIENT_AUTH: requested
+      KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+    volumes:
+      - ./test/secrets:/etc/kafka/secrets
     depends_on:
       - zookeeper
     networks:
