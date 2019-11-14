@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +28,10 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
+	"github.com/linkedin/goavro"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
@@ -413,6 +418,20 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+
+	dialer, err := tlsDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: "suggestion", NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
@@ -443,13 +462,12 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan []byte)
 	service := &Service{
 		datastore:        pg,
 		cbClient:         mockCB,
 		ledgerClient:     mockLedger,
 		reputationClient: mockReputation,
-		eventChannel:     ch,
+		codecs:           make(map[string]*goavro.Codec),
 	}
 
 	err = service.InitKafka()
@@ -512,20 +530,43 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            "suggestion",
+		Dialer:           service.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+	codec := service.codecs["suggestion"]
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
-	// wait for suggestion event
-	suggestionEventJSON := <-ch
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
 	suite.Require().NoError(err)
 
-	var event SuggestionEvent
-	err = json.Unmarshal(suggestionEventJSON, &event)
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
 	suite.Require().NoError(err)
+
+	suggestionEventJSON, err := codec.TextualFromNative(nil, suggestionEvent)
+	suite.Require().NoError(err)
+
+	eventMap, ok := suggestionEvent.(map[string]interface{})
+	suite.Require().True(ok)
+	id, ok := eventMap["id"].(string)
+	suite.Require().True(ok)
+	createdAt, ok := eventMap["createdAt"].(string)
+	suite.Require().True(ok)
 
 	suite.Assert().JSONEq(`{
-    "id": "`+event.ID.String()+`",
+		"id": "`+id+`",
+		"createdAt": "`+createdAt+`",
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
@@ -661,12 +702,10 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	ch := make(chan []byte)
 	service := &Service{
 		datastore:    pg,
 		cbClient:     mockCB,
 		ledgerClient: mockLedger,
-		eventChannel: ch,
 	}
 
 	handler := CreatePromotion(service)

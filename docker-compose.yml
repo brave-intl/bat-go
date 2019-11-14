@@ -23,15 +23,16 @@ services:
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
-      - KAFKA_BROKERS_STRING=kafka:9092
-      - KAFKA_SSL_CA_LOCATION=/src/test/secrets/snakeoil-ca-1.crt
-      - KAFKA_SSL_CERTIFICATE_LOCATION=/src/test/secrets/consumer-ca1-signed.pem
-      - KAFKA_SSL_KEY_LOCATION=/src/test/secrets/consumer.client.key
+      - KAFKA_BROKERS_STRING=kafka:19092
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+    volumes:
+      - ./test/secrets:/etc/kafka/secrets
     depends_on:
       - kafka
       - postgres
@@ -81,13 +82,11 @@ services:
     container_name: grant-kafka
     image: confluentinc/cp-kafka:5.2.2 # kafka version 2.2.1
     ports:
-      - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      #KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_ADVERTISED_LISTENERS: SSL://kafka:9092,SSL2://localhost:9093
+      KAFKA_ADVERTISED_LISTENERS: "SSL://kafka:19092,SSL2://localhost:29092"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL,SSL2:SSL
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_SSL_KEYSTORE_FILENAME: kafka.broker1.keystore.jks
       KAFKA_SSL_KEYSTORE_CREDENTIALS: broker1_keystore_creds

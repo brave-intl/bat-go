@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
@@ -68,7 +69,8 @@ type FundingSource struct {
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
 type SuggestionEvent struct {
-	ID uuid.UUID `json:"id"`
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
 	Funding     []FundingSource `json:"funding"`
@@ -135,7 +137,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{ID: uuid.NewV4(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
+	event := SuggestionEvent{ID: uuid.NewV4(), CreatedAt: time.Now().UTC(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
 
 	for _, v := range fundingSources {
 		event.Funding = append(event.Funding, v)
@@ -172,25 +174,14 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return nil
 	}
 
-	// FIXME remove this and have the test check Kafka
-	service.eventChannel <- suggestion
-
-	// not thrilled with double encoding here; alternative is to find a nice way to turn this into a map
-	// and use codec.BinaryFromNative.
-	jsonMsg, err := json.Marshal(suggestion)
-	if err != nil {
-		return err
-	}
-	textual := []byte(jsonMsg)
-
 	// above generated into native
-	native, _, err := service.codecs["suggestions"].NativeFromTextual(textual)
+	native, _, err := service.codecs["suggestion"].NativeFromTextual([]byte(suggestion))
 	if err != nil {
 		return err
 	}
 
 	// get the avro binary
-	binary, err := service.codecs["suggestions"].BinaryFromNative(nil, native)
+	binary, err := service.codecs["suggestion"].BinaryFromNative(nil, native)
 	if err != nil {
 		return err
 	}
@@ -204,6 +195,5 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
-	service.eventChannel <- suggestion
 	return nil
 }
