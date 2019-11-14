@@ -20,7 +20,7 @@ type Service struct {
 	reputationClient reputation.Client
 	eventChannel     chan []byte
 	codecs           map[string]*goavro.Codec
-	kafkaWriter *kafka.Writer
+	kafkaWriter      *kafka.Writer
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
@@ -46,7 +46,8 @@ func (service *Service) InitKafka() error {
 	}
 
 	service.kafkaWriter = kafkaWriter
-	service.codecs["suggestion"] = codec
+	service.codecs = make(map[string]*goavro.Codec)
+	service.codecs["suggestions"] = codec
 
 	return nil
 }
