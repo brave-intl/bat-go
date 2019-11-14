@@ -152,7 +152,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
-	promotionScoped, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
+	_, err = service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
@@ -160,8 +160,6 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedOSX := `{
 		"promotions": [
-			` + promotionJSON(false, promotionGeneric) + `,
-			` + promotionJSON(false, promotionScoped) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
@@ -171,7 +169,6 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedAndroid := `{
 		"promotions": [
-			` + promotionJSON(false, promotionGeneric) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
@@ -184,8 +181,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
 		"promotions": [
-			` + promotionJSON(true, promotionGeneric) + `,
-			` + promotionJSON(false, promotionScoped) + `
+			` + promotionJSON(true, promotionGeneric) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
@@ -326,7 +322,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	resp := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	_ = suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
 
 	handler := GetAvailablePromotions(service)
 	req, err := http.NewRequest("GET", fmt.Sprintf("/promotions?paymentId=%s&platform=osx", walletID.String()), nil)
@@ -335,20 +331,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expected := `{
-		"promotions": [
-			{
-				"approximateValue": "` + promotion.ApproximateValue.String() + `",
-				"available": false,
-				"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
-				"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
-				"id": "` + promotion.ID.String() + `",
-				"platform": "` + promotion.Platform + `",
-				"publicKeys" : ["` + resp.PublicKey + `"],
-				"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
-				"type": "ugp",
-				"version": 5
-			}
-		]
+		"promotions": []
 	}`
 	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
 

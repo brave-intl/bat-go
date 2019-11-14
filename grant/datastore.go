@@ -1,21 +1,17 @@
 package grant
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/datastore"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/garyburd/redigo/redis"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	// needed for magic migration
@@ -34,8 +30,8 @@ type Datastore interface {
 	ClaimGrantForWallet(grant Grant, wallet wallet.Info) error
 	// HasGrantBeenRedeemed checks to see if a grant has been claimed
 	HasGrantBeenRedeemed(grant Grant) (bool, error)
-	// GetGrantsOrderedByExpiry returns ordered grant claims
-	GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error)
+	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
+	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
 	// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
 	ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error)
 	// GetPromotion by ID
@@ -260,13 +256,17 @@ func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
 }
 
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
+func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error) {
 	type GrantResult struct {
 		Grant
 		ApproximateValue decimal.Decimal `db:"approximate_value"`
 		CreatedAt        time.Time       `db:"created_at"`
 		ExpiresAt        time.Time       `db:"expires_at"`
 		Platform         string          `db:"platform"`
+	}
+
+	if len(promotionType) == 0 {
+		promotionType = "{ads,ugp}"
 	}
 
 	statement := `
@@ -283,13 +283,14 @@ on claims.promotion_id = promotions.id
 where
 	claims.wallet_id = $1 and
 	not claims.redeemed and
-	claims.legacy_claimed
-	and promotions.expires_at > now()
+	claims.legacy_claimed and
+	promotions.promotion_type = any($2::text[]) and
+	promotions.expires_at > now()
 order by promotions.expires_at`
 
 	var grantResults []GrantResult
 
-	err := pg.DB.Select(&grantResults, statement, wallet.ID)
+	err := pg.DB.Select(&grantResults, statement, wallet.ID, promotionType)
 	if err != nil {
 		return []Grant{}, err
 	}
@@ -325,173 +326,5 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, e
 		return &promotions[0], nil
 	}
 
-	return nil, nil
-}
-
-// Redis is our legacy datastore
-type Redis struct {
-	*redis.Pool
-}
-
-// GetClaimantProviderID returns the providerID who has claimed a given grant
-func (redis *Redis) GetClaimantProviderID(grant Grant) (string, error) {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	kv := datastore.GetRedisKv(&conn)
-
-	return getClaimantProviderID(&kv, grant)
-}
-
-func getClaimantProviderID(kv datastore.KvDatastore, grant Grant) (string, error) {
-	return kv.Get(fmt.Sprintf(claimKeyFormat, grant.GrantID))
-}
-
-// RedeemGrantForWallet redeems a claimed grant for a wallet
-func (redis *Redis) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	redeemedGrants := datastore.GetRedisSet(&conn, "promotion:"+grant.PromotionID.String()+":grants")
-	redeemedWallets := datastore.GetRedisSet(&conn, "promotion:"+grant.PromotionID.String()+":wallets")
-
-	return redeemGrantForWallet(&redeemedGrants, &redeemedWallets, grant, wallet)
-}
-
-func redeemGrantForWallet(redeemedGrants datastore.SetLikeDatastore, redeemedWallets datastore.SetLikeDatastore, grant Grant, wallet wallet.Info) error {
-	result, err := redeemedGrants.Add(grant.GrantID.String())
-	if err != nil {
-		return err
-	}
-	if !result {
-		// a) this wallet has not yet redeemed a grant for the given promotionId
-		return fmt.Errorf("grant %s has already been redeemed", grant.GrantID)
-	}
-
-	result, err = redeemedWallets.Add(wallet.ProviderID)
-	if err != nil {
-		return err
-	}
-	if !result {
-		// b) this grant has not yet been redeemed by any wallet
-		return fmt.Errorf("Wallet %s has already redeemed a grant from this promotion", wallet.ProviderID)
-	}
-	return nil
-}
-
-// ClaimGrantForWallet makes a claim to a particular GrantID by a wallet
-func (redis *Redis) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	kv := datastore.GetRedisKv(&conn)
-
-	return claimGrantIDForWallet(&kv, grant.GrantID.String(), wallet)
-}
-
-func claimGrantIDForWallet(kv datastore.KvDatastore, grantID string, wallet wallet.Info) error {
-	_, err := kv.Set(
-		fmt.Sprintf(claimKeyFormat, grantID),
-		wallet.ProviderID,
-		ninetyDaysInSeconds,
-		false,
-	)
-	if err != nil {
-		return errors.New("An existing claim to the grant already exists")
-	}
-	return nil
-}
-
-// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
-func (redis *Redis) ClaimPromotionForWallet(promotion *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
-	return nil, nil
-}
-
-// HasGrantBeenRedeemed checks to see if a grant has been claimed
-func (redis *Redis) HasGrantBeenRedeemed(grant Grant) (bool, error) {
-	conn := redis.Pool.Get()
-	defer closers.Panic(conn)
-	redeemedGrants := datastore.GetRedisSet(&conn, "promotion:"+grant.PromotionID.String()+":grants")
-
-	return hasGrantBeenRedeemed(&redeemedGrants, grant)
-}
-
-func hasGrantBeenRedeemed(redeemedGrants datastore.SetLikeDatastore, grant Grant) (bool, error) {
-	return redeemedGrants.Contains(grant.GrantID.String())
-}
-
-// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (redis *Redis) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
-	return []Grant{}, nil
-}
-
-// GetPromotion by ID
-func (redis *Redis) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
-	return nil, nil
-}
-
-// InMemory is an unsafe Datastore that keeps data in memory, used for testing
-type InMemory struct {
-}
-
-// GetClaimantProviderID returns the providerID who has claimed a given grant
-func (inmem *InMemory) GetClaimantProviderID(grant Grant) (string, error) {
-	kv, err := datastore.GetKvDatastore(context.Background())
-	if err != nil {
-		return "", err
-	}
-
-	return getClaimantProviderID(kv, grant)
-}
-
-// RedeemGrantForWallet redeems a claimed grant for a wallet
-func (inmem *InMemory) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
-	ctx := context.Background()
-	redeemedGrants, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionID.String()+":grants")
-	if err != nil {
-		return err
-	}
-	redeemedWallets, err := datastore.GetSetDatastore(ctx, "promotion:"+grant.PromotionID.String()+":wallets")
-	if err != nil {
-		return err
-	}
-
-	return redeemGrantForWallet(redeemedGrants, redeemedWallets, grant, wallet)
-}
-
-// ClaimGrantForWallet makes a claim to a particular Grant by a wallet
-func (inmem *InMemory) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
-	kv, err := datastore.GetKvDatastore(context.Background())
-	if err != nil {
-		return err
-	}
-
-	return claimGrantIDForWallet(kv, grant.GrantID.String(), wallet)
-}
-
-// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
-func (inmem *InMemory) ClaimPromotionForWallet(promotion *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
-	return nil, nil
-}
-
-// HasGrantBeenRedeemed checks to see if a grant has been claimed
-func (inmem *InMemory) HasGrantBeenRedeemed(grant Grant) (bool, error) {
-	redeemedGrants, err := datastore.GetSetDatastore(context.Background(), "promotion:"+grant.PromotionID.String()+":grants")
-	if err != nil {
-		return false, err
-	}
-
-	return hasGrantBeenRedeemed(redeemedGrants, grant)
-}
-
-// GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (inmem *InMemory) GetGrantsOrderedByExpiry(wallet wallet.Info) ([]Grant, error) {
-	return []Grant{}, nil
-}
-
-// UpsertWallet upserts the given wallet
-func (inmem *InMemory) UpsertWallet(wallet *wallet.Info) error {
-	return nil
-}
-
-// GetPromotion by ID
-func (inmem *InMemory) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
 	return nil, nil
 }

@@ -9,10 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
@@ -43,7 +44,8 @@ func init() {
 		log.Fatalln(err)
 	}
 
-	handler = chi.ServerBaseContext(setupRouter(setupLogger(context.Background())))
+	ctx, r, _ := setupRouter(setupLogger(context.Background()))
+	handler = chi.ServerBaseContext(ctx, r)
 }
 
 func TestPing(t *testing.T) {
@@ -69,8 +71,8 @@ func TestPing(t *testing.T) {
 func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet wallet.Info) error {
 	payload := fmt.Sprintf(`{
 			"wallet": {
-				"altcurrency": "BAT", 
-				"provider": "uphold", 
+				"altcurrency": "BAT",
+				"provider": "uphold",
 				"paymentId": "%s",
 				"providerId": "%s",
 				"publicKey": "%s"
@@ -341,7 +343,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	value = decimal.NewFromFloat(20.0)
+	value = decimal.NewFromFloat(10.0)
 	numGrants = 1
 	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
@@ -377,7 +379,8 @@ func TestRedeem(t *testing.T) {
 		t.Fatal("with two active promotions and two claimed, no promos should be advertised")
 	}
 
-	totalBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(30.0))
+	totalBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(20.0))
+	txBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(10.0))
 
 	grants, err := getActive(t, server, userWallet.Info)
 	if err != nil {
@@ -387,10 +390,10 @@ func TestRedeem(t *testing.T) {
 		t.Fatal("Expected two active grants")
 	}
 	if !grants[0].Probi.Add(grants[1].Probi).Equals(totalBAT) {
-		t.Fatal("Expected two active android grant worth 30 BAT total")
+		t.Fatal("Expected two active android grant worth 20 BAT total")
 	}
 
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, txBAT, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,8 +430,194 @@ func TestRedeem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(grants) != 1 {
+		t.Fatal("Expected one active grants")
+	}
+
+	value = decimal.NewFromFloat(10.0)
+	numGrants = 1
+	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txn, err = userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, grant.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reqPayload.WalletInfo = userWallet.Info
+	reqPayload.Transaction = txn
+
+	payload, err = json.Marshal(&reqPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, err = http.NewRequest("POST", server.URL+"/v1/grants", bytes.NewBuffer([]byte(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != 200 {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		t.Error(string(bodyBytes))
+		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	grants, err = getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(grants) != 0 {
-		t.Fatal("Expected no active grants")
+		t.Fatal("Expected zero active grants")
+	}
+}
+
+func TestDrain(t *testing.T) {
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	pg, err := promotion.NewPostgres("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	for _, table := range tables {
+		_, err = pg.DB.Exec("delete from " + table)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	userWallet := generateWallet(t)
+
+	value := decimal.NewFromFloat(15.0)
+	numGrants := 1
+	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value = decimal.NewFromFloat(5.0)
+	numGrants = 1
+	promotion, err = pg.CreatePromotion("ads", numGrants, value, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promotion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = pg.CreateClaim(promotion.ID, userWallet.Info.ID, value, decimal.Zero)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promotion.ID, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	totalBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(20.0))
+
+	grants, err := getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 2 {
+		t.Fatal("Expected two active grants")
+	}
+	if !grants[0].Probi.Add(grants[1].Probi).Equals(totalBAT) {
+		t.Fatal("Expected two active grants worth 20 BAT total")
+	}
+
+	var reqPayload grant.DrainGrantsRequest
+	reqPayload.WalletInfo = userWallet.Info
+	anonymousAddress, err := uuid.FromString(userWallet.Info.ProviderID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqPayload.AnonymousAddress = anonymousAddress
+
+	payload, err := json.Marshal(&reqPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := http.NewRequest("POST", server.URL+"/v1/grants/drain", bytes.NewBuffer([]byte(payload)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bodyBytes, _ := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Error(string(bodyBytes))
+		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	var respPayload grant.DrainGrantsResponse
+	json.Unmarshal(bodyBytes, &respPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedBAT := altcurrency.BAT.ToProbi(decimal.NewFromFloat(5.0))
+	if !respPayload.GrantTotal.Equals(expectedBAT) {
+
+		t.Fatal("Expected redeemed grants to equal 5 BAT total", respPayload)
+	}
+
+	grants, err = getActive(t, server, userWallet.Info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(grants) != 1 {
+		t.Fatal("Expected zero active grants")
+	}
+
+	_, err = userWallet.Transfer(altcurrency.BAT, expectedBAT, grant.SettlementDestination)
+	if err != nil {
+		t.Log(err)
 	}
 
 	resp, err = http.DefaultClient.Do(req)
@@ -436,7 +625,62 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp.StatusCode != 204 {
-		t.Fatalf("Received non-204 response: %d\n", resp.StatusCode)
+	bodyBytes, _ = ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("Received non-200 response: %d\n", resp.StatusCode)
+	}
+
+	json.Unmarshal(bodyBytes, &respPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedBAT = altcurrency.BAT.ToProbi(decimal.NewFromFloat(15.0))
+	if !respPayload.GrantTotal.Equals(decimal.Zero) {
+		t.Fatal("Expected redeemed grants to equal 15 BAT")
+	}
+}
+
+// This is to try to test a very stubborn validation issue with promotionID
+func TestClaimValidation(t *testing.T) {
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	pg, err := promotion.NewPostgres("", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var w wallet.Info
+	w.ID = uuid.NewV4().String()
+	w.ProviderID = uuid.NewV4().String()
+
+	err = claim(t, server, uuid.Nil, w)
+	if err == nil {
+		t.Fatal("Must fail if no promotion id is passed")
+	}
+
+	for i := 0; i < 100; i++ {
+		value := decimal.NewFromFloat(30.0)
+		numGrants := 1
+		promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = pg.ActivatePromotion(promotion)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var wallet wallet.Info
+		wallet.ID = uuid.NewV4().String()
+		wallet.ProviderID = uuid.NewV4().String()
+
+		err = claim(t, server, promotion.ID, wallet)
+		if err != nil {
+			t.Error(promotion.ID)
+			t.Fatal(err)
+		}
 	}
 }

@@ -21,7 +21,7 @@ import (
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
-	_, err := InitService(nil, nil)
+	_, err := InitService(nil)
 	if err != nil {
 		t.Fatal("unexpected error", err)
 	}
@@ -60,7 +60,7 @@ func TestConsume(t *testing.T) {
 
 	mockDB := NewMockDatastore(mockCtrl)
 
-	service, err := InitService(mockDB, nil)
+	service, err := InitService(mockDB)
 	if err != nil {
 		t.Error("unexpected error")
 	}
@@ -125,15 +125,15 @@ func TestConsume(t *testing.T) {
 
 	request := RedeemGrantsRequest{WalletInfo: walletInfo, Transaction: transaction}
 
-	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{grant}, nil)
+	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo), gomock.Eq("")).Return([]Grant{grant}, nil)
 	mockDB.EXPECT().RedeemGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)
-	_, err = service.Consume(ctx, &request)
+	_, err = service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err != nil {
 		t.Error(err)
 	}
 
-	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo)).Return([]Grant{}, nil)
-	txnInfo, err := service.Consume(ctx, &request)
+	mockDB.EXPECT().GetGrantsOrderedByExpiry(gomock.Eq(walletInfo), gomock.Eq("")).Return([]Grant{}, nil)
+	txnInfo, err := service.Consume(ctx, request.WalletInfo, request.Transaction)
 	if err != nil {
 		t.Error(err)
 	}

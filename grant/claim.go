@@ -12,10 +12,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const (
-	claimKeyFormat = "grant:%s:claim"
-)
-
 // ClaimGrantWithGrantIDRequest is a request to claim a grant
 type ClaimGrantWithGrantIDRequest struct {
 	WalletInfo wallet.Info `json:"wallet" valid:"required"`
@@ -23,7 +19,7 @@ type ClaimGrantWithGrantIDRequest struct {
 
 // ClaimRequest is a request to claim a grant
 type ClaimRequest struct {
-	PromotionID uuid.UUID   `json:"promotionId" valid:"requiredUUID"`
+	PromotionID uuid.UUID   `json:"promotionId" valid:"-"`
 	WalletInfo  wallet.Info `json:"wallet" valid:"required"`
 }
 

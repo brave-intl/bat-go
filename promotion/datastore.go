@@ -58,7 +58,7 @@ type Datastore interface {
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
 	// RunNextClaimJob to sign claim credentials if there is a claim waiting
-	RunNextClaimJob(ctx context.Context, worker ClaimWorker) error
+	RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error)
 	// InsertSuggestion inserts a transaction awaiting validation
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
@@ -385,17 +385,13 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
 			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
-				promos.approximate_value * 
+				promos.approximate_value *
 				promos.suggestions_per_grant )::int as suggestions_per_grant,
 			promos.remaining_grants,
 			promos.platform,
 			promos.active,
 			promos.public_keys,
-			promos.active and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
-			) as available
+			true as available
 		from
 		  (
 				select
@@ -408,6 +404,12 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
+		where
+			promos.active and wallet_claims.redeemed is distinct from true and
+			( wallet_claims.legacy_claimed is true or
+				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			)
 		order by promos.created_at;`
 
 	if legacy {
@@ -448,12 +450,13 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			promotions.active and promotions.remaining_grants > 0 as available,
+			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
 		promotions left join issuers on promotions.id = issuers.promotion_id
 		where promotions.promotion_type = 'ugp' and
-			( promotions.platform = '' or promotions.platform = $1)
+			( promotions.platform = '' or promotions.platform = $1) and
+			promotions.active and promotions.remaining_grants > 0
 		group by promotions.id
 		order by promotions.created_at;`
 
@@ -560,11 +563,12 @@ ORDER BY created_at DESC
 	return nil, nil
 }
 
-// RunNextClaimJob to sign claim credentials if there is a claim waiting
-func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) error {
+// RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
+func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()
+	attempted := false
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
 	type SigningJob struct {
@@ -578,7 +582,7 @@ select
 	issuers.*,
 	claim_cred.claim_id,
 	claim_cred.blinded_creds
-from 
+from
 	(select *
 	from claim_creds
 	where batch_proof is null
@@ -592,35 +596,36 @@ on claim_cred.issuer_id = issuers.id`
 	err = tx.Select(&jobs, statement)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	if len(jobs) != 1 {
 		_ = tx.Rollback()
-		return nil
+		return attempted, nil
 	}
 
 	job := jobs[0]
 
+	attempted = true
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
-	return nil
+	return attempted, nil
 }
 
 // InsertSuggestion inserts a transaction awaiting validation

@@ -8,7 +8,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,10 +15,9 @@ import (
 )
 
 const (
-	lowerTxLimit        = 1
-	upperTxLimit        = 120
-	ninetyDaysInSeconds = 60 * 60 * 24 * 90
-	productionEnv       = "production"
+	lowerTxLimit  = 1
+	upperTxLimit  = 120
+	productionEnv = "production"
 )
 
 var (
@@ -52,18 +50,16 @@ var (
 	)
 )
 
-// Service contains datastore and redis connections as well as prometheus metrics
+// Service contains datastore as well as prometheus metrics
 type Service struct {
 	datastore              Datastore
-	redisPool              *redis.Pool
 	grantWalletBalanceDesc *prometheus.Desc
 }
 
 // InitService initializes the grant service
-func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
+func InitService(datastore Datastore) (*Service, error) {
 	gs := &Service{
 		datastore: datastore,
-		redisPool: redisPool,
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",

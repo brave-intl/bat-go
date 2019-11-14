@@ -120,9 +120,12 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
+		if promotions == nil {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
 
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(&PromotionsResponse{promotions}); err != nil {
+		if err := json.NewEncoder(w).Encode(&PromotionsResponse{*promotions}); err != nil {
 			panic(err)
 		}
 		return nil
@@ -131,7 +134,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	PaymentID    uuid.UUID `json:"paymentId" valid:"requiredUUID"`
+	PaymentID    uuid.UUID `json:"paymentId" valid:"-"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 

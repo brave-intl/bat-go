@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -32,41 +30,29 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 	return promotion.ApproximateValue.Div(decimal.New(int64(promotion.SuggestionsPerGrant), 0))
 }
 
-// GetOrCreateWallet attempts to retrieve wallet info from the local datastore, falling back to the ledger
-func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
-	wallet, err := service.datastore.GetWallet(walletID)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error looking up wallet")
-	}
-
-	if wallet == nil {
-		wallet, err = service.ledgerClient.GetWallet(ctx, walletID)
-		if err != nil {
-			return nil, errors.Wrap(err, "Error looking up wallet")
-		}
-		if wallet != nil {
-			err = service.datastore.InsertWallet(wallet)
-			if err != nil {
-				return nil, errors.Wrap(err, "Error saving wallet")
-			}
-		}
-	}
-	return wallet, nil
-}
-
 // GetAvailablePromotions first tries to look up the wallet and then retrieves available promotions
 func (service *Service) GetAvailablePromotions(
 	ctx context.Context,
 	walletID *uuid.UUID,
 	platform string,
 	legacy bool,
-) ([]Promotion, error) {
+) (*[]Promotion, error) {
 	if walletID != nil {
 		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
 		if err != nil {
-			return []Promotion{}, err
+			return nil, err
 		}
-		return service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
+		if wallet == nil {
+			return nil, nil
+		}
+		promos, err := service.datastore.GetAvailablePromotionsForWallet(wallet, platform, legacy)
+		return &promos, err
 	}
-	return service.datastore.GetAvailablePromotions(platform, legacy)
+	promos, err := service.datastore.GetAvailablePromotions(platform, legacy)
+	return &promos, err
+}
+
+// RunNextClaimJob takes the next claim job and completes it
+func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
+	return service.datastore.RunNextClaimJob(ctx, service)
 }

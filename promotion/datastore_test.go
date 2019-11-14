@@ -278,9 +278,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(1, len(promotions))
-	suite.Assert().Equal(*promotion, promotions[0])
-	suite.Assert().False(promotions[0].Available)
+	suite.Assert().Equal(0, len(promotions))
 
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
@@ -296,9 +294,8 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(2, len(promotions))
+	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Available)
-	suite.Assert().False(promotions[1].Available)
 
 	adClaimValue := decimal.NewFromFloat(30.0)
 	adSuggestionsPerGrant := int(30 * decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue).IntPart())
@@ -339,9 +336,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 
 	promotions, err = pg.GetAvailablePromotions("", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(1, len(promotions))
-	suite.Assert().Equal(*promotion, promotions[0])
-	suite.Assert().False(promotions[0].Available)
+	suite.Assert().Equal(0, len(promotions))
 
 	promotions, err = pg.GetAvailablePromotions("", true)
 	suite.Require().NoError(err, "Get promotions should succeed")
@@ -384,6 +379,8 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	// Create desktop promotion
 	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")
 	suite.Require().NoError(err, "Create promotion should succeed")
+	err = pg.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Activate promotion should succeed")
 
 	// Ensure they are all returned
 	promotions, err = pg.GetAvailablePromotions("desktop", false)
@@ -438,17 +435,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "ios")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
-	// Desktop should not see an iOS grant
-	promotions, err = pg.GetAvailablePromotions("desktop", false)
-	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(0, len(promotions))
-
-	// But iOS should
-	promotions, err = pg.GetAvailablePromotions("ios", false)
-	suite.Require().NoError(err, "Get promotions should succeed")
-	suite.Assert().Equal(1, len(promotions))
-
-	// But it should not be in the legacy list until activated
+	// it should not be in the legacy list until activated
 	promotions, err = pg.GetAvailablePromotions("ios", true)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions))
@@ -456,6 +443,16 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	err = pg.ActivatePromotion(promotion)
 
 	promotions, err = pg.GetAvailablePromotions("ios", true)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(1, len(promotions))
+
+	// Desktop should not see an iOS grant
+	promotions, err = pg.GetAvailablePromotions("desktop", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	// But iOS should
+	promotions, err = pg.GetAvailablePromotions("ios", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 }
@@ -643,7 +640,8 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 
 	mockClaimWorker := NewMockClaimWorker(mockCtrl)
 
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err := pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
@@ -676,11 +674,13 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 
 	// One signing job should run
 	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(creds, nil)
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(true, attempted)
 	suite.Require().NoError(err)
 
 	// No further jobs should run
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)
 }
 
