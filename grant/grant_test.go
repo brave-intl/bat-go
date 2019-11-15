@@ -12,7 +12,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/golang/mock/gomock"
-	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )

@@ -21,13 +21,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-
-func setupLogger(ctx context.Context) *zerolog.Logger {
+func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	// set time field to unix
 	zerolog.TimeFieldFormat = time.UnixDate
 	// always print out timestamp
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	return log.Logger.WithContext(ctx), &log.Logger
+	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+	return log.WithContext(ctx), &log
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
@@ -60,13 +59,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	grantService, err := grant.InitService(grantPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	pg, err := promotion.NewPostgres("", true)
@@ -78,7 +77,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	promotionService, err := promotion.InitService(pg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
@@ -108,6 +107,8 @@ func main() {
 	logger := log.Ctx(serverCtx)
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
+
+	serverCtx, r, service := setupRouter(serverCtx, logger)
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
