@@ -9,6 +9,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
+	contextutil "github.com/brave-intl/bat-go/utils/context"
 	"github.com/pkg/errors"
 	"github.com/pressly/lg"
 	uuid "github.com/satori/go.uuid"
@@ -174,7 +175,10 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	if enableSuggestionJob {
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx = contextutil.Wrap(ctx, asyncCtx)
 		go func() {
+			defer asyncCancel()
 			err := service.datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				// FIXME

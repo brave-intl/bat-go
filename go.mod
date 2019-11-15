@@ -15,7 +15,6 @@ require (
 	github.com/ethereum/go-ethereum v1.7.2
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/frankban/quicktest v1.4.2 // indirect
-	github.com/garyburd/redigo v1.6.0
 	github.com/getsentry/raven-go v0.2.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gogo/protobuf v1.3.0 // indirect
@@ -67,5 +66,6 @@ require (
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/square/go-jose.v2 v2.3.1
 )
