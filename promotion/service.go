@@ -1,6 +1,7 @@
 package promotion
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -167,4 +168,14 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 	return service, nil
+}
+
+// RunNextClaimJob takes the next claim job and completes it
+func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
+	return service.datastore.RunNextClaimJob(ctx, service)
+}
+
+// RunNextSuggestionJob takes the next claim job and completes it
+func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
+	return service.datastore.RunNextSuggestionJob(ctx, service)
 }

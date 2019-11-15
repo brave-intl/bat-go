@@ -101,6 +101,19 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	return ctx, r, promotionService
 }
 
+func jobWorker(context context.Context, job func(context.Context) (bool, error), duration time.Duration) {
+	ticker := time.NewTicker(duration)
+	for {
+		attempted, err := job(context)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
+		if !attempted || err != nil {
+			<-ticker.C
+		}
+	}
+}
+
 func main() {
 	serverCtx, logger := setupLogger(context.Background())
 
@@ -108,18 +121,8 @@ func main() {
 
 	serverCtx, r, service := setupRouter(serverCtx, logger)
 
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		for {
-			attempted, err := service.RunNextClaimJob(serverCtx)
-			if err != nil {
-				raven.CaptureErrorAndWait(err, nil)
-			}
-			if !attempted || err != nil {
-				<-ticker.C
-			}
-		}
-	}()
+	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
+	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()

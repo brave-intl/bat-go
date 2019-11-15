@@ -179,7 +179,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		ctx = contextutil.Wrap(ctx, asyncCtx)
 		go func() {
 			defer asyncCancel()
-			err := service.datastore.RunNextSuggestionJob(ctx, service)
+			_, err := service.datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				// FIXME
 				log := lg.Log(ctx)
