@@ -10,7 +10,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
+	"github.com/pressly/lg"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -178,8 +178,8 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 			err := service.datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				// FIXME
-				logger := log.Ctx(ctx)
-				logger.Error().Err(err).Msg("error processing suggestion job")
+				log := lg.Log(ctx)
+				log.Error("error processing suggestion job")
 			}
 		}()
 	}
@@ -189,10 +189,13 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 
 // RedeemAndCreateSuggestionEvent after validating that all the credential bindings
 func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error {
+	log := lg.Log(ctx)
+	log.Info("started RedeemAndCreateSuggestionEvent")
 	err := service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 	if err != nil {
 		return nil
 	}
+	log.Info("successfully Redeem(ed)Credentials")
 
 	// write the message
 	err = service.kafkaWriter.WriteMessages(ctx,
@@ -203,7 +206,6 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
-	logger := log.Ctx(ctx)
-	logger.Error().Err(err).Msg("wrote message without error")
+	log.Info("wrote message without error")
 	return nil
 }
