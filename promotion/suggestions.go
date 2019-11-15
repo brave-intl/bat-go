@@ -179,7 +179,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 			if err != nil {
 				// FIXME
 				log := lg.Log(ctx)
-				log.Error("error processing suggestion job")
+				log.Error("error processing suggestion job", err)
 			}
 		}()
 	}
