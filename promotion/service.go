@@ -120,7 +120,7 @@ func (service *Service) InitKafka() error {
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
 		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    "suggestion",
+		Topic:    "grant-suggestions",
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
 		//Logger:   kafka.LoggerFunc(log.Printf), // FIXME
@@ -132,7 +132,7 @@ func (service *Service) InitKafka() error {
 	}
 
 	service.kafkaWriter = kafkaWriter
-	service.codecs["suggestion"] = suggestionEventCodec
+	service.codecs["grant-suggestions"] = suggestionEventCodec
 
 	return nil
 }

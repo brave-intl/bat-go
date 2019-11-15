@@ -162,7 +162,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		"funding":     fundings,
 	}
 
-	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
+	eventBinary, err := service.codecs["grant-suggestions"].BinaryFromNative(nil, eventMap)
 	if err != nil {
 		fmt.Println(err)
 		return err
