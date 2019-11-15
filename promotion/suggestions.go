@@ -203,5 +203,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
+	logger := log.Ctx(ctx)
+	logger.Error().Err(err).Msg("wrote message without error")
 	return nil
 }

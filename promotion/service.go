@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -123,7 +124,7 @@ func (service *Service) InitKafka() error {
 		Topic:    "grant-suggestions",
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
-		//Logger:   kafka.LoggerFunc(log.Printf), // FIXME
+		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
 	})
 
 	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
@@ -133,6 +134,7 @@ func (service *Service) InitKafka() error {
 
 	service.kafkaWriter = kafkaWriter
 	service.codecs["grant-suggestions"] = suggestionEventCodec
+	log.Println("created kafka")
 
 	return nil
 }
