@@ -110,6 +110,18 @@ func tlsDialer() (*kafka.Dialer, error) {
 		TLS:       config}, nil
 }
 
+// InitCodecs used for Avro encoding / decoding
+func (service *Service) InitCodecs() error {
+	service.codecs = make(map[string]*goavro.Codec)
+
+	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
+	service.codecs["grant-suggestions"] = suggestionEventCodec
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (service *Service) InitKafka() error {
 	dialer, err := tlsDialer()
@@ -128,14 +140,11 @@ func (service *Service) InitKafka() error {
 		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
 	})
 
-	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
+	service.kafkaWriter = kafkaWriter
+	err = service.InitCodecs()
 	if err != nil {
 		return err
 	}
-
-	service.kafkaWriter = kafkaWriter
-	service.codecs["grant-suggestions"] = suggestionEventCodec
-	log.Println("created kafka")
 
 	return nil
 }
@@ -161,7 +170,6 @@ func InitService(datastore Datastore) (*Service, error) {
 		cbClient:         cbClient,
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
-		codecs:           make(map[string]*goavro.Codec),
 	}
 	err = service.InitKafka()
 	if err != nil {

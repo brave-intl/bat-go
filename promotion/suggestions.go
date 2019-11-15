@@ -78,6 +78,40 @@ type SuggestionEvent struct {
 	Funding     []FundingSource `json:"funding"`
 }
 
+// TryUpgradeSuggestionEvent from JSON format to Avro, filling in any potentially missing fields
+func (service *Service) TryUpgradeSuggestionEvent(suggestion []byte) ([]byte, error) {
+	var event SuggestionEvent
+
+	if suggestion[0] == '{' {
+		// Assume we have a legacy JSON event
+		err := json.Unmarshal(suggestion, &event)
+		if err != nil {
+			return []byte{}, err
+		}
+
+		if event.CreatedAt.IsZero() {
+			event.CreatedAt = time.Now().UTC()
+		}
+
+		eventJSON, err := json.Marshal(event)
+		if err != nil {
+			return []byte{}, err
+		}
+
+		native, _, err := service.codecs["grant-suggestions"].NativeFromTextual(eventJSON)
+		if err != nil {
+			return []byte{}, err
+		}
+
+		binary, err := service.codecs["grant-suggestions"].BinaryFromNative(nil, native)
+		if err != nil {
+			return []byte{}, err
+		}
+		return binary, nil
+	}
+	return suggestion, nil
+}
+
 // SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
 type SuggestionWorker interface {
 	RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
@@ -193,13 +227,15 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 
 // RedeemAndCreateSuggestionEvent after validating that all the credential bindings
 func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error {
-	log := lg.Log(ctx)
-	log.Info("started RedeemAndCreateSuggestionEvent")
-	err := service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
+	suggestion, err := service.TryUpgradeSuggestionEvent(suggestion)
+	if err != nil {
+		return err
+	}
+
+	err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 	if err != nil {
 		return nil
 	}
-	log.Info("successfully Redeem(ed)Credentials")
 
 	// write the message
 	err = service.kafkaWriter.WriteMessages(ctx,
@@ -210,6 +246,5 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
-	log.Info("wrote message without error")
 	return nil
 }

@@ -28,7 +28,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
-	"github.com/linkedin/goavro"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -467,7 +466,6 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		cbClient:         mockCB,
 		ledgerClient:     mockLedger,
 		reputationClient: mockReputation,
-		codecs:           make(map[string]*goavro.Codec),
 	}
 
 	err = service.InitKafka()
