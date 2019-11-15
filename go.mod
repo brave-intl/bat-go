@@ -46,7 +46,6 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/pressly/lg v1.1.1
 	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
 	github.com/rs/xid v1.2.1 // indirect
 	github.com/rs/zerolog v1.14.0
