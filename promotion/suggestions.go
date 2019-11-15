@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 )
 
@@ -43,17 +46,17 @@ func (s *Suggestion) Base64Decode(text string) error {
 
 /*
 {
-  "type": "auto-contribute",
-  "channel": "coinmarketcap.com",
-  "totalAmount": "15.0",
-  "funding": [
-    {
-      "type": "ugp",
-      "amount": "15.0",
-      "cohort": "control",
-      "promotion": "{{promotionId}}"
-    }
-  ]
+	"type": "auto-contribute",
+	"channel": "coinmarketcap.com",
+	"totalAmount": "15.0",
+	"funding": [
+		{
+			"type": "ugp",
+			"amount": "15.0",
+			"cohort": "control",
+			"promotion": "{{promotionId}}"
+		}
+	]
 }
 */
 
@@ -67,7 +70,8 @@ type FundingSource struct {
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
 type SuggestionEvent struct {
-	ID uuid.UUID `json:"id"`
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
 	Suggestion
 	TotalAmount decimal.Decimal `json:"totalAmount"`
 	Funding     []FundingSource `json:"funding"`
@@ -134,18 +138,37 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		fundingSources[publicKey] = fundingSource
 	}
 
-	event := SuggestionEvent{ID: uuid.NewV4(), Suggestion: suggestion, TotalAmount: total, Funding: []FundingSource{}}
-
-	for _, v := range fundingSources {
-		event.Funding = append(event.Funding, v)
-	}
-
-	eventJSON, err := json.Marshal(event)
+	createdAt, err := time.Now().UTC().MarshalText()
 	if err != nil {
 		return err
 	}
 
-	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventJSON)
+	fundings := []map[string]interface{}{}
+	for _, v := range fundingSources {
+		fundings = append(fundings, map[string]interface{}{
+			"type":      v.Type,
+			"cohort":    v.Cohort,
+			"amount":    v.Amount.String(),
+			"promotion": v.PromotionID.String(),
+		})
+	}
+
+	eventMap := map[string]interface{}{
+		"id":          uuid.NewV4().String(),
+		"createdAt":   string(createdAt),
+		"channel":     suggestion.Channel,
+		"type":        suggestion.Type,
+		"totalAmount": total.String(),
+		"funding":     fundings,
+	}
+
+	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
 	if err != nil {
 		return err
 	}
@@ -171,8 +194,14 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return nil
 	}
 
-	service.eventChannel <- suggestion
-	// TODO emit event
-
+	// write the message
+	err = service.kafkaWriter.WriteMessages(ctx,
+		kafka.Message{
+			Value: suggestion,
+		},
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
