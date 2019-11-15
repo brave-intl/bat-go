@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
-
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"golang.org/x/net/http/httpguts"
 )
 
@@ -73,7 +73,7 @@ func encapsulate(req *http.Request) (*HTTPSignedRequest, error) {
 
 	// TODO implement pseudo-header
 
-	bodyBytes, err := ioutil.ReadAll(req.Body)
+	bodyBytes, err := requestutils.Read(req.Body)
 	if err != nil {
 		return nil, err
 	}
