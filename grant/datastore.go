@@ -49,14 +49,13 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, err
 	}
-	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
 
+	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
 	m, err := migrate.NewWithDatabaseInstance(
 		dbMigrationsURL,
 		"postgres",
 		driver,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +71,6 @@ func (pg *Postgres) Migrate() error {
 	}
 
 	err = m.Migrate(2)
-	fmt.Println("migrating", err)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}

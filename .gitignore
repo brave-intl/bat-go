@@ -5,6 +5,7 @@
 .Trashes
 .AppleDouble
 .LSOverride
+
 # Project specific ignores
 .env
 vendor
