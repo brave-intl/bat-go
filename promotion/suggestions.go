@@ -10,6 +10,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/pkg/errors"
+	"github.com/posener/ctxutil"
 	"github.com/pressly/lg"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -174,8 +175,12 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	if enableSuggestionJob {
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+		asyncCtx = ctxutil.WithValues(asyncCtx, ctx)
+
 		go func() {
-			err := service.datastore.RunNextSuggestionJob(ctx, service)
+			defer asyncCancel()
+			err := service.datastore.RunNextSuggestionJob(asyncCtx, service)
 			if err != nil {
 				// FIXME
 				log := lg.Log(ctx)
