@@ -17,7 +17,7 @@ import (
 )
 
 // FIXME temporary until event producer is hooked up
-var enableSuggestionJob = false
+var enableSuggestionJob = true
 
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
