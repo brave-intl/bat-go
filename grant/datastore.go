@@ -56,7 +56,7 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 		"postgres",
 		driver,
 	)
-	fmt.Println(dbMigrationsURL, err)
+
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +72,7 @@ func (pg *Postgres) Migrate() error {
 	}
 
 	err = m.Migrate(2)
+	fmt.Println("migrating", err)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
