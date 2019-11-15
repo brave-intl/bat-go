@@ -55,14 +55,22 @@ func tlsDialer() (*kafka.Dialer, error) {
 		return nil, err
 	}
 
-	certPEM, err := readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
-	if err != nil {
-		return nil, err
+	certEnv := "KAFKA_SSL_CERTIFICATE"
+	certPEM := []byte(os.Getenv(certEnv))
+	if len(certPEM) == 0 {
+		certPEM, err = readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	encryptedKeyPEM, err := readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
-	if err != nil {
-		return nil, err
+	keyEnv := "KAFKA_SSL_KEY"
+	encryptedKeyPEM := []byte(os.Getenv(keyEnv))
+	if len(encryptedKeyPEM) == 0 {
+		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	block, rest := pem.Decode(encryptedKeyPEM)
