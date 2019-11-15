@@ -60,6 +60,8 @@ services:
       - "3333:3333"
     environment:
       - ENV=local
+      - PKG
+      - RUN
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
       - CHALLENGE_BYPASS_SERVER=http://challenge-bypass:2416

@@ -21,7 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"

@@ -10,6 +10,8 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients"
+	errs "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -220,8 +222,43 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		}
 
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
+
 		if err != nil {
-			return handlers.WrapError(err, "Error claiming promotion", http.StatusBadRequest)
+			status := http.StatusBadRequest
+			bundledError, ok := err.(errs.Error)
+			var httpErr error
+			unknownError := errors.New("An unknown error occured")
+			if !ok {
+				httpErr = err
+			} else {
+				switch bundledError.Cause() {
+				case "response":
+					response, ok := bundledError.Data().(clients.HTTPState)
+					if !ok {
+						httpErr = unknownError
+					} else {
+						status = response.Status
+						switch response.Status {
+						case http.StatusNotFound:
+							// did not find wallet
+							httpErr = bundledError
+						case http.StatusBadRequest:
+							// malformed request
+							httpErr = bundledError
+						case http.StatusServiceUnavailable:
+							httpErr = bundledError
+						default:
+							// generic failure
+							httpErr = unknownError
+						}
+					}
+				case "request":
+					httpErr = bundledError
+				default:
+					httpErr = bundledError
+				}
+			}
+			return handlers.WrapError(httpErr, "Error claiming promotion", status)
 		}
 
 		w.WriteHeader(http.StatusOK)
