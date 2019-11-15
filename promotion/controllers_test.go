@@ -419,7 +419,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// FIXME stick kafka setup in suite setup
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
 	dialer, err := tlsDialer()
 	suite.Require().NoError(err)

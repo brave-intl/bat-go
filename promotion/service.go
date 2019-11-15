@@ -117,7 +117,7 @@ func (service *Service) InitKafka() error {
 	}
 	service.kafkaDialer = dialer
 
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS_STRING")
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
 		Brokers:  strings.Split(kafkaBrokers, ","),
