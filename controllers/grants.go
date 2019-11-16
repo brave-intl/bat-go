@@ -20,7 +20,7 @@ import (
 // GrantsRouter is the router for grant endpoints
 func GrantsRouter(service *grant.Service) chi.Router {
 	r := chi.NewRouter()
-	if os.Getenv("ENV") == "production" {
+	if os.Getenv("ENV") != "local" {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)
 	}
 	if len(os.Getenv("THROTTLE_GRANT_REQUESTS")) > 0 {

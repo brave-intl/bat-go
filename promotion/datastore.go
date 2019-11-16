@@ -62,7 +62,7 @@ type Datastore interface {
 	// InsertSuggestion inserts a transaction awaiting validation
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
-	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error
+	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -648,10 +648,11 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 }
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
-func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error {
+func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()
+	attempted := false
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
 	// FIXME
@@ -672,40 +673,41 @@ limit 1`
 	err = tx.Select(&jobs, statement)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	if len(jobs) != 1 {
 		_ = tx.Rollback()
-		return nil
+		return attempted, nil
 	}
 
 	job := jobs[0]
+	attempted = true
 
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 	if err != nil {
 		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
-	return nil
+	return attempted, nil
 }

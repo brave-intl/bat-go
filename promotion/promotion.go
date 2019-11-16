@@ -51,8 +51,3 @@ func (service *Service) GetAvailablePromotions(
 	promos, err := service.datastore.GetAvailablePromotions(platform, legacy)
 	return &promos, err
 }
-
-// RunNextClaimJob takes the next claim job and completes it
-func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextClaimJob(ctx, service)
-}
