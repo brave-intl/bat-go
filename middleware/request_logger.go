@@ -34,7 +34,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -43,10 +42,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
-
-var ignoredHeaders = map[string]bool{
-	"Safetynet-Token": true,
-}
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/rs/zerolog
@@ -111,16 +106,9 @@ func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
 	} else {
 		subLog = logger.Info()
 	}
-	for key, list := range r.Header {
-		if !ignoredHeaders[key] {
-			subLog = subLog.Str(key, strings.Join(list, ","))
-		}
-	}
 	return subLog.
 		Str("host", r.Host).
-		Str("remote_addr", r.RemoteAddr).
 		Str("http_proto", r.Proto).
 		Str("http_method", r.Method).
-		Str("http_scheme", r.URL.Scheme).
 		Str("uri", r.URL.EscapedPath())
 }

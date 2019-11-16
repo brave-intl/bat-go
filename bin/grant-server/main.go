@@ -22,8 +22,6 @@ import (
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	// set time field to unix
-	zerolog.TimeFieldFormat = time.UnixDate
 	// always print out timestamp
 	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
 	return log.WithContext(ctx), &log
@@ -46,12 +44,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
-	r.Use(hlog.NewHandler(*logger))
 	if logger != nil {
 		// Also handles panic recovery
-		r.Use(hlog.RemoteAddrHandler("ip"))
+		r.Use(hlog.NewHandler(*logger))
 		r.Use(hlog.UserAgentHandler("user_agent"))
-		r.Use(hlog.RefererHandler("referer"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
 	}
