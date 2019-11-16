@@ -88,7 +88,7 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
-		if env == "production" {
+		if env != "local" {
 			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
 		}
 	} else {

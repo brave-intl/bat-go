@@ -24,7 +24,7 @@ import (
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
-	if os.Getenv("ENV") == "production" {
+	if os.Getenv("ENV") != "local" {
 		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
 	} else {
 		r.Method("POST", "/", CreatePromotion(service))

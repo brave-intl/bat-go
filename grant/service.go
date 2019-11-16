@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	lowerTxLimit  = 1
-	upperTxLimit  = 120
-	productionEnv = "production"
+	lowerTxLimit = 1
+	upperTxLimit = 120
+	localEnv     = "local"
 )
 
 var (
@@ -74,10 +74,10 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, errors.Wrap(err, "GrantSignatorPublicKeyHex is invalid")
 	}
 
-	if os.Getenv("ENV") == productionEnv && !refreshBalance {
+	if os.Getenv("ENV") != localEnv && !refreshBalance {
 		return nil, errors.New("refreshBalance must be true in production")
 	}
-	if os.Getenv("ENV") == productionEnv && !testSubmit {
+	if os.Getenv("ENV") != localEnv && !testSubmit {
 		return nil, errors.New("testSubmit must be true in production")
 	}
 
@@ -107,7 +107,7 @@ func InitService(datastore Datastore) (*Service, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if os.Getenv("ENV") == productionEnv {
+	} else if os.Getenv("ENV") != localEnv {
 		return nil, errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 
