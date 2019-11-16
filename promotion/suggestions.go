@@ -10,8 +10,9 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
+	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
-	"github.com/pressly/lg"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -215,9 +216,11 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 			defer asyncCancel()
 			_, err := service.datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
-				// FIXME
-				log := lg.Log(ctx)
-				log.Error("error processing suggestion job", err)
+				log.Ctx(ctx).
+					Error().
+					Err(err).
+					Msg("error processing suggestion job")
+				raven.CaptureMessage("error processing suggestion job", nil)
 			}
 		}()
 	}
