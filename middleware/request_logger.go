@@ -44,6 +44,10 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
+var ignoredHeaders = map[string]bool{
+	"Safetynet-Token": true,
+}
+
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/rs/zerolog
 // Added support for sending captured panic to Sentry
@@ -58,7 +62,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			t1 := time.Now()
 			entry := hlog.FromRequest(r)
-			createSubLog(r).
+			createSubLog(r, 0).
 				Msg("request started")
 			defer func() {
 				t2 := time.Now()
@@ -82,9 +86,10 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 					}.ServeHTTP(w, r)
 				}
 
+				status := ww.Status()
 				// Log the entry, the request is complete.
-				createSubLog(r).
-					Int("status", ww.Status()).
+				createSubLog(r, status).
+					Int("status", status).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1)).
 					Msg("request complete")
@@ -97,14 +102,25 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 	}
 }
 
-func createSubLog(r *http.Request) *zerolog.Event {
-	subLog := hlog.FromRequest(r).Info()
+func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
+	logger := hlog.FromRequest(r)
+	if status >= 400 && status < 499 {
+		subLog = logger.Warn()
+	} else if status >= 500 {
+		subLog = logger.Error()
+	} else {
+		subLog = logger.Info()
+	}
 	for key, list := range r.Header {
-		subLog = subLog.Str(key, strings.Join(list, ","))
+		if !ignoredHeaders[key] {
+			subLog = subLog.Str(key, strings.Join(list, ","))
+		}
 	}
 	return subLog.
 		Str("host", r.Host).
 		Str("remote_addr", r.RemoteAddr).
 		Str("http_proto", r.Proto).
+		Str("http_method", r.Method).
+		Str("http_scheme", r.URL.Scheme).
 		Str("uri", r.URL.EscapedPath())
 }
