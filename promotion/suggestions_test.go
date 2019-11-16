@@ -28,7 +28,7 @@ func TestTryUpgradeSuggestionEvent(t *testing.T) {
 	upgraded, err := service.TryUpgradeSuggestionEvent([]byte(suggestion))
 	assert.NoError(t, err, "Failed to upgrade suggestion event")
 
-	native, _, err := service.codecs["grant-suggestions"].NativeFromBinary(upgraded)
+	native, _, err := service.codecs["suggestion"].NativeFromBinary(upgraded)
 	assert.NoError(t, err)
 
 	createdAt, err := time.Parse(time.RFC3339, native.(map[string]interface{})["createdAt"].(string))

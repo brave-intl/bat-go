@@ -98,12 +98,12 @@ func (service *Service) TryUpgradeSuggestionEvent(suggestion []byte) ([]byte, er
 			return []byte{}, err
 		}
 
-		native, _, err := service.codecs["grant-suggestions"].NativeFromTextual(eventJSON)
+		native, _, err := service.codecs["suggestion"].NativeFromTextual(eventJSON)
 		if err != nil {
 			return []byte{}, err
 		}
 
-		binary, err := service.codecs["grant-suggestions"].BinaryFromNative(nil, native)
+		binary, err := service.codecs["suggestion"].BinaryFromNative(nil, native)
 		if err != nil {
 			return []byte{}, err
 		}
@@ -197,7 +197,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		"funding":     fundings,
 	}
 
-	eventBinary, err := service.codecs["grant-suggestions"].BinaryFromNative(nil, eventMap)
+	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
 	if err != nil {
 		fmt.Println(err)
 		return err

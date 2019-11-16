@@ -19,6 +19,8 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
+var suggestionTopic string = os.Getenv("ENV") + ".grant.suggestion"
+
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
 	datastore        Datastore
@@ -115,7 +117,7 @@ func (service *Service) InitCodecs() error {
 	service.codecs = make(map[string]*goavro.Codec)
 
 	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
-	service.codecs["grant-suggestions"] = suggestionEventCodec
+	service.codecs["suggestion"] = suggestionEventCodec
 	if err != nil {
 		return err
 	}
@@ -134,7 +136,7 @@ func (service *Service) InitKafka() error {
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
 		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    "grant-suggestions",
+		Topic:    suggestionTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
 		Logger:   kafka.LoggerFunc(log.Printf), // FIXME

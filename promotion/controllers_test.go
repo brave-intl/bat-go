@@ -425,7 +425,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
 
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: "grant-suggestions", NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
 	offset, err := conn.ReadLastOffset()
@@ -530,13 +530,13 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:          strings.Split(kafkaBrokers, ","),
-		Topic:            "grant-suggestions",
+		Topic:            suggestionTopic,
 		Dialer:           service.kafkaDialer,
 		MaxWait:          time.Second,
 		RebalanceTimeout: time.Second,
 		Logger:           kafka.LoggerFunc(log.Printf),
 	})
-	codec := service.codecs["grant-suggestions"]
+	codec := service.codecs["suggestion"]
 
 	// :cry:
 	err = r.SetOffset(offset)
