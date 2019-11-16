@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -25,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/digest"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/pindialer"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
@@ -165,7 +165,7 @@ func submit(req *http.Request) ([]byte, *http.Response, error) {
 		"type": "http.Response.Header",
 	}).Debug(string(jsonHeaders))
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := requestutils.Read(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}

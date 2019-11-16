@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	lowerTxLimit = 1
-	upperTxLimit = 120
+	lowerTxLimit = 0.25
+	upperTxLimit = 120.0
 	localEnv     = "local"
 )
 

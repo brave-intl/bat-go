@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,8 +9,8 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -92,18 +91,12 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 // Claim is the handler for claiming grants
 func Claim(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		defer closers.Panic(r.Body)
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
-		}
-
 		var req grant.ClaimRequest
-		err = json.Unmarshal(body, &req)
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -126,18 +119,12 @@ func Claim(service *grant.Service) handlers.AppHandler {
 // ClaimGrantWithGrantID is the handler for claiming grants using only a grant id
 func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		defer closers.Panic(r.Body)
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
-		}
-
 		var req grant.ClaimGrantWithGrantIDRequest
-		err = json.Unmarshal(body, &req)
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -177,18 +164,12 @@ func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
 // RedeemGrants is the handler for redeeming one or more grants
 func RedeemGrants(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		defer closers.Panic(r.Body)
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
-		}
-
 		var req grant.RedeemGrantsRequest
-		err = json.Unmarshal(body, &req)
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -216,18 +197,12 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 // DrainGrants is the handler for draining all grants in a wallet into a linked uphold account
 func DrainGrants(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		defer closers.Panic(r.Body)
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusBadRequest)
-		}
-
 		var req grant.DrainGrantsRequest
-		err = json.Unmarshal(body, &req)
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)

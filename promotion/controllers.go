@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 
@@ -14,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
@@ -146,17 +145,12 @@ type ClaimResponse struct {
 // ClaimPromotion is the handler for claiming a particular promotion by a wallet
 func ClaimPromotion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		limit := int64(1024 * 1024 * 10) // 10MiB
-		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
+		var req ClaimRequest
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		var req ClaimRequest
-		err = json.Unmarshal(body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
-		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -323,19 +317,12 @@ type SuggestionRequest struct {
 // MakeSuggestion is the handler for making a suggestion using credentials
 func MakeSuggestion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		limit := int64(1024 * 1024 * 10) // 10MiB
-		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
+		var req SuggestionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			// FIXME
-			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		var req SuggestionRequest
-		err = json.Unmarshal(body, &req)
-		if err != nil {
-			// FIXME
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
-		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -376,17 +363,12 @@ type CreatePromotionResponse struct {
 // CreatePromotion is the handler for creating a promotion
 func CreatePromotion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		limit := int64(1024 * 1024 * 10) // 10MiB
-		body, err := ioutil.ReadAll(io.LimitReader(r.Body, limit))
+		var req CreatePromotionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error reading body", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		var req CreatePromotionRequest
-		err = json.Unmarshal(body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
-		}
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)

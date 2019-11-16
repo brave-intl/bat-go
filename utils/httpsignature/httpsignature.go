@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/digest"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures
@@ -82,7 +83,7 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			d.Hash = crypto.SHA256
 
 			if req.Body != nil {
-				body, err := ioutil.ReadAll(req.Body)
+				body, err := requestutils.Read(req.Body)
 				if err != nil {
 					return out, err
 				}
