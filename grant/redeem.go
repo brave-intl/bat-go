@@ -93,11 +93,11 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 		if txInfo.Probi.LessThan(decimal.Zero) {
 			return nil, errors.New("included transaction cannot be for negative BAT")
 		}
-		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
-			return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
+		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(lowerTxLimit))) {
+			return nil, fmt.Errorf("included transaction must be for a minimum of %g BAT", lowerTxLimit)
 		}
-		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
-			return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
+		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(upperTxLimit))) {
+			return nil, fmt.Errorf("included transaction must be for a maxiumum of %g BAT", upperTxLimit)
 		}
 		if txInfo.Destination != SettlementDestination {
 			return nil, errors.New("included transactions must have settlement as their destination")
