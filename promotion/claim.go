@@ -190,9 +190,3 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 
 	return creds, nil
 }
-
-// IsRedeemed checks whether the claim is solved
-func (claim Claim) IsRedeemed() bool {
-	solvedAt, err := claim.RedeemedAt.Value()
-	return err == nil && solvedAt != nil
-}

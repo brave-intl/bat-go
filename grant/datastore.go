@@ -148,8 +148,7 @@ func (pg *Postgres) GetClaimant(grant Grant) (*wallet.Info, error) {
 func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
 	statement := `
 	update claims
-	set redeemed = true,
-			redeemed_at = current_timestamp
+	set redeemed = true, redeemed_at = current_timestamp
 	where id = $1 and promotion_id = $2 and wallet_id = $3 and not redeemed and legacy_claimed
 	returning *`
 
