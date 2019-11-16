@@ -10,8 +10,8 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
-	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -210,7 +210,7 @@ type RedeemGrantsResponse struct {
 
 // Redeem the grants in the included response
 func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*RedeemGrantsResponse, error) {
-	log := lg.Log(ctx)
+	ctx = log.Logger.WithContext(ctx)
 
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, req.Transaction)
 	if err != nil {
@@ -225,7 +225,10 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		log.Errorf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not get wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
@@ -233,9 +236,11 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-
-		log.Errorf("Could not fund wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not fund wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
 
@@ -267,7 +272,7 @@ type DrainGrantsResponse struct {
 
 // Drain the grants for the wallet in the included response
 func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
-	log := lg.Log(ctx)
+	ctx = log.Logger.WithContext(ctx)
 
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
 	if err != nil {
@@ -281,7 +286,10 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*Dr
 	// drain probi from grants into user wallet
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, req.AnonymousAddress.String())
 	if err != nil {
-		log.Errorf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{
 			"providerId": req.WalletInfo.ProviderID,
 		})
