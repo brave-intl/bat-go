@@ -75,6 +75,10 @@ download-vault:
 test:
 	go test -v -p 1 --tags=$(TEST_TAGS) ./...
 
+format:
+	gofmt -s -w ./
+format-lint:
+	make format && make lint
 lint:
 	golangci-lint run -E gofmt -E golint --exclude-use-default=false
 

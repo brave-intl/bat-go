@@ -15,7 +15,6 @@ require (
 	github.com/ethereum/go-ethereum v1.7.2
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/frankban/quicktest v1.4.2 // indirect
-	github.com/garyburd/redigo v1.6.0
 	github.com/getsentry/raven-go v0.2.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gogo/protobuf v1.3.0 // indirect
@@ -38,6 +37,7 @@ require (
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.2.0
+	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-colorable v0.1.1 // indirect
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
@@ -47,17 +47,19 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/pkg/errors v0.8.1
-	github.com/pressly/lg v1.1.1
 	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
+	github.com/rs/xid v1.2.1 // indirect
 	github.com/rs/zerolog v1.14.0
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0
+	github.com/segmentio/kafka-go v0.3.4
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.4.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
+	github.com/zenazn/goji v0.9.0 // indirect
 	golang.org/x/crypto v0.0.0-20190909091759-094676da4a83
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
 	golang.org/x/sys v0.0.0-20190909082730-f460065e899a // indirect
@@ -65,5 +67,6 @@ require (
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/square/go-jose.v2 v2.3.1
 )

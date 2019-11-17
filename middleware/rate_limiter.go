@@ -16,8 +16,8 @@ func RateLimiter(next http.Handler) http.Handler {
 		log.Fatal(err)
 	}
 	quota := throttled.RateQuota{
-		MaxRate:  throttled.PerMin(5),
-		MaxBurst: 5,
+		MaxRate:  throttled.PerMin(60),
+		MaxBurst: 60,
 	}
 	rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
 	if err != nil {

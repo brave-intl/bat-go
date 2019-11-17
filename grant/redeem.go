@@ -6,13 +6,12 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
-	"github.com/pressly/lg"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -26,7 +25,7 @@ type RedeemGrantsRequest struct {
 
 // RedemptionDisabled due to fail safe condition
 func RedemptionDisabled() bool {
-	return safeMode || breakerTripped
+	return safeMode
 }
 
 // Consume one or more grants to fulfill the included transaction for wallet
@@ -94,11 +93,11 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 		if txInfo.Probi.LessThan(decimal.Zero) {
 			return nil, errors.New("included transaction cannot be for negative BAT")
 		}
-		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.New(lowerTxLimit, 0))) {
-			return nil, fmt.Errorf("included transaction must be for a minimum of %d BAT", lowerTxLimit)
+		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(lowerTxLimit))) {
+			return nil, fmt.Errorf("included transaction must be for a minimum of %g BAT", lowerTxLimit)
 		}
-		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.New(upperTxLimit, 0))) {
-			return nil, fmt.Errorf("included transaction must be for a maxiumum of %d BAT", upperTxLimit)
+		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(upperTxLimit))) {
+			return nil, fmt.Errorf("included transaction must be for a maxiumum of %g BAT", upperTxLimit)
 		}
 		if txInfo.Destination != SettlementDestination {
 			return nil, errors.New("included transactions must have settlement as their destination")
@@ -211,12 +210,6 @@ type RedeemGrantsResponse struct {
 
 // Redeem the grants in the included response
 func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*RedeemGrantsResponse, error) {
-	log := lg.Log(ctx)
-
-	if RedemptionDisabled() {
-		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
-	}
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -230,7 +223,10 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 
 	userWallet, err := provider.GetWallet(req.WalletInfo)
 	if err != nil {
-		log.Errorf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
 		raven.CaptureMessage("Could not get wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
@@ -238,9 +234,11 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 	// fund user wallet with probi from grants
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, grantFulfillmentInfo.Destination)
 	if err != nil {
-
-		log.Errorf("Could not fund wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not fund wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
 		return nil, err
 	}
 
@@ -272,12 +270,6 @@ type DrainGrantsResponse struct {
 
 // Drain the grants for the wallet in the included response
 func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
-	log := lg.Log(ctx)
-
-	if RedemptionDisabled() {
-		return nil, errors.New("Grant redemption has been disabled due to fail-safe condition")
-	}
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
 	if err != nil {
 		return nil, err
@@ -290,19 +282,13 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*Dr
 	// drain probi from grants into user wallet
 	_, err = grantWallet.Transfer(*grantFulfillmentInfo.AltCurrency, grantFulfillmentInfo.Probi, req.AnonymousAddress.String())
 	if err != nil {
-		conn := service.redisPool.Get()
-		defer closers.Panic(conn)
-		b := GetBreaker(&conn)
-
-		incErr := b.Increment()
-		if incErr != nil {
-			log.Errorf("Could not increment the breaker!!!")
-			raven.CaptureMessage("Could not increment the breaker!!!", map[string]string{"breaker": "true"})
-			safeMode = true
-		}
-
-		log.Errorf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		log.Ctx(ctx).
+			Error().
+			Err(err).
+			Msgf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
+		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{
+			"providerId": req.WalletInfo.ProviderID,
+		})
 		return nil, err
 	}
 	return &DrainGrantsResponse{grantFulfillmentInfo.Probi}, nil

@@ -8,7 +8,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -16,10 +15,9 @@ import (
 )
 
 const (
-	lowerTxLimit        = 1
-	upperTxLimit        = 120
-	ninetyDaysInSeconds = 60 * 60 * 24 * 90
-	productionEnv       = "production"
+	lowerTxLimit = 0.25
+	upperTxLimit = 120.0
+	localEnv     = "local"
 )
 
 var (
@@ -52,18 +50,16 @@ var (
 	)
 )
 
-// Service contains datastore and redis connections as well as prometheus metrics
+// Service contains datastore as well as prometheus metrics
 type Service struct {
 	datastore              Datastore
-	redisPool              *redis.Pool
 	grantWalletBalanceDesc *prometheus.Desc
 }
 
 // InitService initializes the grant service
-func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
+func InitService(datastore Datastore) (*Service, error) {
 	gs := &Service{
 		datastore: datastore,
-		redisPool: redisPool,
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",
@@ -78,10 +74,10 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 		return nil, errors.Wrap(err, "GrantSignatorPublicKeyHex is invalid")
 	}
 
-	if os.Getenv("ENV") == productionEnv && !refreshBalance {
+	if os.Getenv("ENV") != localEnv && !refreshBalance {
 		return nil, errors.New("refreshBalance must be true in production")
 	}
-	if os.Getenv("ENV") == productionEnv && !testSubmit {
+	if os.Getenv("ENV") != localEnv && !testSubmit {
 		return nil, errors.New("testSubmit must be true in production")
 	}
 
@@ -111,7 +107,7 @@ func InitService(datastore Datastore, redisPool *redis.Pool) (*Service, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if os.Getenv("ENV") == productionEnv {
+	} else if os.Getenv("ENV") != localEnv {
 		return nil, errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 

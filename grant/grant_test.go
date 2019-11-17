@@ -3,6 +3,7 @@ package grant
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -12,16 +13,18 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	"github.com/golang/mock/gomock"
-	"github.com/pressly/lg"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/sirupsen/logrus"
 )
 
 func TestFromCompactJWS(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
 	registerGrantInstrumentation = false
-	_, err := InitService(nil, nil)
+	err := os.Setenv("ENV", "local")
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	_, err = InitService(nil)
 	if err != nil {
 		t.Fatal("unexpected error", err)
 	}
@@ -60,7 +63,11 @@ func TestConsume(t *testing.T) {
 
 	mockDB := NewMockDatastore(mockCtrl)
 
-	service, err := InitService(mockDB, nil)
+	err := os.Setenv("ENV", "local")
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	service, err := InitService(mockDB)
 	if err != nil {
 		t.Error("unexpected error")
 	}
@@ -112,9 +119,7 @@ func TestConsume(t *testing.T) {
 	grant.Probi = grant.AltCurrency.ToProbi(decimal.NewFromFloat(25))
 	grant.ExpiryTimestamp = time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC).Unix()
 
-	logger := logrus.New()
 	ctx := context.Background()
-	ctx = lg.WithLoggerContext(ctx, logger)
 
 	mockDB.EXPECT().UpsertWallet(gomock.Eq(&walletInfo)).Return(nil)
 	mockDB.EXPECT().ClaimGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)

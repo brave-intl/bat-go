@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -15,31 +14,33 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/reputation"
-	"github.com/garyburd/redigo/redis"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	"github.com/pressly/lg"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
+	"github.com/rs/zerolog/log"
 )
 
-var (
-	redisURL = os.Getenv("REDIS_URL")
-)
+func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
+	var output io.Writer
+	output = zerolog.ConsoleWriter{Out: os.Stdout}
+	if os.Getenv("ENV") != "local" {
+		output = os.Stdout
+	}
 
-func setupLogger(ctx context.Context) (context.Context, *logrus.Logger) {
-	logger := logrus.New()
+	// always print out timestamp
+	log := zerolog.New(output).With().Timestamp().Logger()
 
-	//logger.Formatter = &logrus.JSONFormatter{}
+	debug := os.Getenv("DEBUG")
+	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
+		log = log.Level(zerolog.InfoLevel)
+	}
 
-	// Redirect output from the standard logging package "log"
-	lg.RedirectStdlogOutput(logger)
-	lg.DefaultLogger = logger
-	ctx = lg.WithLoggerContext(ctx, logger)
-	return ctx, logger
+	return log.WithContext(ctx), &log
 }
 
-func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *chi.Mux) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -58,41 +59,34 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	r.Use(middleware.RateLimiter)
 	if logger != nil {
 		// Also handles panic recovery
+		r.Use(hlog.NewHandler(*logger))
+		r.Use(hlog.UserAgentHandler("user_agent"))
+		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
-	}
-
-	redisAddress := "localhost:6379"
-	if len(redisURL) > 0 {
-		redisAddress = strings.TrimPrefix(redisURL, "redis://")
-	}
-	rp := &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", redisAddress) },
 	}
 
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
-	grantService, err := grant.InitService(grantPg, rp)
+	grantService, err := grant.InitService(grantPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	pg, err := promotion.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	promotionService, err := promotion.InitService(pg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		log.Panic().Err(err)
 	}
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
@@ -104,8 +98,8 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
-		if env == "production" {
-			log.Panic(errors.New("REPUTATION_SERVER is missing in production environment"))
+		if env != "local" {
+			log.Panic().Err(errors.New("REPUTATION_SERVER is missing in production environment"))
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
@@ -114,20 +108,37 @@ func setupRouter(ctx context.Context, logger *logrus.Logger) (context.Context, *
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	return ctx, r
+	return ctx, r, promotionService
+}
+
+func jobWorker(context context.Context, job func(context.Context) (bool, error), duration time.Duration) {
+	ticker := time.NewTicker(duration)
+	for {
+		attempted, err := job(context)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
+		if !attempted || err != nil {
+			<-ticker.C
+		}
+	}
 }
 
 func main() {
-	serverCtx, logger := setupLogger(context.Background())
+	serverCtx, _ := setupLogger(context.Background())
+	logger := log.Ctx(serverCtx)
+	subLog := logger.Info().Str("prefix", "main")
+	subLog.Msg("Starting server")
 
-	logger.WithFields(logrus.Fields{"prefix": "main"}).Info("Starting server")
+	serverCtx, r, service := setupRouter(serverCtx, logger)
 
-	serverCtx, r := setupRouter(serverCtx, logger)
+	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
+	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic(err)
+		logger.Panic().Err(err)
 	}
 }

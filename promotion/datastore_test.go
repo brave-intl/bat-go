@@ -640,7 +640,8 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 
 	mockClaimWorker := NewMockClaimWorker(mockCtrl)
 
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err := pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
@@ -673,11 +674,13 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 
 	// One signing job should run
 	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(creds, nil)
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(true, attempted)
 	suite.Require().NoError(err)
 
 	// No further jobs should run
-	err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)
 }
 

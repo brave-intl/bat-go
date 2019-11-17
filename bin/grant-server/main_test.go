@@ -44,7 +44,8 @@ func init() {
 		log.Fatalln(err)
 	}
 
-	handler = chi.ServerBaseContext(setupRouter(setupLogger(context.Background())))
+	ctx, r, _ := setupRouter(setupLogger(context.Background()))
+	handler = chi.ServerBaseContext(ctx, r)
 }
 
 func TestPing(t *testing.T) {
@@ -70,8 +71,8 @@ func TestPing(t *testing.T) {
 func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet wallet.Info) error {
 	payload := fmt.Sprintf(`{
 			"wallet": {
-				"altcurrency": "BAT", 
-				"provider": "uphold", 
+				"altcurrency": "BAT",
+				"provider": "uphold",
 				"paymentId": "%s",
 				"providerId": "%s",
 				"publicKey": "%s"

@@ -58,11 +58,11 @@ type Datastore interface {
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
 	// RunNextClaimJob to sign claim credentials if there is a claim waiting
-	RunNextClaimJob(ctx context.Context, worker ClaimWorker) error
+	RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error)
 	// InsertSuggestion inserts a transaction awaiting validation
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
-	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error
+	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -385,7 +385,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
 			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
-				promos.approximate_value * 
+				promos.approximate_value *
 				promos.suggestions_per_grant )::int as suggestions_per_grant,
 			promos.remaining_grants,
 			promos.platform,
@@ -409,7 +409,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			( wallet_claims.legacy_claimed is true or
 				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
 				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
-			) 
+			)
 		order by promos.created_at;`
 
 	if legacy {
@@ -563,11 +563,12 @@ ORDER BY created_at DESC
 	return nil, nil
 }
 
-// RunNextClaimJob to sign claim credentials if there is a claim waiting
-func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) error {
+// RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
+func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()
+	attempted := false
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
 	type SigningJob struct {
@@ -581,7 +582,7 @@ select
 	issuers.*,
 	claim_cred.claim_id,
 	claim_cred.blinded_creds
-from 
+from
 	(select *
 	from claim_creds
 	where batch_proof is null
@@ -595,35 +596,36 @@ on claim_cred.issuer_id = issuers.id`
 	err = tx.Select(&jobs, statement)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	if len(jobs) != 1 {
 		_ = tx.Rollback()
-		return nil
+		return attempted, nil
 	}
 
 	job := jobs[0]
 
+	attempted = true
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
-	return nil
+	return attempted, nil
 }
 
 // InsertSuggestion inserts a transaction awaiting validation
@@ -646,10 +648,11 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 }
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
-func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) error {
+func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()
+	attempted := false
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
 	// FIXME
@@ -670,40 +673,41 @@ limit 1`
 	err = tx.Select(&jobs, statement)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	if len(jobs) != 1 {
 		_ = tx.Rollback()
-		return nil
+		return attempted, nil
 	}
 
 	job := jobs[0]
+	attempted = true
 
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 	if err != nil {
 		// FIXME certain errors are not recoverable
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
 	if err != nil {
 		_ = tx.Rollback()
-		return err
+		return attempted, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return attempted, err
 	}
 
-	return nil
+	return attempted, nil
 }

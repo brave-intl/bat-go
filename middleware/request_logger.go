@@ -34,22 +34,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/getsentry/raven-go"
 	"github.com/go-chi/chi/middleware"
-	"github.com/pressly/lg"
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
 )
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
-// Modified version of RequestLogger from github.com/pressly/lg
+// Modified version of RequestLogger from github.com/rs/zerolog
 // Added support for sending captured panic to Sentry
-func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	httpLogger := &lg.HTTPLogger{Logger: logger}
-
+func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.EscapedPath() == "/metrics" { // Skip logging prometheus metric scrapes
@@ -57,16 +54,17 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 				return
 			}
 
-			entry := httpLogger.NewLogEntry(r)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-
 			t1 := time.Now()
+			entry := hlog.FromRequest(r)
+			createSubLog(r, 0).
+				Msg("request started")
 			defer func() {
 				t2 := time.Now()
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
-					entry.Panic(rec, debug.Stack())
+					entry.Panic().Stack()
 
 					// Send panic info to Sentry
 					recStr := fmt.Sprint(rec)
@@ -83,13 +81,34 @@ func RequestLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 					}.ServeHTTP(w, r)
 				}
 
+				status := ww.Status()
 				// Log the entry, the request is complete.
-				entry.Write(ww.Status(), ww.BytesWritten(), t2.Sub(t1))
+				createSubLog(r, status).
+					Int("status", status).
+					Int("size", ww.BytesWritten()).
+					Dur("duration", t2.Sub(t1)).
+					Msg("request complete")
 			}()
 
-			r = r.WithContext(lg.WithLogEntry(r.Context(), entry))
+			r = r.WithContext(entry.WithContext(r.Context()))
 			next.ServeHTTP(ww, r)
 		}
 		return http.HandlerFunc(fn)
 	}
+}
+
+func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
+	logger := hlog.FromRequest(r)
+	if status >= 400 && status < 499 {
+		subLog = logger.Warn()
+	} else if status >= 500 {
+		subLog = logger.Error()
+	} else {
+		subLog = logger.Info()
+	}
+	return subLog.
+		Str("host", r.Host).
+		Str("http_proto", r.Proto).
+		Str("http_method", r.Method).
+		Str("uri", r.URL.EscapedPath())
 }
