@@ -31,6 +31,12 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 
 	// always print out timestamp
 	log := zerolog.New(output).With().Timestamp().Logger()
+
+	debug := os.Getenv("DEBUG")
+	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
+		log = log.Level(zerolog.InfoLevel)
+	}
+
 	return log.WithContext(ctx), &log
 }
 
