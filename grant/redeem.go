@@ -210,8 +210,6 @@ type RedeemGrantsResponse struct {
 
 // Redeem the grants in the included response
 func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*RedeemGrantsResponse, error) {
-	ctx = log.Logger.WithContext(ctx)
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, req.Transaction)
 	if err != nil {
 		return nil, err
@@ -272,8 +270,6 @@ type DrainGrantsResponse struct {
 
 // Drain the grants for the wallet in the included response
 func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*DrainGrantsResponse, error) {
-	ctx = log.Logger.WithContext(ctx)
-
 	grantFulfillmentInfo, err := service.Consume(ctx, req.WalletInfo, "")
 	if err != nil {
 		return nil, err
