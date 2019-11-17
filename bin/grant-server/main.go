@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -22,8 +23,14 @@ import (
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
+	var output io.Writer
+	output = zerolog.ConsoleWriter{Out: os.Stdout}
+	if os.Getenv("ENV") != "local" {
+		output = os.Stdout
+	}
+
 	// always print out timestamp
-	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+	log := zerolog.New(output).With().Timestamp().Logger()
 	return log.WithContext(ctx), &log
 }
 
