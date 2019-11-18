@@ -28,7 +28,6 @@ var (
 	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 	grantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
-	grantPublicKey               ed25519.PublicKey
 	grantWallet                  *uphold.Wallet
 	refreshBalance               = true  // for testing we can disable balance refresh
 	testSubmit                   = true  // for testing we can disable testing tx submit
@@ -66,12 +65,6 @@ func InitService(datastore Datastore) (*Service, error) {
 			[]string{},
 			prometheus.Labels{},
 		),
-	}
-
-	var err error
-	grantPublicKey, err = hex.DecodeString(GrantSignatorPublicKeyHex)
-	if err != nil {
-		return nil, errors.Wrap(err, "GrantSignatorPublicKeyHex is invalid")
 	}
 
 	if os.Getenv("ENV") != localEnv && !refreshBalance {

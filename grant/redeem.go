@@ -178,30 +178,6 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	return &redeemTxInfo, nil
 }
 
-// GetRedeemedIDs returns a list of any grants that have already been redeemed
-func (service *Service) GetRedeemedIDs(ctx context.Context, Grants []string) ([]string, error) {
-
-	// 1. Check grant signatures and decode
-	grants, err := DecodeGrants(grantPublicKey, Grants)
-	if err != nil {
-		return nil, err
-	}
-	grantCount := len(grants)
-	results := make([]string, 0, grantCount)
-
-	for _, grant := range grants {
-		grantRedeemed, err := service.datastore.HasGrantBeenRedeemed(grant)
-		if err != nil {
-			return nil, err
-		}
-		if grantRedeemed {
-			results = append(results, grant.GrantID.String())
-		}
-	}
-
-	return results, nil
-}
-
 // RedeemGrantsResponse includes information about the transaction to settlement and the grant funds used
 type RedeemGrantsResponse struct {
 	wallet.TransactionInfo

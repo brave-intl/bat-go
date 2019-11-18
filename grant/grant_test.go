@@ -2,13 +2,12 @@ package grant
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"reflect"
 	"sort"
 	"testing"
 	"time"
 
+	promotion "github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -16,40 +15,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
-
-func TestFromCompactJWS(t *testing.T) {
-	GrantSignatorPublicKeyHex = "f2eb37b5eb30ad5b888c680ab8848a46fc2a6be81324de990ad20dc9b6e569fe"
-	registerGrantInstrumentation = false
-	err := os.Setenv("ENV", "local")
-	if err != nil {
-		t.Fatal("unexpected error", err)
-	}
-	_, err = InitService(nil)
-	if err != nil {
-		t.Fatal("unexpected error", err)
-	}
-
-	expectedGrantJSON := []byte(`{"altcurrency":"BAT","grantId":"9614ade7-58af-4df0-86c6-2f70051b43de","probi":"30000000000000000000","promotionId":"880309fc-df27-40a8-8d51-9cf39885e61d","maturityTime":1511769862,"expiryTime":1513843462}`)
-
-	jwsGrant := "eyJhbGciOiJFZERTQSIsImtpZCI6IiJ9.eyJhbHRjdXJyZW5jeSI6IkJBVCIsImdyYW50SWQiOiI5NjE0YWRlNy01OGFmLTRkZjAtODZjNi0yZjcwMDUxYjQzZGUiLCJwcm9iaSI6IjMwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvbW90aW9uSWQiOiI4ODAzMDlmYy1kZjI3LTQwYTgtOGQ1MS05Y2YzOTg4NWU2MWQiLCJtYXR1cml0eVRpbWUiOjE1MTE3Njk4NjIsImV4cGlyeVRpbWUiOjE1MTM4NDM0NjJ9.OOEBJUHPE21OyFw5Vq1tRTxYQc7aEL-KL5Lb4nb1TZn_3LFkXEPY7bNo0GhJ6k9X2UkZ19rnfBbpXHKuqBupDA"
-
-	expectedGrant := Grant{}
-	err = json.Unmarshal(expectedGrantJSON, &expectedGrant)
-	if err != nil {
-		t.Fatal("unexpected error", err)
-	}
-
-	grant, err := FromCompactJWS(grantPublicKey, jwsGrant)
-	if err != nil {
-		t.Fatal("unexpected error", err)
-	}
-
-	if !reflect.DeepEqual(*grant, expectedGrant) {
-		t.Fatal("grant not equal", err)
-	}
-
-	// TODO add incorrect signature tests
-}
 
 func TestConsume(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f03bccbcd2314d721f2375a669e7b817ef61067ab18a5da5df5b24b73feba8b7"
@@ -110,8 +75,10 @@ func TestConsume(t *testing.T) {
 	transaction := "eyJoZWFkZXJzIjp7ImRpZ2VzdCI6IlNIQS0yNTY9WFg0YzgvM0J4ejJkZWNkakhpY0xWaXJ5dTgxbWdGNkNZTTNONFRHc0xoTT0iLCJzaWduYXR1cmUiOiJrZXlJZD1cInByaW1hcnlcIixhbGdvcml0aG09XCJlZDI1NTE5XCIsaGVhZGVycz1cImRpZ2VzdFwiLHNpZ25hdHVyZT1cIjI4TitabzNodlRRWmR2K2trbGFwUE5IY29OMEpLdWRiSU5GVnlOSm0rWDBzdDhzbXdzYVlHaTJQVHFRbjJIVWdacUp4Q2NycEpTMWpxZHdyK21RNEN3PT1cIiJ9LCJvY3RldHMiOiJ7XCJkZW5vbWluYXRpb25cIjp7XCJhbW91bnRcIjpcIjI1XCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImZvb0BiYXIuY29tXCJ9In0="
 
 	grantID, _ := uuid.FromString("18f7cada-2e9c-4c6e-a541-b2032c43a92e")
+	promotionID := uuid.NewV4()
 	var grant Grant
 	grant.GrantID = grantID
+	grant.PromotionID = promotionID
 	{
 		tmp := altcurrency.BAT
 		grant.AltCurrency = &tmp
@@ -121,9 +88,12 @@ func TestConsume(t *testing.T) {
 
 	ctx := context.Background()
 
+	promo := &promotion.Promotion{Type: "ads", ID: promotionID}
+
 	mockDB.EXPECT().UpsertWallet(gomock.Eq(&walletInfo)).Return(nil)
-	mockDB.EXPECT().ClaimGrantForWallet(gomock.Eq(grant), gomock.Eq(walletInfo)).Return(nil)
-	err = service.Claim(ctx, walletInfo, grant)
+	mockDB.EXPECT().GetPromotion(gomock.Eq(promotionID)).Return(promo, nil)
+	mockDB.EXPECT().ClaimPromotionForWallet(gomock.Eq(promo), gomock.Eq(&walletInfo)).Return(&promotion.Claim{}, nil)
+	_, err = service.ClaimPromotion(ctx, walletInfo, grant.PromotionID)
 	if err != nil {
 		t.Error("Claim failed")
 	}
