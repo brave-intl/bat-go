@@ -75,6 +75,14 @@ type Claim struct {
 	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
 }
 
+// SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
+func (claim *Claim) SuggestionsNeeded(promotion *Promotion) (int, error) {
+	if claim.PromotionID != promotion.ID {
+		return 0, errors.New("incorrect promotion passed")
+	}
+	return int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).Round(0).IntPart()), nil
+}
+
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
 type ClaimCreds struct {
 	ID           uuid.UUID        `db:"claim_id"`
@@ -141,7 +149,10 @@ func (service *Service) ClaimPromotionForWallet(
 			return nil, errors.New("you cannot claim this promotion")
 		}
 
-		suggestionsNeeded := int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).IntPart())
+		suggestionsNeeded, err := claim.SuggestionsNeeded(promotion)
+		if err != nil {
+			return nil, err
+		}
 		if len(blindedCreds) != suggestionsNeeded {
 			return nil, errors.New("wrong number of blinded tokens included")
 		}
