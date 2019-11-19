@@ -297,10 +297,12 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Available)
 
-	adClaimValue := decimal.NewFromFloat(30.0)
-	adSuggestionsPerGrant := int(30 * decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue).IntPart())
-	_, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
+	// 30.7 * 4 = 122.8 => test differences in rounding
+	adClaimValue := decimal.NewFromFloat(30.7)
+	claim, err := pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
+	adSuggestionsPerGrant, err := claim.SuggestionsNeeded(promotion)
+	suite.Require().NoError(err)
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")

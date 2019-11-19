@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -21,6 +20,9 @@ import (
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
+
+// GitCommit at the time of build, must be injected via ldflags
+var GitCommit string
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	var output io.Writer
@@ -68,25 +70,25 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
 	grantService, err := grant.InitService(grantPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
 	pg, err := promotion.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
 	promotionService, err := promotion.InitService(pg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
@@ -99,7 +101,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
 		if env != "local" {
-			log.Panic().Err(errors.New("REPUTATION_SERVER is missing in production environment"))
+			log.Panic().Msg("REPUTATION_SERVER is missing in production environment")
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
@@ -128,7 +130,7 @@ func main() {
 	serverCtx, _ := setupLogger(context.Background())
 	logger := log.Ctx(serverCtx)
 	subLog := logger.Info().Str("prefix", "main")
-	subLog.Msg("Starting server")
+	subLog.Str("commit", GitCommit).Msg("Starting server")
 
 	serverCtx, r, service := setupRouter(serverCtx, logger)
 
@@ -139,6 +141,6 @@ func main() {
 	err := srv.ListenAndServe()
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		logger.Panic().Err(err)
+		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 }
