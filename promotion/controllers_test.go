@@ -779,3 +779,128 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
+
+func (suite *ControllersTestSuite) TestClaimCompatability() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+	}
+
+	scenarios := []struct {
+		Legacy           bool
+		Redeemed         bool
+		ChecksReputation bool
+		WillSign         bool
+		Type             string
+	}{
+		{
+			Legacy:           false,
+			Redeemed:         false,
+			ChecksReputation: true,
+			Type:             "ugp",
+		},
+		{
+			Legacy:           false,
+			Redeemed:         true,
+			ChecksReputation: false,
+			Type:             "ugp",
+		},
+		{
+			Legacy:           true,
+			Redeemed:         false,
+			ChecksReputation: false,
+			Type:             "ugp",
+		},
+		{
+			Legacy:           true,
+			Redeemed:         true,
+			ChecksReputation: false,
+			Type:             "ugp",
+		},
+	}
+	for _, test := range scenarios {
+		walletID := uuid.NewV4()
+		publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+		suite.Require().NoError(err, "Failed to create wallet keypair")
+		bat := altcurrency.BAT
+		hexPublicKey := hex.EncodeToString(publicKey)
+		w := &wallet.Info{
+			ID:          walletID.String(),
+			Provider:    "uphold",
+			ProviderID:  "-",
+			AltCurrency: &bat,
+			PublicKey:   hexPublicKey,
+			LastBalance: nil,
+		}
+		suite.Require().NoError(pg.InsertWallet(w), "could not insert wallet")
+
+		blindedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
+		signedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
+		batchProof := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+
+		promotionValue := decimal.NewFromFloat(0.25)
+		promotion, err := pg.CreatePromotion("ugp", 1, promotionValue, "")
+		suite.Require().NoError(err, "Create promotion should succeed")
+
+		issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: hexPublicKey}
+		issuer, err = pg.InsertIssuer(issuer)
+		suite.Assert().NoError(err, "Insert issuer should succeed")
+
+		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+		var claim *Claim
+		if test.Legacy {
+			claim, err = service.datastore.CreateClaim(promotion.ID, w.ID, promotionValue, decimal.NewFromFloat(0.0))
+			suite.Require().NoError(err, "an error occured when creating a claim for wallet")
+			_, err = pg.DB.Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
+			suite.Require().NoError(err, "an error occured when setting legacy or redeemed")
+		}
+
+		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+			BatchProof:   batchProof,
+			SignedTokens: signedCreds,
+		}, nil)
+
+		if test.Redeemed {
+			// if redeemed, the mockCB's SignCredentials is used up here
+			// otherwise used up in suite.ClaimGrant below
+			if !test.Legacy {
+				mockReputation.EXPECT().
+					IsWalletReputable(
+						gomock.Any(),
+						gomock.Any(),
+						gomock.Any(),
+					).
+					Return(
+						true,
+						nil,
+					)
+			}
+			_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
+		}
+
+		if test.ChecksReputation {
+			mockReputation.EXPECT().
+				IsWalletReputable(
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
+				).
+				Return(
+					true,
+					nil,
+				)
+		}
+
+		// if NOT redeemed, the mockCB's SignCredentials will be used up here
+		_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
+	}
+}
