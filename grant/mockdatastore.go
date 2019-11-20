@@ -50,21 +50,6 @@ func (mr *MockDatastoreMockRecorder) UpsertWallet(wallet interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWallet", reflect.TypeOf((*MockDatastore)(nil).UpsertWallet), wallet)
 }
 
-// GetClaimantProviderID mocks base method
-func (m *MockDatastore) GetClaimantProviderID(grant Grant) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClaimantProviderID", grant)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetClaimantProviderID indicates an expected call of GetClaimantProviderID
-func (mr *MockDatastoreMockRecorder) GetClaimantProviderID(grant interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimantProviderID", reflect.TypeOf((*MockDatastore)(nil).GetClaimantProviderID), grant)
-}
-
 // RedeemGrantForWallet mocks base method
 func (m *MockDatastore) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
 	m.ctrl.T.Helper()
@@ -77,35 +62,6 @@ func (m *MockDatastore) RedeemGrantForWallet(grant Grant, wallet wallet.Info) er
 func (mr *MockDatastoreMockRecorder) RedeemGrantForWallet(grant, wallet interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemGrantForWallet", reflect.TypeOf((*MockDatastore)(nil).RedeemGrantForWallet), grant, wallet)
-}
-
-// ClaimGrantForWallet mocks base method
-func (m *MockDatastore) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimGrantForWallet", grant, wallet)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ClaimGrantForWallet indicates an expected call of ClaimGrantForWallet
-func (mr *MockDatastoreMockRecorder) ClaimGrantForWallet(grant, wallet interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimGrantForWallet", reflect.TypeOf((*MockDatastore)(nil).ClaimGrantForWallet), grant, wallet)
-}
-
-// HasGrantBeenRedeemed mocks base method
-func (m *MockDatastore) HasGrantBeenRedeemed(grant Grant) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasGrantBeenRedeemed", grant)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// HasGrantBeenRedeemed indicates an expected call of HasGrantBeenRedeemed
-func (mr *MockDatastoreMockRecorder) HasGrantBeenRedeemed(grant interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasGrantBeenRedeemed", reflect.TypeOf((*MockDatastore)(nil).HasGrantBeenRedeemed), grant)
 }
 
 // GetGrantsOrderedByExpiry mocks base method
