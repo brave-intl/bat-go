@@ -343,6 +343,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	mockReputation.EXPECT().IsWalletReputable(
 		gomock.Any(),
 		gomock.Any(),
+		gomock.Any(),
 	).Return(
 		true,
 		nil,
@@ -452,6 +453,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 	).Return(
