@@ -124,7 +124,7 @@ func (service *Service) ClaimPromotionForWallet(
 		return &claim.ID, nil
 	}
 
-	walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID)
+	walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
 	if err != nil {
 		return nil, err
 	}
