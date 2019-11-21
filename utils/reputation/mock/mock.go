@@ -35,16 +35,16 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // IsWalletReputable mocks base method
-func (m *MockClient) IsWalletReputable(ctx context.Context, id go_uuid.UUID) (bool, error) {
+func (m *MockClient) IsWalletReputable(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsWalletReputable", ctx, id)
+	ret := m.ctrl.Call(m, "IsWalletReputable", ctx, id, platform)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsWalletReputable indicates an expected call of IsWalletReputable
-func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
 }
