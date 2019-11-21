@@ -302,6 +302,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	mockReputation.EXPECT().IsWalletReputable(
 		gomock.Any(),
 		gomock.Any(),
+		gomock.Any(),
 	).Return(
 		true,
 		nil,
@@ -381,6 +382,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
 
 	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 	).Return(
