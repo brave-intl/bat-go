@@ -117,6 +117,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
 			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
 			"id": "` + promotion.ID.String() + `",
+			"legacyClaimed": ` + strconv.FormatBool(promotion.LegacyClaimed) + `,
 			"platform": "` + promotion.Platform + `",
 			"publicKeys" : [],
 			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
