@@ -392,7 +392,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.platform,
 			promos.active,
 			promos.public_keys,
-			false as legacy_claimed,
+			coalesce(false, wallet_claims.legacy_claimed) as legacy_claimed,
 			true as available
 		from
 		  (
@@ -418,11 +418,11 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 		statement = `
 		select
 			promotions.*,
-			false as legacy_claimed,
+			coalesce(false, wallet_claims.legacy_claimed) as legacy_claimed,
 			true as available
 		from promotions left join (
-      select * from claims where claims.wallet_id = $1
-    ) wallet_claims on promotions.id = wallet_claims.promotion_id
+			select * from claims where claims.wallet_id = $1
+		) wallet_claims on promotions.id = wallet_claims.promotion_id
 		where
 			promotions.active and wallet_claims.redeemed is distinct from true and
 			( promotions.platform = '' or promotions.platform = $2) and
@@ -453,30 +453,34 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			false as legacy_claimed,
+			coalesce(false, claims.legacy_claimed) as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
-		promotions left join issuers on promotions.id = issuers.promotion_id
+		promotions 
+			left join issuers on promotions.id = issuers.promotion_id
+			left join claims on promotions.id = claims.promotion_id
 		where promotions.promotion_type = 'ugp' and
 			( promotions.platform = '' or promotions.platform = $1) and
 			promotions.active and promotions.remaining_grants > 0
-		group by promotions.id
+		group by promotions.id, claims.legacy_claimed as true
 		order by promotions.created_at;`
 
 	if legacy {
 		statement = `
 		select
 			promotions.*,
-			false as legacy_claimed,
+			coalesce(false, claims.legacy_claimed) as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
-		promotions left join issuers on promotions.id = issuers.promotion_id
+		promotions 
+			left join issuers on promotions.id = issuers.promotion_id
+			left join claims on promotions.id = claims.promotion_id
 		where promotions.promotion_type = 'ugp' and promotions.active and
 			promotions.remaining_grants > 0 and
 			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id
+		group by promotions.id, claims.legacy_claimed as true
 		order by promotions.created_at;`
 	}
 
