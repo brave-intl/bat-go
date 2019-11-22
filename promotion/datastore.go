@@ -463,7 +463,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 		where promotions.promotion_type = 'ugp' and
 			( promotions.platform = '' or promotions.platform = $1) and
 			promotions.active and promotions.remaining_grants > 0
-		group by promotions.id, claims.legacy_claimed as true
+		group by promotions.id, claims.legacy_claimed
 		order by promotions.created_at;`
 
 	if legacy {
@@ -480,7 +480,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 		where promotions.promotion_type = 'ugp' and promotions.active and
 			promotions.remaining_grants > 0 and
 			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id, claims.legacy_claimed as true
+		group by promotions.id, claims.legacy_claimed
 		order by promotions.created_at;`
 	}
 
