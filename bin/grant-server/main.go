@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -21,6 +20,9 @@ import (
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
+
+// GitCommit at the time of build, must be injected via ldflags
+var GitCommit string
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	var output io.Writer
@@ -65,28 +67,46 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(middleware.RequestLogger(logger))
 	}
 
+	roDB := os.Getenv("RO_DATABASE_URL")
+
+	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	if len(roDB) > 0 {
+		grantRoPg, err = grant.NewPostgres(roDB, false)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
 	}
 
-	grantService, err := grant.InitService(grantPg)
+	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
+	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	if len(roDB) > 0 {
+		roPg, err = promotion.NewPostgres(roDB, false)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
 	}
 
-	promotionService, err := promotion.InitService(pg)
+	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		log.Panic().Err(err)
+		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
@@ -99,7 +119,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
 		if env != "local" {
-			log.Panic().Err(errors.New("REPUTATION_SERVER is missing in production environment"))
+			log.Panic().Msg("REPUTATION_SERVER is missing in production environment")
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
@@ -128,7 +148,7 @@ func main() {
 	serverCtx, _ := setupLogger(context.Background())
 	logger := log.Ctx(serverCtx)
 	subLog := logger.Info().Str("prefix", "main")
-	subLog.Msg("Starting server")
+	subLog.Str("commit", GitCommit).Msg("Starting server")
 
 	serverCtx, r, service := setupRouter(serverCtx, logger)
 
@@ -139,6 +159,6 @@ func main() {
 	err := srv.ListenAndServe()
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
-		logger.Panic().Err(err)
+		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 }

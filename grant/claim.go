@@ -12,11 +12,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// ClaimGrantWithGrantIDRequest is a request to claim a grant
-type ClaimGrantWithGrantIDRequest struct {
-	WalletInfo wallet.Info `json:"wallet" valid:"required"`
-}
-
 // ClaimRequest is a request to claim a grant
 type ClaimRequest struct {
 	PromotionID uuid.UUID   `json:"promotionId" valid:"-"`
@@ -26,26 +21,6 @@ type ClaimRequest struct {
 // ClaimResponse includes information about the claimed grant
 type ClaimResponse struct {
 	ApproximateValue decimal.Decimal `json:"approximateValue" db:"approximate_value"`
-}
-
-// Claim registers a claim on behalf of a user wallet to a particular Grant.
-// Registered claims are enforced by RedeemGrantsRequest.Verify.
-func (service *Service) Claim(ctx context.Context, wallet wallet.Info, grant Grant) error {
-	err := service.datastore.UpsertWallet(&wallet)
-	if err != nil {
-		return errors.Wrap(err, "Error saving wallet")
-	}
-
-	err = service.datastore.ClaimGrantForWallet(grant, wallet)
-	if err != nil {
-		log.Ctx(ctx).
-			Error().
-			Msg("Attempt to claim previously claimed grant!")
-		return err
-	}
-	claimedGrantsCounter.With(prometheus.Labels{}).Inc()
-
-	return nil
 }
 
 // ClaimPromotion registers a claim on behalf of a user wallet to a particular Promotion.

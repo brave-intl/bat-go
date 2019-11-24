@@ -65,6 +65,31 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 }
 
+// ReadOnlyDatastore includes all database methods that can be made with a read only db connection
+type ReadOnlyDatastore interface {
+	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
+	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
+	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	// GetAvailablePromotions returns the list of available promotions for all wallets
+	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	// GetClaimCreds returns the claim credentials for a ClaimID
+	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
+	// GetPromotion by ID
+	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
+	// GetIssuer by PromotionID and cohort
+	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
+	// GetIssuerByPublicKey
+	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
+	// GetWallet by ID
+	GetWallet(id uuid.UUID) (*wallet.Info, error)
+	// GetClaimSummary gets the number of grants for a specific type
+	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
+	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
+	// with the given promotion and returns the grant if so
+	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+}
+
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
 	*sqlx.DB
@@ -97,7 +122,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(2)
+	err = m.Migrate(3)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}

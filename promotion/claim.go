@@ -8,6 +8,7 @@ import (
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/jmoiron/sqlx/types"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -71,6 +72,15 @@ type Claim struct {
 	Redeemed         bool            `db:"redeemed"`
 	Bonus            decimal.Decimal `db:"bonus"`
 	LegacyClaimed    string          `db:"legacy_claimed"`
+	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
+}
+
+// SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
+func (claim *Claim) SuggestionsNeeded(promotion *Promotion) (int, error) {
+	if claim.PromotionID != promotion.ID {
+		return 0, errors.New("incorrect promotion passed")
+	}
+	return int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).Round(0).IntPart()), nil
 }
 
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
@@ -139,7 +149,10 @@ func (service *Service) ClaimPromotionForWallet(
 			return nil, errors.New("you cannot claim this promotion")
 		}
 
-		suggestionsNeeded := int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).IntPart())
+		suggestionsNeeded, err := claim.SuggestionsNeeded(promotion)
+		if err != nil {
+			return nil, err
+		}
 		if len(blindedCreds) != suggestionsNeeded {
 			return nil, errors.New("wrong number of blinded tokens included")
 		}

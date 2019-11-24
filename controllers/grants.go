@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	uuid "github.com/satori/go.uuid"
 )
 
 // GrantsRouter is the router for grant endpoints
@@ -36,7 +35,6 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	r.Method("GET", "/active", middleware.InstrumentHandler("GetActive", GetActive(service)))
 	r.Method("POST", "/drain", middleware.InstrumentHandler("DrainGrants", DrainGrants(service)))
 	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
-	r.Method("PUT", "/{grantId}", middleware.InstrumentHandler("ClaimGrant", ClaimGrantWithGrantID(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
 }
@@ -112,51 +110,6 @@ func Claim(service *grant.Service) handlers.AppHandler {
 		if err := json.NewEncoder(w).Encode(&grant.ClaimResponse{ApproximateValue: claim.ApproximateValue}); err != nil {
 			panic(err)
 		}
-		return nil
-	})
-}
-
-// ClaimGrantWithGrantID is the handler for claiming grants using only a grant id
-func ClaimGrantWithGrantID(service *grant.Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req grant.ClaimGrantWithGrantIDRequest
-		err := requestutils.ReadJSON(r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		if grantID := chi.URLParam(r, "grantId"); grantID != "" {
-			if !govalidator.IsUUIDv4(grantID) {
-				return &handlers.AppError{
-					Message: "Error validating request url parameter",
-					Code:    http.StatusBadRequest,
-					Data: map[string]interface{}{
-						"validationErrors": map[string]string{
-							"grantId": "grantId must be a uuidv4",
-						},
-					},
-				}
-			}
-
-			var grant grant.Grant
-			grant.GrantID, err = uuid.FromString(grantID)
-			if err != nil {
-				return handlers.WrapError(err, "Error claiming grant", http.StatusInternalServerError)
-			}
-
-			err = service.Claim(r.Context(), req.WalletInfo, grant)
-			if err != nil {
-				// FIXME not all errors are 4xx
-				return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
-			}
-		}
-
-		w.WriteHeader(http.StatusOK)
 		return nil
 	})
 }

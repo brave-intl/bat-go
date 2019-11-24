@@ -22,18 +22,20 @@ import (
 type Datastore interface {
 	// UpsertWallet inserts the given wallet
 	UpsertWallet(wallet *wallet.Info) error
-	// GetClaimantID returns the providerID who has claimed a given grant
-	GetClaimantProviderID(grant Grant) (string, error)
 	// RedeemGrantForWallet redeems a claimed grant for a wallet
 	RedeemGrantForWallet(grant Grant, wallet wallet.Info) error
-	// ClaimGrantForWallet makes a claim to a particular Grant by a wallet
-	ClaimGrantForWallet(grant Grant, wallet wallet.Info) error
-	// HasGrantBeenRedeemed checks to see if a grant has been claimed
-	HasGrantBeenRedeemed(grant Grant) (bool, error)
 	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
 	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
 	// ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
 	ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error)
+	// GetPromotion by ID
+	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
+}
+
+// ReadOnlyDatastore includes all database methods that can be made with a read only db connection
+type ReadOnlyDatastore interface {
+	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
+	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
 }
@@ -70,7 +72,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(2)
+	err = m.Migrate(3)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
@@ -115,40 +117,11 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	return nil
 }
 
-// GetClaimantProviderID returns the providerID who has claimed a given grant
-func (pg *Postgres) GetClaimantProviderID(grant Grant) (string, error) {
-	wallet, err := pg.GetClaimant(grant)
-	if wallet != nil {
-		return wallet.ProviderID, err
-	}
-	return "", err
-}
-
-// GetClaimant returns info about the wallet which has claimed a given grant
-func (pg *Postgres) GetClaimant(grant Grant) (*wallet.Info, error) {
-	statement := `
-	select
-		wallets.*
-	from wallets left join claims on wallets.id = claims.wallet_id where claims.id = $1;`
-	wallets := []wallet.Info{}
-
-	err := pg.DB.Select(&wallets, statement, grant.GrantID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if len(wallets) > 0 {
-		return &wallets[0], nil
-	}
-
-	return nil, nil
-}
-
 // RedeemGrantForWallet redeems a claimed grant for a wallet
 func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error {
 	statement := `
 	update claims
-	set redeemed = true
+	set redeemed = true, redeemed_at = current_timestamp
 	where id = $1 and promotion_id = $2 and wallet_id = $3 and not redeemed and legacy_claimed
 	returning *`
 
@@ -167,21 +140,6 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 	}
 
 	return nil
-}
-
-// ClaimGrantForWallet makes a claim to a particular GrantID by a wallet
-func (pg *Postgres) ClaimGrantForWallet(grant Grant, wallet wallet.Info) error {
-	statement := `
-	insert into claims (id, promotion_id, wallet_id, approximate_value, legacy_claimed)
-	values ($1, $2, $3, $4, true)
-	returning *`
-
-	// FIXME
-
-	value := grant.AltCurrency.FromProbi(grant.Probi)
-
-	_, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID, value)
-	return err
 }
 
 // ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
@@ -237,22 +195,6 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 	}
 
 	return &claims[0], nil
-}
-
-// HasGrantBeenRedeemed checks to see if a grant has been claimed
-func (pg *Postgres) HasGrantBeenRedeemed(grant Grant) (bool, error) {
-	var redeemed []bool
-
-	err := pg.DB.Select(&redeemed, "select redeemed from claims where id = $1", grant.GrantID.String())
-	if err != nil {
-		return false, err
-	}
-
-	if len(redeemed) != 1 {
-		return false, errors.New("no matching claimed grant")
-	}
-
-	return redeemed[0], nil
 }
 
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
