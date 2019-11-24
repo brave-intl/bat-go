@@ -10,7 +10,7 @@ import (
 
 // GetOrCreateWallet attempts to retrieve wallet info from the local datastore, falling back to the ledger
 func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.ReadableDatastore().GetWallet(walletID)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error looking up wallet")
 	}

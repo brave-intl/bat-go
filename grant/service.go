@@ -52,13 +52,15 @@ var (
 // Service contains datastore as well as prometheus metrics
 type Service struct {
 	datastore              Datastore
+	roDatastore            ReadOnlyDatastore
 	grantWalletBalanceDesc *prometheus.Desc
 }
 
 // InitService initializes the grant service
-func InitService(datastore Datastore) (*Service, error) {
+func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	gs := &Service{
-		datastore: datastore,
+		datastore:   datastore,
+		roDatastore: roDatastore,
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",
@@ -116,15 +118,23 @@ func InitService(datastore Datastore) (*Service, error) {
 	return gs, nil
 }
 
+// ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
+func (service *Service) ReadableDatastore() ReadOnlyDatastore {
+	if service.roDatastore != nil {
+		return service.roDatastore
+	}
+	return service.datastore
+}
+
 // Describe returns all descriptions of the collector.
 // We implement this and the Collect function to fulfill the prometheus.Collector interface
-func (gs *Service) Describe(ch chan<- *prometheus.Desc) {
-	ch <- gs.grantWalletBalanceDesc
+func (service *Service) Describe(ch chan<- *prometheus.Desc) {
+	ch <- service.grantWalletBalanceDesc
 }
 
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
-func (gs *Service) Collect(ch chan<- prometheus.Metric) {
+func (service *Service) Collect(ch chan<- prometheus.Metric) {
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
 		raven.CaptureError(err, map[string]string{})
@@ -134,7 +144,7 @@ func (gs *Service) Collect(ch chan<- prometheus.Metric) {
 	spendable, _ := grantWallet.GetWalletInfo().AltCurrency.FromProbi(balance.SpendableProbi).Float64()
 
 	ch <- prometheus.MustNewConstMetric(
-		gs.grantWalletBalanceDesc,
+		service.grantWalletBalanceDesc,
 		prometheus.GaugeValue,
 		spendable,
 	)

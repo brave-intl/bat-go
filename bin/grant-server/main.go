@@ -67,25 +67,43 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(middleware.RequestLogger(logger))
 	}
 
+	roDB := os.Getenv("RO_DATABASE_URL")
+
+	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
+	if len(roDB) > 0 {
+		grantRoPg, err = grant.NewPostgres(roDB, false)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
 
-	grantService, err := grant.InitService(grantPg)
+	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
+	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
+	if len(roDB) > 0 {
+		roPg, err = promotion.NewPostgres(roDB, false)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
 
-	promotionService, err := promotion.InitService(pg)
+	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")

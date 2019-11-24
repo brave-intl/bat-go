@@ -28,5 +28,5 @@ func (a ByExpiryTimestamp) Less(i, j int) bool { return a[i].ExpiryTimestamp < a
 
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet with optional promotionType filter
 func (service *Service) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error) {
-	return service.datastore.GetGrantsOrderedByExpiry(wallet, promotionType)
+	return service.ReadableDatastore().GetGrantsOrderedByExpiry(wallet, promotionType)
 }
