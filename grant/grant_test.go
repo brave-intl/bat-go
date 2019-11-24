@@ -32,7 +32,7 @@ func TestConsume(t *testing.T) {
 	if err != nil {
 		t.Fatal("unexpected error", err)
 	}
-	service, err := InitService(mockDB)
+	service, err := InitService(mockDB, nil)
 	if err != nil {
 		t.Error("unexpected error")
 	}

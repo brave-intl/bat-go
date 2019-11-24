@@ -32,6 +32,14 @@ type Datastore interface {
 	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
 }
 
+// ReadOnlyDatastore includes all database methods that can be made with a read only db connection
+type ReadOnlyDatastore interface {
+	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
+	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
+	// GetPromotion by ID
+	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
+}
+
 // Postgres is a WIP Datastore
 type Postgres struct {
 	*sqlx.DB

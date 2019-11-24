@@ -24,6 +24,7 @@ var suggestionTopic string = os.Getenv("ENV") + ".grant.suggestion"
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
 	datastore        Datastore
+	roDatastore      ReadOnlyDatastore
 	cbClient         cbr.Client
 	ledgerClient     ledger.Client
 	reputationClient reputation.Client
@@ -152,7 +153,7 @@ func (service *Service) InitKafka() error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore) (*Service, error) {
+func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -169,6 +170,7 @@ func InitService(datastore Datastore) (*Service, error) {
 
 	service := &Service{
 		datastore:        datastore,
+		roDatastore:      roDatastore,
 		cbClient:         cbClient,
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
@@ -178,6 +180,14 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 	return service, nil
+}
+
+// ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
+func (service *Service) ReadableDatastore() ReadOnlyDatastore {
+	if service.roDatastore != nil {
+		return service.roDatastore
+	}
+	return service.datastore
 }
 
 // RunNextClaimJob takes the next claim job and completes it
