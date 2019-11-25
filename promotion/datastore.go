@@ -392,7 +392,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.platform,
 			promos.active,
 			promos.public_keys,
-			coalesce(false, wallet_claims.legacy_claimed) as legacy_claimed,
+			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from
 		  (
@@ -418,7 +418,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 		statement = `
 		select
 			promotions.*,
-			coalesce(false, wallet_claims.legacy_claimed) as legacy_claimed,
+			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from promotions left join (
 			select * from claims where claims.wallet_id = $1
@@ -453,7 +453,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			coalesce(false, claims.legacy_claimed) as legacy_claimed,
+			coalesce(claims.legacy_claimed, false) as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
@@ -470,7 +470,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 		statement = `
 		select
 			promotions.*,
-			coalesce(false, claims.legacy_claimed) as legacy_claimed,
+			false as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
