@@ -20,7 +20,7 @@ import (
 
 // Client abstracts over the underlying client
 type Client interface {
-	IsWalletReputable(ctx context.Context, id uuid.UUID) (bool, error)
+	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -127,6 +127,7 @@ type IsWalletReputableResponse struct {
 func (c *HTTPClient) IsWalletReputable(
 	ctx context.Context,
 	paymentID uuid.UUID,
+	platform string,
 ) (bool, error) {
 	req, err := c.newRequest(
 		ctx,
@@ -135,6 +136,10 @@ func (c *HTTPClient) IsWalletReputable(
 	)
 	if err != nil {
 		return false, err
+	}
+
+	if len(platform) > 0 {
+		req.URL.Query().Add("platform", platform)
 	}
 
 	var resp IsWalletReputableResponse
