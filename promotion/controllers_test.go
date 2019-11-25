@@ -710,7 +710,21 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 		cbClient:     mockCB,
 		ledgerClient: mockLedger,
 	}
-
+	var issuerName string
+	mockCB.EXPECT().
+		CreateIssuer(gomock.Any(), gomock.Any(), gomock.Eq(defaultMaxTokensPerIssuer)).
+		DoAndReturn(func(ctx context.Context, name string, maxTokens int) (error) {
+			issuerName = name
+			return nil
+		})
+	mockCB.EXPECT().
+		GetIssuer(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, name string) (*cbr.IssuerResponse, error) {
+			return &cbr.IssuerResponse{
+				Name:      issuerName,
+				PublicKey: "",
+			}, nil
+		})
 	handler := CreatePromotion(service)
 
 	createRequest := CreatePromotionRequest{

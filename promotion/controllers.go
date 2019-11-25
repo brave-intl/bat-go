@@ -386,7 +386,7 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 			}
 		}
 
-		// TODO create issuer
+		_, err = service.CreateIssuer(r.Context(), promotion.ID, "control")
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {
