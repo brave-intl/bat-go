@@ -6,18 +6,21 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
 // Info contains information about a wallet like associated identifiers, the denomination,
 // the last known balance and provider
 type Info struct {
-	ID          string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
-	Provider    string                   `json:"provider" valid:"in(uphold)" db:"provider"`
-	ProviderID  string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
-	PublicKey   string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
-	LastBalance *Balance                 `json:"balances,omitempty" valid:"-"`
+	ID                string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
+	Provider          string                   `json:"provider" valid:"in(uphold)" db:"provider"`
+	ProviderID        string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
+	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
+	PublicKey         string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
+	LastBalance       *Balance                 `json:"balances,omitempty" valid:"-"`
+	ProviderLinkingID *uuid.UUID               `json:"linked_address"`
+	AnonymousAddress  *uuid.UUID               `json:"anonymous_address"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,
@@ -36,6 +39,9 @@ type TransactionInfo struct {
 	Source       string                   `json:"-"`
 	Time         time.Time                `json:"-"`
 	Note         string                   `json:"-"`
+	Type         string                   `json:"-"`
+	IsMember     bool                     `json:"-"`
+	UserID       *uuid.UUID               `json:"-"`
 }
 
 // String returns the transaction info as an easily readable string

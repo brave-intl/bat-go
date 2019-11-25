@@ -515,19 +515,24 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 	return &info, err
 }
 
+type upholdUser struct {
+	ID *uuid.UUID `json:"id"`
+}
+
 type upholdTransactionResponseDestinationNode struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
+	Type string     `json:"type"`
+	ID   string     `json:"id"`
+	User upholdUser `json:"user"`
 }
 
 type upholdTransactionResponseDestination struct {
-	Type        string                                   `json:"type"`
-	CardID      string                                   `json:"CardId,omitempty"`
-	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
-	Currency    string                                   `json:"currency"`
-	Amount      decimal.Decimal                          `json:"amount"`
-	ExchangeFee decimal.Decimal                          `json:"commission"`
-	TransferFee decimal.Decimal                          `json:"fee"`
+	Type        string                                    `json:"type"`
+	CardID      string                                    `json:"CardId,omitempty"`
+	Node        *upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Currency    string                                    `json:"currency"`
+	Amount      decimal.Decimal                           `json:"amount"`
+	ExchangeFee decimal.Decimal                           `json:"commission"`
+	TransferFee decimal.Decimal                           `json:"fee"`
 }
 
 type upholdTransactionResponseParams struct {
@@ -543,6 +548,8 @@ type upholdTransactionResponse struct {
 	Params       upholdTransactionResponseParams      `json:"params"`
 	CreatedAt    string                               `json:"createdAt"`
 	Message      string                               `json:"message"`
+	IsMember     bool                                 `json:"isMember"`
+	Type         string                               `json:"type"`
 }
 
 func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
@@ -580,6 +587,13 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 	}
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message
+
+	txInfo.Type = resp.Type
+	node := resp.Destination.Node
+	txInfo.IsMember = resp.IsMember
+	if node != nil {
+		txInfo.UserID = node.User.ID
+	}
 
 	return &txInfo
 }
