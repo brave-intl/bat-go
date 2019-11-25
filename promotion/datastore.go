@@ -418,7 +418,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 		statement = `
 		select
 			promotions.*,
-			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
+			false as legacy_claimed,
 			true as available
 		from promotions left join (
 			select * from claims where claims.wallet_id = $1
