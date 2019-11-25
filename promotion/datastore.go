@@ -457,13 +457,11 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
-		promotions 
-			left join issuers on promotions.id = issuers.promotion_id
-			left join claims on promotions.id = claims.promotion_id
+		promotions left join issuers on promotions.id = issuers.promotion_id
 		where promotions.promotion_type = 'ugp' and
 			( promotions.platform = '' or promotions.platform = $1) and
 			promotions.active and promotions.remaining_grants > 0
-		group by promotions.id, claims.legacy_claimed
+		group by promotions.id
 		order by promotions.created_at;`
 
 	if legacy {
@@ -474,13 +472,11 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
-		promotions 
-			left join issuers on promotions.id = issuers.promotion_id
-			left join claims on promotions.id = claims.promotion_id
+		promotions left join issuers on promotions.id = issuers.promotion_id
 		where promotions.promotion_type = 'ugp' and promotions.active and
 			promotions.remaining_grants > 0 and
 			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id, claims.legacy_claimed
+		group by promotions.id
 		order by promotions.created_at;`
 	}
 
