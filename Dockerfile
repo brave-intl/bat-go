@@ -4,8 +4,7 @@ WORKDIR /src/
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . ./
-COPY .git ./.git
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.GitCommit=$(git rev-list -1 HEAD)" -o grant-server ./bin/grant-server
+RUN CGO_ENABLED=0 GOOS=linux go build -o grant-server ./bin/grant-server
 CMD ["go", "run", "bin/grant-server/main.go"]
 
 FROM alpine:3.6

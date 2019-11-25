@@ -21,9 +21,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// GitCommit at the time of build, must be injected via ldflags
-var GitCommit string
-
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	var output io.Writer
 	output = zerolog.ConsoleWriter{Out: os.Stdout}
@@ -148,7 +145,7 @@ func main() {
 	serverCtx, _ := setupLogger(context.Background())
 	logger := log.Ctx(serverCtx)
 	subLog := logger.Info().Str("prefix", "main")
-	subLog.Str("commit", GitCommit).Msg("Starting server")
+	subLog.Msg("Starting server")
 
 	serverCtx, r, service := setupRouter(serverCtx, logger)
 
