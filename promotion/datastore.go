@@ -453,7 +453,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	statement := `
 		select
 			promotions.*,
-			coalesce(claims.legacy_claimed, false) as legacy_claimed,
+			false as legacy_claimed,
 			true as available,
 			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
 		from
