@@ -22,6 +22,7 @@ type Promotion struct {
 	Available           bool            `json:"available" db:"available"`
 	Platform            string          `json:"platform" db:"platform"`
 	PublicKeys          JSONStringArray `json:"publicKeys" db:"public_keys"`
+	LegacyClaimed       bool            `json:"legacyClaimed" db:"legacy_claimed"`
 	//ClaimableUntil      time.Time
 }
 
