@@ -387,6 +387,9 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 		}
 
 		_, err = service.CreateIssuer(r.Context(), promotion.ID, "control")
+		if err != nil {
+			return handlers.WrapError(err, "Error making control promotion", http.StatusInternalServerError)
+		}
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {

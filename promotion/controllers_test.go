@@ -713,7 +713,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	var issuerName string
 	mockCB.EXPECT().
 		CreateIssuer(gomock.Any(), gomock.Any(), gomock.Eq(defaultMaxTokensPerIssuer)).
-		DoAndReturn(func(ctx context.Context, name string, maxTokens int) (error) {
+		DoAndReturn(func(ctx context.Context, name string, maxTokens int) error {
 			issuerName = name
 			return nil
 		})
