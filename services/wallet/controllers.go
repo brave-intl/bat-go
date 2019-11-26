@@ -64,7 +64,7 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 
 		wallet, err := service.ReadableDatastore().GetWallet(paymentID)
 		if err != nil {
-			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
 
 		userWallet, err := provider.GetWallet(*wallet)

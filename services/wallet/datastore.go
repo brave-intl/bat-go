@@ -23,7 +23,10 @@ type Datastore interface {
 	TxSetAnonymousAddress(tx *sqlx.Tx, ID uuid.UUID, anonymousAddress uuid.UUID) error
 	TxGetByProviderAddress(tx *sqlx.Tx, providerAddress uuid.UUID) (*[]wallet.Info, error)
 	LinkWallet(id uuid.UUID, providerLinkingID uuid.UUID, anonymousAddress uuid.UUID) error
+	// GetWallet by ID
 	GetWallet(id uuid.UUID) (*wallet.Info, error)
+	// InsertWallet inserts the given wallet
+	InsertWallet(wallet *wallet.Info) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -126,6 +129,22 @@ func (pg *Postgres) SetAnonymousAddress(ID uuid.UUID, anonymousAddress uuid.UUID
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// InsertWallet inserts the given wallet
+func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
+	// NOTE on conflict do nothing because none of the wallet information is updateable
+	statement := `
+	insert into wallets (id, provider, provider_id, public_key)
+	values ($1, $2, $3, $4)
+	on conflict do nothing
+	returning *`
+	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
