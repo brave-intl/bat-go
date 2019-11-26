@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/utils/reputation"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -100,16 +101,35 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
-
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
+	var roWalletPg wallet.ReadOnlyDatastore
+	walletPg, err := wallet.NewPostgres("", true)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	if len(roDB) > 0 {
+		roWalletPg, err = wallet.NewPostgres(roDB, false)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
+	walletService, err := wallet.InitService(walletPg, roWalletPg)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic().Err(err).Msg("Wallet service initialization failed")
+	}
+
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
+	r.Mount("/v1/wallet", wallet.Router(walletService))
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")

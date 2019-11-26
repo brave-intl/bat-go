@@ -17,7 +17,6 @@ func init() {
 	govalidator.TagMap["ethaddress"] = govalidator.Validator(IsETHAddress)
 	govalidator.TagMap["platform"] = govalidator.Validator(IsPlatform)
 	govalidator.CustomTypeTagMap.Set("requiredUUID", govalidator.CustomTypeValidator(IsRequiredUUID))
-
 }
 
 const (

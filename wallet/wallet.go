@@ -19,8 +19,8 @@ type Info struct {
 	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
 	PublicKey         string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
 	LastBalance       *Balance                 `json:"balances,omitempty" valid:"-"`
-	ProviderLinkingID *uuid.UUID               `json:"linked_address"`
-	AnonymousAddress  *uuid.UUID               `json:"anonymous_address"`
+	ProviderLinkingID *uuid.UUID               `json:"linkedAddress" valid:"-" db:"linked_address"`
+	AnonymousAddress  *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,

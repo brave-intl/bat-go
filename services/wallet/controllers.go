@@ -97,7 +97,7 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 				}
 			}
 		} else {
-			err := service.datastore.LinkWallet(paymentID, providerLinkingID)
+			err := service.datastore.LinkWallet(paymentID, providerLinkingID, *anonymousAddress)
 			if err != nil {
 				return handlers.WrapError(err, "unable to link wallets", http.StatusInternalServerError)
 			}

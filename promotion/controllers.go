@@ -376,6 +376,7 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 		}
 
 		_, err = govalidator.ValidateStruct(req)
+		fmt.Println(err)
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
