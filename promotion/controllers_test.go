@@ -157,7 +157,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
-	_, err = service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
+	promotionDesktop, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
@@ -180,13 +180,16 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	err = service.datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
+	err = service.datastore.ActivatePromotion(promotionDesktop)
+	suite.Require().NoError(err, "Failed to activate promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
 		"promotions": [
-			` + promotionJSON(true, promotionGeneric) + `
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(true, promotionDesktop) + `
 		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
@@ -200,6 +203,37 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
+
+	statement := `
+	insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
+	values ($1, $2, $3, true)`
+	_, err = pg.DB.Exec(statement, promotionDesktop.ID, wallet.ID, promotionDesktop.ApproximateValue)
+	promotionDesktop.LegacyClaimed = true
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+	expectedOSX = `{
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `
+		]
+	}`
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+
+	url := fmt.Sprintf("/promotions?paymentId=%s&platform=osx&migrate=true", walletID.String())
+	reqOSX, err = http.NewRequest("GET", url, nil)
+	suite.Require().NoError(err, "Failed to create get promotions request")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+	expectedOSX = `{
+		"promotions": [
+			` + promotionJSON(true, promotionGeneric) + `,
+			` + promotionJSON(true, promotionDesktop) + `
+		]
+	}`
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
