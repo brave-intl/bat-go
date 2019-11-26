@@ -23,9 +23,10 @@ import (
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	var output io.Writer
-	output = zerolog.ConsoleWriter{Out: os.Stdout}
 	if os.Getenv("ENV") != "local" {
 		output = os.Stdout
+	} else {
+		output = zerolog.ConsoleWriter{Out: os.Stdout}
 	}
 
 	// always print out timestamp

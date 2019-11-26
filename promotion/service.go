@@ -19,7 +19,7 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
-var suggestionTopic string = os.Getenv("ENV") + ".grant.suggestion"
+var suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
