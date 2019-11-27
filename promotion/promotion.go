@@ -22,7 +22,19 @@ type Promotion struct {
 	Available           bool            `json:"available" db:"available"`
 	Platform            string          `json:"platform" db:"platform"`
 	PublicKeys          JSONStringArray `json:"publicKeys" db:"public_keys"`
+	LegacyClaimed       bool            `json:"legacyClaimed" db:"legacy_claimed"`
 	//ClaimableUntil      time.Time
+}
+
+// Filter promotions to all that satisfy the function passed
+func Filter(orig []Promotion, f func(Promotion) bool) []Promotion {
+	promos := make([]Promotion, 0)
+	for _, p := range orig {
+		if f(p) {
+			promos = append(promos, p)
+		}
+	}
+	return promos
 }
 
 // CredentialValue returns the approximate value of a credential
@@ -36,6 +48,7 @@ func (service *Service) GetAvailablePromotions(
 	walletID *uuid.UUID,
 	platform string,
 	legacy bool,
+	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
 		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
@@ -46,7 +59,14 @@ func (service *Service) GetAvailablePromotions(
 			return nil, nil
 		}
 		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
-		return &promos, err
+		if err != nil {
+			return nil, err
+		}
+
+		if !migrate {
+			promos = Filter(promos, func(p Promotion) bool { return !p.LegacyClaimed })
+		}
+		return &promos, nil
 	}
 	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform, legacy)
 	return &promos, err

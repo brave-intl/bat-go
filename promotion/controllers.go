@@ -115,7 +115,13 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			legacy = true
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy)
+		migrate := false
+		migrateParam := r.URL.Query().Get("migrate")
+		if migrateParam == "true" {
+			migrate = true
+		}
+
+		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -386,7 +392,10 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 			}
 		}
 
-		// TODO create issuer
+		_, err = service.CreateIssuer(r.Context(), promotion.ID, "control")
+		if err != nil {
+			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
+		}
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {
