@@ -16,3 +16,5 @@ services:
     image: vault:0.10.2
     networks:
       - grant
+    ports:
+      - "8200:8200"

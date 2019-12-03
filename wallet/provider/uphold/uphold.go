@@ -26,6 +26,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -109,6 +110,41 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 		return nil, errors.New("A wallet must have a valid altcurrency")
 	}
 	return &Wallet{Info: info, PrivKey: privKey, PubKey: pubKey}, nil
+}
+
+// NewFromWalletInfo creates a new wallet from a wallet info object
+func NewFromWalletInfo(name string, info *wallet.Info) (*Wallet, error) {
+	client, err := vaultsigner.Connect()
+	if err != nil {
+		return nil, err
+	}
+
+	signer, err := vaultsigner.New(client, name)
+	if err != nil {
+		return nil, err
+	}
+
+	upholdWallet := Wallet{
+		Info:    *info,
+		PrivKey: signer,
+		PubKey:  signer,
+	}
+	reg, err := upholdWallet.PrepareRegistration(name)
+	if err != nil {
+		return nil, err
+	}
+
+	upholdWallet = Wallet{
+		Info:    *info,
+		PrivKey: ed25519.PrivateKey{},
+		PubKey:  signer,
+	}
+
+	err = upholdWallet.SubmitRegistration(reg)
+	if err != nil {
+		return nil, err
+	}
+	return &upholdWallet, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
