@@ -68,5 +68,5 @@ require (
 	google.golang.org/grpc v1.23.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
-	gopkg.in/square/go-jose.v2 v2.3.1
+	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
 )

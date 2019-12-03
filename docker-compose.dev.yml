@@ -9,6 +9,8 @@ services:
       - "VAULT_ADDR=http://vault:8200"
       - TEST_TAGS
       - VAULT_TOKEN
+      - TEST_RUN
+      - TEST_PKG
   vault:
     container_name: grant-vault
     image: vault:0.10.2

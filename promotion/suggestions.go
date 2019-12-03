@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -200,7 +199,6 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 
 	eventBinary, err := service.codecs["suggestion"].BinaryFromNative(nil, eventMap)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
