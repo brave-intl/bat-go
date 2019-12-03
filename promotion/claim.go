@@ -71,7 +71,7 @@ type Claim struct {
 	ApproximateValue decimal.Decimal `db:"approximate_value"`
 	Redeemed         bool            `db:"redeemed"`
 	Bonus            decimal.Decimal `db:"bonus"`
-	LegacyClaimed    string          `db:"legacy_claimed"`
+	LegacyClaimed    bool            `db:"legacy_claimed"`
 	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
 }
 
@@ -119,18 +119,20 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
 	}
 
-	// If this wallet already claimed, return the previously claimed promotion
-	if claim != nil {
+	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
+	if claim != nil && claim.Redeemed {
 		return &claim.ID, nil
 	}
+	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
+	if claim == nil || !claim.LegacyClaimed {
+		walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
+		if err != nil {
+			return nil, err
+		}
 
-	walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
-	if err != nil {
-		return nil, err
-	}
-
-	if !walletIsReputable {
-		return nil, errors.New("Insufficient wallet reputation for grant claim")
+		if !walletIsReputable {
+			return nil, errors.New("Insufficient wallet reputation for grant claim")
+		}
 	}
 
 	cohort := "control"
