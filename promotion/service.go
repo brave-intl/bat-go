@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/ledger"
 	"github.com/brave-intl/bat-go/utils/reputation"
 	"github.com/linkedin/goavro"
@@ -28,6 +29,7 @@ type Service struct {
 	cbClient         cbr.Client
 	ledgerClient     ledger.Client
 	reputationClient reputation.Client
+	balanceClient    balance.Client
 	codecs           map[string]*goavro.Codec
 	kafkaWriter      *kafka.Writer
 	kafkaDialer      *kafka.Dialer
@@ -168,12 +170,18 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
+	balanceClient, err := balance.New()
+	if err != nil {
+		return nil, err
+	}
+
 	service := &Service{
 		datastore:        datastore,
 		roDatastore:      roDatastore,
 		cbClient:         cbClient,
 		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
+		balanceClient:    balanceClient,
 	}
 	err = service.InitKafka()
 	if err != nil {

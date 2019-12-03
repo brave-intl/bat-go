@@ -22,6 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/cbr/mock"
+	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/reputation/mock"
@@ -787,43 +788,49 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
+	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
 		datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
+		balanceClient:    mockBalance,
 	}
 
 	scenarios := []struct {
-		Legacy           bool
-		Redeemed         bool
-		ChecksReputation bool
-		WillSign         bool
-		Type             string
+		Legacy             bool
+		Redeemed           bool
+		ChecksReputation   bool
+		InvalidatesBalance bool
+		Type               string
 	}{
 		{
-			Legacy:           false,
-			Redeemed:         false,
-			ChecksReputation: true,
-			Type:             "ugp",
+			Legacy:             false,
+			Redeemed:           false,
+			ChecksReputation:   true,
+			InvalidatesBalance: false,
+			Type:               "ugp",
 		},
 		{
-			Legacy:           false,
-			Redeemed:         true,
-			ChecksReputation: false,
-			Type:             "ugp",
+			Legacy:             false,
+			Redeemed:           true,
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+			Type:               "ugp",
 		},
 		{
-			Legacy:           true,
-			Redeemed:         false,
-			ChecksReputation: false,
-			Type:             "ugp",
+			Legacy:             true,
+			Redeemed:           false,
+			ChecksReputation:   false,
+			InvalidatesBalance: true,
+			Type:               "ugp",
 		},
 		{
-			Legacy:           true,
-			Redeemed:         true,
-			ChecksReputation: false,
-			Type:             "ugp",
+			Legacy:             true,
+			Redeemed:           true,
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+			Type:               "ugp",
 		},
 	}
 	for _, test := range scenarios {
@@ -883,6 +890,13 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 						true,
 						nil,
 					)
+			} else {
+				mockBalance.EXPECT().
+					InvalidateBalance(
+						gomock.Any(),
+						gomock.Eq(walletID),
+					).
+					Return(nil)
 			}
 			_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
 		}
@@ -898,6 +912,14 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 					true,
 					nil,
 				)
+		}
+		if test.InvalidatesBalance {
+			mockBalance.EXPECT().
+				InvalidateBalance(
+					gomock.Any(),
+					gomock.Eq(walletID),
+				).
+				Return(nil)
 		}
 
 		// if NOT redeemed, the mockCB's SignCredentials will be used up here
