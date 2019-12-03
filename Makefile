@@ -11,16 +11,7 @@ ifdef GOOS
 else
 	BINS := $(_BINS:bin/%=target/release/%)
 endif
-ifdef PKG
-	TEST_PKG=$(PKG)
-else 
-	TEST_PKG=./...
-endif
-ifdef RUN
-	TEST_RUN=$(RUN)
-else 
-	TEST_RUN=
-endif
+
 .PHONY: all bins docker test lint clean
 all: test bins
 
