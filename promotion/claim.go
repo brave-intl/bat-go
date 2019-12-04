@@ -169,6 +169,13 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, err
 	}
 
+	if claim.LegacyClaimed {
+		err = service.balanceClient.InvalidateBalance(ctx, walletID)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
+	}
+
 	go func() {
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
