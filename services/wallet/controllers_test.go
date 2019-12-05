@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -66,8 +67,8 @@ func (suite *ControllersTestSuite) SettlementWallet() *uphold.Wallet {
 	var pubKey httpsignature.Ed25519PubKey
 	var privKey ed25519.PrivateKey
 	var err error
-	grantWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
-	grantWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	providerID := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 
 	pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
@@ -91,6 +92,7 @@ func (suite *ControllersTestSuite) SettlementWallet() *uphold.Wallet {
 
 func (suite *ControllersTestSuite) TransferFunds(probi decimal.Decimal, destination string) *wallet.TransactionInfo {
 	settlementWallet := suite.SettlementWallet()
+	fmt.Printf("transferring: %d to %s\n", probi, destination)
 	txn, err := settlementWallet.Transfer(altcurrency.BAT, probi, destination)
 	suite.Require().NoError(err, "could not prepare wallet claim transaction")
 	return txn
@@ -218,5 +220,7 @@ func (suite *ControllersTestSuite) CreateAndFundUserWallet(service *Service) *up
 
 	probi := decimal.NewFromFloat(1.0)
 	_ = suite.TransferFunds(probi, walletInfo.ProviderID)
+	_, err = upholdWallet.GetBalance(true)
+	suite.Assert().NoError(err, "balance should be refreshed")
 	return upholdWallet
 }
