@@ -134,12 +134,6 @@ func NewFromWalletInfo(name string, info *wallet.Info) (*Wallet, error) {
 		return nil, err
 	}
 
-	upholdWallet = Wallet{
-		Info:    *info,
-		PrivKey: ed25519.PrivateKey{},
-		PubKey:  signer,
-	}
-
 	err = upholdWallet.SubmitRegistration(reg)
 	if err != nil {
 		return nil, err
@@ -657,6 +651,8 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		url = url + "?commit=true"
 	}
 
+	fmt.Println("url:", url)
+	fmt.Println("txB64:", transactionB64)
 	req, err := newRequest("POST", url, nil)
 	if err != nil {
 		return nil, err

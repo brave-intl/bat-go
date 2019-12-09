@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -66,6 +68,8 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
+		bat := altcurrency.BAT
+		wallet.AltCurrency = &bat
 
 		userWallet, err := provider.GetWallet(*wallet)
 		if err != nil {
@@ -74,6 +78,7 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 
 		postedTx, err := userWallet.SubmitTransaction(body.SignedTx, false)
 		if err != nil {
+			fmt.Printf("pre submit err: %v", err)
 			return handlers.WrapError(err, "unable to submit transaction", http.StatusBadRequest)
 		}
 
@@ -81,7 +86,7 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 		txType := postedTx.Type
 		userID := postedTx.UserID
 		if txType != "card" || !isMember || userID == nil {
-			return handlers.WrapError(err, "unable submit transaction", http.StatusBadRequest)
+			return handlers.WrapError(err, "unable to submit transaction", http.StatusBadRequest)
 		}
 
 		providerLinkingID := uuid.NewV5(claimLinkingGeneratorKey, userID.String())
@@ -105,6 +110,7 @@ func PostClaimWalletCompat(service *Service) handlers.AppHandler {
 
 		_, err = userWallet.SubmitTransaction(body.SignedTx, true)
 		if err != nil {
+			fmt.Printf("post submit err: %v", err)
 			return handlers.WrapError(err, "unable to submit transaction", http.StatusServiceUnavailable)
 		}
 		return nil

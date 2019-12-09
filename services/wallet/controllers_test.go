@@ -92,7 +92,6 @@ func (suite *ControllersTestSuite) SettlementWallet() *uphold.Wallet {
 
 func (suite *ControllersTestSuite) TransferFunds(probi decimal.Decimal, destination string) *wallet.TransactionInfo {
 	settlementWallet := suite.SettlementWallet()
-	fmt.Printf("transferring: %d to %s\n", probi, destination)
 	txn, err := settlementWallet.Transfer(altcurrency.BAT, probi, destination)
 	suite.Require().NoError(err, "could not prepare wallet claim transaction")
 	return txn
@@ -164,6 +163,8 @@ func (suite *ControllersTestSuite) ClaimCard(
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+	fmt.Println(rr.Body.String())
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to be %d got %d", status, rr.Code))
 	return rr
 }
 
@@ -185,41 +186,21 @@ func (suite *ControllersTestSuite) CreateAndFundUserWallet(service *Service) *up
 	walletInfo := wallet.Info{
 		ID:          walletID.String(),
 		Provider:    "uphold",
-		ProviderID:  "-",
+		ProviderID:  "",
 		AltCurrency: &bat,
 		PublicKey:   signer.String(),
 	}
 
-	upholdWallet := &uphold.Wallet{
-		Info:    walletInfo,
-		PrivKey: signer,
-		PubKey:  signer,
-	}
+	upholdWallet, err := uphold.NewFromWalletInfo(walletID.String(), &walletInfo)
 
-	reg, err := upholdWallet.PrepareRegistration(name)
-	suite.Require().NoError(err, "Failed to prepare registration for uphold")
+	// _ = suite.CreateAnonymousCards(upholdWallet, "ethereum")
+	// walletInfo.PublicKey = depositAddr
 
-	var publicKey httpsignature.Ed25519PubKey
-	publicKey, err = hex.DecodeString(walletInfo.PublicKey)
-	suite.Require().NoError(err, "Failed to generate public key")
-
-	upholdWallet = &uphold.Wallet{
-		Info:    walletInfo,
-		PrivKey: ed25519.PrivateKey{},
-		PubKey:  publicKey,
-	}
-
-	err = upholdWallet.SubmitRegistration(reg)
-	suite.Require().NoError(err, "Failed to complete uphold registration")
-
-	depositAddr := suite.CreateAnonymousCards(upholdWallet, "ethereum")
-	walletInfo.ProviderID = depositAddr
-
-	err = service.datastore.InsertWallet(&walletInfo)
+	err = service.datastore.InsertWallet(&upholdWallet.Info)
 	suite.Assert().NoError(err, "Save wallet should succeed")
 
 	probi := decimal.NewFromFloat(1.0)
-	_ = suite.TransferFunds(probi, walletInfo.ProviderID)
+	_ = suite.TransferFunds(probi, upholdWallet.Info.ProviderID)
 	_, err = upholdWallet.GetBalance(true)
 	suite.Assert().NoError(err, "balance should be refreshed")
 	return upholdWallet
