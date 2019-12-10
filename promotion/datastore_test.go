@@ -756,14 +756,14 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 
 	{
 		tmp := uuid.NewV4().String()
-		w.PayoutAddress = &tmp
+		w.AnonymousAddress = &tmp
 	}
 	err = pg.UpsertWallet(w)
 	suite.Assert().NoError(err, "Upsert wallet should succeed")
 
 	wallet, err := pg.GetWallet(walletID)
 	suite.Assert().NoError(err, "Get wallet should succeed")
-	suite.Assert().Equal(w.PayoutAddress, wallet.PayoutAddress)
+	suite.Assert().Equal(w.AnonymousAddress, wallet.AnonymousAddress)
 
 	total := decimal.NewFromFloat(50.0)
 	// Create promotion

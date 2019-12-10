@@ -283,6 +283,8 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 	statement := `
 	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
 	values ($1, $2, $3, $4)`
+	fmt.Println("creds")
+	fmt.Printf("%#v\n", creds)
 	_, err = pg.DB.Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
 	return err
 }

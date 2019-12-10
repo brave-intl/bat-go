@@ -1140,8 +1140,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	payoutAddress := wal.ProviderID
-	wallet.PayoutAddress = &payoutAddress
+	anonymousAddress := wal.ProviderID
+	wallet.AnonymousAddress = &anonymousAddress
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	rr = httptest.NewRecorder()

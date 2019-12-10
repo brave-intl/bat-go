@@ -22,14 +22,14 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// A verified wallet will have a payout address
-	if wallet.PayoutAddress == nil {
+	if wallet.AnonymousAddress == nil {
 		// Try to retrieve updated wallet from the ledger service
 		wallet, err = service.wallet.UpsertWallet(ctx, walletID)
 		if err != nil {
 			return fmt.Errorf("error upserting wallet: %w", err)
 		}
 
-		if wallet.PayoutAddress == nil {
+		if wallet.AnonymousAddress == nil {
 			return errors.New("Wallet is not verified")
 		}
 	}
@@ -99,7 +99,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	if wallet == nil || wallet.PayoutAddress == nil {
+	if wallet == nil || wallet.AnonymousAddress == nil {
 		return nil, errors.New("missing wallet")
 	}
 
@@ -109,7 +109,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	// FIXME should use idempotency key
-	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), *wallet.PayoutAddress)
+	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.AnonymousAddress.String())
 	if err != nil {
 		return nil, err
 	}

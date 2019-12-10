@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -524,6 +525,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	for rr.Code != http.StatusOK {
+		fmt.Println("status", rr.Code)
 		if rr.Code == http.StatusBadRequest {
 			break
 		}
@@ -531,7 +533,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 		case <-ctx.Done():
 			break
 		default:
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			rr = httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 		}

@@ -11,6 +11,10 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+var (
+	walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
+)
+
 // Client abstracts over the underlying client
 type Client interface {
 	GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error)
@@ -40,12 +44,25 @@ type WalletAddresses struct {
 	ProviderID uuid.UUID `json:"CARD_ID"`
 }
 
+type upholdTXUser struct {
+	ID *uuid.UUID `json:"id"`
+}
+
+type upholdTXNode struct {
+	User upholdTXUser `json:"user"`
+}
+
+type upholdTXDestination struct {
+	Node upholdTXNode `json:"node"`
+}
+
 // WalletResponse contains information about the ledger wallet
 type WalletResponse struct {
-	Addresses     WalletAddresses          `json:"addresses"`
-	AltCurrency   *altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey     string                   `json:"httpSigningPubKey"`
-	PayoutAddress *string                  `json:"anonymousAddress"`
+	Addresses        WalletAddresses          `json:"addresses"`
+	AltCurrency      *altcurrency.AltCurrency `json:"altcurrency"`
+	PublicKey        string                   `json:"httpSigningPubKey"`
+	AnonymousAddress *string                  `json:"anonymousAddress"`
+	Destination      upholdTXDestination      `json:"destination"`
 }
 
 // GetWallet retrieves wallet information
@@ -65,14 +82,21 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 		return nil, err
 	}
 
+	anonymousAddress := uuid.Must(uuid.FromString(*walletResponse.AnonymousAddress))
+	var providerLinkingID uuid.UUID
+	nullableProviderLinkingID := walletResponse.Destination.Node.User.ID
+	if nullableProviderLinkingID != nil {
+		providerLinkingID = uuid.NewV5(walletClaimNamespace, nullableProviderLinkingID.String())
+	}
 	info := wallet.Info{
-		ID:            id.String(),
-		Provider:      "uphold",
-		ProviderID:    walletResponse.Addresses.ProviderID.String(),
-		AltCurrency:   walletResponse.AltCurrency,
-		PublicKey:     walletResponse.PublicKey,
-		LastBalance:   nil,
-		PayoutAddress: walletResponse.PayoutAddress,
+		ID:                id.String(),
+		Provider:          "uphold",
+		ProviderID:        walletResponse.Addresses.ProviderID.String(),
+		AltCurrency:       walletResponse.AltCurrency,
+		PublicKey:         walletResponse.PublicKey,
+		LastBalance:       nil,
+		AnonymousAddress:  &anonymousAddress,
+		ProviderLinkingID: &providerLinkingID,
 	}
 
 	return &info, err

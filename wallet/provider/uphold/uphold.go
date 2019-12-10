@@ -371,6 +371,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 		return "", err
 	}
 
+	fmt.Println("probi", probi)
 	httpSignedReq, err := encapsulate(req)
 	if err != nil {
 		return "", err
