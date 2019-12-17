@@ -24,6 +24,7 @@ import (
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
@@ -364,4 +365,9 @@ func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) 
 // RunNextDrainJob takes the next drain job and completes it
 func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
 	return service.datastore.RunNextDrainJob(ctx, service)
+}
+
+// CountActiveWallet counts an active user
+func (service *Service) CountActiveWallet(paymentID uuid.UUID) error {
+	return service.datastore.CountActiveWallet(paymentID)
 }

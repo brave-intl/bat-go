@@ -48,7 +48,7 @@ services:
       - grant
   postgres:
     container_name: grant-postgres
-    image: postgres:10.4
+    image: mmclau14/postgres-extended:latest
     ports:
       - "3401:5432"
     environment:

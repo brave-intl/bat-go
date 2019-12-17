@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
+	"github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -154,6 +155,14 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 				"id": promotion.ID.String(),
 			}).Inc()
 		}
+
+		if walletID != nil {
+			err = service.CountActiveWallet(*walletID)
+			if err != nil {
+				raven.CaptureError(err, nil)
+			}
+		}
+
 		return nil
 	})
 }

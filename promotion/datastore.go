@@ -82,6 +82,8 @@ type Datastore interface {
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
+	// CountActiveWallet counts an active user
+	CountActiveWallet(walletID uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection

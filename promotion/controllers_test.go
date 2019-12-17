@@ -68,7 +68,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) SetupTest() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "daily_unique_metrics"}
 
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -241,6 +241,16 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		]
 	}`
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+
+	var dailyUniques []DailyUniqueMetricCounts
+	err = pg.DB.Select(&dailyUniques, `
+	SELECT
+		date,
+		activity_type,
+		hll_cardinality(wallets) as wallets
+	FROM daily_unique_metrics`)
+	suite.Assert().NoError(err)
+	suite.Assert().Equal(1, dailyUniques[0].Wallets, "wallet has been seen")
 }
 
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
