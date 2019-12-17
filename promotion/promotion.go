@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/rs/zerolog"
+	"github.com/brave-intl/bat-go/utils/logging"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -52,10 +52,7 @@ func (service *Service) GetAvailablePromotions(
 	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
-		l := zerolog.Ctx(ctx)
-		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
-			return c.Str("walletID", (*walletID).String())
-		})
+		logging.AddWalletIDToContext(ctx, *walletID)
 
 		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
 		if err != nil {
