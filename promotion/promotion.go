@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -51,6 +52,11 @@ func (service *Service) GetAvailablePromotions(
 	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
+		l := zerolog.Ctx(ctx)
+		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Str("walletID", (*walletID).String())
+		})
+
 		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
 		if err != nil {
 			return nil, err
@@ -58,6 +64,7 @@ func (service *Service) GetAvailablePromotions(
 		if wallet == nil {
 			return nil, nil
 		}
+
 		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
 		if err != nil {
 			return nil, err
