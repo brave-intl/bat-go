@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
@@ -100,6 +101,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 				panic(err) // Should not be possible
 			}
 			paymentID = &tmp
+			logging.AddPaymentIDToContext(r.Context(), tmp)
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -161,6 +163,8 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
+
+		logging.AddPaymentIDToContext(r.Context(), req.PaymentID)
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
@@ -285,6 +289,8 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 				"paymentID": "must be a uuidv4",
 			})
 		}
+
+		logging.AddPaymentIDToContext(r.Context(), paymentID)
 
 		wallet, err := service.ReadableDatastore().GetWallet(paymentID)
 		if err != nil {

@@ -10,7 +10,6 @@ import (
 	"github.com/jmoiron/sqlx/types"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -102,11 +101,6 @@ func (service *Service) ClaimPromotionForWallet(
 	walletID uuid.UUID,
 	blindedCreds []string,
 ) (*uuid.UUID, error) {
-	l := zerolog.Ctx(ctx)
-	l.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("walletID", walletID.String())
-	})
-
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
