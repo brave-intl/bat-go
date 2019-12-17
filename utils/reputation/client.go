@@ -122,16 +122,16 @@ type IsWalletReputableResponse struct {
 }
 
 // IsWalletReputable makes the request to the reputation server
-// and reutrns whether a paymentId has enough reputation
+// and reutrns whether a walletID has enough reputation
 // to claim a grant
 func (c *HTTPClient) IsWalletReputable(
 	ctx context.Context,
-	paymentID uuid.UUID,
+	walletID uuid.UUID,
 	platform string,
 ) (bool, error) {
 	req, err := c.newRequest(
 		ctx,
-		"GET", "v1/reputation/"+paymentID.String(),
+		"GET", "v1/reputation/"+walletID.String(),
 		nil,
 	)
 	if err != nil {

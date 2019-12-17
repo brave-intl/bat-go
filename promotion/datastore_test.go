@@ -375,7 +375,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	suite.Assert().True(promotions[0].Available)
 
 	// Test platform='desktop' returns all desktop grants for non-legacy
-	// GetAvailablePromotions endpoint w/o paymentID
+	// GetAvailablePromotions endpoint w/o walletID
 	suite.CleanDB()
 
 	// Create desktop promotion
@@ -402,7 +402,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 	suite.Assert().Equal(len(promotions), 1)
 
 	// Test platform='desktop' returns all desktop grants for legacy
-	// GetAvailablePromotions endpoint without paymentID
+	// GetAvailablePromotions endpoint without walletID
 	suite.CleanDB()
 
 	promotion, err = pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "desktop")

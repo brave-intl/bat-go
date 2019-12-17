@@ -11,9 +11,9 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-func TestAddPaymentIDToContext(t *testing.T) {
+func TestAddWalletIDToContext(t *testing.T) {
 	type logLine struct {
-		PaymentID uuid.UUID `json:"paymentID"`
+		WalletID uuid.UUID `json:"walletID"`
 	}
 
 	var b bytes.Buffer
@@ -22,9 +22,9 @@ func TestAddPaymentIDToContext(t *testing.T) {
 	log := zerolog.New(output).With().Timestamp().Logger()
 	ctx := log.WithContext(context.Background())
 
-	paymentID := uuid.NewV4()
+	walletID := uuid.NewV4()
 
-	AddPaymentIDToContext(ctx, paymentID)
+	AddWalletIDToContext(ctx, walletID)
 
 	l := zerolog.Ctx(ctx)
 	l.Debug().Msg("test")
@@ -39,7 +39,7 @@ func TestAddPaymentIDToContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !uuid.Equal(line.PaymentID, paymentID) {
-		t.Fatal("PaymentID must be included")
+	if !uuid.Equal(line.WalletID, walletID) {
+		t.Fatal("WalletID must be included")
 	}
 }

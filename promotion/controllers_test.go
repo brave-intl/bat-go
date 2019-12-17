@@ -243,7 +243,7 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	suite.Require().NoError(err)
 
 	claimReq := ClaimRequest{
-		PaymentID:    walletID,
+		WalletID:     walletID,
 		BlindedCreds: blindedCreds,
 	}
 
@@ -390,7 +390,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	// blindedCreds should be the wrong length
 	claimReq := ClaimRequest{
-		PaymentID:    walletID,
+		WalletID:     walletID,
 		BlindedCreds: blindedCreds,
 	}
 
