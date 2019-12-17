@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
@@ -79,11 +80,11 @@ type PromotionsResponse struct {
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var paymentID *uuid.UUID
-		paymentIDText := r.URL.Query().Get("paymentId")
+		var walletID *uuid.UUID
+		walletIDText := r.URL.Query().Get("paymentId")
 
-		if len(paymentIDText) > 0 {
-			if !govalidator.IsUUIDv4(paymentIDText) {
+		if len(walletIDText) > 0 {
+			if !govalidator.IsUUIDv4(walletIDText) {
 				return &handlers.AppError{
 					Message: "Error validating request query parameter",
 					Code:    http.StatusBadRequest,
@@ -95,11 +96,12 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 				}
 			}
 
-			tmp, err := uuid.FromString(paymentIDText)
+			tmp, err := uuid.FromString(walletIDText)
 			if err != nil {
 				panic(err) // Should not be possible
 			}
-			paymentID = &tmp
+			walletID = &tmp
+			logging.AddWalletIDToContext(r.Context(), tmp)
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -121,7 +123,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			migrate = true
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), paymentID, platform, legacy, migrate)
+		promotions, err := service.GetAvailablePromotions(r.Context(), walletID, platform, legacy, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -139,7 +141,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	PaymentID    uuid.UUID `json:"paymentId" valid:"-"`
+	WalletID     uuid.UUID `json:"paymentId" valid:"-"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
@@ -162,11 +164,13 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
+		logging.AddWalletIDToContext(r.Context(), req.WalletID)
+
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
-		if req.PaymentID.String() != keyID {
+		if req.WalletID.String() != keyID {
 			return &handlers.AppError{
 				Message: "Error validating request",
 				Code:    http.StatusBadRequest,
@@ -196,7 +200,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.PaymentID, req.BlindedCreds)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error claiming promotion", http.StatusBadRequest)
 		}
@@ -277,8 +281,8 @@ func GetClaim(service *Service) handlers.AppHandler {
 func GetClaimSummary(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		claimType := chi.URLParam(r, "claimType")
-		paymentIDQuery := r.URL.Query().Get("paymentID")
-		paymentID, err := uuid.FromString(paymentIDQuery)
+		walletIDQuery := r.URL.Query().Get("paymentID")
+		walletID, err := uuid.FromString(walletIDQuery)
 
 		if err != nil {
 			return handlers.ValidationError("query parameter", map[string]string{
@@ -286,17 +290,19 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 			})
 		}
 
-		wallet, err := service.ReadableDatastore().GetWallet(paymentID)
+		logging.AddWalletIDToContext(r.Context(), walletID)
+
+		wallet, err := service.ReadableDatastore().GetWallet(walletID)
 		if err != nil {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
 		}
 
 		if wallet == nil {
-			err := errors.New("wallet not found id: '" + paymentID.String() + "'")
+			err := errors.New("wallet not found id: '" + walletID.String() + "'")
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
 
-		summary, err := service.ReadableDatastore().GetClaimSummary(paymentID, claimType)
+		summary, err := service.ReadableDatastore().GetClaimSummary(walletID, claimType)
 		if err != nil {
 			return handlers.WrapError(err, "Error aggregating wallet claims", http.StatusInternalServerError)
 		}
@@ -402,6 +408,5 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 			panic(err)
 		}
 		return nil
-
 	})
 }

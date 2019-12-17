@@ -143,8 +143,7 @@ func jobWorker(context context.Context, job func(context.Context) (bool, error),
 }
 
 func main() {
-	serverCtx, _ := setupLogger(context.Background())
-	logger := log.Ctx(serverCtx)
+	serverCtx, logger := setupLogger(context.Background())
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 

@@ -57,9 +57,9 @@ type ActiveGrantsResponse struct {
 // GetActive is the handler for returning info about active grants
 func GetActive(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		paymentID := r.URL.Query().Get("paymentId")
+		walletID := r.URL.Query().Get("paymentId")
 
-		if len(paymentID) == 0 || !govalidator.IsUUIDv4(paymentID) {
+		if len(walletID) == 0 || !govalidator.IsUUIDv4(walletID) {
 			return &handlers.AppError{
 				Message: "Error validating request query parameter",
 				Code:    http.StatusBadRequest,
@@ -72,7 +72,7 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 		}
 
 		var wallet wallet.Info
-		wallet.ID = paymentID
+		wallet.ID = walletID
 		grants, err := service.GetGrantsOrderedByExpiry(wallet, "")
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up active grants", http.StatusBadRequest)
