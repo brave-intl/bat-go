@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"

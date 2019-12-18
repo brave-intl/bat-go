@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/balance"
-	"github.com/brave-intl/bat-go/utils/ledger"
-	"github.com/brave-intl/bat-go/utils/reputation"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/ledger"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	kafka "github.com/segmentio/kafka-go"
@@ -160,12 +160,8 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	if err != nil {
 		return nil, err
 	}
-	ledgerClient, err := ledger.New()
-	if err != nil {
-		return nil, err
-	}
 
-	reputationClient, err := reputation.New()
+	ledgerClient, err := ledger.New()
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +169,14 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	balanceClient, err := balance.New()
 	if err != nil {
 		return nil, err
+	}
+
+	var reputationClient *reputation.HTTPClient
+	if os.Getenv("ENV") != "local" || len(os.Getenv("REPUTATION_SERVER")) > 0 {
+		reputationClient, err = reputation.New()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	service := &Service{
