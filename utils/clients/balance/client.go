@@ -21,9 +21,9 @@ type HTTPClient struct {
 func New() (*HTTPClient, error) {
 	client, err := clients.New("BALANCE_SERVER", "BALANCE_TOKEN")
 	if err != nil {
-		return &HTTPClient{*client}, err
+		return nil, err
 	}
-	return nil, err
+	return &HTTPClient{*client}, err
 }
 
 // InvalidateBalance invalidates the cached value on balance

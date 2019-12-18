@@ -21,9 +21,9 @@ type HTTPClient struct {
 func New() (*HTTPClient, error) {
 	client, err := clients.New("REPUTATION_SERVER", "REPUTATION_TOKEN")
 	if err != nil {
-		return &HTTPClient{*client}, err
+		return nil, err
 	}
-	return nil, err
+	return &HTTPClient{*client}, err
 }
 
 // IsWalletReputableResponse is what the reputation server

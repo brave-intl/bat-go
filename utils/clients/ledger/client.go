@@ -23,9 +23,9 @@ type HTTPClient struct {
 func New() (*HTTPClient, error) {
 	client, err := clients.New("LEDGER_SERVER", "LEDGER_TOKEN")
 	if err != nil {
-		return &HTTPClient{*client}, err
+		return nil, err
 	}
-	return nil, err
+	return &HTTPClient{*client}, err
 }
 
 // WalletAddresses contains the wallet addresses

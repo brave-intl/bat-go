@@ -24,9 +24,9 @@ type HTTPClient struct {
 func New() (*HTTPClient, error) {
 	client, err := clients.New("CHALLENGE_BYPASS_SERVER", "CHALLENGE_BYPASS_TOKEN")
 	if err != nil {
-		return &HTTPClient{*client}, err
+		return nil, err
 	}
-	return nil, err
+	return &HTTPClient{*client}, err
 }
 
 // IssuerCreateRequest is a request to create a new issuer
