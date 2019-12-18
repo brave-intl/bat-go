@@ -20,12 +20,12 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/cbr"
-	mockcb "github.com/brave-intl/bat-go/utils/cbr/mock"
 	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
+	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
-	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
-	mockreputation "github.com/brave-intl/bat-go/utils/reputation/mock"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
@@ -244,7 +244,7 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	suite.Require().NoError(err)
 
 	claimReq := ClaimRequest{
-		PaymentID:    walletID,
+		WalletID:     walletID,
 		BlindedCreds: blindedCreds,
 	}
 
@@ -391,7 +391,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	// blindedCreds should be the wrong length
 	claimReq := ClaimRequest{
-		PaymentID:    walletID,
+		WalletID:     walletID,
 		BlindedCreds: blindedCreds,
 	}
 

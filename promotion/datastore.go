@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/brave-intl/bat-go/utils/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"

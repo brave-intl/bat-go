@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/logging"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -51,6 +52,8 @@ func (service *Service) GetAvailablePromotions(
 	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
+		logging.AddWalletIDToContext(ctx, *walletID)
+
 		wallet, err := service.GetOrCreateWallet(ctx, *walletID)
 		if err != nil {
 			return nil, err
@@ -58,6 +61,7 @@ func (service *Service) GetAvailablePromotions(
 		if wallet == nil {
 			return nil, nil
 		}
+
 		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
 		if err != nil {
 			return nil, err

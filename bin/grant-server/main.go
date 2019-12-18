@@ -12,7 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
-	"github.com/brave-intl/bat-go/utils/reputation"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -143,8 +143,7 @@ func jobWorker(context context.Context, job func(context.Context) (bool, error),
 }
 
 func main() {
-	serverCtx, _ := setupLogger(context.Background())
-	logger := log.Ctx(serverCtx)
+	serverCtx, logger := setupLogger(context.Background())
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
