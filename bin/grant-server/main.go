@@ -12,7 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
-	"github.com/brave-intl/bat-go/utils/reputation"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"

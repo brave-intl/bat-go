@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/balance"
-	"github.com/brave-intl/bat-go/utils/ledger"
-	"github.com/brave-intl/bat-go/utils/reputation"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/ledger"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	kafka "github.com/segmentio/kafka-go"

@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	mockledger "github.com/brave-intl/bat-go/utils/ledger/mock"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 )
