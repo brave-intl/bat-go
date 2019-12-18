@@ -48,7 +48,7 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 	}
 
 	var walletResponse WalletResponse
-	resp, err := c.Do(req, &walletResponse)
+	resp, err := c.Do(ctx, req, &walletResponse)
 
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {

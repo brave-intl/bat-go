@@ -54,7 +54,7 @@ func (c *HTTPClient) IsWalletReputable(
 	}
 
 	var resp IsWalletReputableResponse
-	_, err = c.Do(req, &resp)
+	_, err = c.Do(ctx, req, &resp)
 	if err != nil {
 		return false, err
 	}

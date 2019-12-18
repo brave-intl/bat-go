@@ -86,12 +86,18 @@ func (c *SimpleHTTPClient) NewRequest(ctx context.Context, method, path string, 
 }
 
 // Do the specified http request, decoding the JSON result into v
-func (c *SimpleHTTPClient) Do(req *http.Request, v interface{}) (*http.Response, error) {
+func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer closers.Panic(resp.Body)
+	logger := log.Ctx(ctx)
+	dump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		panic(err)
+	}
+	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
 	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
 		if v != nil {

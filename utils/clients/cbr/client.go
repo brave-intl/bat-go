@@ -48,7 +48,7 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 		return err
 	}
 
-	_, err = c.Do(req, nil)
+	_, err = c.Do(ctx, req, nil)
 
 	return err
 }
@@ -61,7 +61,7 @@ func (c *HTTPClient) GetIssuer(ctx context.Context, issuer string) (*IssuerRespo
 	}
 
 	var resp IssuerResponse
-	_, err = c.Do(req, &resp)
+	_, err = c.Do(ctx, req, &resp)
 
 	return &resp, err
 }
@@ -85,7 +85,7 @@ func (c *HTTPClient) SignCredentials(ctx context.Context, issuer string, creds [
 	}
 
 	var resp CredentialsIssueResponse
-	_, err = c.Do(req, &resp)
+	_, err = c.Do(ctx, req, &resp)
 
 	return &resp, err
 }
@@ -104,7 +104,7 @@ func (c *HTTPClient) RedeemCredential(ctx context.Context, issuer string, preima
 		return err
 	}
 
-	_, err = c.Do(req, nil)
+	_, err = c.Do(ctx, req, nil)
 
 	return err
 }
@@ -129,7 +129,7 @@ func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []Creden
 		return err
 	}
 
-	_, err = c.Do(req, nil)
+	_, err = c.Do(ctx, req, nil)
 
 	return err
 }

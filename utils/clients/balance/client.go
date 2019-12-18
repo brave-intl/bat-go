@@ -33,7 +33,7 @@ func (c *HTTPClient) InvalidateBalance(ctx context.Context, id uuid.UUID) error 
 		return err
 	}
 
-	_, err = c.Do(req, nil)
+	_, err = c.Do(ctx, req, nil)
 
 	if err != nil {
 		return err
