@@ -311,6 +311,27 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().True(promotions[1].Available)
 	suite.Assert().True(adClaimValue.Equals(promotions[1].ApproximateValue))
 	suite.Assert().Equal(adSuggestionsPerGrant, promotions[1].SuggestionsPerGrant)
+
+	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(35.0), "")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	// test when claim is for less than the value of one vote
+	adClaimValue = decimal.NewFromFloat(0.05)
+	claim, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
+	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
+	adSuggestionsPerGrant, err = claim.SuggestionsNeeded(promotion)
+	suite.Require().NoError(err)
+
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(3, len(promotions))
+	suite.Assert().True(promotions[0].Available)
+	suite.Assert().True(promotions[1].Available)
+	suite.Assert().True(promotions[2].Available)
+	suite.Assert().True(adClaimValue.Equals(promotions[2].ApproximateValue))
+	suite.Assert().Equal(adSuggestionsPerGrant, promotions[2].SuggestionsPerGrant)
+	suite.Assert().Equal(1, adSuggestionsPerGrant)
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
