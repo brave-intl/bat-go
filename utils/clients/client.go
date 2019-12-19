@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 )
@@ -80,7 +81,21 @@ func (c *SimpleHTTPClient) NewRequest(
 
 	req, err := c.newRequest(method, resolvedURL.String(), buf)
 	if err != nil {
-		return req, err
+		status := 0
+		message := "request"
+		switch err.(type) {
+		case url.EscapeError:
+			status = http.StatusBadRequest
+			message = "request: unable to escape url"
+		case url.InvalidHostError:
+			status = http.StatusBadRequest
+			message = "request: invalid host"
+		}
+		return nil, handlers.AppError{
+			Cause:   err,
+			Code:    status,
+			Message: message,
+		}
 	}
 
 	req.Header.Set("accept", "application/json")
@@ -88,6 +103,7 @@ func (c *SimpleHTTPClient) NewRequest(
 		req.Header.Add("content-type", "application/json")
 	}
 
+	handlers.TransferRequestID(ctx, req)
 	logOut(ctx, "request", *req.URL, 0, req.Header, body)
 
 	req.Header.Set("authorization", "Bearer "+c.AuthToken)
