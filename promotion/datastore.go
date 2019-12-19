@@ -410,9 +410,10 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.expires_at,
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
-			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
-				promos.approximate_value *
-				promos.suggestions_per_grant )::int as suggestions_per_grant,
+			greatest(1, (coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+					promos.approximate_value *
+					promos.suggestions_per_grant
+				)::int) as suggestions_per_grant,
 			promos.remaining_grants,
 			promos.platform,
 			promos.active,

@@ -80,7 +80,11 @@ func (claim *Claim) SuggestionsNeeded(promotion *Promotion) (int, error) {
 	if claim.PromotionID != promotion.ID {
 		return 0, errors.New("incorrect promotion passed")
 	}
-	return int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).Round(0).IntPart()), nil
+	amount := int(claim.ApproximateValue.Mul(decimal.NewFromFloat(float64(promotion.SuggestionsPerGrant)).Div(promotion.ApproximateValue)).Round(0).IntPart())
+	if amount < 1 {
+		return 1, nil
+	}
+	return amount, nil
 }
 
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
