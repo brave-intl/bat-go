@@ -10,10 +10,12 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
+	uuid "github.com/satori/go.uuid"
 )
 
 // GrantsRouter is the router for grant endpoints
@@ -70,6 +72,7 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 				},
 			}
 		}
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(walletID)))
 
 		var wallet wallet.Info
 		wallet.ID = walletID
@@ -100,6 +103,8 @@ func Claim(service *grant.Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
+
 		claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
 		if err != nil {
 			// FIXME not all errors are 4xx
@@ -127,6 +132,8 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
+
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
 
 		redeemInfo, err := service.Redeem(r.Context(), &req)
 		if err != nil {
