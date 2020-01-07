@@ -34,6 +34,8 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+
+	r.Method("POST", "/orders", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	return r
 }
 
@@ -207,6 +209,45 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&ClaimResponse{*claimID}); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
+
+// OrderItem is a thing
+type OrderItem struct {
+	SKU     string `json:"sku"`
+	Quanity int    `json:"quanity"`
+}
+
+// CreateOrderRequest includes information needed to create a promotion
+type CreateOrderRequest struct {
+	Items []OrderItem `json:"items"`
+}
+
+// CreateOrder tada
+func CreateOrder(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateOrderRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		data := CreateOrderRequest{
+			Items: req.Items,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+
+		if err := json.NewEncoder(w).Encode(data); err != nil {
 			panic(err)
 		}
 		return nil

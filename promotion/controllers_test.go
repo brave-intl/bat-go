@@ -780,6 +780,77 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
 
+func (suite *ControllersTestSuite) TestCreateOrder() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore:    pg,
+		cbClient:     mockCB,
+		ledgerClient: mockLedger,
+	}
+
+	// var issuerName string
+	// mockCB.EXPECT().
+	// 	CreateIssuer(gomock.Any(), gomock.Any(), gomock.Eq(defaultMaxTokensPerIssuer)).
+	// 	DoAndReturn(func(ctx context.Context, name string, maxTokens int) error {
+	// 		issuerName = name
+	// 		return nil
+	// 	})
+	// mockCB.EXPECT().
+	// 	GetIssuer(gomock.Any(), gomock.Any()).
+	// 	DoAndReturn(func(ctx context.Context, name string) (*cbr.IssuerResponse, error) {
+	// 		return &cbr.IssuerResponse{
+	// 			Name:      issuerName,
+	// 			PublicKey: "",
+	// 		}, nil
+	// 	})
+
+	handler := CreateOrder(service)
+
+	createRequest := &CreateOrderRequest{
+		Items: []OrderItem{
+			{
+				SKU:     "Test",
+				Quanity: 40,
+			},
+			{
+				SKU:     "Test2",
+				Quanity: 2,
+			},
+		},
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Assert().JSONEq(`{
+		"items": [
+			{
+				"sku": "Test",
+				"quanity": 40
+			},
+			{
+				"sku": "Test2",
+				"quanity": 2
+			}
+		]
+	}`, rr.Body.String(), "expected an order response")
+}
+
 func (suite *ControllersTestSuite) TestClaimCompatability() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
