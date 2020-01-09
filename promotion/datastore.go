@@ -169,7 +169,7 @@ func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status str
 		totalPrice, merchantID, status)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	for i := 0; i < len(orderItems); i++ {
@@ -181,35 +181,35 @@ func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status str
 			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
 		`, orderItems[i])
 		if err != nil {
-			fmt.Println("OH NO")
-			panic(err)
+			return nil, err
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-
-	fmt.Println("🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀")
-	fmt.Println(orderID.Value())
-	fmt.Println("🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀")
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	// statement := "select * from orders where id = $1"
-	// orders := []Order{}
-	// err = pg.DB.Get(&orders, statement, orderID)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	statement := "select * from orders where id = $1"
+	order := Order{}
+	err = pg.DB.Get(&order, statement, orderID)
+	if err != nil {
+		return nil, err
+	}
 
-	// if len(orders) > 0 {
-	// 	return &orders[0], nil
-	// }
+	foundOrderItems := []OrderItem{}
+	statement = "select * from order_items where order_id = $1"
+	err = pg.DB.Select(&foundOrderItems, statement, orderID)
 
-	return nil, nil
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, nil
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
