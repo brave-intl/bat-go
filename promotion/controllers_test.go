@@ -816,14 +816,10 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	handler := CreateOrder(service)
 
 	createRequest := &CreateOrderRequest{
-		Items: []OrderItem{
+		Items: []OrderItemRequest{
 			{
-				SKU:     "Test",
+				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
 				Quanity: 40,
-			},
-			{
-				SKU:     "Test2",
-				Quanity: 2,
 			},
 		},
 	}

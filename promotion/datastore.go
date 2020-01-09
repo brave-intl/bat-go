@@ -29,6 +29,8 @@ type Datastore interface {
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	// CreateOrder is used to create an order for payments
+	CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -151,6 +153,44 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	}
 
 	return pg, nil
+}
+
+// CreateOrder given the promotion type, initial number of grants and the desired value of those grants
+func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
+	// orderItemsStatements := []
+
+	for i := 0; i < len(orderItems); i++ {
+		query, _, _ := sqlx.Named(`
+			INSERT INTO order_items (order_id, quantity, price, description, kind)
+			VALUES (SELECT id FROM new_order, :quantity, :price, :description, :kind)
+		`, orderItems[i])
+
+		fmt.Println(string(query))
+	}
+
+	// statement := `
+	// BEGIN
+	// 	WITH new_order AS (
+	// 		INSERT INTO orders (total_price, merchant_id, status)
+	// 		VALUES ($1, $2, $3)
+	// 		RETURNING id
+	// 	)
+	// COMMIT
+	// `
+
+	// promotions := []Promotion{}
+
+	// err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	orders := []Order{
+		{
+			Status: "Test",
+		},
+	}
+
+	return &orders[0], nil
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants

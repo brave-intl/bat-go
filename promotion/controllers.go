@@ -215,15 +215,15 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 	})
 }
 
-// OrderItem is a thing
-type OrderItem struct {
+// OrderItemRequest is a thing
+type OrderItemRequest struct {
 	SKU     string `json:"sku"`
 	Quanity int    `json:"quanity"`
 }
 
 // CreateOrderRequest includes information needed to create a promotion
 type CreateOrderRequest struct {
-	Items []OrderItem `json:"items"`
+	Items []OrderItemRequest `json:"items"`
 }
 
 // CreateOrder tada
@@ -240,8 +240,9 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		data := CreateOrderRequest{
-			Items: req.Items,
+		data := []OrderItem{}
+		for i := 0; i < len(req.Items); i++ {
+			data = append(data, CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
