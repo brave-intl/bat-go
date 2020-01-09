@@ -36,6 +36,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 
 	r.Method("POST", "/orders", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
+	r.Method("GET", "/orders/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 	return r
 }
 
@@ -226,7 +227,7 @@ type CreateOrderRequest struct {
 	Items []OrderItemRequest `json:"items"`
 }
 
-// CreateOrder tada
+// CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderRequest
@@ -256,7 +257,41 @@ func CreateOrder(service *Service) handlers.AppHandler {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(order); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
 
+// GetOrder is the handler for creating a new order
+func GetOrder(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		orderID := chi.URLParam(r, "id")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return &handlers.AppError{
+				Message: "Error validating request url parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			}
+		}
+
+		id, err := uuid.FromString(orderID)
+		if err != nil {
+			panic(err) // Should not be possible
+		}
+
+		order, err := service.datastore.GetOrder(id)
+		if err != nil {
+			panic(err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(order); err != nil {
 			panic(err)
 		}

@@ -43,6 +43,8 @@ type Datastore interface {
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
 	SaveClaimCreds(claimCreds *ClaimCreds) error
+	// GetOrder by ID
+	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
 	// InsertIssuer inserts the given issuer
@@ -193,9 +195,14 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		return nil, err
 	}
 
+	return pg.GetOrder(orderID)
+}
+
+// GetOrder does the thing
+func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "select * from orders where id = $1"
 	order := Order{}
-	err = pg.DB.Get(&order, statement, orderID)
+	err := pg.DB.Get(&order, statement, orderID)
 	if err != nil {
 		return nil, err
 	}
