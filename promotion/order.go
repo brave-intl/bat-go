@@ -2,12 +2,12 @@ package promotion
 
 import (
 	"database/sql"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"gopkg.in/macaroon.v2"
 )
 
@@ -24,14 +24,14 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID        uuid.UUID    `json:"id" db:"id"`
-	OrderID   uuid.UUID    `json:"order_id" db:"order_id"`
-	CreatedAt sql.NullTime `json:"createdAt" db:"created_at"`
-	UpdatedAt sql.NullTime `json:"updatedAt" db:"updated_at"`
-	Currency  string       `json:"currency" db:"currency"`
-	Quantity  int          `json:"quantity" db:"quantity"`
-	Price     string       `json:"price" db:"price"`
-	Subtotal  string       `json:"subtotal"`
+	ID        uuid.UUID       `json:"id" db:"id"`
+	OrderID   uuid.UUID       `json:"order_id" db:"order_id"`
+	CreatedAt sql.NullTime    `json:"createdAt" db:"created_at"`
+	UpdatedAt sql.NullTime    `json:"updatedAt" db:"updated_at"`
+	Currency  string          `json:"currency" db:"currency"`
+	Quantity  int             `json:"quantity" db:"quantity"`
+	Price     string          `json:"price" db:"price"`
+	Subtotal  decimal.Decimal `json:"subtotal"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
@@ -69,8 +69,9 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) OrderItem {
 			orderItem.Currency = value
 		}
 	}
-	price, err := strconv.ParseFloat(orderItem.Price, 64)
-	orderItem.Subtotal = fmt.Sprintf("%f", price*float64(quantity))
+	price, err := decimal.NewFromString(orderItem.Price)
+	quanity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
+	orderItem.Subtotal = price.Mul(quanity)
 
 	return orderItem
 }

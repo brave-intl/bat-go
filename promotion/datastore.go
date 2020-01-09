@@ -30,7 +30,7 @@ type Datastore interface {
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -156,7 +156,7 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 }
 
 // CreateOrder given the promotion type, initial number of grants and the desired value of those grants
-func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var orderID uuid.UUID
@@ -179,7 +179,7 @@ func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status str
 		_, err = tx.NamedExec(`
 			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
 			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
-		`, orderItems[i])
+		`, orderItem)
 		if err != nil {
 			return nil, err
 		}

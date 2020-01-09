@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -241,20 +240,16 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		totalPrice := float64(0)
+		totalPrice := decimal.New(0, 0)
 		orderItems := []OrderItem{}
 		for i := 0; i < len(req.Items); i++ {
 			orderItem := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity)
-			price, err := strconv.ParseFloat(orderItem.Subtotal, 64)
-			if err != nil {
-				panic(err)
-			}
-			totalPrice += price
+			totalPrice = totalPrice.Add(orderItem.Subtotal)
 
 			orderItems = append(orderItems, orderItem)
 		}
 
-		order, err := service.datastore.CreateOrder(fmt.Sprintf("%f", totalPrice), "brave.com", "pending", orderItems)
+		order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", orderItems)
 		if err != nil {
 			panic(err)
 		}

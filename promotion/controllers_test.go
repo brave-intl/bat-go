@@ -797,22 +797,6 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 		ledgerClient: mockLedger,
 	}
 
-	// var issuerName string
-	// mockCB.EXPECT().
-	// 	CreateIssuer(gomock.Any(), gomock.Any(), gomock.Eq(defaultMaxTokensPerIssuer)).
-	// 	DoAndReturn(func(ctx context.Context, name string, maxTokens int) error {
-	// 		issuerName = name
-	// 		return nil
-	// 	})
-	// mockCB.EXPECT().
-	// 	GetIssuer(gomock.Any(), gomock.Any()).
-	// 	DoAndReturn(func(ctx context.Context, name string) (*cbr.IssuerResponse, error) {
-	// 		return &cbr.IssuerResponse{
-	// 			Name:      issuerName,
-	// 			PublicKey: "",
-	// 		}, nil
-	// 	})
-
 	handler := CreateOrder(service)
 
 	createRequest := &CreateOrderRequest{
@@ -833,18 +817,22 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusCreated, rr.Code)
-	suite.Assert().JSONEq(`{
-		"items": [
-			{
-				"sku": "Test",
-				"quanity": 40
-			},
-			{
-				"sku": "Test2",
-				"quanity": 2
-			}
-		]
-	}`, rr.Body.String(), "expected an order response")
+
+	var order Order
+	err = json.Unmarshal([]byte(rr.Body.String()), &order)
+
+	// Check the order
+	suite.Assert().Equal("10", order.TotalPrice)
+	suite.Assert().Equal("brave.com", order.MerchantID)
+	suite.Assert().Equal("pending", order.Status)
+
+	// Check the order items
+	suite.Assert().Equal(len(order.Items), 1)
+	suite.Assert().Equal("BAT", order.Items[0].Currency)
+	suite.Assert().Equal("0.25", order.Items[0].Price)
+	suite.Assert().Equal(40, order.Items[0].Quantity)
+	suite.Assert().Equal(decimal.New(10,0), order.Items[0].Subtotal)
+	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 }
 
 func (suite *ControllersTestSuite) TestClaimCompatability() {
