@@ -7,7 +7,7 @@ create table orders (
 	status text
 );
 
-create table orders_items (
+create table order_items (
   id uuid primary key not null default uuid_generate_v4(),
   order_id uuid,
 	created_at timestamp with time zone not null default current_timestamp,
@@ -15,7 +15,7 @@ create table orders_items (
 	currency   text,
   quantity integer,
 	price   text,
-	subtotal text,
+	subtotal text
 );
 
-create index on order_items(order_id);
+create index order_items_indx on order_items(order_id);
