@@ -2,9 +2,6 @@ GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 VAULT_VERSION=0.10.1
 _BINS := $(wildcard bin/*)
 TEST_PKG?=./...
-ifdef TEST_RUN
-	TEST_RUN = --run=$(TEST_RUN)
-endif
 
 ifdef GOOS
 	BINS := $(_BINS:bin/%=target/$(GOOS)_$(GOARCH)/%)
@@ -78,7 +75,7 @@ download-vault:
 	cd target/settlement-tools && unzip -o vault_$(VAULT_VERSION)_$(GOOS)_$(GOARCH).zip vault && rm vault_$(VAULT_VERSION)_*
 
 test:
-	go test -v -p 1 --tags=$(TEST_TAGS) $(TEST_PKG) $(TEST_RUN)
+	go test -v -p 1 --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 
 format:
 	gofmt -s -w ./

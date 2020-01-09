@@ -282,11 +282,14 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		claimType := chi.URLParam(r, "claimType")
 		walletIDQuery := r.URL.Query().Get("paymentID")
+		if len(walletIDQuery) == 0 {
+			walletIDQuery = r.URL.Query().Get("paymentId")
+		}
 		walletID, err := uuid.FromString(walletIDQuery)
 
 		if err != nil {
 			return handlers.ValidationError("query parameter", map[string]string{
-				"paymentID": "must be a uuidv4",
+				"paymentId": "must be a uuidv4",
 			})
 		}
 
