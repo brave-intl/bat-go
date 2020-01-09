@@ -1,5 +1,3 @@
-create extension if not exists "uuid-ossp";
-
 create table orders (
   id uuid primary key not null default uuid_generate_v4(),
 	created_at timestamp with time zone not null default current_timestamp,

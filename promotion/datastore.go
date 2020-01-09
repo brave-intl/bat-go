@@ -157,40 +157,39 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 
 // CreateOrder given the promotion type, initial number of grants and the desired value of those grants
 func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
-	// orderItemsStatements := []
+	tx := pg.DB.MustBegin()
+
+	id := tx.MustExec(
+		`WITH new_order AS (
+			INSERT INTO orders (total_price, merchant_id, status)
+			VALUES ($1, $2, $3)
+			RETURNING id
+		) SELECT id from new_order;`,
+		totalPrice, merchantID, status)
 
 	for i := 0; i < len(orderItems); i++ {
-		query, _, _ := sqlx.Named(`
+		tx.NamedExec(`
 			INSERT INTO order_items (order_id, quantity, price, description, kind)
 			VALUES (SELECT id FROM new_order, :quantity, :price, :description, :kind)
 		`, orderItems[i])
-
-		fmt.Println(string(query))
+	}
+	err := tx.Commit()
+	if err != nil {
+		panic(err)
 	}
 
-	// statement := `
-	// BEGIN
-	// 	WITH new_order AS (
-	// 		INSERT INTO orders (total_price, merchant_id, status)
-	// 		VALUES ($1, $2, $3)
-	// 		RETURNING id
-	// 	)
-	// COMMIT
-	// `
-
-	// promotions := []Promotion{}
-
-	// err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	orders := []Order{
-		{
-			Status: "Test",
-		},
+	statement := "select * from orders where id = $1"
+	orders := []Order{}
+	err = pg.DB.Select(&orders, statement, id)
+	if err != nil {
+		return nil, err
 	}
 
-	return &orders[0], nil
+	if len(orders) > 0 {
+		return &orders[0], nil
+	}
+
+	return nil, nil
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
