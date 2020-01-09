@@ -159,7 +159,8 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
-	id := tx.MustExec(
+	var orderID uuid.UUID
+	err := tx.Get(&orderID,
 		`WITH new_order AS (
 			INSERT INTO orders (total_price, merchant_id, status)
 			VALUES ($1, $2, $3)
@@ -167,27 +168,46 @@ func (pg *Postgres) CreateOrder(totalPrice string, merchantID string, status str
 		) SELECT id from new_order;`,
 		totalPrice, merchantID, status)
 
-	for i := 0; i < len(orderItems); i++ {
-		tx.NamedExec(`
-			INSERT INTO order_items (order_id, quantity, price, description, kind)
-			VALUES (SELECT id FROM new_order, :quantity, :price, :description, :kind)
-		`, orderItems[i])
-	}
-	err := tx.Commit()
 	if err != nil {
 		panic(err)
 	}
 
-	statement := "select * from orders where id = $1"
-	orders := []Order{}
-	err = pg.DB.Select(&orders, statement, id)
+	for i := 0; i < len(orderItems); i++ {
+		orderItem := orderItems[i]
+		orderItem.OrderID = orderID
+
+		_, err = tx.NamedExec(`
+			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
+			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
+		`, orderItems[i])
+		if err != nil {
+			fmt.Println("OH NO")
+			panic(err)
+		}
+	}
+	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	if len(orders) > 0 {
-		return &orders[0], nil
+	fmt.Println("🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀")
+	fmt.Println(orderID.Value())
+	fmt.Println("🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀🏀")
+
+	if err != nil {
+		panic(err)
 	}
+
+	// statement := "select * from orders where id = $1"
+	// orders := []Order{}
+	// err = pg.DB.Get(&orders, statement, orderID)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// if len(orders) > 0 {
+	// 	return &orders[0], nil
+	// }
 
 	return nil, nil
 }

@@ -13,27 +13,25 @@ import (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID `json:"id" db:"id"`
-	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt  time.Time `json:"updatedAt" db:"updated_at"`
-	TotalPrice string    `json:"totalPrice" db:"total_price"`
-	MerchantID string    `json:"merchantId" db:"merchant_id"`
-	Status     string    `json:"status" db:"status"`
+	ID         uuid.UUID   `json:"id" db:"id"`
+	CreatedAt  time.Time   `json:"createdAt" db:"created_at"`
+	UpdatedAt  time.Time   `json:"updatedAt" db:"updated_at"`
+	TotalPrice string      `json:"totalPrice" db:"total_price"`
+	MerchantID string      `json:"merchantId" db:"merchant_id"`
+	Status     string      `json:"status" db:"status"`
+	Items      []OrderItem `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID          uuid.UUID    `json:"id" db:"id"`
-	OrderID     uuid.UUID    `json:"order_id" db:"order_id"`
-	CreatedAt   sql.NullTime `json:"createdAt" db:"created_at"`
-	UpdatedAt   sql.NullTime `json:"updatedAt" db:"updated_at"`
-	Currency    string       `json:"currency" db:"currency"`
-	Quantity    int          `json:"quantity" db:"quantity"`
-	Price       string       `json:"price" db:"price"`
-	Subtotal    string       `json:"subtotal"`
-	Description string       `json:"description" db:"description"`
-	Image       string       `json:"image" db:"image"`
-	Kind        string       `json:"kind" db:"kind"`
+	ID        uuid.UUID    `json:"id" db:"id"`
+	OrderID   uuid.UUID    `json:"order_id" db:"order_id"`
+	CreatedAt sql.NullTime `json:"createdAt" db:"created_at"`
+	UpdatedAt sql.NullTime `json:"updatedAt" db:"updated_at"`
+	Currency  string       `json:"currency" db:"currency"`
+	Quantity  int          `json:"quantity" db:"quantity"`
+	Price     string       `json:"price" db:"price"`
+	Subtotal  string       `json:"subtotal"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
