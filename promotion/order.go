@@ -46,6 +46,13 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) OrderItem {
 		panic(err)
 	}
 
+	// TODO Figure out how to verify macaroon using library
+	// I think we have to call .Bind()
+	// https://github.com/go-macaroon/macaroon#func-macaroon-bind
+	// I think we simply want to verify the signature and not the caveats?
+	// SO maybe VerifySignature
+	// https://github.com/go-macaroon/macaroon#func-macaroon-verifysignature
+
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
