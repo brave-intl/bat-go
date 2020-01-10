@@ -34,9 +34,14 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+	return r
+}
 
-	r.Method("POST", "/orders", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/orders/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+// Router for order endpoints
+func OrderRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
+	r.Method("GET", "/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 	return r
 }
 

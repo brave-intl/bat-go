@@ -31,7 +31,7 @@ some auxiliary binaries.
 
 You can run the unit and integration tests via `make docker-test`
 
-Once you are in the Docker containe you can run the web server via `go run bin/grant-server/main.go`.
+Once you are in the Docker container you can run the web server via `go run bin/grant-server/main.go`.
 
 If you want to run tests you can do so via the command `go test --tags=integration -v`
 For example in `promotion` you can run specific tests by running a command similar to `go test --tags=integration -run TestControllersTestSuite/TestCreateOrder`.
