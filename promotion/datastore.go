@@ -161,13 +161,12 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
-	var orderID uuid.UUID
-	err := tx.Get(&orderID,
-		`WITH new_order AS (
+	var order Order
+	err := tx.Get(&order, `
 			INSERT INTO orders (total_price, merchant_id, status)
 			VALUES ($1, $2, $3)
-			RETURNING id
-		) SELECT id from new_order;`,
+			RETURNING *
+		`,
 		totalPrice, merchantID, status)
 
 	if err != nil {
@@ -175,13 +174,15 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	}
 
 	for i := 0; i < len(orderItems); i++ {
-		orderItem := orderItems[i]
-		orderItem.OrderID = orderID
+		orderItems[i].OrderID = order.ID
 
-		_, err = tx.NamedExec(`
+		nstmt, _ := tx.PrepareNamed(`
 			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
 			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
-		`, orderItem)
+			RETURNING *
+		`)
+		err = nstmt.Get(&orderItems[i], orderItems[i])
+
 		if err != nil {
 			return nil, err
 		}
@@ -191,11 +192,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
+	order.Items = orderItems
 
-	return pg.GetOrder(orderID)
+	return &order, nil
 }
 
 // GetOrder queries the database and returns an order
