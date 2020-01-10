@@ -13,13 +13,13 @@ import (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID   `json:"id" db:"id"`
-	CreatedAt  time.Time   `json:"createdAt" db:"created_at"`
-	UpdatedAt  time.Time   `json:"updatedAt" db:"updated_at"`
-	TotalPrice string      `json:"totalPrice" db:"total_price"`
-	MerchantID string      `json:"merchantId" db:"merchant_id"`
-	Status     string      `json:"status" db:"status"`
-	Items      []OrderItem `json:"items"`
+	ID         uuid.UUID       `json:"id" db:"id"`
+	CreatedAt  time.Time       `json:"createdAt" db:"created_at"`
+	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
+	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
+	MerchantID string          `json:"merchantId" db:"merchant_id"`
+	Status     string          `json:"status" db:"status"`
+	Items      []OrderItem     `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
@@ -30,7 +30,7 @@ type OrderItem struct {
 	UpdatedAt sql.NullTime    `json:"updatedAt" db:"updated_at"`
 	Currency  string          `json:"currency" db:"currency"`
 	Quantity  int             `json:"quantity" db:"quantity"`
-	Price     string          `json:"price" db:"price"`
+	Price     decimal.Decimal `json:"price" db:"price"`
 	Subtotal  decimal.Decimal `json:"subtotal"`
 }
 
@@ -71,14 +71,17 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) OrderItem {
 			}
 			orderItem.ID = uuid
 		case "price":
-			orderItem.Price = value
+			orderItem.Price, err = decimal.NewFromString(value)
+			if err != nil {
+				panic(err)
+			}
 		case "currency":
 			orderItem.Currency = value
 		}
+
 	}
-	price, err := decimal.NewFromString(orderItem.Price)
 	quanity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
-	orderItem.Subtotal = price.Mul(quanity)
+	orderItem.Subtotal = orderItem.Price.Mul(quanity)
 
 	return orderItem
 }
