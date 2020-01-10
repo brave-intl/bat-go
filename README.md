@@ -13,6 +13,18 @@ Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://trav
 
 4. Build via `make`
 
+**Consider adding a pre-commit hook**
+
+1. Use your favorite editor to open `.git/hooks/pre-commit`
+2. Add the following contents
+
+   ```
+   make test lint
+   ```
+
+3. Make the executable runnable by executing `chmod +x .git/hooks/pre-commit`
+4. Commit away!
+
 ## Full environment via docker-compose
 
 Ensure docker and docker-compose are installed.
