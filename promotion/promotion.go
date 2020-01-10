@@ -9,6 +9,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var defaultVoteValue decimal.Decimal = decimal.NewFromFloat(0.25)
+
 // Promotion includes information about a particular promotion
 type Promotion struct {
 	ID                  uuid.UUID       `json:"id" db:"id"`
@@ -65,6 +67,11 @@ func (service *Service) GetAvailablePromotions(
 		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
 		if err != nil {
 			return nil, err
+		}
+
+		// Quick hack FIXME
+		for i := 0; i < len(promos); i++ {
+			promos[i].ApproximateValue = decimal.New(int64(promos[i].SuggestionsPerGrant), 0).Mul(defaultVoteValue)
 		}
 
 		if !migrate {
