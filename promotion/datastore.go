@@ -198,7 +198,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	return pg.GetOrder(orderID)
 }
 
-// GetOrder does the thing
+// GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "select * from orders where id = $1"
 	order := Order{}

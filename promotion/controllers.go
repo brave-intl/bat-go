@@ -37,7 +37,7 @@ func Router(service *Service) chi.Router {
 	return r
 }
 
-// Router for order endpoints
+// OrderRouter for order endpoints
 func OrderRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
@@ -221,7 +221,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 	})
 }
 
-// OrderItemRequest is a thing
+// OrderItemRequest is the body for creating new items
 type OrderItemRequest struct {
 	SKU     string `json:"sku"`
 	Quanity int    `json:"quanity"`
