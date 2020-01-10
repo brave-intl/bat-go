@@ -160,7 +160,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 	values ($1, $2, $3, $4, $5)
 	returning *`
 	promotions := []Promotion{}
-	suggestionsPerGrant := value.Div(decimal.NewFromFloat(0.25))
+	suggestionsPerGrant := value.Div(defaultVoteValue)
 	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
