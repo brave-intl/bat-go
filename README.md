@@ -7,9 +7,11 @@ Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://trav
 
 1. [Install Go 1.12](https://golang.org/doc/install) (NOTE: Go 1.10 and earlier will not work!)
 
-2. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
-3. Build via `make`
+3. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+
+4. Build via `make`
 
 ## Full environment via docker-compose
 
