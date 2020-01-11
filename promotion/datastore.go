@@ -29,8 +29,6 @@ type Datastore interface {
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
-	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -43,8 +41,6 @@ type Datastore interface {
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
 	SaveClaimCreds(claimCreds *ClaimCreds) error
-	// GetOrder by ID
-	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
 	// InsertIssuer inserts the given issuer
@@ -155,70 +151,6 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	}
 
 	return pg, nil
-}
-
-// CreateOrder given the promotion type, initial number of grants and the desired value of those grants
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
-	tx := pg.DB.MustBegin()
-
-	var order Order
-	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status)
-			VALUES ($1, $2, $3)
-			RETURNING *
-		`,
-		totalPrice, merchantID, status)
-
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-
-	for i := 0; i < len(orderItems); i++ {
-		orderItems[i].OrderID = order.ID
-
-		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
-			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
-			RETURNING *
-		`)
-		err = nstmt.Get(&orderItems[i], orderItems[i])
-
-		if err != nil {
-			_ = tx.Rollback()
-			return nil, err
-		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-
-	order.Items = orderItems
-
-	return &order, nil
-}
-
-// GetOrder queries the database and returns an order
-func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	statement := "select * from orders where id = $1"
-	order := Order{}
-	err := pg.DB.Get(&order, statement, orderID)
-	if err != nil {
-		return nil, err
-	}
-
-	foundOrderItems := []OrderItem{}
-	statement = "select * from order_items where order_id = $1"
-	err = pg.DB.Select(&foundOrderItems, statement, orderID)
-
-	order.Items = foundOrderItems
-	if err != nil {
-		return nil, err
-	}
-
-	return &order, nil
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants

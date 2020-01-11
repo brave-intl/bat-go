@@ -18,6 +18,7 @@ require (
 	github.com/getsentry/raven-go v0.2.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gogo/protobuf v1.3.0 // indirect
+	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/golang-migrate/migrate/v4 v4.6.2
 	github.com/golang/mock v1.3.1
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect

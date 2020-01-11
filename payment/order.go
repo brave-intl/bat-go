@@ -1,4 +1,4 @@
-package promotion
+package payment
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"gopkg.in/macaroon.v2"
+	macaroon "gopkg.in/macaroon.v2"
 )
 
 // Order includes information about a particular order
