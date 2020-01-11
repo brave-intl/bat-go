@@ -96,7 +96,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(order); err != nil {
 			panic(err)
 		}

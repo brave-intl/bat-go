@@ -102,7 +102,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 		Items: []OrderItemRequest{
 			{
 				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
-				Quanity: 40,
+				Quanity: 20,
 			},
 		},
 	}
@@ -121,28 +121,29 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	err = json.Unmarshal([]byte(rr.Body.String()), &order)
 	suite.Assert().NoError(err)
 
-	req, err = http.NewRequest("GET", "/v1/orders/{orderID}", nil)
+	req, err = http.NewRequest("GET", "/v1/orders/{id}", nil)
 	suite.Require().NoError(err)
 
+	getOrderHandler := GetOrder(service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rctx.URLParams.Add("id", order.ID.String())
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	getOrderHandler.ServeHTTP(rr, getReq)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
 	suite.Assert().NoError(err)
 
-	suite.Assert().Equal("5", order.TotalPrice)
+	suite.Assert().Equal("5", order.TotalPrice.String())
 	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
 
 	// Check the order items
 	suite.Assert().Equal(len(order.Items), 1)
 	suite.Assert().Equal("BAT", order.Items[0].Currency)
-	suite.Assert().Equal("0.25", order.Items[0].Price)
+	suite.Assert().Equal("0.25", order.Items[0].Price.String())
 	suite.Assert().Equal(20, order.Items[0].Quantity)
 	suite.Assert().Equal(decimal.New(5, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
