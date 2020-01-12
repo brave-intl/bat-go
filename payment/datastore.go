@@ -19,6 +19,8 @@ type Datastore interface {
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
+	// CreateTransaction
+	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -83,7 +85,7 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	return pg, nil
 }
 
-// CreateOrder given the promotion type, initial number of grants and the desired value of those grants
+// CreateOrder creates orders given the total price, merchant ID, status and items of the order
 func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
@@ -145,4 +147,31 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
+func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
+	tx := pg.DB.MustBegin()
+
+	var transaction Transaction
+	err := tx.Get(&transaction,
+		`
+			INSERT INTO transactions (order_id, external_transaction_id, status, currency, kind, amount)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING *
+	`, orderID, externalTransactionID, status, currency, kind, amount)
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	return &transaction, nil
 }
