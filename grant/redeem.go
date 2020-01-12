@@ -8,6 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -69,9 +70,13 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	}
 
 	// 2. Enforce transaction checks and verify transaction signature
-	userWallet, err := provider.GetWallet(walletInfo)
+	providerWallet, err := provider.GetWallet(walletInfo)
 	if err != nil {
 		return nil, err
+	}
+	userWallet, ok := providerWallet.(*uphold.Wallet)
+	if !ok {
+		return nil, errors.New("Only uphold wallets are supported")
 	}
 	// this ensures we have a valid wallet if refreshBalance == true
 	balance, err := userWallet.GetBalance(refreshBalance)
