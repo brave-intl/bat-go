@@ -8,6 +8,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	uuid "github.com/satori/go.uuid"
@@ -22,7 +23,7 @@ type Datastore interface {
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -220,7 +221,7 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -515,8 +516,8 @@ func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bo
 
 	type SigningJob struct {
 		Issuer
-		ClaimID      uuid.UUID       `db:"claim_id"`
-		BlindedCreds JSONStringArray `db:"blinded_creds"`
+		ClaimID      uuid.UUID                 `db:"claim_id"`
+		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
 	}
 
 	statement := `

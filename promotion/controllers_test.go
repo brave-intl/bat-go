@@ -26,6 +26,7 @@ import (
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
@@ -646,7 +647,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "an error is returned")
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{publicKey})
+	blindedCreds := jsonutils.JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
 	w := &wallet.Info{
 		ID:         walletID,

@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
@@ -215,9 +216,9 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 // GetClaimResponse includes signed credentials and a batch proof showing they were signed by the public key
 type GetClaimResponse struct {
-	SignedCreds JSONStringArray `json:"signedCreds"`
-	BatchProof  string          `json:"batchProof"`
-	PublicKey   string          `json:"publicKey"`
+	SignedCreds jsonutils.JSONStringArray `json:"signedCreds"`
+	BatchProof  string                    `json:"batchProof"`
+	PublicKey   string                    `json:"publicKey"`
 }
 
 // GetClaim is the handler for checking on a particular claim's status
