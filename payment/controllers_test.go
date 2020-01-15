@@ -41,25 +41,23 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 }
 
-func (suite *ControllersTestSuite) TestCreateOrder() {
+func (suite *ControllersTestSuite) setupCreateOrder(quanity int) Order {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
 		datastore: pg,
 	}
-
 	handler := CreateOrder(service)
 
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
 				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
-				Quanity: 40,
+				Quanity: quanity,
 			},
 		},
 	}
-
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
 
@@ -73,6 +71,12 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	var order Order
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
 	suite.Assert().NoError(err)
+
+	return order
+}
+
+func (suite *ControllersTestSuite) TestCreateOrder() {
+	order := suite.setupCreateOrder(40)
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
@@ -96,32 +100,9 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 		datastore: pg,
 	}
 
-	// Create the order first
-	handler := CreateOrder(service)
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
-			{
-				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
-				Quanity: 20,
-			},
-		},
-	}
+	order := suite.setupCreateOrder(20)
 
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
-
-	var order Order
-	err = json.Unmarshal([]byte(rr.Body.String()), &order)
-	suite.Assert().NoError(err)
-
-	req, err = http.NewRequest("GET", "/v1/orders/{id}", nil)
+	req, err := http.NewRequest("GET", "/v1/orders/{id}", nil)
 	suite.Require().NoError(err)
 
 	getOrderHandler := GetOrder(service)
@@ -129,7 +110,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	rctx.URLParams.Add("id", order.ID.String())
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	getOrderHandler.ServeHTTP(rr, getReq)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
@@ -147,4 +128,55 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(20, order.Items[0].Quantity)
 	suite.Assert().Equal(decimal.New(5, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
+}
+
+func (suite *ControllersTestSuite) TestCreateTransaction() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		datastore: pg,
+	}
+	order := suite.setupCreateOrder(4.75 / .25)
+
+	handler := CreateTransaction(service)
+
+	createRequest := &CreateTransactionRequest{
+		ExternalTransactionID: "3db2f74e-df23-42e2-bf25-a302a93baa2d",
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions", bytes.NewBuffer(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, postReq)
+
+	suite.Assert().Equal(http.StatusCreated, rr.Code)
+
+	var transaction Transaction
+	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
+	suite.Assert().NoError(err)
+
+	// Check the transaction
+	suite.Assert().Equal(decimal.NewFromFloat32(4.75), transaction.Amount)
+	suite.Assert().Equal("uphold", transaction.Kind)
+	suite.Assert().Equal("completed", transaction.Status)
+	suite.Assert().Equal("BAT", transaction.Currency)
+	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
+	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
+
+	// Check the order was updated to paid
+	// Old order
+	suite.Assert().Equal("pending", order.Status)
+	// Check the new order
+	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	suite.Assert().NoError(err)
+	suite.Assert().Equal("paid", updatedOrder.Status)
 }

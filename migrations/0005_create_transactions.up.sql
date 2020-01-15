@@ -7,5 +7,5 @@ create table transactions (
 	status   text NOT NULL,
 	currency   text NOT NULL,
 	kind   text NOT NULL,
-	amount   numeric(28, 18) NOT NULL,
+	amount   numeric(28, 18) NOT NULL
 );

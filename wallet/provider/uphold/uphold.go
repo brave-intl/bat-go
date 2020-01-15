@@ -655,6 +655,26 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 	return uhResp.ToTransactionInfo(), nil
 }
 
+// GetPublicTransaction returns info about a previously confirmed transaction
+func (w *Wallet) GetPublicTransaction(id string) (*wallet.TransactionInfo, error) {
+	req, err := newRequest("GET", "/v0/reserve/transactions/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	body, _, err := submit(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var uhResp upholdTransactionResponse
+	err = json.Unmarshal(body, &uhResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return uhResp.ToTransactionInfo(), nil
+}
+
 // GetTransaction returns info about a previously confirmed transaction
 func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 	req, err := newRequest("GET", "/v0/me/transactions/"+id, nil)

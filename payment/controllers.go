@@ -10,7 +10,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
 
 // Router for order endpoints
@@ -49,24 +48,16 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		totalPrice := decimal.New(0, 0)
-		orderItems := []OrderItem{}
-		for i := 0; i < len(req.Items); i++ {
-			orderItem := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity)
-			totalPrice = totalPrice.Add(orderItem.Subtotal)
+		order, err := service.CreateOrderFromRequest(req)
 
-			orderItems = append(orderItems, orderItem)
-		}
-
-		order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", orderItems)
 		if err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(order); err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
 		}
 		return nil
 	})
@@ -95,22 +86,21 @@ func GetOrder(service *Service) handlers.AppHandler {
 
 		order, err := service.datastore.GetOrder(id)
 		if err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(order); err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
 		}
 		return nil
 	})
-
 }
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	externalTransactionID string
+	ExternalTransactionID string `json:"externalTransactionID"`
 }
 
 // CreateTransaction creates a transaction against an order
@@ -122,7 +112,7 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		orderID := chi.URLParam(r, "id")
+		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
 			return &handlers.AppError{
 				Message: "Error validating request url parameter",
@@ -144,20 +134,15 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		amount := decimal.New(0, 0)
-		status := "pending"
-		currency := "BAT"
-		kind := "uphold"
-
-		transaction, err := service.datastore.CreateTransaction(validOrderID, req.externalTransactionID, status, currency, kind, amount)
+		transaction, err := service.CreateTransactionFromRequest(req, validOrderID)
 		if err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusInternalServerError)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
 		}
 		return nil
 	})

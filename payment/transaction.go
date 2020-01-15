@@ -17,5 +17,5 @@ type Transaction struct {
 	Status                string          `json:"status" db:"status"`
 	Currency              string          `json:"currency" db:"currency"`
 	Kind                  string          `json:"kind" db:"kind"`
-	Amount                decimal.Decimal `json:"totalPrice" db:"total_price"`
+	Amount                decimal.Decimal `json:"amount" db:"amount"`
 }

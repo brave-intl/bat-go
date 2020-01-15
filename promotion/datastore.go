@@ -123,7 +123,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(4)
+	err = m.Migrate(5)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}

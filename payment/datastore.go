@@ -19,8 +19,12 @@ type Datastore interface {
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
-	// CreateTransaction
+	// UpdateOrder updates an order when it has been paid
+	UpdateOrder(orderID uuid.UUID, status string) error
+	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// GetSumForTransactions gets a decimal sum of for transactions for an order
+	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -55,7 +59,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(4)
+	err = m.Migrate(5)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
@@ -130,7 +134,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	statement := "select * from orders where id = $1"
+	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
 	err := pg.DB.Get(&order, statement, orderID)
 	if err != nil {
@@ -138,7 +142,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	foundOrderItems := []OrderItem{}
-	statement = "select * from order_items where order_id = $1"
+	statement = "SELECT * FROM order_items WHERE order_id = $1"
 	err = pg.DB.Select(&foundOrderItems, statement, orderID)
 
 	order.Items = foundOrderItems
@@ -147,6 +151,18 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// UpdateOrder updates the orders status.
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	_, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
@@ -174,4 +190,17 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	}
 
 	return &transaction, nil
+}
+
+// GetSumForTransactions returns the calculated sum
+func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
+	var sum decimal.Decimal
+
+	err := pg.DB.Get(&sum, `
+		SELECT SUM(amount) as sum
+		FROM transactions
+		WHERE order_id = $1 AND status = 'completed'
+	`, orderID)
+
+	return sum, err
 }

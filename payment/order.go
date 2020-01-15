@@ -35,7 +35,7 @@ type OrderItem struct {
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func CreateOrderItemFromMacaroon(sku string, quantity int) OrderItem {
+func createOrderItemFromMacaroon(sku string, quantity int) OrderItem {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
 		panic(err)
