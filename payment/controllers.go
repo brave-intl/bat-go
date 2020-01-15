@@ -20,6 +20,18 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/{orderID}/transactions", middleware.InstrumentHandler("CreateTransaction", CreateTransaction(service)))
 
+	r.Method("POST", "/{orderID}/transactions/anonymouscard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+
+	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
+	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+
+	return r
+}
+
+// VoteRouter for voting endpoint
+func VoteRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/votes", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
 	return r
 }
 
@@ -148,13 +160,10 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 	})
 }
 
-// FIXME should this be consollidated with the above?
-
 // CreateAnonCardTransactionRequest includes information needed to create a anon card transaction
 type CreateAnonCardTransactionRequest struct {
 	WalletID    uuid.UUID `json:"paymentId"`
 	Transaction string    `json:"transaction"`
-	Kind        string    `json:"kind"`
 }
 
 // CreateAnonCardTransaction creates a transaction against an order
@@ -166,7 +175,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		orderID := chi.URLParam(r, "id")
+		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
 			return &handlers.AppError{
 				Message: "Error validating request url parameter",
@@ -183,20 +192,15 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			panic(err) // Should not be possible
 		}
 
-		txInfo, err := service.wallet.SubmitAnonCardTransaction(r.Context(), req.WalletID, req.Transaction)
+		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, validOrderID)
 		if err != nil {
-			return handlers.WrapError(err, "Error submitting anon card transaction", http.StatusBadRequest)
-		}
-
-		transaction, err := service.datastore.CreateTransaction(validOrderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
-		if err != nil {
-			return handlers.WrapError(err, "Error recording anon card transaction", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			panic(err)
+			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
 		}
 		return nil
 
@@ -223,7 +227,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		orderID := chi.URLParam(r, "id")
+		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
 			return &handlers.AppError{
 				Message: "Error validating request url parameter",
@@ -287,6 +291,44 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		if err := json.NewEncoder(w).Encode(creds); err != nil {
 			panic(err)
 		}
+		return nil
+	})
+}
+
+// VoteRequest includes a suggestion payload and credentials to be redeemed
+type VoteRequest struct {
+	Vote        string              `json:"vote" valid:"base64"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// MakeVote is the handler for making a vote using credentials
+func MakeVote(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req VoteRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.Vote(r.Context(), req.Credentials, req.Vote)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME
+				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
 		return nil
 	})
 }

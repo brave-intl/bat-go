@@ -2,10 +2,12 @@ package payment
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -53,6 +55,28 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 	return order, err
 }
 
+// UpdateOrderStatus checks to see if an order has been paid and updates it if so
+func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	order, err := service.datastore.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	sum, err := service.datastore.GetSumForTransactions(orderID)
+	if err != nil {
+		return err
+	}
+
+	if sum.GreaterThanOrEqual(order.TotalPrice) {
+		err = service.datastore.UpdateOrder(orderID, "paid")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (service *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
 
@@ -70,30 +94,36 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 
 	transaction, err := service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error recording transaction")
 	}
 
-	// Now that the transaction has been created let's check to see if that fulfilled the order.
-	order, err := service.datastore.GetOrder(orderID)
+	err = service.UpdateOrderStatus(orderID)
 	if err != nil {
-		return nil, err
-	}
-
-	// Get current sums for transactions
-	sum, err := service.datastore.GetSumForTransactions(orderID)
-	if err != nil {
-		return nil, err
-	}
-
-	// If the transaction that was inserted satisifies the order then let's update the status
-	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = service.datastore.UpdateOrder(orderID, "paid")
-		if err != nil {
-			return nil, err
-		}
+		return nil, errors.Wrap(err, "Error updating order status")
 	}
 
 	return transaction, err
+}
+
+// CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
+func (service *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
+	txInfo, err := service.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error submitting anon card transaction")
+	}
+	fmt.Println(txInfo)
+
+	txn, err := service.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error recording anon card transaction")
+	}
+
+	err = service.UpdateOrderStatus(orderID)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error updating order status")
+	}
+
+	return txn, err
 }
 
 // RunNextOrderJob takes the next order job and completes it

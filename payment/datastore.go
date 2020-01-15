@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	uuid "github.com/satori/go.uuid"
@@ -224,17 +225,22 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 
 // InsertOrderCreds inserts the given order creds
 func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
+	blindedCredsJSON, err := json.Marshal(creds.BlindedCreds)
+	if err != nil {
+		return err
+	}
+
 	statement := `
-	insert into order_creds (order_id, issuer_id, blinded_creds)
-	values ($1, $2, $3)`
-	_, err := pg.DB.Exec(statement, creds.ID, creds.IssuerID, creds.BlindedCreds)
+	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
+	values ($1, $2, $3, $4)`
+	_, err = pg.DB.Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
 	return err
 }
 
 // GetOrderCreds returns the order credentials for a OrderID
 func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1", orderID)
+	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
 	if err != nil {
 		return nil, err
 	}

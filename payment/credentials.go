@@ -78,9 +78,11 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 		return errors.Wrap(err, "Error finding order")
 	}
 
-	// FIXME Check order completion
+	if !order.IsPaid() {
+		return errors.New("Order has not yet been paid")
+	}
 
-	issuer, err := service.datastore.GetIssuer(order.MerchantID)
+	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
 	if err != nil {
 		return errors.Wrap(err, "Error finding issuer")
 	}

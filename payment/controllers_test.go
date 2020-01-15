@@ -5,14 +5,28 @@ package payment
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 
+	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/crypto/ed25519"
 )
 
 type ControllersTestSuite struct {
@@ -179,4 +193,246 @@ func (suite *ControllersTestSuite) TestCreateTransaction() {
 	updatedOrder, err := service.datastore.GetOrder(order.ID)
 	suite.Assert().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
+}
+
+func fundWallet(t *testing.T, destWallet *uphold.Wallet, amount decimal.Decimal) {
+	var donorInfo wallet.Info
+	donorInfo.Provider = "uphold"
+	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
+	{
+		tmp := altcurrency.BAT
+		donorInfo.AltCurrency = &tmp
+	}
+
+	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
+	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	var donorPublicKey httpsignature.Ed25519PubKey
+	var donorPrivateKey ed25519.PrivateKey
+	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	donorWallet := &uphold.Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+
+	if len(donorWallet.ID) > 0 {
+		t.Fatal("FIXME")
+	}
+
+	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	balance, err := destWallet.GetBalance(true)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if balance.TotalProbi.Equals(decimal.Zero) {
+		t.Error("Submit with confirm should result in a balance.")
+	}
+}
+
+func generateWallet(t *testing.T) *uphold.Wallet {
+	var info wallet.Info
+	info.ID = uuid.NewV4().String()
+	info.Provider = "uphold"
+	info.ProviderID = ""
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info.PublicKey = hex.EncodeToString(publicKey)
+	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
+	err = newWallet.Register("bat-go test card")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newWallet
+}
+
+func (suite *ControllersTestSuite) TestE2E() {
+	numVotes := 20
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore: pg,
+		},
+	}
+
+	// Create the order first
+	handler := CreateOrder(service)
+	createRequest := &CreateOrderRequest{
+		Items: []OrderItemRequest{
+			{
+				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				Quanity: numVotes,
+			},
+		},
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusCreated, rr.Code)
+
+	var order Order
+	err = json.Unmarshal([]byte(rr.Body.String()), &order)
+	suite.Assert().NoError(err)
+
+	userWallet := generateWallet(suite.T())
+	err = pg.InsertWallet(&userWallet.Info)
+	suite.Assert().NoError(err)
+
+	fundWallet(suite.T(), userWallet, order.TotalPrice)
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
+	suite.Assert().NoError(err)
+
+	walletID, err := uuid.FromString(userWallet.ID)
+	suite.Require().NoError(err)
+
+	anonCardRequest := CreateAnonCardTransactionRequest{
+		WalletID:    walletID,
+		Transaction: txn,
+	}
+
+	body, err = json.Marshal(&anonCardRequest)
+	suite.Require().NoError(err)
+
+	handler = CreateAnonCardTransaction(service)
+	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusCreated, rr.Code)
+
+	issuerName := "brave.com"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	credsReq := CreateOrderCredsRequest{
+		ItemID:       order.Items[0].ID,
+		BlindedCreds: blindedCreds,
+	}
+
+	body, err = json.Marshal(&credsReq)
+	suite.Require().NoError(err)
+
+	handler = CreateOrderCreds(service)
+	req, err = http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	for rr.Code != http.StatusOK {
+		if rr.Code == http.StatusBadRequest {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			time.Sleep(50 * time.Millisecond)
+			rr = httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+		}
+	}
+	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+
+	// FIXME read body
+
+	handler = MakeVote(service)
+
+	vote := Vote{
+		Type:    "auto-contribute",
+		Channel: "brave.com",
+	}
+
+	voteBytes, err := json.Marshal(&vote)
+	suite.Require().NoError(err)
+	votePayload := base64.StdEncoding.EncodeToString(voteBytes)
+
+	voteReq := VoteRequest{
+		Vote: votePayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	// FIXME re-enable once event is emitted
+	//mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+	//Issuer:        issuerName,
+	//TokenPreimage: preimage,
+	//Signature:     sig,
+	//}}), gomock.Eq(votePayload)).Return(nil)
+
+	body, err = json.Marshal(&voteReq)
+	suite.Require().NoError(err)
+
+	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	// FIXME check event is emitted
 }
