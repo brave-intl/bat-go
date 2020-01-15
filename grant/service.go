@@ -21,8 +21,6 @@ const (
 )
 
 var (
-	// SettlementDestination is the address of the settlement wallet
-	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	// GrantSignatorPublicKeyHex is the hex encoded public key of the keypair used to sign grants
 	GrantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
 	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")

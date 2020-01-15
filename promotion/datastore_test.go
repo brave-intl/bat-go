@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
@@ -204,7 +205,7 @@ func (suite *PostgresTestSuite) TestClaimForWallet() {
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{})
+	blindedCreds := jsonutils.JSONStringArray([]string{})
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
@@ -274,7 +275,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
-	promotion.PublicKeys = JSONStringArray{}
+	promotion.PublicKeys = jsonutils.JSONStringArray{}
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
@@ -344,7 +345,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 
 	promotion, err := pg.CreatePromotion("ugp", 0, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
-	promotion.PublicKeys = JSONStringArray{}
+	promotion.PublicKeys = jsonutils.JSONStringArray{}
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
 	promotions, err = pg.GetAvailablePromotions("", true)
@@ -355,7 +356,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
 
 	promotion, err = pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
-	promotion.PublicKeys = JSONStringArray{}
+	promotion.PublicKeys = jsonutils.JSONStringArray{}
 
 	promotions, err = pg.GetAvailablePromotions("", false)
 	suite.Require().NoError(err, "Get promotions should succeed")
@@ -571,7 +572,7 @@ func (suite *PostgresTestSuite) TestGetClaimCreds() {
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	blindedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
@@ -599,7 +600,7 @@ func (suite *PostgresTestSuite) TestGetClaimByWalletAndPromotion() {
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	blindedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
 	w := &wallet.Info{
 		ID:         uuid.NewV4().String(),
 		Provider:   "uphold",
@@ -668,8 +669,8 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
-	signedCreds := JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	blindedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	signedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
 	batchProof := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 
 	promotion, err := pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")

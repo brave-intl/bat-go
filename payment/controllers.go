@@ -147,3 +147,146 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 		return nil
 	})
 }
+
+// FIXME should this be consollidated with the above?
+
+// CreateAnonCardTransactionRequest includes information needed to create a anon card transaction
+type CreateAnonCardTransactionRequest struct {
+	WalletID    uuid.UUID `json:"paymentId"`
+	Transaction string    `json:"transaction"`
+	Kind        string    `json:"kind"`
+}
+
+// CreateAnonCardTransaction creates a transaction against an order
+func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateAnonCardTransactionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		orderID := chi.URLParam(r, "id")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return &handlers.AppError{
+				Message: "Error validating request url parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			}
+		}
+		validOrderID, err := uuid.FromString(orderID)
+		if err != nil {
+			panic(err) // Should not be possible
+		}
+
+		txInfo, err := service.wallet.SubmitAnonCardTransaction(r.Context(), req.WalletID, req.Transaction)
+		if err != nil {
+			return handlers.WrapError(err, "Error submitting anon card transaction", http.StatusBadRequest)
+		}
+
+		transaction, err := service.datastore.CreateTransaction(validOrderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
+		if err != nil {
+			return handlers.WrapError(err, "Error recording anon card transaction", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(transaction); err != nil {
+			panic(err)
+		}
+		return nil
+
+	})
+}
+
+// CreateOrderCredsRequest includes the item ID and blinded credentials which to be signed
+type CreateOrderCredsRequest struct {
+	ItemID       uuid.UUID `json:"itemId" valid:"-"`
+	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
+}
+
+// CreateOrderCreds is the handler for creating order credentials
+func CreateOrderCreds(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateOrderCredsRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		orderID := chi.URLParam(r, "id")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return &handlers.AppError{
+				Message: "Error validating request url parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			}
+		}
+		validOrderID, err := uuid.FromString(orderID)
+		if err != nil {
+			panic(err) // Should not be possible
+		}
+
+		err = service.CreateOrderCreds(r.Context(), validOrderID, req.ItemID, req.BlindedCreds)
+		if err != nil {
+			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
+		}
+
+		return nil
+	})
+}
+
+// GetOrderCreds is the handler for fetching order credentials
+func GetOrderCreds(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		orderID := chi.URLParam(r, "orderID")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return &handlers.AppError{
+				Message: "Error validating request url parameter",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			}
+		}
+
+		id, err := uuid.FromString(orderID)
+		if err != nil {
+			panic(err) // Should not be possible
+		}
+
+		creds, err := service.datastore.GetOrderCreds(id)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+		}
+
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "Order does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(creds); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
