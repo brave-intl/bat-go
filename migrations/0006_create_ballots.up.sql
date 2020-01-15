@@ -8,7 +8,7 @@ create table order_cred_issuers (
 create table order_creds (
   item_id uuid primary key not null references order_items(id),
   order_id uuid not null references orders(id),
-  issuer_id uuid not null references issuers(id);
+  issuer_id uuid not null references order_cred_issuers(id);
   blinded_creds json not null,
   signed_creds json,
   batch_proof text,
