@@ -1,88 +1,54 @@
 package payment
 
 import (
-	"os"
+	"context"
+	"errors"
 
-	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// CreateTransaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// InsertIssuer
+	InsertIssuer(issuer *Issuer) (*Issuer, error)
+	// GetIssuer
+	GetIssuer(merchantID string) (*Issuer, error)
+	// GetIssuerByPublicKey
+	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
+	// InsertOrderCreds
+	InsertOrderCreds(creds *OrderCreds) error
+	// GetOrderCreds
+	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	// RunNextOrderJob
+	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
-	*sqlx.DB
-}
-
-// NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
-func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
-	m, err := migrate.NewWithDatabaseInstance(
-		dbMigrationsURL,
-		"postgres",
-		driver,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return m, err
-}
-
-// Migrate the Postgres instance
-func (pg *Postgres) Migrate() error {
-	m, err := pg.NewMigrate()
-	if err != nil {
-		return err
-	}
-
-	err = m.Migrate(4)
-	if err != migrate.ErrNoChange && err != nil {
-		return err
-	}
-	return nil
+	grantserver.Postgres
 }
 
 // NewPostgres creates a new Postgres Datastore
 func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
-	if len(databaseURL) == 0 {
-		databaseURL = os.Getenv("DATABASE_URL")
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration)
+	if pg != nil {
+		return &Postgres{*pg}, err
 	}
-
-	db, err := sqlx.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	pg := &Postgres{db}
-
-	if performMigration {
-		err = pg.Migrate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return pg, nil
+	return nil, err
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
@@ -174,4 +140,144 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	}
 
 	return &transaction, nil
+}
+
+// InsertIssuer inserts the given issuer
+func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
+	statement := `
+	insert into order_cred_issuers (merchant_id, public_key)
+	values ($1, $2)
+	returning *`
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(issuers) != 1 {
+		return nil, errors.New("Unexpected number of issuers returned")
+	}
+
+	return &issuers[0], nil
+}
+
+// GetIssuer retrieves the given issuer
+func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
+	statement := "select * from order_cred_issuers where merchant_id = $1"
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, merchantID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(issuers) > 0 {
+		return &issuers[0], nil
+	}
+
+	return nil, nil
+}
+
+// GetIssuerByPublicKey or return an error
+func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
+	statement := "select * from order_cred_issuers where public_key = $1"
+	issuers := []Issuer{}
+	err := pg.DB.Select(&issuers, statement, publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(issuers) > 0 {
+		return &issuers[0], nil
+	}
+
+	return nil, nil
+}
+
+// InsertOrderCreds inserts the given order creds
+func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
+	statement := `
+	insert into order_creds (order_id, issuer_id, blinded_creds)
+	values ($1, $2, $3)`
+	_, err := pg.DB.Exec(statement, creds.ID, creds.IssuerID, creds.BlindedCreds)
+	return err
+}
+
+// GetOrderCreds returns the order credentials for a OrderID
+func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
+	orderCreds := []OrderCreds{}
+	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1", orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(orderCreds) > 0 {
+		return &orderCreds, nil
+	}
+
+	return nil, nil
+}
+
+// RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
+func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
+	tx, err := pg.DB.Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+
+	type SigningJob struct {
+		Issuer
+		OrderID      uuid.UUID                 `db:"order_id"`
+		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
+	}
+
+	statement := `
+select
+	order_cred_issuers.*,
+	order_cred.order_id,
+	order_cred.blinded_creds
+from
+	(select *
+	from order_creds
+	where batch_proof is null
+	for update skip locked
+	limit 1
+) order_cred
+inner join order_cred_issuers
+on order_cred.issuer_id = order_cred_issuers.id`
+
+	jobs := []SigningJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return attempted, nil
+	}
+
+	job := jobs[0]
+
+	attempted = true
+	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
+	if err != nil {
+		// FIXME certain errors are not recoverable
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
 }
