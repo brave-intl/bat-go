@@ -12,9 +12,9 @@ create table order_items (
 	order_id uuid references orders(id),
 	created_at timestamp with time zone not null default current_timestamp,
 	updated_at timestamp with time zone not null default current_timestamp,
-	currency   text NOT NULL,
+	currency text NOT NULL,
 	quantity integer NOT NULL,
-	price   numeric(28, 18) NOT NULL,
+	price numeric(28, 18) NOT NULL,
 	subtotal numeric(28, 18) NOT NULL
 );
 
