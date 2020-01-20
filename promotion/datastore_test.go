@@ -8,6 +8,7 @@ import (
 
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -696,12 +697,18 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 	}
 
 	// One signing job should run
+	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(nil, errors.New("Worker failed"))
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(true, attempted)
+	suite.Require().Error(err)
+
+	// Signing job should rerun on failure
 	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(creds, nil)
 	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
 	suite.Require().Equal(true, attempted)
 	suite.Require().NoError(err)
 
-	// No further jobs should run
+	// No further jobs should run after success
 	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
 	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)

@@ -865,9 +865,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		var claim *Claim
 		if test.Legacy {
 			claim, err = service.datastore.CreateClaim(promotion.ID, w.ID, promotionValue, decimal.NewFromFloat(0.0))
-			suite.Require().NoError(err, "an error occured when creating a claim for wallet")
+			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
 			_, err = pg.DB.Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
-			suite.Require().NoError(err, "an error occured when setting legacy or redeemed")
+			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
 		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
