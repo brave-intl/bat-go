@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"io/ioutil"
 	"log"
@@ -22,6 +23,19 @@ import (
 )
 
 var suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+var kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "kafka_cert_not_before",
+	Help: "Date when the kafka certificate becomes valid.",
+})
+var kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "kafka_cert_not_after",
+	Help: "Date when the kafka certificate expires.",
+})
+
+func init() {
+	prometheus.MustRegister(kafkaCertNotBefore)
+	prometheus.MustRegister(kafkaCertNotAfter)
+}
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
@@ -71,6 +85,22 @@ func tlsDialer() (*kafka.Dialer, error) {
 
 	keyEnv := "KAFKA_SSL_KEY"
 	encryptedKeyPEM := []byte(os.Getenv(keyEnv))
+
+	// Check to see if KAFKA_SSL_CERTIFICATE includes both certificate and key
+	if certPEM[0] == '{' {
+		type Certificate struct {
+			Certificate string `json:"certificate"`
+			Key         string `json:"key"`
+		}
+		var cert Certificate
+		err := json.Unmarshal(certPEM, &cert)
+		if err != nil {
+			return nil, err
+		}
+		certPEM = []byte(cert.Certificate)
+		encryptedKeyPEM = []byte(cert.Key)
+	}
+
 	if len(encryptedKeyPEM) == 0 {
 		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
 		if err != nil {
@@ -108,16 +138,6 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not parse certificate")
 	}
-	kafkaCertNotBefore := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_before",
-		Help: "Date when the kafka certificate becomes valid.",
-	})
-	kafkaCertNotAfter := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_after",
-		Help: "Date when the kafka certificate expires.",
-	})
-	prometheus.MustRegister(kafkaCertNotBefore)
-	prometheus.MustRegister(kafkaCertNotAfter)
 	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
 	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
