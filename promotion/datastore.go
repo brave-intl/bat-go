@@ -692,6 +692,7 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 		Credentials     string    `db:"credentials"`
 		SuggestionText  string    `db:"suggestion_text"`
 		SuggestionEvent []byte    `db:"suggestion_event"`
+		Erred           bool      `db:"erred"`
 	}
 
 	statement := `
