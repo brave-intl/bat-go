@@ -271,7 +271,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusAccepted)
 		if err := json.NewEncoder(w).Encode(creds); err != nil {
 			panic(err)
 		}
