@@ -42,10 +42,13 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	for i := 0; i < len(req.Items); i++ {
-		orderItem := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity)
+		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity)
+		if err != nil {
+			return nil, err
+		}
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
-		orderItems = append(orderItems, orderItem)
+		orderItems = append(orderItems, *orderItem)
 	}
 
 	order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", orderItems)
