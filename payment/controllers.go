@@ -68,21 +68,18 @@ func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		orderID := chi.URLParam(r, "id")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
 					"validationErrors": map[string]string{
 						"orderID": "orderID must be a uuidv4",
 					},
 				},
-			}
+			)
 		}
 
 		id, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(id, err)
 
 		order, err := service.datastore.GetOrder(id)
 		if err != nil {
@@ -114,20 +111,17 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 
 		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
 					"validationErrors": map[string]string{
 						"orderID": "orderID must be a uuidv4",
 					},
 				},
-			}
+			)
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -179,9 +173,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			}
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		txInfo, err := service.wallet.SubmitAnonCardTransaction(r.Context(), req.WalletID, req.Transaction)
 		if err != nil {
@@ -236,9 +228,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		err = service.CreateOrderCreds(r.Context(), validOrderID, req.ItemID, req.BlindedCreds)
 		if err != nil {
@@ -266,9 +256,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		id, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(id, err)
 
 		creds, err := service.datastore.GetOrderCreds(id)
 		if err != nil {
