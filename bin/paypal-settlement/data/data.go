@@ -68,6 +68,7 @@ func (pm *PaypalMetadata) GenerateRefID() string {
 	key := pm.RefIDKey() // nothing more needed for now
 	bytes := sha256.Sum256([]byte(key))
 	refID := base58.Encode(bytes[:], base58.BitcoinAlphabet)
+	refID = refID[:30]
 	pm.RefID = refID
 	return refID
 }
