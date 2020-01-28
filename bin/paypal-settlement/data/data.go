@@ -107,14 +107,26 @@ func NewPaypalMetadata(pm PaypalMetadata) PaypalMetadata {
 	}
 }
 
+// // ToCSVRow turns a paypal metadata into a list of strings ready to be consumed by a CSV generator
+// func (pm *PaypalMetadata) ToCSVRow() []string {
+// 	return []string{
+// 		pm.Section,
+// 		pm.PayerID,
+// 		pm.Amount.String(),
+// 		pm.Currency,
+// 		pm.RefID,
+// 		strings.Join(pm.Note, pm.NoteDelimiter),
+// 	}
+// }
+
 // ToCSVRow turns a paypal metadata into a list of strings ready to be consumed by a CSV generator
 func (pm *PaypalMetadata) ToCSVRow() []string {
 	return []string{
-		pm.Section,
 		pm.PayerID,
 		pm.Amount.String(),
 		pm.Currency,
 		pm.RefID,
-		strings.Join(pm.Note, pm.NoteDelimiter),
+		"Payout for\n" + strings.Join(pm.Note, pm.NoteDelimiter),
+		"PAYPAL",
 	}
 }

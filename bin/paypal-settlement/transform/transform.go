@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -146,16 +145,21 @@ func WriteTransformedCSV(args data.Args, metadata []data.PaypalMetadata) error {
 		rows = append(rows, row.ToCSVRow())
 		total = total.Add(row.Amount)
 	}
-	return WriteCSV(args.Out, append([][]string{
-		{
-			"PAYOUT_SUMMARY",
-			total.String(),
-			args.Currency,
-			strconv.Itoa(len(rows)),
-			"Brave Publishers Payout",
-			"Payout for",
-		},
-	}, rows...))
+	if len(rows) > 5000 {
+		return errors.New("a payout cannot be larger than 5000 lines items long")
+	}
+	fmt.Println("payouts", len(rows))
+	return WriteCSV(args.Out, rows)
+	// WriteCSV(args.Out, append([][]string{
+	// 	{
+	// 		"PAYOUT_SUMMARY",
+	// 		total.String(),
+	// 		args.Currency,
+	// 		strconv.Itoa(len(rows)),
+	// 		"Brave Publishers Payout",
+	// 		"Payout for",
+	// 	},
+	// }, rows...))
 }
 
 // WriteCSV writes out a csv
