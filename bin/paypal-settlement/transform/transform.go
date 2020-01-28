@@ -16,6 +16,12 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	supportedCurrencies = map[string]float64{
+		"JPY": 0,
+	}
+)
+
 // Input starts the transform process
 func Input(args data.Args) (err error) {
 	fmt.Println("RUNNING: transform")
@@ -74,63 +80,68 @@ func ReadFiles(input string) (*[]data.PayoutTransaction, error) {
 
 // ValidatePayouts validates the payout objects and creates metadata to represent rows
 func ValidatePayouts(args data.Args, rate decimal.Decimal, batPayouts []data.PayoutTransaction) (*[]data.PaypalMetadata, error) {
-	oneHundred := decimal.NewFromFloat(100)
+	scale := decimal.NewFromFloat(supportedCurrencies[args.Currency])
+	factor := decimal.NewFromFloat(10).Pow(scale)
 	rows := make([]data.PaypalMetadata, 0)
 	type placement struct {
 		Valid bool
 		Index int
 	}
 	refIDsInBatch := map[string]placement{}
-	ownersInBatch := map[string]placement{}
+	publishersInBatch := map[string]placement{}
 
 	for i, batPayout := range batPayouts {
+		if batPayout.Provider != "paypal" {
+			continue
+		}
 		amount := altcurrency.BAT.FromProbi(rate.Mul(batPayout.Probi)).
-			Mul(oneHundred).
+			Mul(factor).
 			Floor().
-			Div(oneHundred)
+			Div(factor)
 
 		// needs to be shortened (0-9,a-Z) <=30 chars
-		owner := batPayout.Owner
+		publisher := batPayout.Publisher
 		amountString := amount.String()
-		note := "(" + batPayout.Publisher + " -> " + amountString + ")"
+		note := "(" + batPayout.Channel + " -> " + amountString + ")"
 		row := data.NewPaypalMetadata(data.PaypalMetadata{
 			Prefix:    args.Date,
 			Section:   "PAYOUT",
 			PayerID:   batPayout.ProviderID,
-			Owner:     owner,
-			Publisher: batPayout.Publisher,
+			Publisher: publisher,
+			Channel:   batPayout.Channel,
 			Amount:    amount,
 			Currency:  args.Currency,
-			Note:      []string{note},
+			Note: []string{
+				note,
+			},
 		})
-		refID := row.GenerateRefID()
 
 		// ref id cannot be same. otherwise we're payout out to same channel twice
-		known := refIDsInBatch[refID]
+		known := refIDsInBatch[row.RefID]
 		if known.Valid {
-			fmt.Println("ref id:\t", refID)
+			fmt.Println("ref id:\t", row.RefID)
 			fmt.Println("payout address:\t", batPayout.Address.String())
-			fmt.Println("publisher:", batPayout.Publisher)
-			fmt.Println("owner:", batPayout.Owner)
+			fmt.Println("channel:\t", batPayout.Channel)
+			fmt.Println("publisher:\t", batPayout.Publisher)
 			fmt.Println("hashed key:\t", row.RefIDKey())
-			fmt.Println("indices:", known.Index, i)
+			fmt.Println("indices:\t", known.Index, i)
 			fmt.Printf("%#v", rows[known.Index])
 			return nil, errors.New("id already seen in batch")
 		}
 
-		ownerInBatch := ownersInBatch[owner]
-		if ownerInBatch.Valid {
-			row := rows[ownerInBatch.Index]
-			if row.Publisher == batPayout.Publisher {
-				return nil, errors.New("duplicate payout for:" + batPayout.Publisher)
+		publisherInBatch := publishersInBatch[publisher]
+		if publisherInBatch.Valid {
+			row := rows[publisherInBatch.Index]
+			if row.Channel == batPayout.Channel {
+				return nil, errors.New("duplicate payout for: " + batPayout.Channel)
 			}
 			row.Amount = row.Amount.Add(amount)
 			row.Note = append(row.Note, note)
-			rows[ownerInBatch.Index] = row
+			rows[publisherInBatch.Index] = row
 		} else {
 			placing := placement{true, len(rows)}
-			refIDsInBatch[refID] = placing
-			ownersInBatch[owner] = placing
+			refIDsInBatch[row.RefID] = placing
+			publishersInBatch[publisher] = placing
 			rows = append(rows, row)
 		}
 	}
@@ -149,7 +160,16 @@ func WriteTransformedCSV(args data.Args, metadata []data.PaypalMetadata) error {
 		return errors.New("a payout cannot be larger than 5000 lines items long")
 	}
 	fmt.Println("payouts", len(rows))
-	return WriteCSV(args.Out, rows)
+	return WriteCSV(args.Out, append([][]string{
+		{
+			"Email/Phone",
+			"Amount",
+			"Currency code",
+			"Reference ID",
+			"Note to recipient",
+			"Recipient wallet",
+		},
+	}, rows...))
 	// WriteCSV(args.Out, append([][]string{
 	// 	{
 	// 		"PAYOUT_SUMMARY",

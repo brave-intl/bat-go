@@ -30,14 +30,15 @@ func (args Args) CheckDate() (time.Time, error) {
 type PayoutTransaction struct {
 	TransactionID      uuid.UUID               `json:"transactionId"`
 	PotentialPaymentID uuid.UUID               `json:"potentialPaymentId"`
-	ProviderID         string                  `json:"upholdId"`
-	Publisher          string                  `json:"publisher"`
+	Provider           string                  `json:"walletProvider"`
+	ProviderID         string                  `json:"walletProviderId"`
+	Channel            string                  `json:"publisher"`
 	AltCurrency        altcurrency.AltCurrency `json:"altcurrency"`
 	Probi              decimal.Decimal         `json:"probi"`
 	Address            *uuid.UUID              `json:"address"`
 	Authority          string                  `json:"authority"`
 	Fees               decimal.Decimal         `json:"fees"`
-	Owner              string                  `json:"owner"`
+	Publisher          string                  `json:"owner"`
 	Type               string                  `json:"type"`
 	// HContributionsVerdict *bool `json:"hContributionsVerdict"`
 	// HReferralsVerdict     *bool `json:"hReferralsVerdict"`
@@ -60,7 +61,7 @@ type RateResponse struct {
 
 // RefIDKey is used to generate a hash
 func (pm *PaypalMetadata) RefIDKey() string {
-	return pm.Prefix + pm.Owner + pm.Publisher
+	return pm.Prefix + pm.Publisher + pm.Channel
 }
 
 // GenerateRefID converts a hex to base62
@@ -78,7 +79,7 @@ type PaypalMetadata struct {
 	Prefix        string
 	Section       string
 	PayerID       string
-	Owner         string
+	Channel       string
 	Publisher     string
 	Amount        decimal.Decimal
 	Currency      string
@@ -97,8 +98,8 @@ func NewPaypalMetadata(pm PaypalMetadata) PaypalMetadata {
 		Prefix:        pm.Prefix,
 		Section:       pm.Section,
 		PayerID:       pm.PayerID,
-		Owner:         pm.Owner,
 		Publisher:     pm.Publisher,
+		Channel:       pm.Channel,
 		Amount:        pm.Amount,
 		Currency:      pm.Currency,
 		RefID:         pm.GenerateRefID(),
@@ -127,6 +128,6 @@ func (pm *PaypalMetadata) ToCSVRow() []string {
 		pm.Currency,
 		pm.RefID,
 		"Payout for\n" + strings.Join(pm.Note, pm.NoteDelimiter),
-		"PAYPAL",
+		"PayPal",
 	}
 }
