@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/bin/paypal-settlement/data"
+	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/shopspring/decimal"
 )
@@ -60,11 +61,11 @@ func Input(args data.Args) (err error) {
 }
 
 // ReadFiles reads a series of files
-func ReadFiles(input string) (*[]data.PayoutTransaction, error) {
-	var allPayouts []data.PayoutTransaction
+func ReadFiles(input string) (*[]settlement.Transaction, error) {
+	var allPayouts []settlement.Transaction
 	files := strings.Split(input, ",")
 	for _, file := range files {
-		var batPayouts []data.PayoutTransaction
+		var batPayouts []settlement.Transaction
 		bytes, err := ioutil.ReadFile(file)
 		if err != nil {
 			return nil, err
@@ -79,7 +80,7 @@ func ReadFiles(input string) (*[]data.PayoutTransaction, error) {
 }
 
 // ValidatePayouts validates the payout objects and creates metadata to represent rows
-func ValidatePayouts(args data.Args, rate decimal.Decimal, batPayouts []data.PayoutTransaction) (*[]data.PaypalMetadata, error) {
+func ValidatePayouts(args data.Args, rate decimal.Decimal, batPayouts []settlement.Transaction) (*[]data.PaypalMetadata, error) {
 	scale := decimal.NewFromFloat(supportedCurrencies[args.Currency])
 	factor := decimal.NewFromFloat(10).Pow(scale)
 	rows := make([]data.PaypalMetadata, 0)
@@ -120,7 +121,6 @@ func ValidatePayouts(args data.Args, rate decimal.Decimal, batPayouts []data.Pay
 		known := refIDsInBatch[row.RefID]
 		if known.Valid {
 			fmt.Println("ref id:\t", row.RefID)
-			fmt.Println("payout address:\t", batPayout.Address.String())
 			fmt.Println("channel:\t", batPayout.Channel)
 			fmt.Println("publisher:\t", batPayout.Publisher)
 			fmt.Println("hashed key:\t", row.RefIDKey())

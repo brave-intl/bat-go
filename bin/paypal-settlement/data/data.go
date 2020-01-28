@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -24,28 +22,6 @@ type Args struct {
 // CheckDate parses a date from the input string to validate it
 func (args Args) CheckDate() (time.Time, error) {
 	return time.Parse(time.RFC3339, args.Date+"T00:00:00.0Z")
-}
-
-// PayoutTransaction holds all information relevant to a transaction (in BAT)
-type PayoutTransaction struct {
-	TransactionID      uuid.UUID               `json:"transactionId"`
-	PotentialPaymentID uuid.UUID               `json:"potentialPaymentId"`
-	Provider           string                  `json:"walletProvider"`
-	ProviderID         string                  `json:"walletProviderId"`
-	Channel            string                  `json:"publisher"`
-	AltCurrency        altcurrency.AltCurrency `json:"altcurrency"`
-	Probi              decimal.Decimal         `json:"probi"`
-	Address            *uuid.UUID              `json:"address"`
-	Authority          string                  `json:"authority"`
-	Fees               decimal.Decimal         `json:"fees"`
-	Publisher          string                  `json:"owner"`
-	Type               string                  `json:"type"`
-	// HContributionsVerdict *bool `json:"hContributionsVerdict"`
-	// HReferralsVerdict     *bool `json:"hReferralsVerdict"`
-	// HOwnerVerdict         *bool `json:"hOwnerVerdict"`
-	// HProviderIDVerdict    *bool `json:"hProviderIDVerdict"`
-	// HProviderIDNotes      *bool `json:"hProviderIDNotes"`
-	// HShadowBanned         *bool `json:"hShadowBanned"`
 }
 
 // CurrencyPrices is a hash of all currencies supported
