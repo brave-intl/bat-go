@@ -189,7 +189,7 @@ func WriteCSV(out string, rows [][]string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 	return WriteCSVRows(writer, rows)
@@ -254,7 +254,7 @@ func Request(method string, url string, args data.Args) (body []byte, err error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
