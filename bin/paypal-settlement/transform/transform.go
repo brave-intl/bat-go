@@ -20,6 +20,7 @@ import (
 var (
 	supportedCurrencies = map[string]float64{
 		"JPY": 0,
+		"USD": 2,
 	}
 )
 
