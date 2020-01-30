@@ -79,12 +79,12 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		}
 
 	}
-	quanity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
+	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
 		return nil, err
 	}
 
-	orderItem.Subtotal = orderItem.Price.Mul(quanity)
+	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
 	return &orderItem, nil
 }

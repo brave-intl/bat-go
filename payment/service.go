@@ -42,7 +42,7 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quanity)
+		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}

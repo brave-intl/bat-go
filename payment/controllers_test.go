@@ -41,7 +41,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 }
 
-func (suite *ControllersTestSuite) setupCreateOrder(quanity int) Order {
+func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -53,8 +53,8 @@ func (suite *ControllersTestSuite) setupCreateOrder(quanity int) Order {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
-				Quanity: quanity,
+				SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				Quantity: quantity,
 			},
 		},
 	}

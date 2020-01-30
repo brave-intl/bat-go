@@ -25,8 +25,8 @@ func Router(service *Service) chi.Router {
 
 // OrderItemRequest is the body for creating new items
 type OrderItemRequest struct {
-	SKU     string `json:"sku"`
-	Quanity int    `json:"quanity"`
+	SKU      string `json:"sku"`
+	Quantity int    `json:"quantity"`
 }
 
 // CreateOrderRequest includes information needed to create an order
