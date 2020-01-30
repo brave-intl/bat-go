@@ -23,3 +23,5 @@ grantTokens.json
 /list-transactions
 /create-wallet
 /paypal-settlement
+/paypal-settlement.csv
+/paypal-settlement.json

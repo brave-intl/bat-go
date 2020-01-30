@@ -32,8 +32,9 @@ type Transaction struct {
 	Publisher      string                   `json:"owner"`
 	BATPlatformFee decimal.Decimal          `json:"fees"`
 	Probi          decimal.Decimal          `json:"probi"`
-	Provider       string                   `json:"walletProvider"`
-	ProviderID     string                   `json:"walletProviderId"`
+	Hash           string                   `json:"hash"`
+	Provider       string                   `json:"provider"`
+	ProviderID     string                   `json:"providerId"`
 	Channel        string                   `json:"publisher"`
 	SignedTx       string                   `json:"signedTx"`
 	Status         string                   `json:"status"`
