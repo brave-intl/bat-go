@@ -25,3 +25,4 @@ grantTokens.json
 /paypal-settlement
 /paypal-settlement.csv
 /paypal-settlement.json
+.vscode/
