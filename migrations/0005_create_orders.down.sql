@@ -1,3 +1,3 @@
-drop index order_items_indx;
-drop table order_items;
-drop table orders;
+drop index order_items_indx cascade;
+drop table if exists order_items cascade;
+drop table if exists orders cascade;

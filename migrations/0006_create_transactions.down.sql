@@ -1,1 +1,1 @@
-drop table transactions;
+drop table if exists transactions cascade;
