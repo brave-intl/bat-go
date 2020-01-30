@@ -49,7 +49,7 @@ const (
 
 const (
 	sandboxFingerprint = "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw4="
-	prodFingerprint    = "U3Ny8QcC3uKPNnMK3a3V4W4nby2YjSeS+/+0XHFhDs4="
+	prodFingerprint    = "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw4="
 )
 
 var (
