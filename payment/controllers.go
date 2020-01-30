@@ -97,7 +97,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	ExternalTransactionID string `json:"externalTransactionID"`
+	ExternalTransactionID string `json:"externalTransactionID" valid:"uuidv4"`
 }
 
 // CreateTransaction creates a transaction against an order
