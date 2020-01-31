@@ -167,7 +167,7 @@ func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
 		convertedAmount.String(),
 		pm.Currency,
 		pm.RefID,
-		fmt.Sprintf("You earned %s BAT from %d channels.", batFloat, len(pm.Note)),
+		fmt.Sprintf("You earned %s BAT from %d channel(s).", batFloat, len(pm.Note)),
 		// strings.Join(notes, pm.NoteDelimiter),
 		"PayPal",
 	}
