@@ -17,6 +17,32 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// CompleteSettlement marks the settlement file as complete
+func CompleteSettlement(args Args) error {
+	fmt.Println("RUNNING: complete")
+	if args.In == "" {
+		return errors.New("the 'in' flag must be set")
+	}
+	if args.Out == "./paypal-settlement" {
+		args.Out = "./paypal-settlement.json"
+		// return errors.New("the 'out' flag must be set")
+	}
+	payouts, err := ReadFiles(args.Out)
+	if err != nil {
+		return err
+	}
+	for i, payout := range *payouts {
+		payout.Status = "complete"
+		(*payouts)[i] = payout
+	}
+	fmt.Println(payouts)
+	err = WriteEyeshadeTransactions(args.Out, payouts)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // CreateSettlementFile starts the transform process
 func CreateSettlementFile(args Args) (err error) {
 	fmt.Println("RUNNING: transform")
@@ -37,6 +63,12 @@ func CreateSettlementFile(args Args) (err error) {
 		return err
 	}
 
+	// TEMPORARY HACK. NEED UPDATED DATA STRUCTURE
+	for i, payout := range *payouts {
+		payout.Provider = "paypal"
+		(*payouts)[i] = payout
+	}
+
 	rate, err := GetRate(args)
 	if err != nil {
 		return err
@@ -48,7 +80,7 @@ func CreateSettlementFile(args Args) (err error) {
 		return err
 	}
 
-	err = WriteEyeshadeTransactions(args.Out, txs)
+	err = WriteEyeshadeTransactions(args.Out+".json", txs)
 	if err != nil {
 		return err
 	}
@@ -106,7 +138,7 @@ func WriteEyeshadeTransactions(output string, metadata *[]settlement.Transaction
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(output+".json", data, 0400)
+	return ioutil.WriteFile(output, data, 0400)
 }
 
 // ReadFiles reads a series of files
@@ -122,11 +154,6 @@ func ReadFiles(input string) (*[]settlement.Transaction, error) {
 		err = json.Unmarshal(bytes, &batPayouts)
 		if err != nil {
 			return nil, err
-		}
-		// TEMPORARY HACK. NEED UPDATED DATA STRUCTURE
-		for i, payout := range batPayouts {
-			payout.Provider = "paypal"
-			batPayouts[i] = payout
 		}
 		allPayouts = append(allPayouts, batPayouts...)
 	}
@@ -213,6 +240,7 @@ func WriteTransformedCSV(args Args, metadata []Metadata) error {
 	// 	return errors.New("a payout cannot be larger than 5000 lines items long")
 	// }
 	fmt.Println("payouts", len(rows))
+	fmt.Println("total", total.String(), args.Currency)
 	return WriteCSV(args.Out+".csv", append([][]string{
 		{
 			"Email/Phone",

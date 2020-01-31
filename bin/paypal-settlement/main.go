@@ -30,6 +30,8 @@ func main() {
 	switch command {
 	case "transform":
 		err = paypal.CreateSettlementFile(args)
+	case "complete":
+		err = paypal.CompleteSettlement(args)
 	case "upload":
 		// upload()
 	case "verify":
