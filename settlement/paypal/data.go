@@ -2,7 +2,7 @@ package paypal
 
 import (
 	"crypto/sha256"
-	"strings"
+	"fmt"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -153,19 +153,20 @@ func (pm *Metadata) Amount(rate decimal.Decimal) decimal.Decimal {
 
 // ToCSVRow turns a paypal metadata into a list of strings ready to be consumed by a CSV generator
 func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
-	var notes []string
+	// var notes []string
 	total := decimal.NewFromFloat(0)
 	for _, note := range pm.Note {
 		amount := fromProbi(note.Probi, rate, pm.Currency)
 		total = total.Add(amount)
-		notes = append(notes, "("+note.Channel+" -> "+amount.String()+")")
+		// notes = append(notes, "("+note.Channel+" -> "+amount.String()+")")
 	}
 	return []string{
 		pm.PayerID,
 		total.String(),
 		pm.Currency,
 		pm.RefID,
-		strings.Join(notes, pm.NoteDelimiter),
+		fmt.Sprintf("You earned %d BAT from %d channels.", total, len(pm.Note)),
+		// strings.Join(notes, pm.NoteDelimiter),
 		"PayPal",
 	}
 }
