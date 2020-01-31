@@ -101,7 +101,7 @@ type EyeshadeTransaction struct {
 
 // NewMetadata creates a new paypal metadata object
 func NewMetadata(pm Metadata) Metadata {
-	delimiter := "\n"
+	delimiter := ","
 	if len(pm.NoteDelimiter) > 0 {
 		delimiter = pm.NoteDelimiter
 	}
@@ -165,7 +165,7 @@ func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
 		total.String(),
 		pm.Currency,
 		pm.RefID,
-		"Payout for\n" + strings.Join(notes, pm.NoteDelimiter),
+		strings.Join(notes, pm.NoteDelimiter),
 		"PayPal",
 	}
 }
