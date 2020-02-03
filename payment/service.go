@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -58,6 +59,15 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (service *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
+	// Ensure the transaction hasn't already been added to any orders.
+	transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
+
+	if err != nil {
+		return nil, err
+	}
+	if transaction != nil {
+		return nil, fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID)
+	}
 
 	var wallet uphold.Wallet
 	upholdTransaction, err := wallet.GetPublicTransaction(req.ExternalTransactionID)
@@ -71,7 +81,7 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 	currency := upholdTransaction.AltCurrency.String()
 	kind := "uphold"
 
-	transaction, err := service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
+	transaction, err = service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
 		return nil, err
 	}

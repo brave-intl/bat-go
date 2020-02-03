@@ -18,6 +18,7 @@ func Router(service *Service) chi.Router {
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 
+	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions", middleware.InstrumentHandler("CreateTransaction", CreateTransaction(service)))
 
 	return r
@@ -95,6 +96,38 @@ func GetOrder(service *Service) handlers.AppHandler {
 	})
 }
 
+// GetTransactions is the handler for listing the transactions for an order
+func GetTransactions(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		orderID := chi.URLParam(r, "orderID")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			)
+		}
+
+		id, err := uuid.FromString(orderID)
+		uuid.Must(id, err)
+
+		order, err := service.datastore.GetTransactions(id)
+		if err != nil {
+			return handlers.WrapError(err, "Error retrieving the transactions for the order", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(order); err != nil {
+			return handlers.WrapError(err, "Error encoding the transactions JSON", http.StatusInternalServerError)
+		}
+		return nil
+	})
+}
+
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
 	ExternalTransactionID string `json:"externalTransactionID" valid:"uuidv4"`
@@ -128,14 +161,14 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		transaction, err := service.CreateTransactionFromRequest(req, validOrderID)
+		transactions, err := service.CreateTransactionFromRequest(req, validOrderID)
 		if err != nil {
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transaction); err != nil {
+		if err := json.NewEncoder(w).Encode(transactions); err != nil {
 			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
 		}
 		return nil
