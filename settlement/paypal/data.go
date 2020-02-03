@@ -16,6 +16,10 @@ var (
 		"JPY": 0,
 		"USD": 2,
 	}
+	currencySymbols = map[string]string{
+		"USD": "$",
+		"JPY": "¥",
+	}
 )
 
 // Args defines all inputs from cli
@@ -162,12 +166,17 @@ func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
 	convertedAmount := fromProbi(probiTotal, rate, pm.Currency)
 	batAmount := altcurrency.BAT.FromProbi(probiTotal)
 	batFloat := batAmount.String()
+	convertedAmountWithUnit := currencySymbols[pm.Currency] + convertedAmount.String()
+	batFloatWithUnit := batFloat + " BAT"
+	if pm.Currency == "JPY" {
+		batFloatWithUnit = batFloatWithUnit + " Points"
+	}
 	return []string{
 		pm.PayerID,
 		convertedAmount.String(),
 		pm.Currency,
 		pm.RefID,
-		fmt.Sprintf("You earned %s BAT from %d channel(s).", batFloat, len(pm.Note)),
+		fmt.Sprintf("You earned %s, as %s from %d channel(s).", batFloatWithUnit, convertedAmountWithUnit, len(pm.Note)),
 		// strings.Join(notes, pm.NoteDelimiter),
 		"PayPal",
 	}
