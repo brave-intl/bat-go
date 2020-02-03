@@ -109,7 +109,9 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
 	err := pg.DB.Get(&order, statement, orderID)
-	if err != nil {
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -130,6 +132,7 @@ func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
 	statement := "SELECT * FROM transactions WHERE order_id = $1"
 	transactions := []Transaction{}
 	err := pg.DB.Select(&transactions, statement, orderID)
+
 	if err != nil {
 		return nil, err
 	}

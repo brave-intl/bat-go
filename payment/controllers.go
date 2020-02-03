@@ -16,10 +16,10 @@ import (
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions", middleware.InstrumentHandler("CreateTransaction", CreateTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 
 	return r
 }
@@ -67,7 +67,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 // GetOrder is the handler for creating a new order
 func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "id")
+		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
@@ -88,7 +88,11 @@ func GetOrder(service *Service) handlers.AppHandler {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		if order == nil {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 		if err := json.NewEncoder(w).Encode(order); err != nil {
 			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
 		}
@@ -133,8 +137,8 @@ type CreateTransactionRequest struct {
 	ExternalTransactionID string `json:"externalTransactionID" valid:"uuidv4"`
 }
 
-// CreateTransaction creates a transaction against an order
-func CreateTransaction(service *Service) handlers.AppHandler {
+// CreateUpholdTransaction creates a transaction against an order
+func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateTransactionRequest
 		err := requestutils.ReadJSON(r.Body, &req)

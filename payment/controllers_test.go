@@ -102,12 +102,12 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 
 	order := suite.setupCreateOrder(20)
 
-	req, err := http.NewRequest("GET", "/v1/orders/{id}", nil)
+	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
 
 	getOrderHandler := GetOrder(service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", order.ID.String())
+	rctx.URLParams.Add("orderID", order.ID.String())
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -139,7 +139,7 @@ func (suite *ControllersTestSuite) TestCreateTransaction() {
 	}
 	order := suite.setupCreateOrder(4.75 / .25)
 
-	handler := CreateTransaction(service)
+	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
 		ExternalTransactionID: "3db2f74e-df23-42e2-bf25-a302a93baa2d",
@@ -148,7 +148,7 @@ func (suite *ControllersTestSuite) TestCreateTransaction() {
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -182,7 +182,7 @@ func (suite *ControllersTestSuite) TestCreateTransaction() {
 
 	// Test to make sure we can't submit the same externalTransactionID twice
 
-	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions", bytes.NewBuffer(body))
+	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -209,7 +209,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 
 	order := suite.setupCreateOrder(4.75 / .25)
 
-	handler := CreateTransaction(service)
+	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
 		ExternalTransactionID: "3db2f74e-df23-42e2-bf25-a302a93baa2d",
@@ -218,7 +218,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
