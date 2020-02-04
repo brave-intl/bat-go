@@ -2,6 +2,7 @@ package payment
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
@@ -165,14 +166,25 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		transactions, err := service.CreateTransactionFromRequest(req, validOrderID)
+		// Ensure the external transaction ID hasn't already been added to any orders.
+		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
+		if err != nil {
+			return handlers.WrapError(err, "Error when validating externalTransactinID", http.StatusInternalServerError)
+		}
+
+		if transaction != nil {
+			err = fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID)
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		transaction, err = service.CreateTransactionFromRequest(req, validOrderID)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transactions); err != nil {
+		if err := json.NewEncoder(w).Encode(transaction); err != nil {
 			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
 		}
 		return nil

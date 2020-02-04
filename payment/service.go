@@ -2,7 +2,6 @@ package payment
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -59,16 +58,6 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (service *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
-	// Ensure the transaction hasn't already been added to any orders.
-	transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
-
-	if err != nil {
-		return nil, err
-	}
-	if transaction != nil {
-		return nil, fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID)
-	}
-
 	var wallet uphold.Wallet
 	upholdTransaction, err := wallet.GetPublicTransaction(req.ExternalTransactionID)
 
@@ -81,32 +70,41 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 	currency := upholdTransaction.AltCurrency.String()
 	kind := "uphold"
 
-	transaction, err = service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
+	transaction, err := service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
 		return nil, err
 	}
 
-	// Now that the transaction has been created let's check to see if that fulfilled the order.
-	order, err := service.datastore.GetOrder(orderID)
+	isPaid, err := service.IsOrderPaid(transaction.OrderID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get current sums for transactions
-	sum, err := service.datastore.GetSumForTransactions(orderID)
-	if err != nil {
-		return nil, err
-	}
-
-	// If the transaction that was inserted satisifies the order then let's update the status
-	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = service.datastore.UpdateOrder(orderID, "paid")
+	// If the transaction that was satisifies the order then let's update the status
+	if isPaid {
+		err = service.datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return transaction, err
+}
+
+// IsOrderPaid determines if the order has been paid
+func (service *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
+	// Now that the transaction has been created let's check to see if that fulfilled the order.
+	order, err := service.datastore.GetOrder(orderID)
+	if err != nil {
+		return false, err
+	}
+
+	sum, err := service.datastore.GetSumForTransactions(orderID)
+	if err != nil {
+		return false, err
+	}
+
+	return sum.GreaterThanOrEqual(order.TotalPrice), nil
 }
 
 // RunNextOrderJob takes the next order job and completes it
