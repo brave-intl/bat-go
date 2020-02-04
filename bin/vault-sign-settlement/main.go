@@ -87,7 +87,7 @@ func main() {
 
 	var upholdOnlySettlements []settlement.Transaction
 	for i := 0; i < len(settlements); i++ {
-		if settlements[i].Provider == "uphold" {
+		if settlements[i].WalletProvider == "uphold" {
 			upholdOnlySettlements = append(upholdOnlySettlements, settlements[i])
 		}
 	}
