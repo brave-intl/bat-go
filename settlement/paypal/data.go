@@ -36,12 +36,6 @@ type CompleteArgs struct {
 	Out string
 }
 
-// RateResponse is the response received from ratios
-type RateResponse struct {
-	LastUpdated time.Time                  `json:"lastUpdated"`
-	Payload     map[string]decimal.Decimal `json:"payload"`
-}
-
 // RefIDKey is used to generate a hash
 func (pm *Metadata) RefIDKey(channel string) string {
 	return pm.Publisher + channel

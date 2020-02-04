@@ -1,15 +1,16 @@
 package paypal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -183,9 +184,17 @@ func WriteTransformedCSV(currency string, rate decimal.Decimal, out string, meta
 // GetRate figures out which rate to use
 func GetRate(currency string, rate decimal.Decimal, auth string) (decimal.Decimal, error) {
 	if rate.Equal(decimal.NewFromFloat(0)) {
-		rateData, err := FetchRate(currency, auth)
+		client, err := ratios.New()
 		if err != nil {
 			return rate, err
+		}
+		ctx := context.Background()
+		rateData, err := client.FetchRate(ctx, "BAT", currency)
+		if err != nil {
+			return rate, err
+		}
+		if rateData == nil {
+			return rate, errors.New("ratio not found")
 		}
 		rate = rateData.Payload[currency]
 		if time.Since(rateData.LastUpdated).Minutes() > 5 {
@@ -193,45 +202,4 @@ func GetRate(currency string, rate decimal.Decimal, auth string) (decimal.Decima
 		}
 	}
 	return rate, nil
-}
-
-// FetchRate fetches the rate of a currency to BAT
-func FetchRate(currency string, auth string) (*RateResponse, error) {
-	var body RateResponse
-	url := "https://ratios.mercury.basicattentiontoken.org/v1/relative/BAT?currency=" + currency
-	bytes, err := Request("GET", url, auth)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(bytes, &body)
-	if err != nil {
-		return nil, err
-	}
-	return &body, err
-}
-
-// Request does a request
-func Request(method string, url string, auth string) (body []byte, err error) {
-	client := http.Client{
-		Timeout: time.Second * 2, // Maximum of 2 secs
-	}
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return
-	}
-	req.Header.Add("Authorization", "Bearer "+auth)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("\n\turl: %s\n\tstatus code: %d", url, resp.StatusCode)
-	}
-	return body, nil
 }
