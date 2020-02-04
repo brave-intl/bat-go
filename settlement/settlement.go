@@ -23,27 +23,27 @@ const maxConfirmTries = 5
 
 // Transaction describes a payout transaction from the settlement wallet to a publisher
 type Transaction struct {
-	AltCurrency    *altcurrency.AltCurrency `json:"altcurrency"`
-	Authority      string                   `json:"authority"`
-	Amount         decimal.Decimal          `json:"amount"`
-	ExchangeFee    decimal.Decimal          `json:"commission"`
-	Currency       string                   `json:"currency"`
-	Destination    string                   `json:"address"`
-	Publisher      string                   `json:"owner"`
-	BATPlatformFee decimal.Decimal          `json:"fees"`
-	Probi          decimal.Decimal          `json:"probi"`
-	Hash           string                   `json:"hash"`
-	Provider       string                   `json:"provider"`
-	ProviderID     string                   `json:"providerId"`
-	Channel        string                   `json:"publisher"`
-	SignedTx       string                   `json:"signedTx"`
-	Status         string                   `json:"status"`
-	ID             string                   `json:"transactionId" valid:"uuidv4"`
-	TransferFee    decimal.Decimal          `json:"fee"`
-	Type           string                   `json:"type"`
-	ValidUntil     time.Time                `json:"validUntil"`
-	DocumentID     string                   `json:"documentId,omitempty"`
-	Note           string                   `json:"note"`
+	AltCurrency      *altcurrency.AltCurrency `json:"altcurrency"`
+	Authority        string                   `json:"authority"`
+	Amount           decimal.Decimal          `json:"amount"`
+	ExchangeFee      decimal.Decimal          `json:"commission"`
+	Currency         string                   `json:"currency"`
+	Destination      string                   `json:"address"`
+	Publisher        string                   `json:"owner"`
+	BATPlatformFee   decimal.Decimal          `json:"fees"`
+	Probi            decimal.Decimal          `json:"probi"`
+	ProviderID       string                   `json:"hash" valid:"uuidv4"`
+	WalletProvider   string                   `json:"walletProvider"`
+	WalletProviderID string                   `json:"walletProviderId"`
+	Channel          string                   `json:"publisher"`
+	SignedTx         string                   `json:"signedTx"`
+	Status           string                   `json:"status"`
+	ID               string                   `json:"transactionId" valid:"uuidv4"`
+	TransferFee      decimal.Decimal          `json:"fee"`
+	Type             string                   `json:"type"`
+	ValidUntil       time.Time                `json:"validUntil"`
+	DocumentID       string                   `json:"documentId,omitempty"`
+	Note             string                   `json:"note"`
 }
 
 // State contains the current state of the settlement, including wallet and transaction status

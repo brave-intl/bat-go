@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -22,24 +21,19 @@ var (
 	}
 )
 
-// Args defines all inputs from cli
-type Args struct {
+// TransformArgs are the args required for the transform command
+type TransformArgs struct {
 	In       string
 	Currency string
 	Auth     string
-	Date     string
 	Rate     decimal.Decimal
 	Out      string
 }
 
-// CheckDate parses a date from the input string to validate it
-func (args Args) CheckDate() (time.Time, error) {
-	return time.Parse(time.RFC3339, args.Date+"T00:00:00.0Z")
-}
-
-// CurrencyPrices is a hash of all currencies supported
-type CurrencyPrices struct {
-	JPY decimal.Decimal `json:"JPY"`
+// CompleteArgs are the args required for the complete command
+type CompleteArgs struct {
+	In  string
+	Out string
 }
 
 // RateResponse is the response received from ratios
@@ -50,7 +44,7 @@ type RateResponse struct {
 
 // RefIDKey is used to generate a hash
 func (pm *Metadata) RefIDKey(channel string) string {
-	return pm.Prefix + pm.Publisher + channel
+	return pm.Publisher + channel
 }
 
 // GenerateRefID converts a hex to base62
@@ -73,7 +67,6 @@ type Note struct {
 type Metadata struct {
 	ExecutedAt    time.Time
 	Rate          decimal.Decimal
-	Prefix        string
 	Section       string
 	PayerID       string
 	Channel       string
@@ -85,26 +78,8 @@ type Metadata struct {
 	NoteDelimiter string
 }
 
-// EyeshadeTransaction an object to express the flow of funds
-type EyeshadeTransaction struct {
-	Publisher     string                  `json:"publisher"`
-	Owner         string                  `json:"owner"`
-	Probi         decimal.Decimal         `json:"probi"`
-	Currency      string                  `json:"currency"`
-	Hash          string                  `json:"hash"`
-	Amount        decimal.Decimal         `json:"amount"`
-	ExecutedAt    time.Time               `json:"executedAt"`
-	AltCurrency   altcurrency.AltCurrency `json:"altcurrency"`
-	Address       uuid.UUID               `json:"address"`
-	Fees          decimal.Decimal         `json:"fees"`
-	Fee           decimal.Decimal         `json:"fee"`
-	Commission    decimal.Decimal         `json:"commission"`
-	TransactionID uuid.UUID               `json:"transactionId"`
-	Type          string                  `json:"type"`
-}
-
-// NewMetadata creates a new paypal metadata object
-func NewMetadata(pm Metadata) Metadata {
+// FillMetadataDefaults backfills the defaults in a metadata object
+func FillMetadataDefaults(pm Metadata) Metadata {
 	delimiter := ","
 	if len(pm.NoteDelimiter) > 0 {
 		delimiter = pm.NoteDelimiter
@@ -112,7 +87,6 @@ func NewMetadata(pm Metadata) Metadata {
 	return Metadata{
 		ExecutedAt:    pm.ExecutedAt,
 		Rate:          pm.Rate,
-		Prefix:        pm.Prefix,
 		Section:       pm.Section,
 		PayerID:       pm.PayerID,
 		Publisher:     pm.Publisher,

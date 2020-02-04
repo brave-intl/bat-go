@@ -18,7 +18,7 @@ import (
 )
 
 // CompleteSettlement marks the settlement file as complete
-func CompleteSettlement(args Args) error {
+func CompleteSettlement(args CompleteArgs) error {
 	fmt.Println("RUNNING: complete")
 	if args.In == "" {
 		return errors.New("the 'in' flag must be set")
@@ -33,10 +33,11 @@ func CompleteSettlement(args Args) error {
 	}
 	for i, payout := range *payouts {
 		payout.Status = "complete"
+		payout.ProviderID = uuid.NewV4().String()
 		(*payouts)[i] = payout
 	}
 	fmt.Println(payouts)
-	err = WriteEyeshadeTransactions(args.Out, payouts)
+	err = WriteTransactions(args.Out, payouts)
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func CompleteSettlement(args Args) error {
 }
 
 // CreateSettlementFile starts the transform process
-func CreateSettlementFile(args Args) (err error) {
+func CreateSettlementFile(args TransformArgs) (err error) {
 	fmt.Println("RUNNING: transform")
 	if args.In == "" {
 		return errors.New("the 'in' flag must be set")
@@ -52,93 +53,81 @@ func CreateSettlementFile(args Args) (err error) {
 	if args.Currency == "" {
 		return errors.New("the 'currency' flag must be set")
 	}
-	// check that date is fine
-	_, err = args.CheckDate()
-	if err != nil {
-		return err
-	}
 
 	payouts, err := ReadFiles(args.In)
 	if err != nil {
 		return err
 	}
 
-	// TEMPORARY HACK. NEED UPDATED DATA STRUCTURE
-	for i, payout := range *payouts {
-		payout.Provider = "paypal"
-		(*payouts)[i] = payout
-	}
-
-	rate, err := GetRate(args)
+	rate, err := GetRate(args.Currency, args.Rate, args.Auth)
 	if err != nil {
 		return err
 	}
 	args.Rate = rate
 
-	txs, err := CreateEyeshadeTransactions(args, payouts)
+	txs, err := GenerateTransactions(args.Currency, args.Rate, payouts)
 	if err != nil {
 		return err
 	}
 
-	err = WriteEyeshadeTransactions(args.Out+".json", txs)
+	err = WriteTransactions(args.Out+".json", txs)
 	if err != nil {
 		return err
 	}
 
-	metadata, err := ValidatePayouts(args, *payouts)
+	metadata, err := ValidatePayouts(args.Currency, txs)
 	if err != nil {
 		return err
 	}
 
-	err = WriteTransformedCSV(args, *metadata)
+	err = WriteTransformedCSV(args.Currency, args.Rate, args.Out, metadata)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// CreateEyeshadeTransactions creates tx structs
-func CreateEyeshadeTransactions(args Args, payouts *[]settlement.Transaction) (*[]settlement.Transaction, error) {
+// GenerateTransactions creates tx structs
+func GenerateTransactions(currency string, rate decimal.Decimal, payouts *[]settlement.Transaction) (*[]settlement.Transaction, error) {
 	txs := make([]settlement.Transaction, 0)
 	transactionID := uuid.NewV4()
 	bat := altcurrency.BAT
 	for _, tx := range *payouts {
-		publisher := tx.Publisher
-		providerID := tx.ProviderID
-		if providerID == "" {
-			providerID = publisher
+		if tx.WalletProvider != "paypal" {
+			continue
 		}
-		amount := fromProbi(tx.Probi, args.Rate, args.Currency)
+		publisher := tx.Publisher
+		amount := fromProbi(tx.Probi, rate, currency)
 		txs = append(txs, settlement.Transaction{
-			ID:             transactionID.String(),
-			AltCurrency:    &bat,
-			Amount:         amount,
-			Authority:      tx.Authority,
-			Publisher:      publisher,
-			Channel:        tx.Channel,
-			Destination:    tx.Destination,
-			Probi:          tx.Probi,
-			Type:           tx.Type,
-			ProviderID:     providerID,
-			Provider:       tx.Provider,
-			Status:         "pending",
-			BATPlatformFee: tx.BATPlatformFee,       // 5%
-			ExchangeFee:    decimal.NewFromFloat(0), // should probably be computed
-			TransferFee:    decimal.NewFromFloat(0), // should probably be computed
-			Currency:       args.Currency,
-			Hash:           uuid.NewV4().String(),
+			ID:               transactionID.String(),
+			AltCurrency:      &bat,
+			Amount:           amount,
+			Authority:        tx.Authority,
+			Publisher:        publisher,
+			Channel:          tx.Channel,
+			Destination:      tx.Destination,
+			Probi:            tx.Probi,
+			Type:             tx.Type,
+			WalletProviderID: tx.WalletProviderID,
+			WalletProvider:   tx.WalletProvider,
+			Status:           "pending",
+			BATPlatformFee:   tx.BATPlatformFee,       // 5%
+			ExchangeFee:      decimal.NewFromFloat(0), // should probably be computed
+			TransferFee:      decimal.NewFromFloat(0), // should probably be computed
+			Currency:         currency,
+			ProviderID:       uuid.NewV4().String(),
 		})
 	}
 	return &txs, nil
 }
 
-// WriteEyeshadeTransactions outputs json
-func WriteEyeshadeTransactions(output string, metadata *[]settlement.Transaction) error {
+// WriteTransactions outputs json
+func WriteTransactions(output string, metadata *[]settlement.Transaction) error {
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(output, data, 0400)
+	return ioutil.WriteFile(output, data, 0600)
 }
 
 // ReadFiles reads a series of files
@@ -161,9 +150,7 @@ func ReadFiles(input string) (*[]settlement.Transaction, error) {
 }
 
 // ValidatePayouts validates the payout objects and creates metadata to represent rows
-func ValidatePayouts(args Args, batPayouts []settlement.Transaction) (*[]Metadata, error) {
-	// scale := decimal.NewFromFloat(supportedCurrencies[args.Currency])
-	// factor := decimal.NewFromFloat(10).Pow(scale)
+func ValidatePayouts(currency string, batPayouts *[]settlement.Transaction) (*[]Metadata, error) {
 	executedAt := time.Now()
 	rows := make([]Metadata, 0)
 	type placement struct {
@@ -173,25 +160,15 @@ func ValidatePayouts(args Args, batPayouts []settlement.Transaction) (*[]Metadat
 	refIDsInBatch := map[string]placement{}
 	publishersInBatch := map[string]placement{}
 
-	for i, batPayout := range batPayouts {
-		if batPayout.Provider != "paypal" {
-			continue
-		}
-
-		publisher := batPayout.Publisher
-		payerID := batPayout.ProviderID
-		if payerID == "" {
-			payerID = publisher
-		}
-		row := NewMetadata(Metadata{
+	for i, batPayout := range *batPayouts {
+		row := FillMetadataDefaults(Metadata{
 			ExecutedAt: executedAt,
-			Prefix:     args.Date,
 			Section:    "PAYOUT",
-			PayerID:    payerID,
-			Publisher:  publisher,
+			PayerID:    batPayout.WalletProviderID,
+			Publisher:  batPayout.Publisher,
 			Channel:    batPayout.Channel,
 			Probi:      batPayout.Probi,
-			Currency:   args.Currency,
+			Currency:   currency,
 		})
 
 		// ref id cannot be same. otherwise we're payout out to same channel twice
@@ -207,7 +184,7 @@ func ValidatePayouts(args Args, batPayouts []settlement.Transaction) (*[]Metadat
 		}
 
 		note := Note{batPayout.Channel, batPayout.Probi}
-		publisherInBatch := publishersInBatch[publisher]
+		publisherInBatch := publishersInBatch[batPayout.Publisher]
 		if publisherInBatch.Valid {
 			cachedRow := rows[publisherInBatch.Index]
 			if cachedRow.Channel == batPayout.Channel {
@@ -220,7 +197,7 @@ func ValidatePayouts(args Args, batPayouts []settlement.Transaction) (*[]Metadat
 		} else {
 			placing := placement{true, len(rows)}
 			refIDsInBatch[row.RefID] = placing
-			publishersInBatch[publisher] = placing
+			publishersInBatch[batPayout.Publisher] = placing
 			row.AddNote(note)
 			rows = append(rows, row)
 		}
@@ -229,19 +206,19 @@ func ValidatePayouts(args Args, batPayouts []settlement.Transaction) (*[]Metadat
 }
 
 // WriteTransformedCSV opens and writes a csv
-func WriteTransformedCSV(args Args, metadata []Metadata) error {
+func WriteTransformedCSV(currency string, rate decimal.Decimal, out string, metadata *[]Metadata) error {
 	rows := make([][]string, 0)
 	total := decimal.NewFromFloat(0)
-	for _, row := range metadata {
-		rows = append(rows, row.ToCSVRow(args.Rate))
-		total = total.Add(row.Amount(args.Rate))
+	for _, row := range *metadata {
+		rows = append(rows, row.ToCSVRow(rate))
+		total = total.Add(row.Amount(rate))
 	}
-	// if len(rows) > 5000 {
-	// 	return errors.New("a payout cannot be larger than 5000 lines items long")
-	// }
+	if len(rows) > 5000 {
+		return errors.New("a payout cannot be larger than 5000 lines items long")
+	}
 	fmt.Println("payouts", len(rows))
-	fmt.Println("total", total.String(), args.Currency)
-	return WriteCSV(args.Out+".csv", append([][]string{
+	fmt.Println("total", total.String(), currency)
+	return WriteCSV(out+".csv", append([][]string{
 		{
 			"Email/Phone",
 			"Amount",
@@ -251,16 +228,6 @@ func WriteTransformedCSV(args Args, metadata []Metadata) error {
 			"Recipient wallet",
 		},
 	}, rows...))
-	// WriteCSV(args.Out, append([][]string{
-	// 	{
-	// 		"PAYOUT_SUMMARY",
-	// 		total.String(),
-	// 		args.Currency,
-	// 		strconv.Itoa(len(rows)),
-	// 		"Brave Publishers Payout",
-	// 		"Payout for",
-	// 	},
-	// }, rows...))
 }
 
 // WriteCSV writes out a csv
@@ -287,28 +254,25 @@ func WriteCSVRows(writer *csv.Writer, rows [][]string) error {
 }
 
 // GetRate figures out which rate to use
-func GetRate(args Args) (decimal.Decimal, error) {
-	var rate decimal.Decimal
-	if args.Rate.Equal(decimal.NewFromFloat(0)) {
-		rateData, err := FetchRate(args)
+func GetRate(currency string, rate decimal.Decimal, auth string) (decimal.Decimal, error) {
+	if rate.Equal(decimal.NewFromFloat(0)) {
+		rateData, err := FetchRate(currency, auth)
 		if err != nil {
-			return args.Rate, err
+			return rate, err
 		}
-		rate = rateData.Payload[args.Currency]
+		rate = rateData.Payload[currency]
 		if time.Since(rateData.LastUpdated).Minutes() > 5 {
-			return args.Rate, errors.New("ratios data is too old. update ratios response before moving forward")
+			return rate, errors.New("ratios data is too old. update ratios response before moving forward")
 		}
-	} else {
-		rate = args.Rate
 	}
 	return rate, nil
 }
 
 // FetchRate fetches the rate of a currency to BAT
-func FetchRate(args Args) (*RateResponse, error) {
+func FetchRate(currency string, auth string) (*RateResponse, error) {
 	var body RateResponse
-	url := "https://ratios.mercury.basicattentiontoken.org/v1/relative/BAT?currency=" + args.Currency
-	bytes, err := Request("GET", url, args)
+	url := "https://ratios.mercury.basicattentiontoken.org/v1/relative/BAT?currency=" + currency
+	bytes, err := Request("GET", url, auth)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +284,7 @@ func FetchRate(args Args) (*RateResponse, error) {
 }
 
 // Request does a request
-func Request(method string, url string, args Args) (body []byte, err error) {
+func Request(method string, url string, auth string) (body []byte, err error) {
 	client := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs
 	}
@@ -328,7 +292,7 @@ func Request(method string, url string, args Args) (body []byte, err error) {
 	if err != nil {
 		return
 	}
-	req.Header.Add("Authorization", "Bearer "+args.Auth)
+	req.Header.Add("Authorization", "Bearer "+auth)
 
 	resp, err := client.Do(req)
 	if err != nil {
