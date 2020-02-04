@@ -65,37 +65,31 @@ type Note struct {
 
 // Metadata holds metadata to create a row for paypal
 type Metadata struct {
-	ExecutedAt    time.Time
-	Rate          decimal.Decimal
-	Section       string
-	PayerID       string
-	Channel       string
-	Publisher     string
-	Probi         decimal.Decimal
-	Currency      string
-	RefID         string
-	Note          []Note
-	NoteDelimiter string
+	ExecutedAt time.Time
+	Rate       decimal.Decimal
+	Section    string
+	PayerID    string
+	Channel    string
+	Publisher  string
+	Probi      decimal.Decimal
+	Currency   string
+	RefID      string
+	Note       []Note
 }
 
 // FillMetadataDefaults backfills the defaults in a metadata object
 func FillMetadataDefaults(pm Metadata) Metadata {
-	delimiter := ","
-	if len(pm.NoteDelimiter) > 0 {
-		delimiter = pm.NoteDelimiter
-	}
 	return Metadata{
-		ExecutedAt:    pm.ExecutedAt,
-		Rate:          pm.Rate,
-		Section:       pm.Section,
-		PayerID:       pm.PayerID,
-		Publisher:     pm.Publisher,
-		Channel:       pm.Channel,
-		Probi:         pm.Probi,
-		Currency:      pm.Currency,
-		RefID:         pm.GenerateRefID(pm.Channel),
-		Note:          pm.Note,
-		NoteDelimiter: delimiter,
+		Section:    "PAYOUT",
+		ExecutedAt: pm.ExecutedAt,
+		Rate:       pm.Rate,
+		PayerID:    pm.PayerID,
+		Publisher:  pm.Publisher,
+		Channel:    pm.Channel,
+		Probi:      pm.Probi,
+		Currency:   pm.Currency,
+		RefID:      pm.GenerateRefID(pm.Channel),
+		Note:       pm.Note,
 	}
 }
 
@@ -131,11 +125,9 @@ func (pm *Metadata) Amount(rate decimal.Decimal) decimal.Decimal {
 
 // ToCSVRow turns a paypal metadata into a list of strings ready to be consumed by a CSV generator
 func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
-	// var notes []string
 	probiTotal := decimal.NewFromFloat(0)
 	for _, note := range pm.Note {
 		probiTotal = probiTotal.Add(note.Probi)
-		// notes = append(notes, "("+note.Channel+" -> "+amount.String()+")")
 	}
 	convertedAmount := fromProbi(probiTotal, rate, pm.Currency)
 	batAmount := altcurrency.BAT.FromProbi(probiTotal)
@@ -151,7 +143,6 @@ func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
 		pm.Currency,
 		pm.RefID,
 		fmt.Sprintf("You earned %s, as %s from %d channel(s).", batFloatWithUnit, convertedAmountWithUnit, len(pm.Note)),
-		// strings.Join(notes, pm.NoteDelimiter),
 		"PayPal",
 	}
 }

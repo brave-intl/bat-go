@@ -1,14 +1,11 @@
 package paypal
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -16,33 +13,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
-
-// CompleteSettlement marks the settlement file as complete
-func CompleteSettlement(args CompleteArgs) error {
-	fmt.Println("RUNNING: complete")
-	if args.In == "" {
-		return errors.New("the 'in' flag must be set")
-	}
-	if args.Out == "./paypal-settlement" {
-		args.Out = "./paypal-settlement.json"
-		// return errors.New("the 'out' flag must be set")
-	}
-	payouts, err := ReadFiles(args.Out)
-	if err != nil {
-		return err
-	}
-	for i, payout := range *payouts {
-		payout.Status = "complete"
-		payout.ProviderID = uuid.NewV4().String()
-		(*payouts)[i] = payout
-	}
-	fmt.Println(payouts)
-	err = WriteTransactions(args.Out, payouts)
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 // CreateSettlementFile starts the transform process
 func CreateSettlementFile(args TransformArgs) (err error) {
@@ -130,25 +100,6 @@ func WriteTransactions(output string, metadata *[]settlement.Transaction) error 
 	return ioutil.WriteFile(output, data, 0600)
 }
 
-// ReadFiles reads a series of files
-func ReadFiles(input string) (*[]settlement.Transaction, error) {
-	var allPayouts []settlement.Transaction
-	files := strings.Split(input, ",")
-	for _, file := range files {
-		var batPayouts []settlement.Transaction
-		bytes, err := ioutil.ReadFile(file)
-		if err != nil {
-			return nil, err
-		}
-		err = json.Unmarshal(bytes, &batPayouts)
-		if err != nil {
-			return nil, err
-		}
-		allPayouts = append(allPayouts, batPayouts...)
-	}
-	return &allPayouts, nil
-}
-
 // ValidatePayouts validates the payout objects and creates metadata to represent rows
 func ValidatePayouts(currency string, batPayouts *[]settlement.Transaction) (*[]Metadata, error) {
 	executedAt := time.Now()
@@ -163,12 +114,11 @@ func ValidatePayouts(currency string, batPayouts *[]settlement.Transaction) (*[]
 	for i, batPayout := range *batPayouts {
 		row := FillMetadataDefaults(Metadata{
 			ExecutedAt: executedAt,
-			Section:    "PAYOUT",
+			Currency:   currency,
 			PayerID:    batPayout.WalletProviderID,
 			Publisher:  batPayout.Publisher,
 			Channel:    batPayout.Channel,
 			Probi:      batPayout.Probi,
-			Currency:   currency,
 		})
 
 		// ref id cannot be same. otherwise we're payout out to same channel twice
@@ -228,29 +178,6 @@ func WriteTransformedCSV(currency string, rate decimal.Decimal, out string, meta
 			"Recipient wallet",
 		},
 	}, rows...))
-}
-
-// WriteCSV writes out a csv
-func WriteCSV(out string, rows [][]string) error {
-	file, err := os.Create(out)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-	return WriteCSVRows(writer, rows)
-}
-
-// WriteCSVRows writes rows into a csv writer
-func WriteCSVRows(writer *csv.Writer, rows [][]string) error {
-	for _, row := range rows {
-		err := writer.Write(row)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // GetRate figures out which rate to use
