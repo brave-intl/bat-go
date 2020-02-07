@@ -130,7 +130,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 }
 
-func (suite *ControllersTestSuite) TestCreateTransaction() {
+func (suite *ControllersTestSuite) EndToEndTest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
