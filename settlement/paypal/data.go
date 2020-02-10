@@ -2,9 +2,11 @@ package paypal
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
@@ -13,92 +15,53 @@ import (
 var (
 	supportedCurrencies = map[string]float64{
 		"JPY": 0,
-		"USD": 2,
 	}
 	currencySymbols = map[string]string{
-		"USD": "$",
 		"JPY": "¥",
 	}
 )
 
-// TransformArgs are the args required for the transform command
-type TransformArgs struct {
-	In       string
-	Currency string
-	Auth     string
-	Rate     decimal.Decimal
-	Out      string
-}
-
-// CompleteArgs are the args required for the complete command
-type CompleteArgs struct {
-	In  string
-	Out string
-}
-
-// RefIDKey is used to generate a hash
-func (pm *Metadata) RefIDKey(channel string) string {
-	return pm.Publisher + channel
-}
-
 // GenerateRefID converts a hex to base62
-func (pm *Metadata) GenerateRefID(channel string) string {
-	key := pm.RefIDKey(channel) // nothing more needed for now
+func (pm *Metadata) GenerateRefID() error {
+	if len(pm.SettlementID) == 0 || len(pm.PayerID) == 0 {
+		return errors.New("Must populate SettlementID and PayerID to generate a ref ID")
+	}
+	key := pm.SettlementID + pm.PayerID
 	bytes := sha256.Sum256([]byte(key))
 	refID := base58.Encode(bytes[:], base58.BitcoinAlphabet)
 	refID = refID[:30]
 	pm.RefID = refID
-	return refID
+	return nil
 }
 
-// Note a note to be transformed into personal email message
-type Note struct {
-	Channel string
-	Probi   decimal.Decimal
-}
+// FIXME make this a generic merged payment
 
 // Metadata holds metadata to create a row for paypal
 type Metadata struct {
-	ExecutedAt time.Time
-	Rate       decimal.Decimal
-	Section    string
-	PayerID    string
-	Channel    string
-	Publisher  string
-	Probi      decimal.Decimal
-	Currency   string
-	RefID      string
-	Note       []Note
+	Amount       decimal.Decimal
+	BATAmount    decimal.Decimal
+	Currency     string
+	ExecutedAt   time.Time
+	Transactions []settlement.Transaction
+	ChannelCount int
+	PayerID      string
+	RefID        string
+	SettlementID string
 }
 
-// FillMetadataDefaults backfills the defaults in a metadata object
-func FillMetadataDefaults(pm Metadata) Metadata {
-	return Metadata{
-		Section:    "PAYOUT",
-		ExecutedAt: pm.ExecutedAt,
-		Rate:       pm.Rate,
-		PayerID:    pm.PayerID,
-		Publisher:  pm.Publisher,
-		Channel:    pm.Channel,
-		Probi:      pm.Probi,
-		Currency:   pm.Currency,
-		RefID:      pm.GenerateRefID(pm.Channel),
-		Note:       pm.Note,
+// AddTransaction to the aggregate payment
+func (pm *Metadata) AddTransaction(transaction settlement.Transaction) error {
+	if pm.Currency != transaction.Currency {
+		return errors.New("currency in aggregate payment did not match existing currency")
 	}
+	pm.ChannelCount++
+	pm.BATAmount = pm.BATAmount.Add(altcurrency.BAT.FromProbi(transaction.Probi))
+	pm.Amount = pm.Amount.Add(transaction.Amount)
+	pm.Transactions = append(pm.Transactions, transaction)
+	return nil
 }
 
-// AddOutput adds a transaction output to the row
-func (pm *Metadata) AddOutput(probi decimal.Decimal, note Note) {
-	pm.Probi = pm.Probi.Add(probi)
-	pm.Note = append(pm.Note, note)
-}
-
-// AddNote adds a note
-func (pm *Metadata) AddNote(note Note) {
-	pm.Note = append(pm.Note, note)
-}
-
-func fromProbi(probi decimal.Decimal, rate decimal.Decimal, currency string) decimal.Decimal {
+func exchangeFromProbi(probi decimal.Decimal, rate decimal.Decimal, currency string) decimal.Decimal {
 	scale := decimal.NewFromFloat(supportedCurrencies[currency])
 	factor := decimal.NewFromFloat(10).Pow(scale)
 	return altcurrency.BAT.
@@ -108,35 +71,24 @@ func fromProbi(probi decimal.Decimal, rate decimal.Decimal, currency string) dec
 		Div(factor)
 }
 
-// Amount adds all probi up and pays that amount out
-func (pm *Metadata) Amount(rate decimal.Decimal) decimal.Decimal {
-	total := decimal.NewFromFloat(0)
-	for _, note := range pm.Note {
-		total = total.Add(note.Probi)
-	}
-	return fromProbi(total, rate, pm.Currency)
+// MassPayRow is the structure of a row used for paypal web mass pay
+type MassPayRow struct {
+	PayerID         string          `csv:"Email/Phone"`
+	Amount          decimal.Decimal `csv:"Amount"`
+	Currency        string          `csv:"Currency code"`
+	ID              string          `csv:"Reference ID"`
+	Note            string          `csv:"Note to recipient"`
+	DestinationType string          `csv:"Recipient wallet"`
 }
 
-// ToCSVRow turns a paypal metadata into a list of strings ready to be consumed by a CSV generator
-func (pm *Metadata) ToCSVRow(rate decimal.Decimal) []string {
-	probiTotal := decimal.NewFromFloat(0)
-	for _, note := range pm.Note {
-		probiTotal = probiTotal.Add(note.Probi)
-	}
-	convertedAmount := fromProbi(probiTotal, rate, pm.Currency)
-	batAmount := altcurrency.BAT.FromProbi(probiTotal)
-	batFloat := batAmount.String()
-	convertedAmountWithUnit := currencySymbols[pm.Currency] + convertedAmount.String()
-	batFloatWithUnit := batFloat + " BAT"
-	if pm.Currency == "JPY" {
-		batFloatWithUnit = batFloatWithUnit + " Points"
-	}
-	return []string{
-		pm.PayerID,
-		convertedAmount.String(),
-		pm.Currency,
-		pm.RefID,
-		fmt.Sprintf("You earned %s, as %s from %d channel(s).", batFloatWithUnit, convertedAmountWithUnit, len(pm.Note)),
-		"PayPal",
+// ToMassPayCSVRow turns a paypal metadata into a MassPayRow
+func (pm *Metadata) ToMassPayCSVRow() *MassPayRow {
+	return &MassPayRow{
+		PayerID:         pm.PayerID,
+		Amount:          pm.Amount,
+		Currency:        pm.Currency,
+		ID:              pm.RefID,
+		Note:            fmt.Sprintf("You earned %s BAT Points, as %s %s from %d channel(s).", pm.BATAmount.String(), pm.Amount.String(), currencySymbols[pm.Currency], pm.ChannelCount),
+		DestinationType: "PayPal",
 	}
 }

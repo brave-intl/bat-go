@@ -1,10 +1,8 @@
-package paypal
+package main
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"io/ioutil"
-	"os"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -27,27 +25,4 @@ func ReadFiles(input string) (*[]settlement.Transaction, error) {
 		allPayouts = append(allPayouts, batPayouts...)
 	}
 	return &allPayouts, nil
-}
-
-// WriteCSV writes out a csv
-func WriteCSV(out string, rows [][]string) error {
-	file, err := os.Create(out)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-	return WriteCSVRows(writer, rows)
-}
-
-// WriteCSVRows writes rows into a csv writer
-func WriteCSVRows(writer *csv.Writer, rows [][]string) error {
-	for _, row := range rows {
-		err := writer.Write(row)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
