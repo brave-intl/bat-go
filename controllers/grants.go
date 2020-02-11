@@ -93,31 +93,33 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 // Claim is the handler for claiming grants
 func Claim(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
-		// var req grant.ClaimRequest
-		// err := requestutils.ReadJSON(r.Body, &req)
-		// if err != nil {
-		// 	return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		// }
+		if true {
+			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
+		}
+		var req grant.ClaimRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
 
-		// _, err = govalidator.ValidateStruct(req)
-		// if err != nil {
-		// 	return handlers.WrapValidationError(err)
-		// }
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
 
-		// logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
 
-		// claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
-		// if err != nil {
-		// 	// FIXME not all errors are 4xx
-		// 	return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
-		// }
+		claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
+		if err != nil {
+			// FIXME not all errors are 4xx
+			return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
+		}
 
-		// w.WriteHeader(http.StatusOK)
-		// if err := json.NewEncoder(w).Encode(&grant.ClaimResponse{ApproximateValue: claim.ApproximateValue}); err != nil {
-		// 	panic(err)
-		// }
-		// return nil
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&grant.ClaimResponse{ApproximateValue: claim.ApproximateValue}); err != nil {
+			panic(err)
+		}
+		return nil
 	})
 }
 
