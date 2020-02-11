@@ -90,8 +90,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		id, err := uuid.FromString(orderID)
-		uuid.Must(id, err)
+		id := uuid.Must(uuid.FromString(orderID))
 
 		order, err := service.datastore.GetOrder(id)
 		if err != nil {
@@ -124,8 +123,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 			)
 		}
 
-		id, err := uuid.FromString(orderID)
-		uuid.Must(id, err)
+		id := uuid.Must(uuid.FromString(orderID))
 
 		order, err := service.datastore.GetTransactions(id)
 		if err != nil {
@@ -164,8 +162,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 				},
 			)
 		}
-		validOrderID, err := uuid.FromString(orderID)
-		uuid.Must(validOrderID, err)
+		validOrderID := uuid.Must(uuid.FromString(orderID))
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -222,8 +219,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 				},
 			}
 		}
-		validOrderID, err := uuid.FromString(orderID)
-		uuid.Must(validOrderID, err)
+		validOrderID := uuid.Must(uuid.FromString(orderID))
 
 		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, validOrderID)
 		if err != nil {
@@ -270,8 +266,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 				},
 			}
 		}
-		validOrderID, err := uuid.FromString(orderID)
-		uuid.Must(validOrderID, err)
+		validOrderID := uuid.Must(uuid.FromString(orderID))
 
 		err = service.CreateOrderCreds(r.Context(), validOrderID, req.ItemID, req.BlindedCreds)
 		if err != nil {
@@ -296,8 +291,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
-		id, err := uuid.FromString(orderID)
-		uuid.Must(id, err)
+		id := uuid.Must(uuid.FromString(orderID))
 
 		creds, err := service.datastore.GetOrderCreds(id)
 		if err != nil {
