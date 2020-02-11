@@ -85,9 +85,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			)
 		}
@@ -121,9 +119,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			)
 		}
@@ -164,9 +160,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			)
 		}
@@ -224,9 +218,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 				Message: "Error validating request url parameter",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			}
 		}
@@ -274,9 +266,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 				Message: "Error validating request url parameter",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			}
 		}
@@ -301,9 +291,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 				Message: "Error validating request url parameter",
 				Code:    http.StatusBadRequest,
 				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"orderID": "orderID must be a uuidv4",
-					},
+					"orderID": "orderID must be a uuidv4",
 				},
 			}
 		}
