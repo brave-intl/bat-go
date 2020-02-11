@@ -88,3 +88,8 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 
 	return &orderItem, nil
 }
+
+// IsPaid returns true if the order is paid
+func (order Order) IsPaid() bool {
+	return order.Status == "paid"
+}

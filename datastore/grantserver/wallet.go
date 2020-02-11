@@ -1,6 +1,7 @@
 package grantserver
 
 import (
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 )
@@ -31,6 +32,11 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	}
 
 	if len(wallets) > 0 {
+		// FIXME currently assumes BAT
+		{
+			tmp := altcurrency.BAT
+			wallets[0].AltCurrency = &tmp
+		}
 		return &wallets[0], nil
 	}
 
