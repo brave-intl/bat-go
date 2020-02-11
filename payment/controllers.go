@@ -2,6 +2,7 @@ package payment
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
@@ -16,9 +17,10 @@ import (
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/{id}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 
-	r.Method("POST", "/{orderID}/transactions", middleware.InstrumentHandler("CreateTransaction", CreateTransaction(service)))
+	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
+	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
@@ -37,13 +39,13 @@ func VoteRouter(service *Service) chi.Router {
 
 // OrderItemRequest is the body for creating new items
 type OrderItemRequest struct {
-	SKU     string `json:"sku"`
-	Quanity int    `json:"quanity"`
+	SKU      string `json:"sku" valid:"-"`
+	Quantity int    `json:"quantity" valid:"int"`
 }
 
 // CreateOrderRequest includes information needed to create an order
 type CreateOrderRequest struct {
-	Items []OrderItemRequest `json:"items"`
+	Items []OrderItemRequest `json:"items" valid:"-"`
 }
 
 // CreateOrder is the handler for creating a new order
@@ -78,23 +80,20 @@ func CreateOrder(service *Service) handlers.AppHandler {
 // GetOrder is the handler for creating a new order
 func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "id")
+		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
 					"validationErrors": map[string]string{
 						"orderID": "orderID must be a uuidv4",
 					},
 				},
-			}
+			)
 		}
 
 		id, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(id, err)
 
 		order, err := service.datastore.GetOrder(id)
 		if err != nil {
@@ -102,7 +101,11 @@ func GetOrder(service *Service) handlers.AppHandler {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
+		if order == nil {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
 		if err := json.NewEncoder(w).Encode(order); err != nil {
 			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
 		}
@@ -110,13 +113,45 @@ func GetOrder(service *Service) handlers.AppHandler {
 	})
 }
 
-// CreateTransactionRequest includes information needed to create a transaction
-type CreateTransactionRequest struct {
-	ExternalTransactionID string `json:"externalTransactionID"`
+// GetTransactions is the handler for listing the transactions for an order
+func GetTransactions(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		orderID := chi.URLParam(r, "orderID")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"validationErrors": map[string]string{
+						"orderID": "orderID must be a uuidv4",
+					},
+				},
+			)
+		}
+
+		id, err := uuid.FromString(orderID)
+		uuid.Must(id, err)
+
+		order, err := service.datastore.GetTransactions(id)
+		if err != nil {
+			return handlers.WrapError(err, "Error retrieving the transactions for the order", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(order); err != nil {
+			return handlers.WrapError(err, "Error encoding the transactions JSON", http.StatusInternalServerError)
+		}
+		return nil
+	})
 }
 
-// CreateTransaction creates a transaction against an order
-func CreateTransaction(service *Service) handlers.AppHandler {
+// CreateTransactionRequest includes information needed to create a transaction
+type CreateTransactionRequest struct {
+	ExternalTransactionID string `json:"externalTransactionID" valid:"uuidv4"`
+}
+
+// CreateUpholdTransaction creates a transaction against an order
+func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateTransactionRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -126,29 +161,37 @@ func CreateTransaction(service *Service) handlers.AppHandler {
 
 		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
 					"validationErrors": map[string]string{
 						"orderID": "orderID must be a uuidv4",
 					},
 				},
-			}
+			)
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
 
-		transaction, err := service.CreateTransactionFromRequest(req, validOrderID)
+		// Ensure the external transaction ID hasn't already been added to any orders.
+		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error when validating externalTransactinID", http.StatusInternalServerError)
+		}
+
+		if transaction != nil {
+			err = fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID)
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		transaction, err = service.CreateTransactionFromRequest(req, validOrderID)
+		if err != nil {
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -188,9 +231,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			}
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, validOrderID)
 		if err != nil {
@@ -240,9 +281,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 		validOrderID, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(validOrderID, err)
 
 		err = service.CreateOrderCreds(r.Context(), validOrderID, req.ItemID, req.BlindedCreds)
 		if err != nil {
@@ -270,9 +309,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		}
 
 		id, err := uuid.FromString(orderID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
+		uuid.Must(id, err)
 
 		creds, err := service.datastore.GetOrderCreds(id)
 		if err != nil {
@@ -287,7 +324,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusAccepted)
 		if err := json.NewEncoder(w).Encode(creds); err != nil {
 			panic(err)
 		}

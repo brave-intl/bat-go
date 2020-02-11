@@ -1,7 +1,7 @@
 create table order_cred_issuers (
   id uuid primary key not null default uuid_generate_v4(),
   created_at timestamp with time zone not null default current_timestamp,
-	merchant_id text NOT NULL,
+  merchant_id text NOT NULL,
   public_key text not null
 );
 

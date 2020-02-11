@@ -2,16 +2,22 @@ package uphold
 
 import (
 	"encoding/hex"
+	"errors"
+	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
+	"gotest.tools/assert"
 )
 
 func TestGetCardDetails(t *testing.T) {
@@ -264,4 +270,53 @@ func TestTransactions(t *testing.T) {
 	if !balance.TotalProbi.Equals(decimal.Zero) {
 		t.Error("Transfer should move balance back to donorWallet.")
 	}
+}
+
+func TestFingerprintCheck(t *testing.T) {
+	var proxy func(*http.Request) (*url.URL, error)
+	wrongFingerprint := "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw3="
+
+	client = &http.Client{
+		Timeout: time.Second * 60,
+		// remove middleware calls
+		Transport: &http.Transport{
+			Proxy:   proxy,
+			DialTLS: pindialer.MakeDialer(wrongFingerprint),
+		},
+	}
+
+	w := requireDonorWallet(t)
+
+	req, err := w.signRegistration("randomlabel")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = client.Do(req)
+	// should fail here
+	if err == nil {
+		t.Error("unable to fail with bad cert")
+	}
+	assert.Equal(t, errors.Unwrap(err).Error(), "The server certificate was not valid")
+}
+
+func requireDonorWallet(t *testing.T) *Wallet {
+	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
+		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
+	}
+
+	var info wallet.Info
+	info.Provider = "uphold"
+	info.ProviderID = ""
+	{
+		tmp := altcurrency.BAT
+		info.AltCurrency = &tmp
+	}
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
 }

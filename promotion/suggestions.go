@@ -235,7 +235,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 
 	err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// write the message

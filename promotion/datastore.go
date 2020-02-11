@@ -104,7 +104,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 	values ($1, $2, $3, $4, $5)
 	returning *`
 	promotions := []Promotion{}
-	suggestionsPerGrant := value.Div(decimal.NewFromFloat(0.25))
+	suggestionsPerGrant := value.Div(defaultVoteValue)
 	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
@@ -604,11 +604,13 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 		Credentials     string    `db:"credentials"`
 		SuggestionText  string    `db:"suggestion_text"`
 		SuggestionEvent []byte    `db:"suggestion_event"`
+		Erred           bool      `db:"erred"`
 	}
 
 	statement := `
 select *
 from suggestion_drain
+where not erred
 for update skip locked
 limit 1`
 
@@ -636,8 +638,12 @@ limit 1`
 
 	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 	if err != nil {
-		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
+		// FIXME only non-retriable errors should set erred
+		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
+		if err != nil {
+			_ = tx.Rollback()
+		}
+		err = tx.Commit()
 		return attempted, err
 	}
 

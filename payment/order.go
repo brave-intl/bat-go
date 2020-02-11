@@ -34,15 +34,15 @@ type OrderItem struct {
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func createOrderItemFromMacaroon(sku string, quantity int) OrderItem {
+func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	mac := &macaroon.Macaroon{}
 	err = mac.UnmarshalBinary(macBytes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// TODO Figure out how to verify macaroon using library
@@ -66,27 +66,27 @@ func createOrderItemFromMacaroon(sku string, quantity int) OrderItem {
 		case "id":
 			uuid, err := uuid.FromString(value)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 			orderItem.ID = uuid
 		case "price":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 		case "currency":
 			orderItem.Currency = value
 		}
 
 	}
-	quanity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
+	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	orderItem.Subtotal = orderItem.Price.Mul(quanity)
+	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
-	return orderItem
+	return &orderItem, nil
 }
 
 // IsPaid returns true if the order is paid

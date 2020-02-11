@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
+
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -26,6 +28,10 @@ type Datastore interface {
 	UpdateOrder(orderID uuid.UUID, status string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// GetTransaction returns a transaction given an external transaction id
+	GetTransaction(externalTransactionID string) (*Transaction, error)
+	// GetTransactions returns all the transactions for a specific order
+	GetTransactions(orderID uuid.UUID) (*[]Transaction, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// InsertIssuer
@@ -104,7 +110,9 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
 	err := pg.DB.Get(&order, statement, orderID)
-	if err != nil {
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -118,6 +126,34 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// GetTransactions returns the list of transactions given an orderID
+func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
+	statement := "SELECT * FROM transactions WHERE order_id = $1"
+	transactions := []Transaction{}
+	err := pg.DB.Select(&transactions, statement, orderID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &transactions, nil
+}
+
+// GetTransaction returns a single of transaction given an external transactin Id
+func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, error) {
+	statement := "SELECT * FROM transactions WHERE external_transaction_id = $1"
+	transaction := Transaction{}
+	err := pg.DB.Get(&transaction, statement, externalTransactionID)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return &transaction, nil
 }
 
 // UpdateOrder updates the orders status.

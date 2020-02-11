@@ -122,7 +122,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
-	r.Mount("/v1/orders", payment.Router(paymentService))
+
+	if os.Getenv("FEATURE_ORDERS") != "" {
+		r.Mount("/v1/orders", payment.Router(paymentService))
+	}
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")
