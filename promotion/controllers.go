@@ -153,9 +153,6 @@ type ClaimResponse struct {
 // ClaimPromotion is the handler for claiming a particular promotion by a wallet
 func ClaimPromotion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		if true {
-			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
-		}
 		var req ClaimRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
