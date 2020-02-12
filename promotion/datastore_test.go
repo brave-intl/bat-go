@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
@@ -155,7 +156,8 @@ func (suite *PostgresTestSuite) TestGetWallet() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	id := uuid.NewV4()
 
-	origWallet := &wallet.Info{ID: id.String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
+	tmp := altcurrency.BAT
+	origWallet := &wallet.Info{ID: id.String(), Provider: "uphold", AltCurrency: &tmp, ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Assert().NoError(pg.InsertWallet(origWallet), "Save wallet should succeed")
 
 	wallet, err := pg.GetWallet(id)
