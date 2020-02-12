@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -145,7 +144,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 }
 
-func (suite *ControllersTestSuite) TestUpholdTransactionE2E() {
+func (suite *ControllersTestSuite) EndToEndTest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -293,12 +292,6 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 }
 
 func fundWallet(t *testing.T, destWallet *uphold.Wallet, amount decimal.Decimal) {
-	if os.Getenv("DONOR_WALLET_PUBLIC_KEY") == "" {
-		t.Skip("skipping test; DONOR_WALLET_PUBLIC_KEY not set")
-	}
-	if os.Getenv("DONOR_WALLET_PRIVATE_KEY") == "" {
-		t.Skip("skipping test; DONOR_WALLET_PRIVATE_KEY not set")
-	}
 	var donorInfo wallet.Info
 	donorInfo.Provider = "uphold"
 	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
@@ -350,7 +343,6 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 		info.AltCurrency = &tmp
 	}
 
-	fmt.Println("I AM HERE ")
 	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +379,7 @@ func (suite *ControllersTestSuite) TestE2E() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				SKU:     "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
 				Quantity: numVotes,
 			},
 		},
