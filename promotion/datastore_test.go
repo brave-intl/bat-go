@@ -5,6 +5,7 @@ package promotion
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
@@ -729,15 +730,15 @@ func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
 
 	type ClobberedCreds struct {
 		ID        uuid.UUID `db:"id"`
-		CreatedAt uuid.UUID `db:"created_at"`
+		CreatedAt time.Time `db:"created_at"`
 	}
 
 	var allCreds1 []ClobberedCreds
 	var allCreds2 []ClobberedCreds
-	err = pg.DB.Select(&allCreds1, `select * from clobbered_creds;`)
+	err = pg.DB.Select(&allCreds1, `select * from clobbered_claims;`)
 	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
 
 	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
-	err = pg.DB.Select(&allCreds2, `select * from clobbered_creds;`)
+	err = pg.DB.Select(&allCreds2, `select * from clobbered_claims;`)
 	suite.Require().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
 }
