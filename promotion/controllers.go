@@ -413,3 +413,32 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 		return nil
 	})
 }
+
+// ClobberedClaimsRequest holds the data needed to report claims that were clobbered by client bug
+type ClobberedClaimsRequest struct {
+	ClaimIDs []uuid.UUID `json:"claimIds"`
+}
+
+// ReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
+func ReportClobberedClaims(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req ClobberedClaimsRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs)
+		if err != nil {
+			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}

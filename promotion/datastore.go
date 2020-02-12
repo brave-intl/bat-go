@@ -64,6 +64,8 @@ type Datastore interface {
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
+	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
+	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -123,7 +125,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(4)
+	err = m.Migrate(5)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
@@ -183,6 +185,24 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	}
 
 	return nil, nil
+}
+
+// InsertClobberedClaims inserts clobbered claims to the db
+func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error {
+	tx, err := pg.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	statement, err := tx.Prepare(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		statement.Exec(id)
+	}
+	err = tx.Commit()
+	return err
 }
 
 // ActivatePromotion marks a particular promotion as active

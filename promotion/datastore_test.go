@@ -717,3 +717,26 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
 }
+
+func (suite *PostgresTestSuite) TestInsertClobberedCreds() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	id1 := uuid.NewV4()
+	id2 := uuid.NewV4()
+	suite.Require().NoError(pg.InsertClobberedCreds([]uuid.UUID{id1, id2}), "Create promotion should succeed")
+
+	type ClobberedCreds struct {
+		ID        uuid.UUID `db:"id"`
+		CreatedAt uuid.UUID `db:"created_at"`
+	}
+
+	var allCreds1 []ClobberedCreds
+	var allCreds2 []ClobberedCreds
+	err := pg.DB.Select(&allCreds1, `select * from clobbered_creds;`)
+	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
+
+	suite.Require().NoError(pg.InsertClobberedCreds([]uuid.UUID{id1, id2}), "Create promotion should succeed")
+	err := pg.DB.Select(&allCreds2, `select * from clobbered_creds;`)
+	suite.Require().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
+}
