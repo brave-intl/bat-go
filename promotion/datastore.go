@@ -194,12 +194,11 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	statement, err := tx.Prepare(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`)
-	if err != nil {
-		return err
-	}
 	for _, id := range ids {
-		statement.Exec(id)
+		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
+		if err != nil {
+			return err
+		}
 	}
 	err = tx.Commit()
 	return err
