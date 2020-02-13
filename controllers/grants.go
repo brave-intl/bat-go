@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -93,9 +92,6 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 // Claim is the handler for claiming grants
 func Claim(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		if os.Getenv("ENV") != "local" {
-			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
-		}
 		var req grant.ClaimRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {

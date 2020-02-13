@@ -23,31 +23,45 @@ const maxConfirmTries = 5
 
 // Transaction describes a payout transaction from the settlement wallet to a publisher
 type Transaction struct {
-	AltCurrency    *altcurrency.AltCurrency `json:"altcurrency"`
-	Authority      string                   `json:"authority"`
-	Amount         decimal.Decimal          `json:"amount"`
-	ExchangeFee    decimal.Decimal          `json:"commission"`
-	Currency       string                   `json:"currency"`
-	Destination    string                   `json:"address"`
-	Publisher      string                   `json:"owner"`
-	BATPlatformFee decimal.Decimal          `json:"fees"`
-	Probi          decimal.Decimal          `json:"probi"`
-	ProviderID     string                   `json:"hash" valid:"uuidv4"`
-	Channel        string                   `json:"publisher"`
-	SignedTx       string                   `json:"signedTx"`
-	Status         string                   `json:"status"`
-	ID             string                   `json:"transactionId" valid:"uuidv4"`
-	TransferFee    decimal.Decimal          `json:"fee"`
-	Type           string                   `json:"type"`
-	ValidUntil     time.Time                `json:"validUntil"`
-	DocumentID     string                   `json:"documentId,omitempty"`
-	Note           string                   `json:"note"`
+	AltCurrency      *altcurrency.AltCurrency `json:"altcurrency"`
+	Authority        string                   `json:"authority"`
+	Amount           decimal.Decimal          `json:"amount"`
+	ExchangeFee      decimal.Decimal          `json:"commission"`
+	Currency         string                   `json:"currency"`
+	Destination      string                   `json:"address"`
+	Publisher        string                   `json:"owner"`
+	BATPlatformFee   decimal.Decimal          `json:"fees"`
+	Probi            decimal.Decimal          `json:"probi"`
+	ProviderID       string                   `json:"hash"`
+	WalletProvider   string                   `json:"walletProvider"`
+	WalletProviderID string                   `json:"walletProviderId"`
+	Channel          string                   `json:"publisher"`
+	SignedTx         string                   `json:"signedTx"`
+	Status           string                   `json:"status"`
+	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
+	TransferFee      decimal.Decimal          `json:"fee"`
+	Type             string                   `json:"type"`
+	ValidUntil       time.Time                `json:"validUntil"`
+	DocumentID       string                   `json:"documentId,omitempty"`
+	Note             string                   `json:"note"`
 }
 
 // State contains the current state of the settlement, including wallet and transaction status
 type State struct {
 	WalletInfo   wallet.Info   `json:"walletInfo"`
 	Transactions []Transaction `json:"transactions"`
+}
+
+// CheckForDuplicates in a list of transactions
+func CheckForDuplicates(transactions []Transaction) error {
+	channelSet := map[string]bool{}
+	for _, settlementTransaction := range transactions {
+		if _, exists := channelSet[settlementTransaction.Channel]; exists {
+			return errors.New("Malformed settlement file, duplicate channel detected:" + settlementTransaction.Channel)
+		}
+		channelSet[settlementTransaction.Channel] = true
+	}
+	return nil
 }
 
 // IsComplete returns true if the transaction status is completed
@@ -61,7 +75,7 @@ func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error
 		settlement := &settlements[i]
 
 		// Use the Note field if it exists, otherwise use the settlement ID
-		message := settlement.ID
+		message := settlement.SettlementID
 		if len(settlement.Note) > 0 {
 			message = settlement.Note
 		}
@@ -201,7 +215,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 				"channel":      settlement.Channel,
 				"hash":         settlement.ProviderID,
 				"publisher":    settlement.Publisher,
-				"settlementId": settlement.ID,
+				"settlementId": settlement.SettlementID,
 				"status":       settlement.Status,
 			})
 		}
