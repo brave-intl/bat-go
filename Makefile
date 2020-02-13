@@ -55,6 +55,7 @@ settlement-tools:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/vault-create-wallet
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/vault-sign-settlement
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/settlement-submit
+	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/paypal-settlement
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 grant-signing-tools:
