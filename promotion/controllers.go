@@ -417,7 +417,7 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 
 // ClobberedClaimsRequest holds the data needed to report claims that were clobbered by client bug
 type ClobberedClaimsRequest struct {
-	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
+	ClaimIDs []uuid.UUID `json:"claimIds" valid:"-"`
 }
 
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
@@ -431,6 +431,7 @@ func PostReportClobberedClaims(service *Service) handlers.AppHandler {
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			fmt.Println("failed struct validation")
 			return handlers.WrapValidationError(err)
 		}
 

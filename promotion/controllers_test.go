@@ -796,24 +796,47 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		balanceClient:    mockBalance,
 	}
 	handler := PostReportClobberedClaims(service)
-	id := uuid.NewV4()
-	requestPayloadStruct := ClobberedClaimsRequest{
-		ClaimIDs: []uuid.UUID{id},
+	id0 := uuid.NewV4()
+	id1 := uuid.NewV4()
+	id2 := uuid.NewV4()
+	run := func(ids []uuid.UUID) int {
+		requestPayloadStruct := ClobberedClaimsRequest{
+			ClaimIDs: ids,
+		}
+		payload, err := json.Marshal(&requestPayloadStruct)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
+		suite.Require().NoError(err)
+
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
 	}
-	payload, err := json.Marshal(&requestPayloadStruct)
-	suite.Require().NoError(err)
-	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
-	suite.Require().NoError(err)
+	code := run([]uuid.UUID{})
+	suite.Require().Equal(http.StatusOK, code)
 
-	rctx := chi.NewRouteContext()
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusOK, rr.Code)
-	var claims []ClobberedCreds
+	code = run([]uuid.UUID{
+		id0,
+	})
+	suite.Require().Equal(http.StatusOK, code)
+	claims := []ClobberedCreds{}
 	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id)
+	suite.Require().Equal(claims[0].ID, id0)
+
+	code = run([]uuid.UUID{
+		id0,
+		id1,
+		id2,
+	})
+	suite.Require().Equal(http.StatusOK, code)
+	claims = []ClobberedCreds{}
+	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().Equal(claims[0].ID, id0)
+	suite.Require().Equal(claims[1].ID, id1)
+	suite.Require().Equal(claims[2].ID, id2)
 }
 
 func (suite *ControllersTestSuite) TestClaimCompatability() {
