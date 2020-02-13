@@ -32,7 +32,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
-	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", ReportClobberedClaims(service)))
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	return r
@@ -417,11 +417,11 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 
 // ClobberedClaimsRequest holds the data needed to report claims that were clobbered by client bug
 type ClobberedClaimsRequest struct {
-	ClaimIDs []uuid.UUID `json:"claimIds"`
+	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
 }
 
-// ReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
-func ReportClobberedClaims(service *Service) handlers.AppHandler {
+// PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
+func PostReportClobberedClaims(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Body, &req)

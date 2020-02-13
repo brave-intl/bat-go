@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
@@ -20,6 +21,12 @@ import (
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
+// ClobberedCreds holds data of claims that have been clobbered and when they were first reported
+type ClobberedCreds struct {
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
+}
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {

@@ -5,7 +5,6 @@ package promotion
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
@@ -727,11 +726,6 @@ func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err)
 	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
-
-	type ClobberedCreds struct {
-		ID        uuid.UUID `db:"id"`
-		CreatedAt time.Time `db:"created_at"`
-	}
 
 	var allCreds1 []ClobberedCreds
 	var allCreds2 []ClobberedCreds
