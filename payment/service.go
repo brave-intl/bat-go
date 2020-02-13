@@ -43,6 +43,8 @@ func InitService(datastore Datastore) (*Service, error) {
 func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
+	var currency string
+
 	for i := 0; i < len(req.Items); i++ {
 		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
@@ -50,10 +52,16 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 		}
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
+		if currency == "" {
+			currency = orderItem.Currency
+		}
+		if currency != orderItem.Currency {
+			return nil, errors.New("all order items must be the same currency")
+		}
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", orderItems)
+	order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, orderItems)
 
 	return order, err
 }

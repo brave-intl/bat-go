@@ -14,6 +14,7 @@ import (
 type Order struct {
 	ID         uuid.UUID       `json:"id" db:"id"`
 	CreatedAt  time.Time       `json:"createdAt" db:"created_at"`
+	Currency   string          `json:"currency" db:"currency"`
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`

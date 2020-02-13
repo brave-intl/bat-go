@@ -4,6 +4,7 @@ create table orders (
   updated_at timestamp with time zone not null default current_timestamp,
   total_price numeric(28, 18) not null,
   merchant_id text NOT NULL,
+	currency text NOT NULL,
   status text NOT NULL CHECK (status IN ('pending', 'paid', 'fulfilled', 'canceled'))
 );
 

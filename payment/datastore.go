@@ -21,7 +21,7 @@ import (
 type Datastore interface {
 	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -63,16 +63,16 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status)
-			VALUES ($1, $2, $3)
+			INSERT INTO orders (total_price, merchant_id, status, currency)
+			VALUES ($1, $2, $3, $4)
 			RETURNING *
 		`,
-		totalPrice, merchantID, status)
+		totalPrice, merchantID, status, currency)
 
 	if err != nil {
 		_ = tx.Rollback()

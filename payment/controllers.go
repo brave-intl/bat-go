@@ -61,6 +61,14 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
+		if len(req.Items) == 0 {
+			return handlers.ValidationError(
+				"Error validating request body",
+				map[string]interface{}{
+					"items": "array must contain at least one item",
+				},
+			)
+		}
 
 		order, err := service.CreateOrderFromRequest(req)
 
