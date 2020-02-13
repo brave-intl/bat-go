@@ -780,6 +780,42 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
 
+func (suite *ControllersTestSuite) TestReportClobberedClaims() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+	mockBalance := mockbalance.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+		balanceClient:    mockBalance,
+	}
+	handler := PostReportClobberedClaims(service)
+	id := uuid.NewV4()
+	requestPayloadStruct := ClobberedClaimsRequest{
+		ClaimIDs: []uuid.UUID{id},
+	}
+	payload, err := json.Marshal(&requestPayloadStruct)
+	suite.Require().NoError(err)
+	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	var claims []ClobberedCreds
+	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().Equal(claims[0].ID, id)
+}
+
 func (suite *ControllersTestSuite) TestClaimCompatability() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()

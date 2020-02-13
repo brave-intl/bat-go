@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -72,7 +73,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(4)
+	err = m.Migrate(5)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
