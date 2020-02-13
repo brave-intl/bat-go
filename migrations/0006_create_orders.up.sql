@@ -4,8 +4,8 @@ create table orders (
   updated_at timestamp with time zone not null default current_timestamp,
   total_price numeric(28, 18) not null,
   merchant_id text NOT NULL,
-	currency text NOT NULL,
-  status text NOT NULL CHECK (status IN ('pending', 'paid', 'fulfilled', 'canceled'))
+  currency text NOT NULL,
+  status text NOT NULL
 );
 
 create table order_items (
@@ -20,3 +20,7 @@ create table order_items (
 );
 
 create index order_items_indx on order_items(order_id);
+
+ALTER TABLE orders ADD CONSTRAINT status_check CHECK (
+	status IN ('pending', 'paid', 'fulfilled', 'canceled')
+);
