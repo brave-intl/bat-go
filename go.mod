@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
-	github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a
+	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/certifi/gocertifi v0.0.0-20190410005359-59a85de7f35e // indirect
 	github.com/containerd/containerd v1.2.9 // indirect
@@ -23,7 +23,6 @@ require (
 	github.com/golang/mock v1.3.1
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
-	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.8.0 // indirect

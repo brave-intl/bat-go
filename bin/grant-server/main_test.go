@@ -69,6 +69,10 @@ func TestPing(t *testing.T) {
 }
 
 func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet wallet.Info) error {
+	publicKey := wallet.PublicKey
+	if len(publicKey) == 0 {
+		publicKey = "ed402ea535f1c58f0fcadf108f7a3aa9c259e85626c5b15083470aa8c45bb490"
+	}
 	payload := fmt.Sprintf(`{
 			"wallet": {
 				"altcurrency": "BAT",
@@ -78,7 +82,7 @@ func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet 
 				"publicKey": "%s"
 			},
 			"promotionId": "%s"
-		}`, wallet.ID, wallet.ProviderID, wallet.PublicKey, promotionID.String())
+		}`, wallet.ID, wallet.ProviderID, publicKey, promotionID.String())
 	claimURL := fmt.Sprintf("%s/v1/grants/claim", server.URL)
 
 	req, err := http.NewRequest("POST", claimURL, bytes.NewBuffer([]byte(payload)))
