@@ -5,11 +5,35 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
-var defaultVoteValue decimal.Decimal = decimal.NewFromFloat(0.25)
+var (
+	defaultVoteValue  = decimal.NewFromFloat(0.25)
+	promotionGetCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "promotion_get_count",
+			Help: "a count of the number of times the promotions were collected",
+		},
+		[]string{"filter", "migrate", "legacy"},
+	)
+	promotionExposureCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "promotion_exposure_count",
+			Help: "a count of the number of times a single promotion was exposed to clients",
+		},
+		[]string{"id"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(
+		promotionGetCount,
+		promotionExposureCount,
+	)
+}
 
 // Promotion includes information about a particular promotion
 type Promotion struct {
