@@ -22,19 +22,71 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
-var suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
-var kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "kafka_cert_not_before",
-	Help: "Date when the kafka certificate becomes valid.",
-})
-var kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "kafka_cert_not_after",
-	Help: "Date when the kafka certificate expires.",
-})
+var (
+	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+
+	// kafkaCertNotAfter checks when the kafka certificate becomes valid
+	kafkaCertNotBefore = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kafka_cert_not_before",
+			Help: "Date when the kafka certificate becomes valid.",
+		},
+	)
+
+	// kafkaCertNotAfter checks when the kafka certificate expires
+	kafkaCertNotAfter = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kafka_cert_not_after",
+			Help: "Date when the kafka certificate expires.",
+		},
+	)
+
+	// countContributionsTotal counts the number of contributions made broken down by funding and type
+	countContributionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "contributions_total",
+			Help: "count of contributions made ( since last start ) broken down by funding and type",
+		},
+		[]string{"funding", "type"},
+	)
+
+	// countContributionsBatTotal counts the total value of contributions in terms of bat ( since last start ) broken down by funding and type
+	countContributionsBatTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "contributions_bat_total",
+			Help: "total value of contributions in terms of bat ( since last start ) broken down by funding and type",
+		},
+		[]string{"funding", "type"},
+	)
+
+	// countGrantsClaimedTotal counts the grants claimed, broken down by platform and type
+	countGrantsClaimedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grants_claimed_total",
+			Help: "count of grants claimed ( since last start ) broken down by platform and type",
+		},
+		[]string{"platform", "type", "legacy"},
+	)
+
+	// countGrantsClaimedBatTotal counts the total value of grants claimed in terms of bat ( since last start ) broken down by platform and type
+	countGrantsClaimedBatTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grants_claimed_bat_total",
+			Help: "total value of grants claimed in terms of bat ( since last start ) broken down by platform and type",
+		},
+		[]string{"platform", "type", "legacy"},
+	)
+)
 
 func init() {
-	prometheus.MustRegister(kafkaCertNotBefore)
-	prometheus.MustRegister(kafkaCertNotAfter)
+	prometheus.MustRegister(
+		countContributionsTotal,
+		countContributionsBatTotal,
+		countGrantsClaimedTotal,
+		countGrantsClaimedBatTotal,
+		kafkaCertNotBefore,
+		kafkaCertNotAfter,
+	)
 }
 
 // Service contains datastore and challenge bypass / ledger client connections
