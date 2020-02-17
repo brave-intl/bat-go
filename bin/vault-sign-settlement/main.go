@@ -85,12 +85,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	err = settlement.PrepareTransactions(settlementWallet, settlements)
+	var upholdOnlySettlements []settlement.Transaction
+	for i := 0; i < len(settlements); i++ {
+		if settlements[i].WalletProvider == "uphold" {
+			upholdOnlySettlements = append(upholdOnlySettlements, settlements[i])
+		}
+	}
+
+	err = settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: settlements}
+	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: upholdOnlySettlements}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {

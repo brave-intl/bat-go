@@ -50,13 +50,9 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	channelSet := map[string]bool{}
-	for i := 0; i < len(settlementState.Transactions); i++ {
-		settlementTransaction := &settlementState.Transactions[i]
-		if _, exists := channelSet[settlementTransaction.Channel]; exists {
-			log.Fatalln("Malformed settlement file, duplicate channel detected:", settlementTransaction.Channel)
-		}
-		channelSet[settlementTransaction.Channel] = true
+	err = settlement.CheckForDuplicates(settlementState.Transactions)
+	if err != nil {
+		log.Fatalln(err)
 	}
 
 	settlementWallet, err := uphold.FromWalletInfo(settlementState.WalletInfo)
