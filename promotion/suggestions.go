@@ -11,6 +11,7 @@ import (
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -179,7 +180,15 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	fundings := []map[string]interface{}{}
+	metrics := map[string]decimal.Decimal{}
+	fundingTypes := []string{}
 	for _, v := range fundingSources {
+		val, existed := metrics[v.Type]
+		if !existed {
+			fundingTypes = append(fundingTypes, v.Type)
+			val = decimal.Zero
+		}
+		metrics[v.Type] = val.Add(v.Amount)
 		fundings = append(fundings, map[string]interface{}{
 			"type":      v.Type,
 			"cohort":    v.Cohort,
@@ -205,6 +214,17 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
 	if err != nil {
 		return err
+	}
+
+	for _, fundingType := range fundingTypes {
+		total := metrics[fundingType]
+		value, _ := total.Float64()
+		labels := prometheus.Labels{
+			"type":    suggestion.Type,
+			"funding": fundingType,
+		}
+		countContributionsTotal.With(labels).Inc()
+		countContributionsBatTotal.With(labels).Add(value)
 	}
 
 	if enableSuggestionJob {

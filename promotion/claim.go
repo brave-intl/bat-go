@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -179,6 +181,15 @@ func (service *Service) ClaimPromotionForWallet(
 			raven.CaptureErrorAndWait(err, nil)
 		}
 	}
+
+	value, _ := claim.ApproximateValue.Float64()
+	labels := prometheus.Labels{
+		"platform": promotion.Platform,
+		"type":     promotion.Type,
+		"legacy":   strconv.FormatBool(claim.LegacyClaimed),
+	}
+	countGrantsClaimedTotal.With(labels).Inc()
+	countGrantsClaimedBatTotal.With(labels).Add(value)
 
 	go func() {
 		_, err := service.RunNextClaimJob(ctx)
