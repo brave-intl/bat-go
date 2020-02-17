@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -32,6 +33,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	return r
@@ -81,6 +83,7 @@ type PromotionsResponse struct {
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var walletID *uuid.UUID
+		var filter string
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
@@ -102,6 +105,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 			walletID = &tmp
 			logging.AddWalletIDToContext(r.Context(), tmp)
+			filter = "walletID"
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -134,6 +138,19 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&PromotionsResponse{*promotions}); err != nil {
 			panic(err)
+		}
+		if len(filter) == 0 {
+			filter = "none"
+		}
+		promotionGetCount.With(prometheus.Labels{
+			"filter":  filter,
+			"legacy":  fmt.Sprint(legacy),
+			"migrate": fmt.Sprint(migrate),
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
 		}
 		return nil
 	})
@@ -282,11 +299,14 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		claimType := chi.URLParam(r, "claimType")
 		walletIDQuery := r.URL.Query().Get("paymentID")
+		if len(walletIDQuery) == 0 {
+			walletIDQuery = r.URL.Query().Get("paymentId")
+		}
 		walletID, err := uuid.FromString(walletIDQuery)
 
 		if err != nil {
 			return handlers.ValidationError("query parameter", map[string]string{
-				"paymentID": "must be a uuidv4",
+				"paymentId": "must be a uuidv4",
 			})
 		}
 
@@ -407,6 +427,35 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 		if err := json.NewEncoder(w).Encode(&CreatePromotionResponse{Promotion: *promotion}); err != nil {
 			panic(err)
 		}
+		return nil
+	})
+}
+
+// ClobberedClaimsRequest holds the data needed to report claims that were clobbered by client bug
+type ClobberedClaimsRequest struct {
+	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
+}
+
+// PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
+func PostReportClobberedClaims(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req ClobberedClaimsRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs)
+		if err != nil {
+			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(http.StatusOK)
 		return nil
 	})
 }

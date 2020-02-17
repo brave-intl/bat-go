@@ -8,6 +8,7 @@ import (
 
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -311,6 +312,27 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	suite.Assert().True(promotions[1].Available)
 	suite.Assert().True(adClaimValue.Equals(promotions[1].ApproximateValue))
 	suite.Assert().Equal(adSuggestionsPerGrant, promotions[1].SuggestionsPerGrant)
+
+	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(35.0), "")
+	suite.Require().NoError(err, "Create promotion should succeed")
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	// test when claim is for less than the value of one vote
+	adClaimValue = decimal.NewFromFloat(0.05)
+	claim, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
+	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
+	adSuggestionsPerGrant, err = claim.SuggestionsNeeded(promotion)
+	suite.Require().NoError(err)
+
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(3, len(promotions))
+	suite.Assert().True(promotions[0].Available)
+	suite.Assert().True(promotions[1].Available)
+	suite.Assert().True(promotions[2].Available)
+	suite.Assert().True(adClaimValue.Equals(promotions[2].ApproximateValue))
+	suite.Assert().Equal(adSuggestionsPerGrant, promotions[2].SuggestionsPerGrant)
+	suite.Assert().Equal(1, adSuggestionsPerGrant)
 }
 
 func (suite *PostgresTestSuite) TestGetAvailablePromotions() {
@@ -675,12 +697,18 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 	}
 
 	// One signing job should run
+	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(nil, errors.New("Worker failed"))
+	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
+	suite.Require().Equal(true, attempted)
+	suite.Require().Error(err)
+
+	// Signing job should rerun on failure
 	mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(creds, nil)
 	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
 	suite.Require().Equal(true, attempted)
 	suite.Require().NoError(err)
 
-	// No further jobs should run
+	// No further jobs should run after success
 	attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
 	suite.Require().Equal(false, attempted)
 	suite.Require().NoError(err)
@@ -688,4 +716,23 @@ func (suite *PostgresTestSuite) TestRunNextClaimJob() {
 
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
+}
+
+func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
+	ctx := context.Background()
+	id1 := uuid.NewV4()
+	id2 := uuid.NewV4()
+
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
+
+	var allCreds1 []ClobberedCreds
+	var allCreds2 []ClobberedCreds
+	err = pg.DB.Select(&allCreds1, `select * from clobbered_claims;`)
+	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
+
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
+	err = pg.DB.Select(&allCreds2, `select * from clobbered_claims;`)
+	suite.Require().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
 }

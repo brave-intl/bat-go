@@ -28,7 +28,7 @@ func MakeDialer(fingerprint string) Dialer {
 				return c, nil
 			}
 		}
-		panic("The pinned certificate was not valid")
+		return c, errors.New("The server certificate was not valid")
 	}
 }
 

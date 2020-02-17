@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"io/ioutil"
 	"log"
@@ -17,10 +18,76 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
 )
 
-var suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+var (
+	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+
+	// kafkaCertNotAfter checks when the kafka certificate becomes valid
+	kafkaCertNotBefore = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kafka_cert_not_before",
+			Help: "Date when the kafka certificate becomes valid.",
+		},
+	)
+
+	// kafkaCertNotAfter checks when the kafka certificate expires
+	kafkaCertNotAfter = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kafka_cert_not_after",
+			Help: "Date when the kafka certificate expires.",
+		},
+	)
+
+	// countContributionsTotal counts the number of contributions made broken down by funding and type
+	countContributionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "contributions_total",
+			Help: "count of contributions made ( since last start ) broken down by funding and type",
+		},
+		[]string{"funding", "type"},
+	)
+
+	// countContributionsBatTotal counts the total value of contributions in terms of bat ( since last start ) broken down by funding and type
+	countContributionsBatTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "contributions_bat_total",
+			Help: "total value of contributions in terms of bat ( since last start ) broken down by funding and type",
+		},
+		[]string{"funding", "type"},
+	)
+
+	// countGrantsClaimedTotal counts the grants claimed, broken down by platform and type
+	countGrantsClaimedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grants_claimed_total",
+			Help: "count of grants claimed ( since last start ) broken down by platform and type",
+		},
+		[]string{"platform", "type", "legacy"},
+	)
+
+	// countGrantsClaimedBatTotal counts the total value of grants claimed in terms of bat ( since last start ) broken down by platform and type
+	countGrantsClaimedBatTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grants_claimed_bat_total",
+			Help: "total value of grants claimed in terms of bat ( since last start ) broken down by platform and type",
+		},
+		[]string{"platform", "type", "legacy"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(
+		countContributionsTotal,
+		countContributionsBatTotal,
+		countGrantsClaimedTotal,
+		countGrantsClaimedBatTotal,
+		kafkaCertNotBefore,
+		kafkaCertNotAfter,
+	)
+}
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
@@ -53,9 +120,6 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 func tlsDialer() (*kafka.Dialer, error) {
 	keyPasswordEnv := "KAFKA_SSL_KEY_PASSWORD"
 	keyPassword := os.Getenv(keyPasswordEnv)
-	if len(keyPassword) == 0 {
-		return nil, errors.New(keyPasswordEnv + " must be passed")
-	}
 
 	caPEM, err := readFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
 	if err != nil {
@@ -73,6 +137,22 @@ func tlsDialer() (*kafka.Dialer, error) {
 
 	keyEnv := "KAFKA_SSL_KEY"
 	encryptedKeyPEM := []byte(os.Getenv(keyEnv))
+
+	// Check to see if KAFKA_SSL_CERTIFICATE includes both certificate and key
+	if certPEM[0] == '{' {
+		type Certificate struct {
+			Certificate string `json:"certificate"`
+			Key         string `json:"key"`
+		}
+		var cert Certificate
+		err := json.Unmarshal(certPEM, &cert)
+		if err != nil {
+			return nil, err
+		}
+		certPEM = []byte(cert.Certificate)
+		encryptedKeyPEM = []byte(cert.Key)
+	}
+
 	if len(encryptedKeyPEM) == 0 {
 		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
 		if err != nil {
@@ -84,22 +164,34 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if len(rest) > 0 {
 		return nil, errors.New("Extra data in KAFKA_SSL_KEY")
 	}
-	keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
-	if err != nil {
-		return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
+
+	keyPEM := pem.EncodeToMemory(block)
+	if len(keyPassword) != 0 {
+		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
+		if err != nil {
+			return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
+		}
+
+		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
 	}
 
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
-
-	// Define TLS configuration
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Could not parse x509 keypair")
 	}
 
+	// Define TLS configuration
 	config := &tls.Config{
 		Certificates: []tls.Certificate{certificate},
 	}
+
+	// Instrument kafka cert expiration information
+	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
+	if err != nil {
+		return nil, errors.Wrap(err, "Could not parse certificate")
+	}
+	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
+	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
 	if len(caPEM) > 0 {
 		caCertPool := x509.NewCertPool()

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
@@ -20,6 +21,12 @@ import (
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
+// ClobberedCreds holds data of claims that have been clobbered and when they were first reported
+type ClobberedCreds struct {
+	ID        uuid.UUID `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
+}
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
@@ -64,6 +71,8 @@ type Datastore interface {
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
+	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
+	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -123,7 +132,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(3)
+	err = m.Migrate(5)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
@@ -160,7 +169,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 	values ($1, $2, $3, $4, $5)
 	returning *`
 	promotions := []Promotion{}
-	suggestionsPerGrant := value.Div(decimal.NewFromFloat(0.25))
+	suggestionsPerGrant := value.Div(defaultVoteValue)
 	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
@@ -183,6 +192,23 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	}
 
 	return nil, nil
+}
+
+// InsertClobberedClaims inserts clobbered claims to the db
+func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error {
+	tx, err := pg.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, id := range ids {
+		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
+		if err != nil {
+			return err
+		}
+	}
+	err = tx.Commit()
+	return err
 }
 
 // ActivatePromotion marks a particular promotion as active
@@ -334,6 +360,9 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
+		if os.Getenv("ENV") != "local" {
+			return nil, errors.New("legacy promotion is not available to claim")
+		}
 		legacyClaimExists = true
 	}
 
@@ -410,9 +439,10 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			promos.expires_at,
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
-			( coalesce(wallet_claims.approximate_value, promos.approximate_value) /
-				promos.approximate_value *
-				promos.suggestions_per_grant )::int as suggestions_per_grant,
+			greatest(1, (coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+					promos.approximate_value *
+					promos.suggestions_per_grant
+				)::int) as suggestions_per_grant,
 			promos.remaining_grants,
 			promos.platform,
 			promos.active,
@@ -691,11 +721,13 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 		Credentials     string    `db:"credentials"`
 		SuggestionText  string    `db:"suggestion_text"`
 		SuggestionEvent []byte    `db:"suggestion_event"`
+		Erred           bool      `db:"erred"`
 	}
 
 	statement := `
 select *
 from suggestion_drain
+where not erred
 for update skip locked
 limit 1`
 
@@ -723,8 +755,12 @@ limit 1`
 
 	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 	if err != nil {
-		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
+		// FIXME only non-retriable errors should set erred
+		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
+		if err != nil {
+			_ = tx.Rollback()
+		}
+		err = tx.Commit()
 		return attempted, err
 	}
 

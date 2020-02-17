@@ -658,7 +658,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		"code": 400,
 		"data": {
 			"validationErrors": {
-				"paymentID": "must be a uuidv4"
+				"paymentId": "must be a uuidv4"
 			}
 		}
 	}`, body, "body should return a payment id validation error")
@@ -716,11 +716,10 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Inf
 
 func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, walletID string, claimType string) (string, int) {
 	handler := GetClaimSummary(service)
-	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?paymentID="+walletID, nil)
+	req, err := http.NewRequest("GET", "/promotion/{claimType}/grants/total?paymentId="+walletID, nil)
 	suite.Require().NoError(err)
 
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentID", walletID)
 	rctx.URLParams.Add("claimType", claimType)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
@@ -779,6 +778,42 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
+}
+
+func (suite *ControllersTestSuite) TestReportClobberedClaims() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+	mockBalance := mockbalance.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+		balanceClient:    mockBalance,
+	}
+	handler := PostReportClobberedClaims(service)
+	id := uuid.NewV4()
+	requestPayloadStruct := ClobberedClaimsRequest{
+		ClaimIDs: []uuid.UUID{id},
+	}
+	payload, err := json.Marshal(&requestPayloadStruct)
+	suite.Require().NoError(err)
+	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	var claims []ClobberedCreds
+	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().Equal(claims[0].ID, id)
 }
 
 func (suite *ControllersTestSuite) TestClaimCompatability() {
@@ -866,9 +901,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		var claim *Claim
 		if test.Legacy {
 			claim, err = service.datastore.CreateClaim(promotion.ID, w.ID, promotionValue, decimal.NewFromFloat(0.0))
-			suite.Require().NoError(err, "an error occured when creating a claim for wallet")
+			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
 			_, err = pg.DB.Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
-			suite.Require().NoError(err, "an error occured when setting legacy or redeemed")
+			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
 		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{

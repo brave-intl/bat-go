@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -10,10 +11,12 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
+	uuid "github.com/satori/go.uuid"
 )
 
 // GrantsRouter is the router for grant endpoints
@@ -70,6 +73,7 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 				},
 			}
 		}
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(walletID)))
 
 		var wallet wallet.Info
 		wallet.ID = walletID
@@ -89,6 +93,9 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 // Claim is the handler for claiming grants
 func Claim(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		if os.Getenv("ENV") != "local" {
+			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
+		}
 		var req grant.ClaimRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -99,6 +106,8 @@ func Claim(service *grant.Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
+
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
 
 		claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
 		if err != nil {
@@ -127,6 +136,8 @@ func RedeemGrants(service *grant.Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
+
+		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
 
 		redeemInfo, err := service.Redeem(r.Context(), &req)
 		if err != nil {
