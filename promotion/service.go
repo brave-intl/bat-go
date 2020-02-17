@@ -65,7 +65,7 @@ var (
 			Name: "grants_claimed_total",
 			Help: "count of grants claimed ( since last start ) broken down by platform and type",
 		},
-		[]string{"platform", "type"},
+		[]string{"platform", "type", "legacy"},
 	)
 
 	// countGrantsClaimedBatTotal counts the total value of grants claimed in terms of bat ( since last start ) broken down by platform and type
@@ -74,7 +74,7 @@ var (
 			Name: "grants_claimed_bat_total",
 			Help: "total value of grants claimed in terms of bat ( since last start ) broken down by platform and type",
 		},
-		[]string{"platform", "type"},
+		[]string{"platform", "type", "legacy"},
 	)
 )
 

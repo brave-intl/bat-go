@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	raven "github.com/getsentry/raven-go"
@@ -185,6 +186,7 @@ func (service *Service) ClaimPromotionForWallet(
 	labels := prometheus.Labels{
 		"platform": promotion.Platform,
 		"type":     promotion.Type,
+		"legacy":   strconv.FormatBool(claim.LegacyClaimed),
 	}
 	countGrantsClaimedTotal.With(labels).Inc()
 	countGrantsClaimedBatTotal.With(labels).Add(value)
