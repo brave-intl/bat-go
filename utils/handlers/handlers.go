@@ -8,6 +8,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // AppError is error type for json HTTP responses
@@ -98,6 +99,11 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				raven.CaptureMessage(e.Message, map[string]string{})
 			}
 		}
+
+		l := zerolog.Ctx(r.Context())
+		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Err(e)
+		})
 
 		if e.Cause != nil {
 			// Combine error with message
