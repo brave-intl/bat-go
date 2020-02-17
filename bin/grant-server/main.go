@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/mint"
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
@@ -174,6 +175,32 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/devicecheck", proxyRouter)
 		r.Mount("/v1/captchas", proxyRouter)
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
+	}
+
+	var roMintPg mint.ReadOnlyDatastore
+	pgMint, err := mint.NewPostgres("", true, "mint_db")
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	if len(roDB) > 0 {
+		roMintPg, err = mint.NewPostgres(roDB, false, "mint_read_only_db")
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
+
+	mintService, err := mint.InitService(pgMint, roMintPg)
+	if err != nil {
+		raven.CaptureErrorAndWait(err, nil)
+		log.Panic().Err(err).Msg("unable to init mint service")
+	}
+	if mintService != nil {
+		if os.Getenv("ENV") == "production" {
+			panic("mint cannot exist in production")
+		}
+		r.Mount("/v1/mint", mint.Router(mintService))
 	}
 
 	return ctx, r, promotionService, jobs

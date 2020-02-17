@@ -73,8 +73,14 @@ func (c *SimpleHTTPClient) newRequest(
 	resolvedURL := c.BaseURL.ResolveReference(&url.URL{Path: path})
 
 	if body != nil {
+		var err error
+		validStringRep, ok := body.([]byte)
 		buf = new(bytes.Buffer)
-		err := json.NewEncoder(buf).Encode(body)
+		if !ok {
+			err = json.NewEncoder(buf).Encode(body)
+		} else {
+			_, err = buf.Write(validStringRep)
+		}
 		if err != nil {
 			return nil, 0, errors.Wrap(err, ErrUnableToEncodeBody)
 		}

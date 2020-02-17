@@ -65,7 +65,6 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
 					entry.Panic().Stack()
-
 					// Send panic info to Sentry
 					event := sentry.NewEvent()
 					event.Message = fmt.Sprint(rec)
