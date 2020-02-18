@@ -85,7 +85,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 	})
 }
 
-// GetOrder is the handler for creating a new order
+// GetOrder is the handler for getting an order
 func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		orderID := chi.URLParam(r, "orderID")

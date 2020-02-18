@@ -141,7 +141,7 @@ func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
 	return &transactions, nil
 }
 
-// GetTransaction returns a single of transaction given an external transactin Id
+// GetTransaction returns a single of transaction given an external transaction Id
 func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, error) {
 	statement := "SELECT * FROM transactions WHERE external_transaction_id = $1"
 	transaction := Transaction{}
@@ -229,34 +229,28 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1"
-	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, merchantID)
+	statement := "select * from order_cred_issuers where merchant_id = $1 limit 1"
+	issuer := Issuer{}
+	err := pg.DB.Select(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(issuers) > 0 {
-		return &issuers[0], nil
-	}
-
-	return nil, nil
+	return &issuer, nil
 }
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1"
-	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, publicKey)
-	if err != nil {
+	statement := "select * from order_cred_issuers where public_key = $1 limit 1"
+	issuer := Issuer{}
+	err := pg.DB.Get(&issuer, statement, publicKey)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
-	if len(issuers) > 0 {
-		return &issuers[0], nil
-	}
-
-	return nil, nil
+	return &issuer, nil
 }
 
 // InsertOrderCreds inserts the given order creds

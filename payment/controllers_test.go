@@ -358,6 +358,8 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 }
 
 func (suite *ControllersTestSuite) TestE2E() {
+	suite.T().Skip()
+
 	numVotes := 20
 
 	mockCtrl := gomock.NewController(suite.T())
