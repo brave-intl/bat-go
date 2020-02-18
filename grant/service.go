@@ -54,6 +54,25 @@ type Service struct {
 	grantWalletBalanceDesc *prometheus.Desc
 }
 
+// NewService is created
+func NewService() (*Service, error) {
+	roDB := os.Getenv("RO_DATABASE_URL")
+
+	var grantRoPg ReadOnlyDatastore
+	grantPg, err := NewPostgres("", true)
+	if err != nil {
+		return nil, errors.Wrap(err, "Must be able to init postgres connection to start")
+	}
+	if len(roDB) > 0 {
+		grantRoPg, err = NewPostgres(roDB, false)
+		if err != nil {
+			return nil, errors.Wrap(err, "Could not start reader postgres connection")
+		}
+	}
+
+	return InitService(grantPg, grantRoPg)
+}
+
 // InitService initializes the grant service
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	gs := &Service{
@@ -111,6 +130,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 		prometheus.MustRegister(claimedGrantsCounter)
 		prometheus.MustRegister(redeemedGrantsCounter)
+		registerGrantInstrumentation = false
 	}
 
 	return gs, nil

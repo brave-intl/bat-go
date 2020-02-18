@@ -286,12 +286,17 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	return service, nil
 }
 
+// Datastore returns a normal datastore
+func (service *Service) Datastore() Datastore {
+	return service.datastore
+}
+
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
 func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 	if service.roDatastore != nil {
 		return service.roDatastore
 	}
-	return service.datastore
+	return service.Datastore()
 }
 
 // RunNextClaimJob takes the next claim job and completes it
