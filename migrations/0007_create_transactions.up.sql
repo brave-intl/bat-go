@@ -9,3 +9,6 @@ create table transactions (
 	kind text NOT NULL,
 	amount numeric(28, 18) NOT NULL
 );
+
+ALTER TABLE transactions
+ADD CONSTRAINT unique_external_transactions UNIQUE (external_transaction_id);

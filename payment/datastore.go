@@ -282,6 +282,21 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 	return nil, nil
 }
 
+// GetOrderCredsByItemID returns the order credentials for a OrderID
+func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, error) {
+	orderCreds := []OrderCreds{}
+	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(orderCreds) > 0 {
+		return &orderCreds, nil
+	}
+
+	return nil, nil
+}
+
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()

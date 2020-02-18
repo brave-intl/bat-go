@@ -145,7 +145,7 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 }
 
-func (suite *ControllersTestSuite) EndToEndTest() {
+func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -357,7 +357,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
-func (suite *ControllersTestSuite) TestE2E() {
+func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	suite.T().Skip()
 
 	numVotes := 20
