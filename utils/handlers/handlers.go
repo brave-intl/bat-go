@@ -8,14 +8,24 @@ import (
 	"github.com/asaskevich/govalidator"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // AppError is error type for json HTTP responses
 type AppError struct {
-	Error   error                  `json:"-"`
-	Message string                 `json:"message"`
-	Code    int                    `json:"code"`
-	Data    map[string]interface{} `json:"data,omitempty"`
+	Cause   error       `json:"-"`
+	Message string      `json:"message"`
+	Code    int         `json:"code"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// Error makes app error an error
+func (e AppError) Error() string {
+	msg := fmt.Sprintf("error: %s", e.Message)
+	if e.Cause != nil {
+		msg = fmt.Sprintf("%s: %s", msg, e.Cause)
+	}
+	return msg
 }
 
 // ServeHTTP responds according to the passed AppError
@@ -28,15 +38,33 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // WrapError with an additional message as an AppError
-func WrapError(err error, msg string, code int) *AppError {
+func WrapError(err error, msg string, passedCode int) *AppError {
 	// FIXME err should probably be first
+	appErr, ok := err.(AppError)
+	if !ok {
+		code := passedCode
+		if code == 0 {
+			code = http.StatusBadRequest
+		}
+		// use defaults passed in
+		return &AppError{
+			Cause:   err,
+			Message: msg,
+			Code:    code,
+		}
+	}
+	code := appErr.Code
 	if code == 0 {
-		code = http.StatusBadRequest
+		code = passedCode
+	}
+	if len(msg) != 0 {
+		msg = fmt.Sprintf("%s: ", msg)
 	}
 	return &AppError{
-		Error:   err,
-		Message: msg,
+		Cause:   appErr.Cause,
+		Message: fmt.Sprintf("%s%s", msg, appErr.Message),
 		Code:    code,
+		Data:    appErr.Data,
 	}
 }
 
@@ -65,16 +93,21 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
-			if e.Error != nil {
-				raven.CaptureError(errors.Wrap(e.Error, e.Message), map[string]string{})
+			if e.Cause != nil {
+				raven.CaptureError(errors.Wrap(e.Cause, e.Message), map[string]string{})
 			} else {
 				raven.CaptureMessage(e.Message, map[string]string{})
 			}
 		}
 
-		if e.Error != nil {
+		l := zerolog.Ctx(r.Context())
+		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Err(e)
+		})
+
+		if e.Cause != nil {
 			// Combine error with message
-			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Error)
+			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Cause)
 		}
 
 		e.ServeHTTP(w, r)

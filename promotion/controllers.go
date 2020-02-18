@@ -18,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -83,6 +84,7 @@ type PromotionsResponse struct {
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var walletID *uuid.UUID
+		var filter string
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
@@ -104,6 +106,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 			walletID = &tmp
 			logging.AddWalletIDToContext(r.Context(), tmp)
+			filter = "walletID"
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -136,6 +139,19 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&PromotionsResponse{*promotions}); err != nil {
 			panic(err)
+		}
+		if len(filter) == 0 {
+			filter = "none"
+		}
+		promotionGetCount.With(prometheus.Labels{
+			"filter":  filter,
+			"legacy":  fmt.Sprint(legacy),
+			"migrate": fmt.Sprint(migrate),
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
 		}
 		return nil
 	})
