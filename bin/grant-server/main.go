@@ -124,6 +124,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/orders", payment.Router(paymentService))
+		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
 

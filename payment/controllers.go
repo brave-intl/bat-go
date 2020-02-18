@@ -33,7 +33,7 @@ func Router(service *Service) chi.Router {
 // VoteRouter for voting endpoint
 func VoteRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/votes", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
+	r.Method("POST", "/", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
 	return r
 }
 
