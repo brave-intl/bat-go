@@ -180,7 +180,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		// Ensure the external transaction ID hasn't already been added to any orders.
 		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
 		if err != nil {
-			return handlers.WrapError(err, "Error when validating externalTransactinID", http.StatusInternalServerError)
+			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
 
 		if transaction != nil {
