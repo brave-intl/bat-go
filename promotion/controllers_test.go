@@ -765,7 +765,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 		Type:      "ugp",
 		NumGrants: 10,
 		Value:     decimal.NewFromFloat(20.0),
-		Platform:  "",
+		Platform:  "desktop",
 		Active:    true,
 	}
 
@@ -777,7 +777,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Assert().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
 }
 
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
