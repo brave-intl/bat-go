@@ -10,19 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
-
-// ClaimRequest is a request to claim a grant
-type ClaimRequest struct {
-	PromotionID uuid.UUID   `json:"promotionId" valid:"-"`
-	WalletInfo  wallet.Info `json:"wallet" valid:"required"`
-}
-
-// ClaimResponse includes information about the claimed grant
-type ClaimResponse struct {
-	ApproximateValue decimal.Decimal `json:"approximateValue" db:"approximate_value"`
-}
 
 // ClaimPromotion registers a claim on behalf of a user wallet to a particular Promotion.
 func (service *Service) ClaimPromotion(ctx context.Context, wallet wallet.Info, promotionID uuid.UUID) (*promotion.Claim, error) {

@@ -23,6 +23,7 @@ import (
 	srv "github.com/brave-intl/bat-go/utils/service"
 	w "github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/wallet/service"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
@@ -371,12 +372,17 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	return service, nil
 }
 
+// Datastore returns a normal datastore
+func (service *Service) Datastore() Datastore {
+	return service.datastore
+}
+
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
 func (s *Service) ReadableDatastore() ReadOnlyDatastore {
 	if s.roDatastore != nil {
 		return s.roDatastore
 	}
-	return s.datastore
+	return service.Datastore()
 }
 
 // RunNextClaimJob takes the next claim job and completes it

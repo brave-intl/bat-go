@@ -68,46 +68,6 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func claim(t *testing.T, server *httptest.Server, promotionID uuid.UUID, wallet wallet.Info) error {
-	publicKey := wallet.PublicKey
-	if len(publicKey) == 0 {
-		publicKey = "ed402ea535f1c58f0fcadf108f7a3aa9c259e85626c5b15083470aa8c45bb490"
-	}
-	payload := fmt.Sprintf(`{
-			"wallet": {
-				"altcurrency": "BAT",
-				"provider": "uphold",
-				"paymentId": "%s",
-				"providerId": "%s",
-				"publicKey": "%s"
-			},
-			"promotionId": "%s"
-		}`, wallet.ID, wallet.ProviderID, publicKey, promotionID.String())
-	claimURL := fmt.Sprintf("%s/v1/grants/claim", server.URL)
-
-	req, err := http.NewRequest("POST", claimURL, bytes.NewBuffer([]byte(payload)))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Add("Authorization", "Bearer "+accessToken)
-	req.Header.Add("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != 200 {
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			body = []byte("")
-		}
-		return fmt.Errorf("Received non-200 response: %d, %s\n", resp.StatusCode, body)
-	}
-	return nil
-}
-
 func getPromotions(t *testing.T, server *httptest.Server, wallet wallet.Info) ([]promotion.Promotion, error) {
 	type promotionsResp struct {
 		Promotions []promotion.Promotion
@@ -186,23 +146,41 @@ func getActive(t *testing.T, server *httptest.Server, wallet wallet.Info) ([]gra
 	return grants, err
 }
 
+func services() (*promotion.Service, *grant.Service, error) {
+	// leave off readonly
+	var roPg promotion.ReadOnlyDatastore
+	pg, err := promotion.NewPostgres("", false)
+	if err != nil {
+		return nil, nil, err
+	}
+	promotionService, err := promotion.InitService(pg, roPg)
+	if err != nil {
+		return nil, nil, err
+	}
+	grantService, err := grant.NewService()
+	if err != nil {
+		return nil, nil, err
+	}
+	return promotionService, grantService, nil
+}
+
 func TestClaim(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	pg, err := promotion.NewPostgres("", false)
+	promotionService, grantService, err := services()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	value := decimal.NewFromFloat(30.0)
 	numGrants := 1
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+	promotion, err := promotionService.Datastore().CreatePromotion("ugp", numGrants, value, "android")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	err = promotionService.Datastore().ActivatePromotion(promotion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,8 +188,9 @@ func TestClaim(t *testing.T) {
 	var wallet wallet.Info
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
+	wallet.Provider = "uphold"
 
-	err = claim(t, server, promotion.ID, wallet)
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,24 +211,25 @@ func TestClaim(t *testing.T) {
 
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
-	err = claim(t, server, promotion.ID, wallet)
+	wallet.Provider = "uphold"
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err == nil {
 		t.Fatal("Expected re-claim of unavailable promotion to a different card to fail")
 	}
 
 	value = decimal.NewFromFloat(35.0)
 	numGrants = 2
-	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "desktop")
+	promotion, err = promotionService.Datastore().CreatePromotion("ugp", numGrants, value, "desktop")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	err = promotionService.Datastore().ActivatePromotion(promotion)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, wallet)
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,21 +248,23 @@ func TestClaim(t *testing.T) {
 		t.Fatal("Expected one active ugp grant worth 35 BAT")
 	}
 
-	err = claim(t, server, promotion.ID, wallet)
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err == nil {
 		t.Fatal("Expected re-claim of the same grant to fail despite available grants")
 	}
 
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
-	err = claim(t, server, promotion.ID, wallet)
+	wallet.Provider = "uphold"
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err != nil {
 		t.Fatal("Expected re-claim of the same promotion with available to a different card to succeed")
 	}
 
 	wallet.ID = uuid.NewV4().String()
 	wallet.ProviderID = uuid.NewV4().String()
-	err = claim(t, server, promotion.ID, wallet)
+	wallet.Provider = "uphold"
+	_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
 	if err == nil {
 		t.Fatal("Expected new claim of the same promotion to fail as there are no more grants")
 	}
@@ -315,6 +297,11 @@ func TestRedeem(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
+	promotionService, grantService, err := services()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -332,7 +319,7 @@ func TestRedeem(t *testing.T) {
 
 	value := decimal.NewFromFloat(10.0)
 	numGrants := 1
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	promotion, err := promotionService.Datastore().CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,19 +329,19 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	_, err = grantService.ClaimPromotion(context.Background(), userWallet.Info, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	value = decimal.NewFromFloat(10.0)
 	numGrants = 1
-	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	promotion, err = promotionService.Datastore().CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	err = promotionService.Datastore().ActivatePromotion(promotion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +357,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal("promotion id did not match!")
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	_, err = grantService.ClaimPromotion(context.Background(), userWallet.Info, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +437,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	_, err = grantService.ClaimPromotion(context.Background(), userWallet.Info, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,6 +487,11 @@ func TestDrain(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
+	_, grantService, err := services()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -527,7 +519,7 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	_, err = grantService.ClaimPromotion(context.Background(), userWallet.Info, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,7 +541,7 @@ func TestDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	_, err = grantService.ClaimPromotion(context.Background(), userWallet.Info, promotion.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -650,6 +642,11 @@ func TestClaimValidation(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
+	_, grantService, err := services()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	pg, err := promotion.NewPostgres("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -658,33 +655,40 @@ func TestClaimValidation(t *testing.T) {
 	var w wallet.Info
 	w.ID = uuid.NewV4().String()
 	w.ProviderID = uuid.NewV4().String()
+	w.Provider = "uphold"
 
-	err = claim(t, server, uuid.Nil, w)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("Must fail if no promotion id is passed")
+		}
+
+		for i := 0; i < 100; i++ {
+			value := decimal.NewFromFloat(30.0)
+			numGrants := 1
+			promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = pg.ActivatePromotion(promotion)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var wallet wallet.Info
+			wallet.ID = uuid.NewV4().String()
+			wallet.ProviderID = uuid.NewV4().String()
+			wallet.Provider = "uphold"
+
+			_, err = grantService.ClaimPromotion(context.Background(), wallet, promotion.ID)
+			if err != nil {
+				t.Error(promotion.ID)
+				t.Fatal(err)
+			}
+		}
+	}()
+	_, err = grantService.ClaimPromotion(context.Background(), w, uuid.Nil)
 	if err == nil {
 		t.Fatal("Must fail if no promotion id is passed")
-	}
-
-	for i := 0; i < 100; i++ {
-		value := decimal.NewFromFloat(30.0)
-		numGrants := 1
-		promotion, err := pg.CreatePromotion("ugp", numGrants, value, "android")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		err = pg.ActivatePromotion(promotion)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var wallet wallet.Info
-		wallet.ID = uuid.NewV4().String()
-		wallet.ProviderID = uuid.NewV4().String()
-
-		err = claim(t, server, promotion.ID, wallet)
-		if err != nil {
-			t.Error(promotion.ID)
-			t.Fatal(err)
-		}
 	}
 }

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -37,7 +36,6 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	// Hacky compatibility layer between for legacy grants and new datastore
 	r.Method("GET", "/active", middleware.InstrumentHandler("GetActive", GetActive(service)))
 	r.Method("POST", "/drain", middleware.InstrumentHandler("DrainGrants", DrainGrants(service)))
-	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
 	return r
 }
@@ -79,39 +77,6 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&ActiveGrantsResponse{Grants: grants}); err != nil {
-			panic(err)
-		}
-		return nil
-	})
-}
-
-// Claim is the handler for claiming grants
-func Claim(service *grant.Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		if os.Getenv("ENV") != "local" {
-			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)
-		}
-		var req grant.ClaimRequest
-		err := requestutils.ReadJSON(r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(req.WalletInfo.ID)))
-
-		claim, err := service.ClaimPromotion(r.Context(), req.WalletInfo, req.PromotionID)
-		if err != nil {
-			// FIXME not all errors are 4xx
-			return handlers.WrapError(err, "Error claiming grant", http.StatusBadRequest)
-		}
-
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(&grant.ClaimResponse{ApproximateValue: claim.ApproximateValue}); err != nil {
 			panic(err)
 		}
 		return nil
