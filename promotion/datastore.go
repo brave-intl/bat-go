@@ -150,6 +150,16 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 		return nil, err
 	}
 
+	if env = os.Getenv("ENV"); env == "production" {
+		// https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
+		// we are using db.r5.xlarge	3300 in prod, so setting this to just less (divided by number of instances)
+		// the scaling number is 1000 in terraform
+		db.SetMaxOpenConns(1100)
+		// default max idle conns is 2, which is fine
+	} else {
+		db.SetMaxOpenConns(20)
+	}
+
 	pg := &Postgres{db}
 
 	if performMigration {
