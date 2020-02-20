@@ -10,9 +10,11 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/dlmiddlecote/sqlstats"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -150,7 +152,14 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 		return nil, err
 	}
 
-	if env = os.Getenv("ENV"); env == "production" {
+	// setup instrumentation using sqlstats
+	// Create a new collector, the name will be used as a label on the metrics
+	collector := sqlstats.NewStatsCollector("db", db)
+
+	// Register it with Prometheus
+	prometheus.MustRegister(collector)
+
+	if env := os.Getenv("ENV"); env == "production" {
 		// https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
 		// we are using db.r5.xlarge	3300 in prod, so setting this to just less (divided by number of instances)
 		// the scaling number is 1000 in terraform
