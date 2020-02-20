@@ -152,12 +152,12 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	service := &Service{
 		datastore: pg,
 	}
-	order := suite.setupCreateOrder(4.75 / .25)
+	order := suite.setupCreateOrder(1 / .25)
 
 	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: "3db2f74e-df23-42e2-bf25-a302a93baa2d",
+		ExternalTransactionID: "150d7a21-c203-4ba4-8fdf-c5fc36aca004",
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -180,7 +180,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Assert().NoError(err)
 
 	// Check the transaction
-	suite.Assert().Equal(decimal.NewFromFloat32(4.75), transaction.Amount)
+	suite.Assert().Equal(decimal.NewFromFloat32(1), transaction.Amount)
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
@@ -222,12 +222,13 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	_, err = pg.DB.Exec("DELETE FROM transactions;")
 	suite.Require().NoError(err)
 
-	order := suite.setupCreateOrder(4.75 / .25)
+	// External transaction has 12 BAT
+	order := suite.setupCreateOrder(12 / .25)
 
 	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: "3db2f74e-df23-42e2-bf25-a302a93baa2d",
+		ExternalTransactionID: "9d5b6a7d-795b-4f02-a91e-25eee2852ebf",
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -250,7 +251,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().NoError(err)
 
 	// Check the transaction
-	suite.Assert().Equal(decimal.NewFromFloat32(4.75), transaction.Amount)
+	suite.Assert().Equal(decimal.NewFromFloat32(12), transaction.Amount)
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
@@ -284,7 +285,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().NoError(err)
 
 	// Check the transaction
-	suite.Assert().Equal(decimal.NewFromFloat32(4.75), transactions[0].Amount)
+	suite.Assert().Equal(decimal.NewFromFloat32(12), transactions[0].Amount)
 	suite.Assert().Equal("uphold", transactions[0].Kind)
 	suite.Assert().Equal("completed", transactions[0].Status)
 	suite.Assert().Equal("BAT", transactions[0].Currency)

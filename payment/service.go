@@ -91,7 +91,7 @@ func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (service *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
 	var wallet uphold.Wallet
-	upholdTransaction, err := wallet.GetPublicTransaction(req.ExternalTransactionID)
+	upholdTransaction, err := wallet.GetTransaction(req.ExternalTransactionID)
 
 	if err != nil {
 		return nil, err
