@@ -111,6 +111,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 		prometheus.MustRegister(claimedGrantsCounter)
 		prometheus.MustRegister(redeemedGrantsCounter)
+		registerGrantInstrumentation = false
 	}
 
 	return gs, nil
