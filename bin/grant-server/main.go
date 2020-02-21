@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	raven "github.com/getsentry/raven-go"
@@ -110,6 +111,21 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
+
+	if os.Getenv("FEATURE_ORDERS") != "" {
+		paymentPG, err := payment.NewPostgres("", true)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+		}
+		paymentService, err := payment.InitService(paymentPG)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Panic().Err(err).Msg("Payment service initialization failed")
+		}
+		r.Mount("/v1/orders", payment.Router(paymentService))
+		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+	}
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")

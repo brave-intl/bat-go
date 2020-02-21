@@ -26,7 +26,9 @@ import (
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog/log"
@@ -101,9 +103,12 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore:    pg,
-		cbClient:     cbClient,
-		ledgerClient: mockLedger,
+		datastore: pg,
+		cbClient:  cbClient,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 	}
 	handler := GetAvailablePromotions(service)
 
@@ -347,9 +352,12 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore:        pg,
-		cbClient:         cbClient,
-		ledgerClient:     mockLedger,
+		datastore: pg,
+		cbClient:  cbClient,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 		reputationClient: mockReputation,
 	}
 
@@ -502,9 +510,12 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
-		cbClient:         mockCB,
-		ledgerClient:     mockLedger,
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 		reputationClient: mockReputation,
 	}
 
@@ -636,7 +647,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "an error is returned")
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{publicKey})
+	blindedCreds := jsonutils.JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
 	w := &wallet.Info{
 		ID:         walletID,
@@ -740,9 +751,12 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:    pg,
-		cbClient:     mockCB,
-		ledgerClient: mockLedger,
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 	}
 	var issuerName string
 	mockCB.EXPECT().
@@ -830,6 +844,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
+		wallet: walletservice.Service{
+			Datastore: pg,
+		},
 	}
 
 	scenarios := []struct {

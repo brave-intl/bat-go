@@ -8,6 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -69,9 +70,13 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	}
 
 	// 2. Enforce transaction checks and verify transaction signature
-	userWallet, err := provider.GetWallet(walletInfo)
+	providerWallet, err := provider.GetWallet(walletInfo)
 	if err != nil {
 		return nil, err
+	}
+	userWallet, ok := providerWallet.(*uphold.Wallet)
+	if !ok {
+		return nil, errors.New("Only uphold wallets are supported")
 	}
 	// this ensures we have a valid wallet if refreshBalance == true
 	balance, err := userWallet.GetBalance(refreshBalance)
@@ -83,15 +88,9 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 		// 1. Enforce transaction checks and verify transaction signature
 		// NOTE for uphold provider we currently check against user provided publicKey
 		//      thus this check does not protect us from a valid fake signature
-		txInfo, err := userWallet.VerifyTransaction(transaction)
+		txInfo, err := userWallet.VerifyAnonCardTransaction(transaction)
 		if err != nil {
 			return nil, err
-		}
-		if *txInfo.AltCurrency != altcurrency.BAT {
-			return nil, errors.New("only grants submitted with BAT transactions are supported")
-		}
-		if txInfo.Probi.LessThan(decimal.Zero) {
-			return nil, errors.New("included transaction cannot be for negative BAT")
 		}
 		if txInfo.Probi.LessThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(lowerTxLimit))) {
 			return nil, fmt.Errorf("included transaction must be for a minimum of %g BAT", lowerTxLimit)
@@ -99,10 +98,6 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 		if txInfo.Probi.GreaterThan(altcurrency.BAT.ToProbi(decimal.NewFromFloat(upperTxLimit))) {
 			return nil, fmt.Errorf("included transaction must be for a maxiumum of %g BAT", upperTxLimit)
 		}
-		if txInfo.Destination != SettlementDestination {
-			return nil, errors.New("included transactions must have settlement as their destination")
-		}
-
 		txProbi = &txInfo.Probi
 	}
 

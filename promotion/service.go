@@ -14,8 +14,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/utils/clients/ledger"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -91,10 +91,10 @@ func init() {
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
+	wallet           wallet.Service
 	datastore        Datastore
 	roDatastore      ReadOnlyDatastore
 	cbClient         cbr.Client
-	ledgerClient     ledger.Client
 	reputationClient reputation.Client
 	balanceClient    balance.Client
 	codecs           map[string]*goavro.Codec
@@ -253,11 +253,6 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
-	ledgerClient, err := ledger.New()
-	if err != nil {
-		return nil, err
-	}
-
 	balanceClient, err := balance.New()
 	if err != nil {
 		return nil, err
@@ -271,13 +266,18 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		}
 	}
 
+	walletService, err := wallet.InitService(datastore, roDatastore)
+	if err != nil {
+		return nil, err
+	}
+
 	service := &Service{
 		datastore:        datastore,
 		roDatastore:      roDatastore,
 		cbClient:         cbClient,
-		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
 		balanceClient:    balanceClient,
+		wallet:           *walletService,
 	}
 	err = service.InitKafka()
 	if err != nil {
