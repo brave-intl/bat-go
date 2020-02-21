@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -141,6 +142,24 @@ func (pg *Postgres) Migrate() error {
 	return nil
 }
 
+var (
+	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
+	dbInstanceClassToMaxConn = map[string]int{
+		"db.r4.large":    1600,
+		"db.r4.xlarge":   3200,
+		"db.r4.2xlarge":  5000,
+		"db.r4.4xlarge":  5000,
+		"db.r4.8xlarge":  5000,
+		"db.r4.16xlarge": 5000,
+		"db.r5.large":    1600,
+		"db.r5.xlarge":   3300,
+		"db.r5.2xlarge":  5000,
+		"db.r5.4xlarge":  5000,
+		"db.r5.12xlarge": 5000,
+		"db.r5.24xlarge": 5000,
+	}
+)
+
 // NewPostgres creates a new Postgres Datastore
 func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	if len(databaseURL) == 0 {
@@ -159,14 +178,25 @@ func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
 	// Register it with Prometheus
 	prometheus.MustRegister(collector)
 
-	if env := os.Getenv("ENV"); env == "production" {
-		// https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
-		// we are using db.r5.xlarge	3300 in prod, so setting this to just less (divided by number of instances)
-		// the scaling number is 1000 in terraform
-		db.SetMaxOpenConns(1100)
-		// default max idle conns is 2, which is fine
-	} else {
-		db.SetMaxOpenConns(20)
+	// if we have a connection longer than 5 minutes, kill it
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	// set max open connections to default to 550 (will get overwritten later by calculation
+	// depending of if we have environment variables set
+	db.SetMaxOpenConns(550)
+
+	// using desired/max tasks to calculate the right number of max open connections
+	desiredTasks, dterr := strconv.Atoi(os.Getenv("DESIRED_TASKS"))
+	maxTasks, mterr := strconv.Atoi(os.Getenv("MAXIMUM_TASKS"))
+
+	if dterr == nil && mterr == nil && desiredTasks > 0 && maxTasks > 0 {
+		grantDbInstanceClass := os.Getenv("GRANT_DB_INSTANCE_CLASS")
+		// 3300 / maxTasks desiredTasks
+		if maxConns, ok := dbInstanceClassToMaxConn[grantDbInstanceClass]; ok {
+			// if we are able to get desired tasks, max tasks and instance class from environment
+			// calculate the max open connections:
+			db.SetMaxOpenConns(maxConns / (maxTasks / desiredTasks))
+		}
 	}
 
 	pg := &Postgres{db}
