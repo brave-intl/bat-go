@@ -99,8 +99,8 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration)
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
 		return &Postgres{*pg}, err
 	}

@@ -69,13 +69,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	roDB := os.Getenv("RO_DATABASE_URL")
 
 	var grantRoPg grant.ReadOnlyDatastore
-	grantPg, err := grant.NewPostgres("", true)
+	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		grantRoPg, err = grant.NewPostgres(roDB, false)
+		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -89,13 +89,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 
 	var roPg promotion.ReadOnlyDatastore
-	pg, err := promotion.NewPostgres("", true)
+	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		roPg, err = promotion.NewPostgres(roDB, false)
+		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -113,7 +113,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 
 	if os.Getenv("FEATURE_ORDERS") != "" {
-		paymentPG, err := payment.NewPostgres("", true)
+		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
