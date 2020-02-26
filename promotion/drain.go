@@ -48,6 +48,10 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			return errors.Wrap(err, "Error finding claim for wallet")
 		}
 
+		if v.Amount.GreaterThan(claim.ApproximateValue) {
+			return errors.New("Cannot claim more funds than were earned")
+		}
+
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
