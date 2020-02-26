@@ -2,67 +2,17 @@ package promotion
 
 import (
 	"context"
-	"database/sql/driver"
-	"encoding/json"
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	raven "github.com/getsentry/raven-go"
-	"github.com/jmoiron/sqlx/types"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
-
-// JSONStringArray is a wrapper around a string array for sql serialization purposes
-type JSONStringArray []string
-
-// Scan the src sql type into the passed JSONStringArray
-func (arr *JSONStringArray) Scan(src interface{}) error {
-	var jt types.JSONText
-
-	if err := jt.Scan(src); err != nil {
-		return err
-	}
-
-	if err := jt.Unmarshal(arr); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Value the driver.Value representation
-func (arr *JSONStringArray) Value() (driver.Value, error) {
-	var jt types.JSONText
-
-	data, err := json.Marshal((*[]string)(arr))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := jt.UnmarshalJSON(data); err != nil {
-		return nil, err
-	}
-
-	return jt.Value()
-}
-
-// MarshalJSON returns the JSON representation
-func (arr *JSONStringArray) MarshalJSON() ([]byte, error) {
-	return json.Marshal((*[]string)(arr))
-}
-
-// UnmarshalJSON sets the passed JSONStringArray to the value deserialized from JSON
-func (arr *JSONStringArray) UnmarshalJSON(data []byte) error {
-	if err := json.Unmarshal(data, (*[]string)(arr)); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // Claim encapsulates a redeemed or unredeemed ("pre-registered") claim to a promotion by a wallet
 type Claim struct {
@@ -91,12 +41,12 @@ func (claim *Claim) SuggestionsNeeded(promotion *Promotion) (int, error) {
 
 // ClaimCreds encapsulates the credentials to be signed in response to a valid claim
 type ClaimCreds struct {
-	ID           uuid.UUID        `db:"claim_id"`
-	IssuerID     uuid.UUID        `db:"issuer_id"`
-	BlindedCreds JSONStringArray  `db:"blinded_creds"`
-	SignedCreds  *JSONStringArray `db:"signed_creds"`
-	BatchProof   *string          `db:"batch_proof"`
-	PublicKey    *string          `db:"public_key"`
+	ID           uuid.UUID                  `db:"claim_id"`
+	IssuerID     uuid.UUID                  `db:"issuer_id"`
+	BlindedCreds jsonutils.JSONStringArray  `db:"blinded_creds"`
+	SignedCreds  *jsonutils.JSONStringArray `db:"signed_creds"`
+	BatchProof   *string                    `db:"batch_proof"`
+	PublicKey    *string                    `db:"public_key"`
 }
 
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
@@ -170,7 +120,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, JSONStringArray(blindedCreds))
+	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +163,7 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 		return nil, err
 	}
 
-	signedTokens := JSONStringArray(resp.SignedTokens)
+	signedTokens := jsonutils.JSONStringArray(resp.SignedTokens)
 
 	creds := &ClaimCreds{
 		ID:           claimID,

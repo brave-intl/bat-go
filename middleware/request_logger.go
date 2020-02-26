@@ -99,7 +99,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
 	logger := hlog.FromRequest(r)
-	if status >= 400 && status < 499 {
+	if status >= 400 && status <= 499 {
 		subLog = logger.Warn()
 	} else if status >= 500 {
 		subLog = logger.Error()
