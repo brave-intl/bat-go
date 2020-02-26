@@ -30,8 +30,9 @@ type CredentialBinding struct {
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
-	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel string `json:"channel" valid:"-"`
+	Type    string     `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip|payment)"`
+	Channel string     `json:"channel" valid:"-"`
+	OrderID *uuid.UUID `json:"orderId,omitempty" valid:"-"`
 }
 
 // Base64Decode unmarshalls the suggestion from a string.

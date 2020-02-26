@@ -38,15 +38,18 @@ require (
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
+	github.com/kyoh86/richgo v0.3.3 // indirect
+	github.com/kyoh86/xdg v1.2.0 // indirect
 	github.com/lib/pq v1.2.0
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-colorable v0.1.1 // indirect
-	github.com/mattn/go-isatty v0.0.7 // indirect
+	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
+	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.3.0
@@ -62,9 +65,11 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
+	github.com/wacul/ptr v1.0.0 // indirect
 	github.com/zenazn/goji v0.9.0 // indirect
 	golang.org/x/crypto v0.0.0-20190909091759-094676da4a83
 	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
+	golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect
@@ -72,6 +77,6 @@ require (
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
-	gopkg.in/yaml.v2 v2.2.4 // indirect
+	gopkg.in/yaml.v2 v2.2.8 // indirect
 	gotest.tools v2.2.0+incompatible
 )

@@ -8,15 +8,20 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
+	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -24,6 +29,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/crypto/ed25519"
@@ -535,4 +541,163 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	suite.Require().NoError(err)
 
 	// FIXME check event is emitted
+}
+
+func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, err := promotion.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: promotion.SuggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	wallet := wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	promotionService := promotion.InitTestService(mockCB, mockLedger, mockReputation)
+
+	err = promotionService.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	promotion, err := promotionService.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = promotionService.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	suite.ClaimGrant(promotionService, wallet, privKey, promotion, blindedCreds)
+
+	handler := MakeSuggestion(promotionService)
+
+	suggestion := promotion.Suggestion{
+		Type:    "payment",
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	suggestionReq := SuggestionRequest{
+		Suggestion: suggestionPayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(suggestionPayload)).Return(nil)
+
+	body, err := json.Marshal(&suggestionReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            promotionService.SuggestionTopic,
+		Dialer:           promotionService.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+	codec := promotionService.codecs["suggestion"]
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	suite.Require().NoError(err)
+
+	suggestionEventJSON, err := codec.TextualFromNative(nil, suggestionEvent)
+	suite.Require().NoError(err)
+
+	eventMap, ok := suggestionEvent.(map[string]interface{})
+	suite.Require().True(ok)
+	id, ok := eventMap["id"].(string)
+	suite.Require().True(ok)
+	createdAt, ok := eventMap["createdAt"].(string)
+	suite.Require().True(ok)
+
+	suite.Assert().JSONEq(`{
+		"id": "`+id+`",
+		"createdAt": "`+createdAt+`",
+		"type": "`+suggestion.Type+`",
+		"channel": "`+suggestion.Channel+`",
+		"totalAmount": "0.25",
+		"funding": [
+			{
+				"type": "ugp",
+				"amount": "0.25",
+				"cohort": "control",
+				"promotion": "`+promotion.ID.String()+`"
+			}
+		]
+	}`, string(suggestionEventJSON), "Incorrect suggestion event")
 }

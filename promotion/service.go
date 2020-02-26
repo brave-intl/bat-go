@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -14,7 +15,10 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
@@ -23,7 +27,8 @@ import (
 )
 
 var (
-	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+	// SuggestionTopic is the kafka topic for suggestions
+	SuggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
 
 	// kafkaCertNotAfter checks when the kafka certificate becomes valid
 	kafkaCertNotBefore = prometheus.NewGauge(
@@ -117,7 +122,8 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	return buf, nil
 }
 
-func tlsDialer() (*kafka.Dialer, error) {
+// TLSDialer establishes a connection to Kafka
+func TLSDialer() (*kafka.Dialer, error) {
 	keyPasswordEnv := "KAFKA_SSL_KEY_PASSWORD"
 	keyPassword := os.Getenv(keyPasswordEnv)
 
@@ -221,7 +227,7 @@ func (service *Service) InitCodecs() error {
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (service *Service) InitKafka() error {
-	dialer, err := tlsDialer()
+	dialer, err := TLSDialer()
 	if err != nil {
 		return err
 	}
@@ -231,7 +237,7 @@ func (service *Service) InitKafka() error {
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		// by default we are waitng for acks from all nodes
 		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    suggestionTopic,
+		Topic:    SuggestionTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
 		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
@@ -284,6 +290,26 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 	return service, nil
+}
+
+// InitTestService creates a test service for use in testing in another package
+func InitTestService(mockCB *mockcb.MockClient, mockLedger *mockledger.MockClient, mockReputation *mockreputation.MockClient) *Service {
+	pg, err := NewPostgres("", false)
+	if err != nil {
+		fmt.Println("YOOOOOOOOOOOOOOOOOOOOOOOOO")
+	}
+
+	service := &Service{
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: wallet.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
+		reputationClient: mockReputation,
+	}
+
+	return service
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
