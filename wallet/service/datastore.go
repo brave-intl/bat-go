@@ -8,8 +8,8 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	// InsertWallet inserts the given wallet
-	InsertWallet(wallet *wallet.Info) error
+	// UpsertWallet upserts the given wallet
+	UpsertWallet(wallet *wallet.Info) error
 	// GetWallet by ID
 	GetWallet(id uuid.UUID) (*wallet.Info, error)
 }

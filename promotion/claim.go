@@ -25,6 +25,7 @@ type Claim struct {
 	Bonus            decimal.Decimal `db:"bonus"`
 	LegacyClaimed    bool            `db:"legacy_claimed"`
 	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
+	Drained          bool            `db:"drained"`
 }
 
 // SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim

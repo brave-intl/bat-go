@@ -44,6 +44,7 @@ func Router(service *Service) chi.Router {
 func SuggestionsRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
+	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
 	return r
 }
 
@@ -371,6 +372,62 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 			default:
 				// FIXME
 				return handlers.WrapError(err, "Error making suggestion", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
+// DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
+type DrainSuggestionRequest struct {
+	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// DrainSuggestion is the handler for draining ad suggestions for a verified wallet
+func DrainSuggestion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req DrainSuggestionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logging.AddWalletIDToContext(r.Context(), req.WalletID)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if req.WalletID.String() != keyID {
+			return &handlers.AppError{
+				Message: "Error validating request",
+				Code:    http.StatusBadRequest,
+				Data: map[string]interface{}{
+					"validationErrors": map[string]string{
+						"paymentId": "paymentId must match signature",
+					},
+				},
+			}
+		}
+
+		err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME
+				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}
 
