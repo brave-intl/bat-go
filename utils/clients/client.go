@@ -12,6 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 )
@@ -103,7 +104,7 @@ func (c *SimpleHTTPClient) NewRequest(
 		req.Header.Add("content-type", "application/json")
 	}
 
-	handlers.TransferRequestID(ctx, req)
+	requestutils.SetRequestID(ctx, req)
 	logOut(ctx, "request", *req.URL, 0, req.Header, body)
 
 	req.Header.Set("authorization", "Bearer "+c.AuthToken)

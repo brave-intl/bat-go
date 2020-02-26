@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,14 +8,6 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
-)
-
-type requestID string
-
-var (
-	requestIDHeaderKey = "x-request-id"
-	// RequestID holds the type for request ids
-	RequestID = requestID(requestIDHeaderKey)
 )
 
 // AppError is error type for json HTTP responses
@@ -98,15 +89,11 @@ type AppHandler func(http.ResponseWriter, *http.Request) *AppError
 // ServeHTTP responds via the passed handler and handles returned errors
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
-	reqID := r.Header.Get(requestIDHeaderKey)
-	w.Header().Set(requestIDHeaderKey, reqID)
-	ctx := context.WithValue(r.Context(), RequestID, reqID)
-	r = r.WithContext(ctx)
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
 			info := map[string]string{
-				"reqID": reqID,
+				"reqID": r.Header.Get(""),
 			}
 			if e.Cause != nil {
 				sentry.CaptureException(fmt.Errorf("%s: %w", e.Message, e.Cause))
@@ -126,13 +113,5 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		e.ServeHTTP(w, r)
-	}
-}
-
-// TransferRequestID transfers a request id from a context to a request header
-func TransferRequestID(ctx context.Context, r *http.Request) {
-	reqID, ok := ctx.Value(RequestID).(string)
-	if ok && len(reqID) != 0 {
-		r.Header.Set(requestIDHeaderKey, reqID)
 	}
 }
