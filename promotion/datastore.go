@@ -360,10 +360,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
-		if os.Getenv("ENV") != "local" {
-			_ = tx.Rollback()
-			return nil, errors.New("legacy promotion is not available to claim")
-		}
 		legacyClaimExists = true
 	}
 
