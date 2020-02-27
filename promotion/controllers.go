@@ -12,11 +12,13 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -52,7 +54,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		return nil, errors.Wrap(err, "KeyID format is invalid")
 	}
 
-	wallet, err := service.GetOrCreateWallet(ctx, walletID)
+	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
@@ -82,6 +84,7 @@ type PromotionsResponse struct {
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var walletID *uuid.UUID
+		var filter string
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
@@ -103,6 +106,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 			walletID = &tmp
 			logging.AddWalletIDToContext(r.Context(), tmp)
+			filter = "walletID"
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -135,6 +139,19 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&PromotionsResponse{*promotions}); err != nil {
 			panic(err)
+		}
+		if len(filter) == 0 {
+			filter = "none"
+		}
+		promotionGetCount.With(prometheus.Labels{
+			"filter":  filter,
+			"legacy":  fmt.Sprint(legacy),
+			"migrate": fmt.Sprint(migrate),
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
 		}
 		return nil
 	})
@@ -216,9 +233,9 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 // GetClaimResponse includes signed credentials and a batch proof showing they were signed by the public key
 type GetClaimResponse struct {
-	SignedCreds JSONStringArray `json:"signedCreds"`
-	BatchProof  string          `json:"batchProof"`
-	PublicKey   string          `json:"publicKey"`
+	SignedCreds jsonutils.JSONStringArray `json:"signedCreds"`
+	BatchProof  string                    `json:"batchProof"`
+	PublicKey   string                    `json:"publicKey"`
 }
 
 // GetClaim is the handler for checking on a particular claim's status

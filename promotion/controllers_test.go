@@ -26,7 +26,9 @@ import (
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog/log"
@@ -101,9 +103,12 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore:    pg,
-		cbClient:     cbClient,
-		ledgerClient: mockLedger,
+		datastore: pg,
+		cbClient:  cbClient,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 	}
 	handler := GetAvailablePromotions(service)
 
@@ -347,9 +352,12 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore:        pg,
-		cbClient:         cbClient,
-		ledgerClient:     mockLedger,
+		datastore: pg,
+		cbClient:  cbClient,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 		reputationClient: mockReputation,
 	}
 
@@ -502,9 +510,12 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
-		cbClient:         mockCB,
-		ledgerClient:     mockLedger,
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 		reputationClient: mockReputation,
 	}
 
@@ -636,7 +647,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	}`, body, "an error is returned")
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
-	blindedCreds := JSONStringArray([]string{publicKey})
+	blindedCreds := jsonutils.JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
 	w := &wallet.Info{
 		ID:         walletID,
@@ -740,9 +751,12 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:    pg,
-		cbClient:     mockCB,
-		ledgerClient: mockLedger,
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
 	}
 	var issuerName string
 	mockCB.EXPECT().
@@ -765,7 +779,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 		Type:      "ugp",
 		NumGrants: 10,
 		Value:     decimal.NewFromFloat(20.0),
-		Platform:  "",
+		Platform:  "desktop",
 		Active:    true,
 	}
 
@@ -777,7 +791,7 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Assert().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
 }
 
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
@@ -796,24 +810,47 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		balanceClient:    mockBalance,
 	}
 	handler := PostReportClobberedClaims(service)
-	id := uuid.NewV4()
-	requestPayloadStruct := ClobberedClaimsRequest{
-		ClaimIDs: []uuid.UUID{id},
+	id0 := uuid.NewV4()
+	id1 := uuid.NewV4()
+	id2 := uuid.NewV4()
+	run := func(ids []uuid.UUID) int {
+		requestPayloadStruct := ClobberedClaimsRequest{
+			ClaimIDs: ids,
+		}
+		payload, err := json.Marshal(&requestPayloadStruct)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
+		suite.Require().NoError(err)
+
+		rctx := chi.NewRouteContext()
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
 	}
-	payload, err := json.Marshal(&requestPayloadStruct)
-	suite.Require().NoError(err)
-	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
-	suite.Require().NoError(err)
+	code := run([]uuid.UUID{})
+	suite.Require().Equal(http.StatusOK, code)
 
-	rctx := chi.NewRouteContext()
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusOK, rr.Code)
-	var claims []ClobberedCreds
+	code = run([]uuid.UUID{
+		id0,
+	})
+	suite.Require().Equal(http.StatusOK, code)
+	claims := []ClobberedCreds{}
 	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id)
+	suite.Require().Equal(claims[0].ID, id0)
+
+	code = run([]uuid.UUID{
+		id0,
+		id1,
+		id2,
+	})
+	suite.Require().Equal(http.StatusOK, code)
+	claims = []ClobberedCreds{}
+	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().Equal(claims[0].ID, id0)
+	suite.Require().Equal(claims[1].ID, id1)
+	suite.Require().Equal(claims[2].ID, id2)
 }
 
 func (suite *ControllersTestSuite) TestClaimCompatability() {
@@ -830,6 +867,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
+		wallet: walletservice.Service{
+			Datastore: pg,
+		},
 	}
 
 	scenarios := []struct {

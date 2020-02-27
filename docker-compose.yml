@@ -21,6 +21,9 @@ services:
       - CHALLENGE_BYPASS_TOKEN
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
+      - DONOR_WALLET_CARD_ID
+      - DONOR_WALLET_PRIVATE_KEY
+      - DONOR_WALLET_PUBLIC_KEY
       - GRANT_SIGNATOR_PUBLIC_KEY
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY

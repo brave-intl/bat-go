@@ -5,19 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
-	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jmoiron/sqlx"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-
-	// needed for magic migration
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}
@@ -30,10 +26,11 @@ type ClobberedCreds struct {
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -56,10 +53,6 @@ type Datastore interface {
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	// InsertWallet inserts the given wallet
-	InsertWallet(wallet *wallet.Info) error
-	// GetWallet by ID
-	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
@@ -77,6 +70,7 @@ type Datastore interface {
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
+	walletservice.ReadOnlyDatastore
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -91,8 +85,6 @@ type ReadOnlyDatastore interface {
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	// GetWallet by ID
-	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
@@ -102,64 +94,16 @@ type ReadOnlyDatastore interface {
 
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
-	*sqlx.DB
-}
-
-// NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
-func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
-	m, err := migrate.NewWithDatabaseInstance(
-		dbMigrationsURL,
-		"postgres",
-		driver,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return m, err
-}
-
-// Migrate the Postgres instance
-func (pg *Postgres) Migrate() error {
-	m, err := pg.NewMigrate()
-	if err != nil {
-		return err
-	}
-
-	err = m.Migrate(5)
-	if err != migrate.ErrNoChange && err != nil {
-		return err
-	}
-	return nil
+	grantserver.Postgres
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
-	if len(databaseURL) == 0 {
-		databaseURL = os.Getenv("DATABASE_URL")
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+	if pg != nil {
+		return &Postgres{*pg}, err
 	}
-
-	db, err := sqlx.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	pg := &Postgres{db}
-
-	if performMigration {
-		err = pg.Migrate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return pg, nil
+	return nil, err
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -272,38 +216,6 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	return nil, nil
 }
 
-// InsertWallet inserts the given wallet
-func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
-	// NOTE on conflict do nothing because none of the wallet information is updateable
-	statement := `
-	insert into wallets (id, provider, provider_id, public_key)
-	values ($1, $2, $3, $4)
-	on conflict do nothing
-	returning *`
-	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// GetWallet by ID
-func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
-	statement := "select * from wallets where id = $1"
-	wallets := []wallet.Info{}
-	err := pg.DB.Select(&wallets, statement, ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(wallets) > 0 {
-		return &wallets[0], nil
-	}
-
-	return nil, nil
-}
-
 // CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error) {
 	statement := `
@@ -335,7 +247,7 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -630,8 +542,8 @@ func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bo
 
 	type SigningJob struct {
 		Issuer
-		ClaimID      uuid.UUID       `db:"claim_id"`
-		BlindedCreds JSONStringArray `db:"blinded_creds"`
+		ClaimID      uuid.UUID                 `db:"claim_id"`
+		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
 	}
 
 	statement := `

@@ -1,6 +1,6 @@
 // +build integration
 
-package promotion
+package service
 
 import (
 	"context"
@@ -26,8 +26,8 @@ func TestGetOrCreateWallet(t *testing.T) {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(nil, nil)
 
 	var service Service
-	service.datastore = pg
-	service.ledgerClient = mockLedger
+	service.Datastore = pg
+	service.LedgerClient = mockLedger
 
 	wallet, err := service.GetOrCreateWallet(context.Background(), walletID)
 
