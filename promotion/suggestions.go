@@ -30,8 +30,9 @@ type CredentialBinding struct {
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
-	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel string `json:"channel" valid:"-"`
+	Type    string     `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip|payment)"`
+	Channel string     `json:"channel" valid:"-"`
+	OrderID *uuid.UUID `json:"orderId,omitempty" valid:"-"`
 }
 
 // Base64Decode unmarshalls the suggestion from a string.
@@ -216,6 +217,21 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
+	// Delete this section once the issue is completed
+	// https://github.com/brave-intl/bat-go/issues/263
+	if suggestion.OrderID != nil {
+		// TODO Should we iterate through the funding types like below and create transactions for each type?
+		// Is this a good place to put this or should we moved this into the RunNextSuggestion function?
+		_, err := service.datastore.CreateTransaction(*suggestion.OrderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", total)
+		if err != nil {
+			return errors.Wrap(err, "Error recording order transaction")
+		}
+		err = service.UpdateOrderStatus(*suggestion.OrderID)
+		if err != nil {
+			return errors.Wrap(err, "Error updating order status")
+		}
+	}
+
 	for _, fundingType := range fundingTypes {
 		total := metrics[fundingType]
 		value, _ := total.Float64()
@@ -241,6 +257,31 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 				raven.CaptureMessage("error processing suggestion job", nil)
 			}
 		}()
+	}
+
+	return nil
+}
+
+// Delete this function once the issue is completed
+// https://github.com/brave-intl/bat-go/issues/263
+
+// UpdateOrderStatus checks to see if an order has been paid and updates it if so
+func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	order, err := service.datastore.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	sum, err := service.datastore.GetSumForTransactions(orderID)
+	if err != nil {
+		return err
+	}
+
+	if sum.GreaterThanOrEqual(order.TotalPrice) {
+		err = service.datastore.UpdateOrder(orderID, "paid")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
