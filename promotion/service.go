@@ -2,7 +2,6 @@ package promotion
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -26,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
+	"golang.org/x/crypto/ed25519"
 )
 
 const localEnv = "local"
