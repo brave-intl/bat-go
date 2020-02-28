@@ -804,9 +804,9 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	suite.Require().Error(err)
 
 	// After err no further job should run
-	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
+	attempted, err = pg.RunNextDrainJob(context.Background(), mockDrainWorker)
 	suite.Assert().Equal(false, attempted)
-	suite.Require().noError(err)
+	suite.Require().NoError(err)
 
 	// FIXME add test for successful drain job
 }
