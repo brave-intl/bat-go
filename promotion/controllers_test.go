@@ -464,6 +464,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
@@ -590,6 +593,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	codec := service.codecs["suggestion"]
 
 	// :cry:
+
 	err = r.SetOffset(offset)
 	suite.Require().NoError(err)
 
@@ -1005,6 +1009,8 @@ func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 }
 
 func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
