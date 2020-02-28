@@ -167,6 +167,7 @@ func main() {
 
 	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
 	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
+	go jobWorker(serverCtx, service.RunNextDrainJob, 5*time.Second)
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
