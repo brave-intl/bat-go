@@ -803,25 +803,12 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	suite.Assert().Equal(true, attempted)
 	suite.Require().Error(err)
 
-	/*
-		// One signing job should run
-			mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(nil, errors.New("Worker failed"))
-			attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
-			suite.Require().Equal(true, attempted)
-			suite.Require().Error(err)
+	// After err no further job should run
+	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
+	suite.Assert().Equal(false, attempted)
+	suite.Require().noError(err)
 
-			// Signing job should rerun on failure
-			mockClaimWorker.EXPECT().SignClaimCreds(gomock.Any(), gomock.Eq(claim.ID), gomock.Eq(*issuer), gomock.Eq([]string(blindedCreds))).Return(creds, nil)
-			attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
-			suite.Require().Equal(true, attempted)
-			suite.Require().NoError(err)
-
-			// No further jobs should run after success
-			attempted, err = pg.RunNextClaimJob(context.Background(), mockClaimWorker)
-			suite.Require().Equal(false, attempted)
-			suite.Require().NoError(err)
-
-	*/
+	// FIXME add test for successful drain job
 }
 
 func TestPostgresTestSuite(t *testing.T) {

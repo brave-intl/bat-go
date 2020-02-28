@@ -740,7 +740,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 		return attempted, err
 	}
 
-	// FIXME
+	// FIXME maybe useful to later move definition outside of this method scope
 	type DrainJob struct {
 		ID            uuid.UUID       `db:"id"`
 		Credentials   string          `db:"credentials"`

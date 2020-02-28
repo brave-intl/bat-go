@@ -407,15 +407,8 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
-			return &handlers.AppError{
-				Message: "Error validating request",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"paymentId": "paymentId must match signature",
-					},
-				},
-			}
+			return handlers.ValidationError("request",
+				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
 		err = service.Drain(r.Context(), req.Credentials, req.WalletID)
@@ -426,7 +419,7 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 			case govalidator.Errors:
 				return handlers.WrapValidationError(err)
 			default:
-				// FIXME
+				// FIXME not all remaining errors should be mapped to 400
 				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}

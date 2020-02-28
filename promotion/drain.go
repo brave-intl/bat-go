@@ -3,6 +3,7 @@ package promotion
 import (
 	"context"
 
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/pkg/errors"
@@ -86,7 +87,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	// FIXME
-	//return grantWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.PayoutAddress)
-	return nil, nil
+	// FIXME should use idempotency key
+	return service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), *wallet.PayoutAddress)
 }
