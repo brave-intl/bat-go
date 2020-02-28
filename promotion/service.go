@@ -350,7 +350,12 @@ func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
 	return service.datastore.RunNextClaimJob(ctx, service)
 }
 
-// RunNextSuggestionJob takes the next claim job and completes it
+// RunNextSuggestionJob takes the next suggestion job and completes it
 func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 	return service.datastore.RunNextSuggestionJob(ctx, service)
+}
+
+// RunNextDrainJob takes the next drain job and completes it
+func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
+	return service.datastore.RunNextDrainJob(ctx, service)
 }
