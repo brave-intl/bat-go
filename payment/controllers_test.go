@@ -8,9 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/crypto/ed25519"
@@ -358,9 +362,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
-func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
-	suite.T().Skip()
-
+func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	numVotes := 20
 
 	mockCtrl := gomock.NewController(suite.T())
@@ -370,6 +372,21 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	// Create connection to Kafka
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, err := tlsDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
 	service := &Service{
 		datastore: pg,
 		cbClient:  mockCB,
@@ -377,6 +394,9 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 			Datastore: pg,
 		},
 	}
+
+	err = service.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
 
 	// Create the order first
 	handler := CreateOrder(service)
@@ -472,6 +492,60 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
+	// Test the Kafka Event was put into place
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            voteTopic,
+		Dialer:           service.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+
+	codec := service.codecs["vote"]
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
+	fmt.Println("🌵🌵🌵🌵🌵🌵🌵🌵🌵🌵")
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	fmt.Println("🏜🏜🏜🏜🏜🏜🏜🏜🏜🏜")
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	suite.Require().NoError(err)
+
+	suggestionEventJSON, err := codec.TextualFromNative(nil, suggestionEvent)
+	suite.Require().NoError(err)
+
+	// eventMap, ok := suggestionEvent.(map[string]interface{})
+	// suite.Require().True(ok)
+	// id, ok := eventMap["id"].(string)
+	// suite.Require().True(ok)
+	// createdAt, ok := eventMap["createdAt"].(string)
+	// suite.Require().True(ok)
+	fmt.Println(string(suggestionEventJSON))
+
+	suite.Assert().Contains(string(suggestionEventJSON), "id")
+
+	// suite.Assert().JSONEq(`{
+	// 	"id": "`+id+`",
+	// 	"createdAt": "`+createdAt+`",
+	// 	"type": "`+suggestion.Type+`",
+	// 	"channel": "`+suggestion.Channel+`",
+	// 	"totalAmount": "0.25",
+	// 	"funding": [
+	// 		{
+	// 			"type": "ugp",
+	// 			"amount": "0.25",
+	// 			"cohort": "control",
+	// 			"promotion": "`+promotion.ID.String()+`"
+	// 		}
+	// 	]
+	// }`, string(suggestionEventJSON), "Incorrect suggestion event")
+
+	// Get the order credentials
 	handler = GetOrderCreds(service)
 	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
 	suite.Require().NoError(err)

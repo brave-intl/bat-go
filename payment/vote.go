@@ -79,6 +79,13 @@ func (service *Service) Vote(ctx context.Context, credentials []CredentialBindin
 			return
 		}
 
+		// var voteEvent []byte
+
+		// err = service.kafkaWriter.WriteMessages(ctx,
+		// 	kafka.Message{
+		// 		Value: voteEvent,
+		// 	},
+		// )
 		// FIXME emit kafka event
 
 		fmt.Println("Valid vote recieved:", voteText)
