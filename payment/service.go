@@ -46,7 +46,7 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 	var currency string
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}

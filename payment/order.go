@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +35,13 @@ type OrderItem struct {
 	Subtotal  decimal.Decimal `json:"subtotal"`
 }
 
+func checkMacaroon(caveat string) {
+	fmt.Println("OH HEck yeah?")
+
+}
+
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
 		return nil, err
@@ -52,6 +58,9 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	// I think we simply want to verify the signature and not the caveats?
 	// SO maybe VerifySignature
 	// https://github.com/go-macaroon/macaroon#func-macaroon-verifysignature
+	secret := "secret"
+	discharges := []*macaroon.Macaroon
+	mac.Verify([]byte(sescret), checkMacaroon, discharges)
 
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
