@@ -1,7 +1,6 @@
 package payment
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -25,50 +24,37 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID        uuid.UUID       `json:"id" db:"id"`
-	OrderID   uuid.UUID       `json:"order_id" db:"order_id"`
-	CreatedAt *time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt *time.Time      `json:"updatedAt" db:"updated_at"`
-	Currency  string          `json:"currency" db:"currency"`
-	Quantity  int             `json:"quantity" db:"quantity"`
-	Price     decimal.Decimal `json:"price" db:"price"`
-	Subtotal  decimal.Decimal `json:"subtotal"`
-}
-
-func checkMacaroon(caveat string) error {
-	fmt.Println("Caveat: " + caveat)
-
-	return nil
+	ID          uuid.UUID       `json:"id" db:"id"`
+	OrderID     uuid.UUID       `json:"order_id" db:"order_id"`
+	CreatedAt   *time.Time      `json:"createdAt" db:"created_at"`
+	UpdatedAt   *time.Time      `json:"updatedAt" db:"updated_at"`
+	Currency    string          `json:"currency" db:"currency"`
+	Quantity    int             `json:"quantity" db:"quantity"`
+	Price       decimal.Decimal `json:"price" db:"price"`
+	Subtotal    decimal.Decimal `json:"subtotal"`
+	Description string          `json:"description"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
 func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
-	fmt.Println("Creating SKU")
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Creating Macaroon")
 	mac := &macaroon.Macaroon{}
 	err = mac.UnmarshalBinary(macBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO Figure out how to verify macaroon using library
-	// I think we have to call .Bind()
-	// https://github.com/go-macaroon/macaroon#func-macaroon-bind
-	// I think we simply want to verify the signature and not the caveats?
-	// SO maybe VerifySignature
-	// https://github.com/go-macaroon/macaroon#func-macaroon-verifysignature
-	fmt.Println("YEs?")
+	// FIXME Replace this with a lookup for the merchant's secret.
 	secret := "secret"
 	var discharges []*macaroon.Macaroon
-	err = mac.Verify([]byte(secret), checkMacaroon, discharges)
+	err = mac.Verify([]byte(secret), CheckCaveat, discharges)
+	// Macaroon is signed with the wrong secret for the merchant. Fishy! 🐟
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("no error?")
 
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
@@ -94,9 +80,11 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			}
 		case "currency":
 			orderItem.Currency = value
+		case "description":
+			orderItem.Description = value
 		}
-
 	}
+
 	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
 		return nil, err
