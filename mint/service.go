@@ -34,7 +34,7 @@ type Mint struct {
 // InitService creates a mint for printing promotions and grants
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	// FOR DEV / STAGING ENVS ONLY
-	if os.Getenv("ENV") == "production" {
+	if os.Getenv("ENV") != "local" {
 		return nil, nil
 	}
 	slackClient, err := slack.New()
