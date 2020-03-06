@@ -109,6 +109,7 @@ type Service struct {
 	kafkaWriter      *kafka.Writer
 	kafkaDialer      *kafka.Dialer
 	hotWallet        *uphold.Wallet
+	drainChannel     chan *w.TransactionInfo
 }
 
 func readFileFromEnvLoc(env string, required bool) ([]byte, error) {

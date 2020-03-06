@@ -28,6 +28,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
@@ -983,6 +984,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	ch := make(chan *wallet.TransactionInfo)
+
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
@@ -999,6 +1002,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		PublicKey:   hex.EncodeToString(publicKey),
 		LastBalance: nil,
 	}
+	wal := uphold.Wallet{
+		Info:    wallet,
+		PrivKey: privKey,
+		PubKey:  publicKey,
+	}
+	err = wal.Register("drain-card-test")
+	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockReputation.EXPECT().IsWalletReputable(
@@ -1020,7 +1030,11 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 			LedgerClient: mockLedger,
 		},
 		reputationClient: mockReputation,
+		drainChannel:     ch,
 	}
+
+	err = service.InitHotWallet()
+	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
@@ -1054,6 +1068,12 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	}, nil)
 
 	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(walletID.String())).Return(nil)
 
 	handler := middleware.HTTPSignedOnly(service)(DrainSuggestion(service))
 
@@ -1092,11 +1112,18 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	payoutAddress := uuid.NewV4().String()
+	payoutAddress := wal.ProviderID
 	wallet.PayoutAddress = &payoutAddress
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	tx := <-ch
+	suite.Assert().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+
+	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	_, err = wal.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	suite.Assert().NoError(err)
 }

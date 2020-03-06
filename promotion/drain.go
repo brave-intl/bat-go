@@ -96,5 +96,14 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	// FIXME should use idempotency key
-	return service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), *wallet.PayoutAddress)
+	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), *wallet.PayoutAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
+	}
+
+	return tx, err
 }
