@@ -390,20 +390,19 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = submit(req)
+
+	respBody, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
-	var txInfo wallet.TransactionInfo
-	txInfo.Probi = probi
-	{
-		tmp := altcurrency
-		txInfo.AltCurrency = &tmp
+	var uhResp upholdTransactionResponse
+	err = json.Unmarshal(respBody, &uhResp)
+	if err != nil {
+		return nil, err
 	}
-	txInfo.Destination = destination
 
-	return &txInfo, nil
+	return uhResp.ToTransactionInfo(), nil
 }
 
 func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, error) {
