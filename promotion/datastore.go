@@ -5,19 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
-	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jmoiron/sqlx"
+	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-
-	// needed for magic migration
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}
@@ -30,10 +26,11 @@ type ClobberedCreds struct {
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -56,10 +53,6 @@ type Datastore interface {
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	// InsertWallet inserts the given wallet
-	InsertWallet(wallet *wallet.Info) error
-	// GetWallet by ID
-	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
@@ -73,10 +66,15 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
+	// DrainClaim by marking the claim as drained and inserting a new drain entry
+	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
+	// RunNextDrainJob to process deposits if there is one waiting
+	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
+	walletservice.ReadOnlyDatastore
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -91,8 +89,6 @@ type ReadOnlyDatastore interface {
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	// GetWallet by ID
-	GetWallet(id uuid.UUID) (*wallet.Info, error)
 	// GetClaimSummary gets the number of grants for a specific type
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
@@ -102,64 +98,16 @@ type ReadOnlyDatastore interface {
 
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
-	*sqlx.DB
-}
-
-// NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
-func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
-	m, err := migrate.NewWithDatabaseInstance(
-		dbMigrationsURL,
-		"postgres",
-		driver,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return m, err
-}
-
-// Migrate the Postgres instance
-func (pg *Postgres) Migrate() error {
-	m, err := pg.NewMigrate()
-	if err != nil {
-		return err
-	}
-
-	err = m.Migrate(5)
-	if err != migrate.ErrNoChange && err != nil {
-		return err
-	}
-	return nil
+	grantserver.Postgres
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
-	if len(databaseURL) == 0 {
-		databaseURL = os.Getenv("DATABASE_URL")
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+	if pg != nil {
+		return &Postgres{*pg}, err
 	}
-
-	db, err := sqlx.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	pg := &Postgres{db}
-
-	if performMigration {
-		err = pg.Migrate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return pg, nil
+	return nil, err
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -272,38 +220,6 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	return nil, nil
 }
 
-// InsertWallet inserts the given wallet
-func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
-	// NOTE on conflict do nothing because none of the wallet information is updateable
-	statement := `
-	insert into wallets (id, provider, provider_id, public_key)
-	values ($1, $2, $3, $4)
-	on conflict do nothing
-	returning *`
-	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// GetWallet by ID
-func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
-	statement := "select * from wallets where id = $1"
-	wallets := []wallet.Info{}
-	err := pg.DB.Select(&wallets, statement, ID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(wallets) > 0 {
-		return &wallets[0], nil
-	}
-
-	return nil, nil
-}
-
 // CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error) {
 	statement := `
@@ -335,7 +251,7 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -630,8 +546,8 @@ func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bo
 
 	type SigningJob struct {
 		Issuer
-		ClaimID      uuid.UUID       `db:"claim_id"`
-		BlindedCreds JSONStringArray `db:"blinded_creds"`
+		ClaimID      uuid.UUID                 `db:"claim_id"`
+		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
 	}
 
 	statement := `
@@ -762,6 +678,116 @@ limit 1`
 	}
 
 	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
+}
+
+// DrainClaim by marking the claim as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	statement := `
+	insert into claim_drain (credentials, wallet_id, total)
+	values ($1, $2, $3)
+	returning *`
+	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RunNextDrainJob to process deposits if there is one waiting
+func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+	tx, err := pg.DB.Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+
+	// FIXME maybe useful to later move definition outside of this method scope
+	type DrainJob struct {
+		ID            uuid.UUID       `db:"id"`
+		Credentials   string          `db:"credentials"`
+		WalletID      uuid.UUID       `db:"wallet_id"`
+		Total         decimal.Decimal `db:"total"`
+		TransactionID *string         `db:"transaction_id"`
+		Erred         bool            `db:"erred"`
+	}
+
+	statement := `
+select *
+from claim_drain
+where not erred and transaction_id is null
+for update skip locked
+limit 1`
+
+	jobs := []DrainJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return attempted, nil
+	}
+
+	job := jobs[0]
+	attempted = true
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
+	if err != nil || txn == nil {
+		// FIXME only non-retriable errors should set erred
+		{
+			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
+			if err != nil {
+				_ = tx.Rollback()
+			}
+			_ = tx.Commit()
+		}
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return attempted, err

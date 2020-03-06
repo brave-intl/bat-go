@@ -12,11 +12,13 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -42,6 +44,7 @@ func Router(service *Service) chi.Router {
 func SuggestionsRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
+	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
 	return r
 }
 
@@ -52,7 +55,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		return nil, errors.Wrap(err, "KeyID format is invalid")
 	}
 
-	wallet, err := service.GetOrCreateWallet(ctx, walletID)
+	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error getting wallet")
 	}
@@ -82,6 +85,7 @@ type PromotionsResponse struct {
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var walletID *uuid.UUID
+		var filter string
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
@@ -103,6 +107,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			}
 			walletID = &tmp
 			logging.AddWalletIDToContext(r.Context(), tmp)
+			filter = "walletID"
 		}
 
 		platform := r.URL.Query().Get("platform")
@@ -135,6 +140,19 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(&PromotionsResponse{*promotions}); err != nil {
 			panic(err)
+		}
+		if len(filter) == 0 {
+			filter = "none"
+		}
+		promotionGetCount.With(prometheus.Labels{
+			"filter":  filter,
+			"legacy":  fmt.Sprint(legacy),
+			"migrate": fmt.Sprint(migrate),
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
 		}
 		return nil
 	})
@@ -216,9 +234,9 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 // GetClaimResponse includes signed credentials and a batch proof showing they were signed by the public key
 type GetClaimResponse struct {
-	SignedCreds JSONStringArray `json:"signedCreds"`
-	BatchProof  string          `json:"batchProof"`
-	PublicKey   string          `json:"publicKey"`
+	SignedCreds jsonutils.JSONStringArray `json:"signedCreds"`
+	BatchProof  string                    `json:"batchProof"`
+	PublicKey   string                    `json:"publicKey"`
 }
 
 // GetClaim is the handler for checking on a particular claim's status
@@ -354,6 +372,55 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 			default:
 				// FIXME
 				return handlers.WrapError(err, "Error making suggestion", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
+// DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
+type DrainSuggestionRequest struct {
+	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// DrainSuggestion is the handler for draining ad suggestions for a verified wallet
+func DrainSuggestion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req DrainSuggestionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logging.AddWalletIDToContext(r.Context(), req.WalletID)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if req.WalletID.String() != keyID {
+			return handlers.ValidationError("request",
+				map[string]string{"paymentId": "paymentId must match signature"})
+		}
+
+		err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME not all remaining errors should be mapped to 400
+				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}
 

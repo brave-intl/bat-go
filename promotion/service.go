@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"io/ioutil"
@@ -12,15 +13,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/utils/clients/ledger"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
+	w "github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
+	"golang.org/x/crypto/ed25519"
 )
+
+const localEnv = "local"
 
 var (
 	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
@@ -91,15 +99,17 @@ func init() {
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
+	wallet           wallet.Service
 	datastore        Datastore
 	roDatastore      ReadOnlyDatastore
 	cbClient         cbr.Client
-	ledgerClient     ledger.Client
 	reputationClient reputation.Client
 	balanceClient    balance.Client
 	codecs           map[string]*goavro.Codec
 	kafkaWriter      *kafka.Writer
 	kafkaDialer      *kafka.Dialer
+	hotWallet        *uphold.Wallet
+	drainChannel     chan *w.TransactionInfo
 }
 
 func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
@@ -246,14 +256,47 @@ func (service *Service) InitKafka() error {
 	return nil
 }
 
+// InitHotWallet by reading the keypair and card id from the environment
+func (service *Service) InitHotWallet() error {
+	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
+
+	if len(grantWalletCardID) > 0 {
+		var info w.Info
+		info.Provider = "uphold"
+		info.ProviderID = grantWalletCardID
+		{
+			tmp := altcurrency.BAT
+			info.AltCurrency = &tmp
+		}
+
+		var pubKey httpsignature.Ed25519PubKey
+		var privKey ed25519.PrivateKey
+		var err error
+
+		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
+		if err != nil {
+			return errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+		}
+		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
+		if err != nil {
+			return errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+		}
+
+		service.hotWallet, err = uphold.New(info, privKey, pubKey)
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("ENV") != localEnv {
+		return errors.New("GRANT_WALLET_CARD_ID must be set in production")
+	}
+	return nil
+}
+
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	cbClient, err := cbr.New()
-	if err != nil {
-		return nil, err
-	}
-
-	ledgerClient, err := ledger.New()
 	if err != nil {
 		return nil, err
 	}
@@ -264,22 +307,31 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	}
 
 	var reputationClient *reputation.HTTPClient
-	if os.Getenv("ENV") != "local" || len(os.Getenv("REPUTATION_SERVER")) > 0 {
+	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
 		reputationClient, err = reputation.New()
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	walletService, err := wallet.InitService(datastore, roDatastore)
+	if err != nil {
+		return nil, err
+	}
+
 	service := &Service{
 		datastore:        datastore,
 		roDatastore:      roDatastore,
 		cbClient:         cbClient,
-		ledgerClient:     ledgerClient,
 		reputationClient: reputationClient,
 		balanceClient:    balanceClient,
+		wallet:           *walletService,
 	}
 	err = service.InitKafka()
+	if err != nil {
+		return nil, err
+	}
+	err = service.InitHotWallet()
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +351,12 @@ func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
 	return service.datastore.RunNextClaimJob(ctx, service)
 }
 
-// RunNextSuggestionJob takes the next claim job and completes it
+// RunNextSuggestionJob takes the next suggestion job and completes it
 func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 	return service.datastore.RunNextSuggestionJob(ctx, service)
+}
+
+// RunNextDrainJob takes the next drain job and completes it
+func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
+	return service.datastore.RunNextDrainJob(ctx, service)
 }

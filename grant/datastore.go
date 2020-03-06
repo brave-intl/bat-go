@@ -2,15 +2,12 @@ package grant
 
 import (
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
-	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -41,66 +38,18 @@ type ReadOnlyDatastore interface {
 	GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error)
 }
 
-// Postgres is a WIP Datastore
+// Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
-	*sqlx.DB
-}
-
-// NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
-func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	dbMigrationsURL := os.Getenv("DATABASE_MIGRATIONS_URL")
-	m, err := migrate.NewWithDatabaseInstance(
-		dbMigrationsURL,
-		"postgres",
-		driver,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return m, err
-}
-
-// Migrate the Postgres instance
-func (pg *Postgres) Migrate() error {
-	m, err := pg.NewMigrate()
-	if err != nil {
-		return err
-	}
-
-	err = m.Migrate(5)
-	if err != migrate.ErrNoChange && err != nil {
-		return err
-	}
-	return nil
+	grantserver.Postgres
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool) (*Postgres, error) {
-	if len(databaseURL) == 0 {
-		databaseURL = os.Getenv("DATABASE_URL")
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+	if pg != nil {
+		return &Postgres{*pg}, err
 	}
-
-	db, err := sqlx.Open("postgres", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	pg := &Postgres{db}
-
-	if performMigration {
-		err = pg.Migrate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return pg, nil
+	return nil, err
 }
 
 // UpsertWallet upserts the given wallet

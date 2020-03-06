@@ -64,10 +64,11 @@ func (s *Suggestion) Base64Decode(text string) error {
 
 // FundingSource describes where funds for this suggestion should come from
 type FundingSource struct {
-	Type        string          `json:"type"`
-	Amount      decimal.Decimal `json:"amount"`
-	Cohort      string          `json:"cohort"`
-	PromotionID uuid.UUID       `json:"promotion"`
+	Type        string                     `json:"type"`
+	Amount      decimal.Decimal            `json:"amount"`
+	Cohort      string                     `json:"cohort"`
+	PromotionID uuid.UUID                  `json:"promotion"`
+	Credentials []cbr.CredentialRedemption `json:"-"`
 }
 
 // SuggestionEvent encapsulates user and server provided information about a request to contribute
@@ -118,6 +119,58 @@ type SuggestionWorker interface {
 	RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 }
 
+// GetCredentialRedemptions as well as total and funding sources from a list of credential bindings
+func (service *Service) GetCredentialRedemptions(ctx context.Context, credentials []CredentialBinding) (total decimal.Decimal, requestCredentials []cbr.CredentialRedemption, fundingSources map[string]FundingSource, err error) {
+	total = decimal.Zero
+	requestCredentials = make([]cbr.CredentialRedemption, len(credentials))
+	fundingSources = make(map[string]FundingSource)
+	err = nil
+
+	issuers := make(map[string]*Issuer)
+	promotions := make(map[string]*Promotion)
+
+	for i := 0; i < len(credentials); i++ {
+		var ok bool
+		var issuer *Issuer
+		var promotion *Promotion
+
+		publicKey := credentials[i].PublicKey
+
+		if issuer, ok = issuers[publicKey]; !ok {
+			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
+			if err != nil {
+				err = errors.Wrap(err, "Error finding issuer")
+				return
+			}
+		}
+
+		requestCredentials[i].Issuer = issuer.Name()
+		requestCredentials[i].TokenPreimage = credentials[i].TokenPreimage
+		requestCredentials[i].Signature = credentials[i].Signature
+
+		if promotion, ok = promotions[publicKey]; !ok {
+			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
+			if err != nil {
+				err = errors.Wrap(err, "Error finding promotion")
+				return
+			}
+		}
+		value := promotion.CredentialValue()
+		total = total.Add(value)
+
+		fundingSource, ok := fundingSources[publicKey]
+		fundingSource.Amount = fundingSource.Amount.Add(value)
+		fundingSource.Credentials = append(fundingSource.Credentials, requestCredentials[i])
+		if !ok {
+			fundingSource.Type = promotion.Type
+			fundingSource.Cohort = "control"
+			fundingSource.PromotionID = promotion.ID
+		}
+		fundingSources[publicKey] = fundingSource
+	}
+	return
+}
+
 // Suggest that a contribution is made
 func (service *Service) Suggest(ctx context.Context, credentials []CredentialBinding, suggestionText string) error {
 	var suggestion Suggestion
@@ -131,50 +184,12 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
-	total := decimal.Zero
-	requestCredentials := make([]cbr.CredentialRedemption, len(credentials))
-	issuers := make(map[string]*Issuer)
-	promotions := make(map[string]*Promotion)
-	fundingSources := make(map[string]FundingSource)
-
-	for i := 0; i < len(credentials); i++ {
-		var ok bool
-		var issuer *Issuer
-		var promotion *Promotion
-
-		publicKey := credentials[i].PublicKey
-
-		if issuer, ok = issuers[publicKey]; !ok {
-			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
-			if err != nil {
-				return errors.Wrap(err, "Error finding issuer")
-			}
-		}
-
-		requestCredentials[i].Issuer = issuer.Name()
-		requestCredentials[i].TokenPreimage = credentials[i].TokenPreimage
-		requestCredentials[i].Signature = credentials[i].Signature
-
-		if promotion, ok = promotions[publicKey]; !ok {
-			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
-			if err != nil {
-				return errors.Wrap(err, "Error finding promotion")
-			}
-		}
-		value := promotion.CredentialValue()
-		total = total.Add(value)
-
-		fundingSource, ok := fundingSources[publicKey]
-		fundingSource.Amount = fundingSource.Amount.Add(value)
-		if !ok {
-			fundingSource.Type = promotion.Type
-			fundingSource.Cohort = "control"
-			fundingSource.PromotionID = promotion.ID
-		}
-		fundingSources[publicKey] = fundingSource
+	createdAt, err := time.Now().UTC().MarshalText()
+	if err != nil {
+		return err
 	}
 
-	createdAt, err := time.Now().UTC().MarshalText()
+	total, requestCredentials, fundingSources, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
 		return err
 	}

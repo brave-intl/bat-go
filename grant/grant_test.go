@@ -18,10 +18,11 @@ import (
 
 func TestConsume(t *testing.T) {
 	GrantSignatorPublicKeyHex = "f03bccbcd2314d721f2375a669e7b817ef61067ab18a5da5df5b24b73feba8b7"
-	SettlementDestination = "foo@bar.com"
 	refreshBalance = false
 	testSubmit = false
 	registerGrantInstrumentation = false
+
+	uphold.SettlementDestination = "foo@bar.com"
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()

@@ -53,10 +53,12 @@ const (
 )
 
 var (
-	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
-	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
-	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
-	upholdAPIBase = map[string]string{
+	// SettlementDestination is the address of the settlement wallet
+	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	accessToken           = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	environment           = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy           = os.Getenv("UPHOLD_HTTP_PROXY")
+	upholdAPIBase         = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
@@ -388,20 +390,19 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = submit(req)
+
+	respBody, _, err := submit(req)
 	if err != nil {
 		return nil, err
 	}
 
-	var txInfo wallet.TransactionInfo
-	txInfo.Probi = probi
-	{
-		tmp := altcurrency
-		txInfo.AltCurrency = &tmp
+	var uhResp upholdTransactionResponse
+	err = json.Unmarshal(respBody, &uhResp)
+	if err != nil {
+		return nil, err
 	}
-	txInfo.Destination = destination
 
-	return &txInfo, nil
+	return uhResp.ToTransactionInfo(), nil
 }
 
 func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, error) {
@@ -513,6 +514,25 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 	info.Destination = transaction.Destination
 
 	return &info, err
+}
+
+// VerifyAnonCardTransaction calls VerifyTransaction and checks the currency, amount and destination
+func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
+	txInfo, err := w.VerifyTransaction(transactionB64)
+	if err != nil {
+		return nil, err
+	}
+	if *txInfo.AltCurrency != altcurrency.BAT {
+		return nil, errors.New("only BAT denominated transactions are supported for anon cards")
+	}
+	if txInfo.Probi.LessThan(decimal.Zero) {
+		return nil, errors.New("anon card transaction cannot be for negative BAT")
+	}
+	if txInfo.Destination != SettlementDestination {
+		return nil, errors.New("anon card transactions must have settlement as their destination")
+	}
+
+	return txInfo, nil
 }
 
 type upholdTransactionResponseDestinationNode struct {

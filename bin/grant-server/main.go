@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	raven "github.com/getsentry/raven-go"
@@ -68,13 +69,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	roDB := os.Getenv("RO_DATABASE_URL")
 
 	var grantRoPg grant.ReadOnlyDatastore
-	grantPg, err := grant.NewPostgres("", true)
+	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		grantRoPg, err = grant.NewPostgres(roDB, false)
+		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -88,13 +89,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 
 	var roPg promotion.ReadOnlyDatastore
-	pg, err := promotion.NewPostgres("", true)
+	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		roPg, err = promotion.NewPostgres(roDB, false)
+		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -110,6 +111,21 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
+
+	if os.Getenv("FEATURE_ORDERS") != "" {
+		paymentPG, err := payment.NewPostgres("", true, "payment_db")
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+		}
+		paymentService, err := payment.InitService(paymentPG)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+			log.Panic().Err(err).Msg("Payment service initialization failed")
+		}
+		r.Mount("/v1/orders", payment.Router(paymentService))
+		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+	}
 	r.Get("/metrics", middleware.Metrics())
 
 	env := os.Getenv("ENV")
@@ -151,6 +167,7 @@ func main() {
 
 	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
 	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
+	go jobWorker(serverCtx, service.RunNextDrainJob, 5*time.Second)
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
