@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/clients"
-	errs "github.com/brave-intl/bat-go/utils/errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	_ "github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +37,7 @@ func TestGetIssuer(t *testing.T) {
 	issuer, err := client.GetIssuer(ctx, issuerName)
 	assert.Error(t, err, "Should not be able to get issuer")
 	// checking the error
-	httpError, ok := err.(errs.Error)
+	httpError, ok := err.(*errorutils.ErrorBundle)
 	assert.Equal(t, true, ok, "should be able to coerce to an error bundle")
 	httpState, ok := httpError.Data().(clients.HTTPState)
 	assert.Equal(t, true, ok, "should contain an HTTPState")

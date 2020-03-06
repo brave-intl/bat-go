@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -41,6 +40,26 @@ func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
 	}, nil
 }
 
+func (c *SimpleHTTPClient) newRequest(
+	method string,
+	resolvedURL string,
+	buf io.Reader,
+) (*http.Request, error) {
+	req, err := http.NewRequest(method, resolvedURL, buf)
+	if err != nil {
+		switch err.(type) {
+		case url.EscapeError:
+			err = NewHTTPError(err, ErrUnableToEscapeURL, http.StatusBadRequest, nil)
+		case url.InvalidHostError:
+			err = NewHTTPError(err, ErrInvalidHost, http.StatusBadRequest, nil)
+		default:
+			err = NewHTTPError(err, ErrMalformedRequest, http.StatusBadRequest, nil)
+		}
+		return nil, err
+	}
+	return req, nil
+}
+
 // NewRequest creaates a request, JSON encoding the body passed
 func (c *SimpleHTTPClient) NewRequest(
 	ctx context.Context,
@@ -55,27 +74,13 @@ func (c *SimpleHTTPClient) NewRequest(
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
 		if err != nil {
-			return nil, NewHTTPError("request", 0, err)
+			return nil, NewHTTPError(err, ErrUnableToEncodeBody, 0, nil)
 		}
 	}
 
-	req, err := http.NewRequest(method, resolvedURL.String(), buf)
+	req, err := c.newRequest(method, resolvedURL.String(), buf)
 	if err != nil {
-		status := 0
-		message := "request"
-		switch err.(type) {
-		case url.EscapeError:
-			status = http.StatusBadRequest
-			message = "request: unable to escape url"
-		case url.InvalidHostError:
-			status = http.StatusBadRequest
-			message = "request: invalid host"
-		}
-		return nil, NewHTTPError(
-			message,
-			status,
-			err,
-		)
+		return req, err
 	}
 
 	req.Header.Set("accept", "application/json")
@@ -97,14 +102,10 @@ func (c *SimpleHTTPClient) do(
 	v interface{},
 ) (*http.Response, error) {
 	resp, err := c.client.Do(req)
-	status := resp.StatusCode
 	if err != nil {
-		return nil, NewHTTPError(
-			"response",
-			status,
-			err,
-		)
+		return nil, err
 	}
+	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
 	logger := log.Ctx(ctx)
 	dump, err := httputil.DumpResponse(resp, true)
@@ -117,20 +118,12 @@ func (c *SimpleHTTPClient) do(
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)
 			if err != nil {
-				return resp, NewHTTPError(
-					"response",
-					status,
-					err,
-				)
+				return resp, NewHTTPError(err, ErrUnableToDecode, resp.StatusCode, v)
 			}
 		}
 		return resp, nil
 	}
-	return resp, NewHTTPError(
-		"response",
-		status,
-		fmt.Errorf("Request error"),
-	)
+	return resp, NewHTTPError(err, ErrProtocolError, resp.StatusCode, v)
 }
 
 // Do the specified http request, decoding the JSON result into v

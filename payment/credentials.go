@@ -2,11 +2,12 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -75,7 +76,7 @@ type OrderCreds struct {
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.datastore.GetOrder(orderID)
 	if err != nil {
-		return errors.Wrap(err, "Error finding order")
+		return errorutils.Wrap(err, "Error finding order")
 	}
 
 	if !order.IsPaid() {
@@ -84,7 +85,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 
 	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
 	if err != nil {
-		return errors.Wrap(err, "Error finding issuer")
+		return errorutils.Wrap(err, "Error finding issuer")
 	}
 
 	orderCreds := OrderCreds{
@@ -96,7 +97,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 
 	err = service.datastore.InsertOrderCreds(&orderCreds)
 	if err != nil {
-		return errors.Wrap(err, "Error inserting order creds")
+		return errorutils.Wrap(err, "Error inserting order creds")
 	}
 
 	go func() {

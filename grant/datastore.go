@@ -1,6 +1,7 @@
 package grant
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 

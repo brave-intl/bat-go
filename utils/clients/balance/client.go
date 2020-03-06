@@ -41,7 +41,6 @@ func (c *HTTPClient) InvalidateBalance(ctx context.Context, id uuid.UUID) error 
 	}
 
 	_, err = c.client.Do(ctx, req, nil)
-
 	if err != nil {
 		return err
 	}

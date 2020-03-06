@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
-	errs "github.com/brave-intl/bat-go/utils/errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -19,7 +20,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -54,12 +54,12 @@ func SuggestionsRouter(service *Service) chi.Router {
 func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, errors.Wrap(err, "KeyID format is invalid")
+		return nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
 	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error getting wallet")
+		return nil, errorutils.Wrap(err, "Error getting wallet")
 	}
 
 	if wallet == nil {
@@ -192,28 +192,16 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
-			return &handlers.AppError{
-				Message: "Error validating request",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"paymentId": "paymentId must match signature",
-					},
-				},
-			}
+			return handlers.ValidationError("Error validating request", map[string]string{
+				"paymentId": "paymentId must match signature",
+			})
 		}
 
 		promotionID := chi.URLParam(r, "promotionId")
 		if promotionID == "" || !govalidator.IsUUIDv4(promotionID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"promotionId": "promotionId must be a uuidv4",
-					},
-				},
-			}
+			return handlers.ValidationError("Error validating request url parameter", map[string]string{
+				"promotionId": "promotionId must be a uuidv4",
+			})
 		}
 
 		pID, err := uuid.FromString(promotionID)
@@ -224,41 +212,19 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
 
 		if err != nil {
+			var target *errorutils.ErrorBundle
 			status := http.StatusBadRequest
-			bundledError, ok := err.(errs.Error)
-			var httpErr error
-			unknownError := errors.New("An unknown error occured")
-			if !ok {
-				httpErr = err
-			} else {
-				switch bundledError.Cause() {
-				case "response":
-					response, ok := bundledError.Data().(clients.HTTPState)
-					if !ok {
-						httpErr = unknownError
-					} else {
+			if errors.As(err, &target) {
+				err = target
+				response, ok := target.Data().(clients.HTTPState)
+				if ok {
+					if response.Status != 0 {
 						status = response.Status
-						switch response.Status {
-						case http.StatusNotFound:
-							// did not find wallet
-							httpErr = bundledError
-						case http.StatusBadRequest:
-							// malformed request
-							httpErr = bundledError
-						case http.StatusServiceUnavailable:
-							httpErr = bundledError
-						default:
-							// generic failure
-							httpErr = unknownError
-						}
 					}
-				case "request":
-					httpErr = bundledError
-				default:
-					httpErr = bundledError
+					err = fmt.Errorf(target.Error())
 				}
 			}
-			return handlers.WrapError(httpErr, "Error claiming promotion", status)
+			return handlers.WrapError(err, "Error claiming promotion", status)
 		}
 
 		w.WriteHeader(http.StatusOK)

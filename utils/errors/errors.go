@@ -1,26 +1,17 @@
 package errors
 
-import (
-	"fmt"
-)
-
-// Error interface
-type Error interface {
-	Error() string
-	Cause() string
-	Data() interface{}
-}
-
 // ErrorBundle creates a new response error
 type ErrorBundle struct {
-	cause string
-	data  interface{}
+	cause   error
+	message string
+	data    interface{}
 }
 
 // New creates a new response error
-func New(cause string, data interface{}) error {
+func New(cause error, message string, data interface{}) error {
 	return &ErrorBundle{
 		cause,
+		message,
 		data,
 	}
 }
@@ -31,11 +22,20 @@ func (err *ErrorBundle) Data() interface{} {
 }
 
 // Cause returns the associated cause
-func (err *ErrorBundle) Cause() string {
+func (err *ErrorBundle) Cause() error {
 	return err.cause
 }
 
 // Error turns into an error
 func (err *ErrorBundle) Error() string {
-	return fmt.Sprintf("error: %s", err.cause)
+	return err.message
+}
+
+// Wrap wraps an error
+func Wrap(cause error, message string) error {
+	return &ErrorBundle{
+		cause:   cause,
+		message: message,
+		data:    nil,
+	}
 }
