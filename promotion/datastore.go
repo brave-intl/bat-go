@@ -714,7 +714,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to get order : %w", err)
 	}
 
 	foundOrderItems := []OrderItem{}
@@ -732,10 +732,15 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	_, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
 	}
 
 	return nil

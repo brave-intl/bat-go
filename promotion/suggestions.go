@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -198,12 +199,18 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		})
 	}
 
+	orderID := ""
+	if suggestion.OrderID != nil {
+		orderID = suggestion.OrderID.String()
+	}
+
 	eventMap := map[string]interface{}{
 		"id":          uuid.NewV4().String(),
 		"createdAt":   string(createdAt),
 		"channel":     suggestion.Channel,
 		"type":        suggestion.Type,
 		"totalAmount": total.String(),
+		"orderId":     orderID,
 		"funding":     fundings,
 	}
 
@@ -215,21 +222,6 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
 	if err != nil {
 		return err
-	}
-
-	// Delete this section once the issue is completed
-	// https://github.com/brave-intl/bat-go/issues/263
-	if suggestion.OrderID != nil {
-		// TODO Should we iterate through the funding types like below and create transactions for each type?
-		// Is this a good place to put this or should we moved this into the RunNextSuggestion function?
-		_, err := service.datastore.CreateTransaction(*suggestion.OrderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", total)
-		if err != nil {
-			return errors.Wrap(err, "Error recording order transaction")
-		}
-		err = service.UpdateOrderStatus(*suggestion.OrderID)
-		if err != nil {
-			return errors.Wrap(err, "Error updating order status")
-		}
 	}
 
 	for _, fundingType := range fundingTypes {
@@ -308,5 +300,33 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
+
+	// Delete this section once the issue is completed
+	// https://github.com/brave-intl/bat-go/issues/263
+
+	newInterface, _, err := service.codecs["suggestion"].NativeFromBinary(suggestion)
+	eventMap := newInterface.(map[string]interface{})
+	if err != nil {
+		return err
+	}
+
+	if eventMap["orderId"] != nil && eventMap["orderId"] != "" {
+		orderID := uuid.Must(uuid.FromString(eventMap["orderId"].(string)))
+		amount, err := decimal.NewFromString(eventMap["totalAmount"].(string))
+		if err != nil {
+			return err
+		}
+
+		_, err = service.datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
+		if err != nil {
+			return fmt.Errorf("Error recording order transaction : %w", err)
+		}
+
+		err = service.UpdateOrderStatus(orderID)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

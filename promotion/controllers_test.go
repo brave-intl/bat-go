@@ -623,6 +623,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
+		"orderId": "",
 		"funding": [
 			{
 				"type": "ugp",
@@ -1154,6 +1155,15 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	codec := service.codecs["suggestion"]
+
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	suite.Require().NoError(err)
+	suite.Assert().NotNil(suggestionEvent)
 
 	updatedOrder, err := service.datastore.GetOrder(validOrderID)
 	suite.Assert().NoError(err)
