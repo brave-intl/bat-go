@@ -257,7 +257,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Submit with confirm should result in a balance.")
 	}
 
-	_, err = destWallet.Transfer(altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
+	txInfo, err := destWallet.Transfer(altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)
 	}
@@ -269,6 +269,14 @@ func TestTransactions(t *testing.T) {
 
 	if !balance.TotalProbi.Equals(decimal.Zero) {
 		t.Error("Transfer should move balance back to donorWallet.")
+	}
+
+	if !submitInfo.Probi.Equals(txInfo.Probi) {
+		t.Error("Transaction amount should match")
+	}
+
+	if len(txInfo.ID) == 0 {
+		t.Error("Transaction should have identifier")
 	}
 }
 

@@ -4,6 +4,7 @@ notifications:
 branches:
   only:
   - master
+  - prod
 go:
 - "1.13.4"
 - "master"

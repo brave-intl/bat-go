@@ -54,10 +54,25 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 			return nil, errors.Wrap(err, "Error looking up wallet")
 		}
 		if wallet != nil {
-			err = service.Datastore.InsertWallet(wallet)
+			err = service.Datastore.UpsertWallet(wallet)
 			if err != nil {
 				return nil, errors.Wrap(err, "Error saving wallet")
 			}
+		}
+	}
+	return wallet, nil
+}
+
+// UpsertWallet retrieves the latest wallet info from the ledger service, upserting the local database copy
+func (service *Service) UpsertWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
+	wallet, err := service.LedgerClient.GetWallet(ctx, walletID)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error looking up wallet")
+	}
+	if wallet != nil {
+		err = service.Datastore.UpsertWallet(wallet)
+		if err != nil {
+			return nil, errors.Wrap(err, "Error saving wallet")
 		}
 	}
 	return wallet, nil

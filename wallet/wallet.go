@@ -12,12 +12,13 @@ import (
 // Info contains information about a wallet like associated identifiers, the denomination,
 // the last known balance and provider
 type Info struct {
-	ID          string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
-	Provider    string                   `json:"provider" valid:"in(uphold)" db:"provider"`
-	ProviderID  string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
-	PublicKey   string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
-	LastBalance *Balance                 `json:"balances,omitempty" valid:"-"`
+	ID            string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
+	Provider      string                   `json:"provider" valid:"in(uphold)" db:"provider"`
+	ProviderID    string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
+	AltCurrency   *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
+	PublicKey     string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
+	LastBalance   *Balance                 `json:"balances,omitempty" valid:"-"`
+	PayoutAddress *string                  `json:"anonymousAddress" valid:"uuidv4,optional" db:"payout_address"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -68,6 +67,10 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
+	// DrainClaim by marking the claim as drained and inserting a new drain entry
+	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
+	// RunNextDrainJob to process deposits if there is one waiting
+	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -285,10 +288,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
-		if os.Getenv("ENV") != "local" {
-			_ = tx.Rollback()
-			return nil, errors.New("legacy promotion is not available to claim")
-		}
 		legacyClaimExists = true
 	}
 
@@ -727,6 +726,116 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// DrainClaim by marking the claim as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	statement := `
+	insert into claim_drain (credentials, wallet_id, total)
+	values ($1, $2, $3)
+	returning *`
+	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RunNextDrainJob to process deposits if there is one waiting
+func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+	tx, err := pg.DB.Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+
+	// FIXME maybe useful to later move definition outside of this method scope
+	type DrainJob struct {
+		ID            uuid.UUID       `db:"id"`
+		Credentials   string          `db:"credentials"`
+		WalletID      uuid.UUID       `db:"wallet_id"`
+		Total         decimal.Decimal `db:"total"`
+		TransactionID *string         `db:"transaction_id"`
+		Erred         bool            `db:"erred"`
+	}
+
+	statement := `
+select *
+from claim_drain
+where not erred and transaction_id is null
+for update skip locked
+limit 1`
+
+	jobs := []DrainJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	if len(jobs) != 1 {
+		_ = tx.Rollback()
+		return attempted, nil
+	}
+
+	job := jobs[0]
+	attempted = true
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
+	if err != nil || txn == nil {
+		// FIXME only non-retriable errors should set erred
+		{
+			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
+			if err != nil {
+				_ = tx.Rollback()
+			}
+			_ = tx.Commit()
+		}
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
 }
 
 // UpdateOrder updates the orders status.
