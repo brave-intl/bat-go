@@ -8,11 +8,11 @@ const voteSchema = `{
   "fields": [
     { "name": "id", "type": "string" },
     { "name": "type", "type": "string" },
-    { "name": "fundingSource", "type": "string" },
     { "name": "channel", "type": "string" },
     { "name": "createdAt", "type": "string" },
-    { "name": "totalAmount", "type": "string" },
-    { "name": "voteTally", "type": "string" }
+    { "name": "baseVoteValue", "type": "string", "default":"0.25" },
+    { "name": "voteTally", "type": "long", "default":1 },
+    { "name": "fundingSource", "type": "string", "default": "uphold" }
   ]
 }`
 

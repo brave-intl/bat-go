@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -490,6 +491,10 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+	fmt.Printf("result: %+v !!!!!!!!!!!!11\n", rr.Result())
+	bodyBytes, _ := ioutil.ReadAll(rr.Result().Body)
+	fmt.Printf("body: %+v !!!!!!!!!!!!11\n", string(bodyBytes))
+
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	// Test the Kafka Event was put into place
