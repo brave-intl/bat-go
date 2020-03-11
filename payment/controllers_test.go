@@ -525,6 +525,13 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	body, err = json.Marshal(&voteReq)
 	suite.Require().NoError(err)
 
+	// mocked redeem creds
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(votePayload)).Return(nil)
+
 	// perform post to vote endpoint
 	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
@@ -538,12 +545,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	fmt.Println("!!!!!!!!!" + string(body))
 
 	<-time.After(5 * time.Second)
-	// mocked redeem creds
-	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
-		Issuer:        issuerName,
-		TokenPreimage: preimage,
-		Signature:     sig,
-	}}), gomock.Eq(votePayload)).Return(nil)
 
 	// Test the Kafka Event was put into place
 	r := kafka.NewReader(kafka.ReaderConfig{
