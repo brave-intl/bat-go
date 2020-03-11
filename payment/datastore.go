@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -46,6 +48,21 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
+
+	// Votes
+	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
+	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	InsertVote(ctx context.Context, vr VoteRecord) error
+}
+
+// VoteRecord - how the ac votes are stored in the queue
+type VoteRecord struct {
+	ID                 uuid.UUID
+	RequestCredentials string
+	VoteText           string
+	VoteEventBinary    []byte
+	Erred              bool
+	Processed          bool
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -295,6 +312,76 @@ func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, err
 	}
 
 	return nil, nil
+}
+
+// GetUncommittedVotesForUpdate - row locking on number of votes we will be pulling
+// returns a transaction to commit, the vote records, and an error
+func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error) {
+	var (
+		results = make([]*VoteRecord, 100)
+		tx, err = pg.DB.Beginx()
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to aquire transaction: %w", err)
+	}
+
+	statement := `
+select
+	id, credentials, vote_text, vote_event, erred, processed
+from
+	vote_drain
+where
+	processed = false AND
+	erred = false
+limit 100
+FOR UPDATE
+`
+	rows, err := tx.QueryContext(ctx, statement)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var vr = new(VoteRecord)
+		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
+			&vr.VoteEventBinary, &vr.Erred, &vr.Processed); err != nil {
+			return nil, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
+		}
+		// add to results
+		results = append(results, vr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
+	}
+
+	return tx, results, err
+}
+
+// CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set processed=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
+}
+
+// InsertVote - Add a vote to our "queue" to be processed
+func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
+	var (
+		statement = `
+	insert into vote_drain (credentials, vote_text, vote_event)
+	values ($1, $2, $3)`
+		_, err = pg.DB.Exec(statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert vote to drain: %w", err)
+	}
+	return nil
 }
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted

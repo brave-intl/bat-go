@@ -399,6 +399,13 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = service.InitKafka()
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
+	// kick off async goroutine to monitor the vote
+	// queue of uncommitted votes in postgres, and
+	// push the votes through redemption and kafka
+	ctx, cancel := context.WithCancel(context.Background())
+	go service.DrainVoteQueue(ctx, 1*time.Second)
+	defer cancel()
+
 	// Create the order first
 	handler := CreateOrder(service)
 	createRequest := &CreateOrderRequest{
@@ -491,11 +498,52 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	fmt.Printf("result: %+v !!!!!!!!!!!!11\n", rr.Result())
-	bodyBytes, _ := ioutil.ReadAll(rr.Result().Body)
-	fmt.Printf("body: %+v !!!!!!!!!!!!11\n", string(bodyBytes))
-
 	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	// setup our make vote handler
+	handler = MakeVote(service)
+
+	vote := Vote{
+		Type:      "auto-contribute",
+		Channel:   "brave.com",
+		VoteTally: 20,
+	}
+
+	voteBytes, err := json.Marshal(&vote)
+	suite.Require().NoError(err)
+	votePayload := base64.StdEncoding.EncodeToString(voteBytes)
+
+	voteReq := VoteRequest{
+		Vote: votePayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	body, err = json.Marshal(&voteReq)
+	suite.Require().NoError(err)
+
+	// perform post to vote endpoint
+	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	// actually perform the call
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	body, _ = ioutil.ReadAll(rr.Body)
+	fmt.Println("!!!!!!!!!" + string(body))
+
+	<-time.After(5 * time.Second)
+	// mocked redeem creds
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(votePayload)).Return(nil)
 
 	// Test the Kafka Event was put into place
 	r := kafka.NewReader(kafka.ReaderConfig{
@@ -514,31 +562,30 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	fmt.Println("🌵🌵🌵🌵🌵🌵🌵🌵🌵🌵")
-	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	voteEventBinary, err := r.ReadMessage(context.Background())
 	suite.Require().NoError(err)
 
 	fmt.Println("🏜🏜🏜🏜🏜🏜🏜🏜🏜🏜")
-	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	voteEvent, _, err := codec.NativeFromBinary(voteEventBinary.Value)
 	suite.Require().NoError(err)
 
-	suggestionEventJSON, err := codec.TextualFromNative(nil, suggestionEvent)
+	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
 	suite.Require().NoError(err)
 
-	// eventMap, ok := suggestionEvent.(map[string]interface{})
+	// eventMap, ok := voteEvent.(map[string]interface{})
 	// suite.Require().True(ok)
 	// id, ok := eventMap["id"].(string)
 	// suite.Require().True(ok)
 	// createdAt, ok := eventMap["createdAt"].(string)
 	// suite.Require().True(ok)
-	fmt.Println(string(suggestionEventJSON))
 
-	suite.Assert().Contains(string(suggestionEventJSON), "id")
+	suite.Assert().Contains(string(voteEventJSON), "id")
 
 	// suite.Assert().JSONEq(`{
 	// 	"id": "`+id+`",
 	// 	"createdAt": "`+createdAt+`",
-	// 	"type": "`+suggestion.Type+`",
-	// 	"channel": "`+suggestion.Channel+`",
+	// 	"type": "`+vote.Type+`",
+	// 	"channel": "`+vote.Channel+`",
 	// 	"totalAmount": "0.25",
 	// 	"funding": [
 	// 		{
@@ -548,70 +595,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// 			"promotion": "`+promotion.ID.String()+`"
 	// 		}
 	// 	]
-	// }`, string(suggestionEventJSON), "Incorrect suggestion event")
+	// }`, string(voteEventJSON), "Incorrect vote event")
 
-	// Get the order credentials
-	handler = GetOrderCreds(service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	for rr.Code != http.StatusOK {
-		if rr.Code == http.StatusBadRequest {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			break
-		default:
-			time.Sleep(50 * time.Millisecond)
-			rr = httptest.NewRecorder()
-			handler.ServeHTTP(rr, req)
-		}
-	}
-	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
-
-	// FIXME read body
-
-	handler = MakeVote(service)
-
-	vote := Vote{
-		Type:    "auto-contribute",
-		Channel: "brave.com",
-	}
-
-	voteBytes, err := json.Marshal(&vote)
-	suite.Require().NoError(err)
-	votePayload := base64.StdEncoding.EncodeToString(voteBytes)
-
-	voteReq := VoteRequest{
-		Vote: votePayload,
-		Credentials: []CredentialBinding{{
-			PublicKey:     issuerPublicKey,
-			Signature:     sig,
-			TokenPreimage: preimage,
-		}},
-	}
-
-	// FIXME re-enable once event is emitted
-	//mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
-	//Issuer:        issuerName,
-	//TokenPreimage: preimage,
-	//Signature:     sig,
-	//}}), gomock.Eq(votePayload)).Return(nil)
-
-	body, err = json.Marshal(&voteReq)
-	suite.Require().NoError(err)
-
-	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// FIXME check event is emitted
 }

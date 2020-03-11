@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
@@ -18,8 +19,9 @@ import (
 
 // Vote encapsulates information from the browser about attention
 type Vote struct {
-	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel string `json:"channel" valid:"-"`
+	Type      string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
+	Channel   string `json:"channel" valid:"-"`
+	VoteTally int64  `json:"voteTally"`
 }
 
 // Validate - implement inputs.Validatable interface for input
@@ -68,7 +70,7 @@ type VoteEvent struct {
 	ID            uuid.UUID       `json:"id"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	BaseVoteValue decimal.Decimal `json:"baseVoteValue"`
-	voteTally     int64           `json:"voteTally"`
+	VoteTally     int64           `json:"voteTally"`
 	FundingSource string          `json:"fundingSource"`
 }
 
@@ -80,6 +82,7 @@ func NewVoteEvent(v Vote) (*VoteEvent, error) {
 			Type:          v.Type,
 			Channel:       v.Channel,
 			CreatedAt:     time.Now().UTC(),
+			VoteTally:     v.VoteTally,
 			FundingSource: "uphold",
 		}
 		err error
@@ -94,7 +97,116 @@ func NewVoteEvent(v Vote) (*VoteEvent, error) {
 
 // CodecEncode - encode using avro vote codec
 func (ve *VoteEvent) CodecEncode(codec *goavro.Codec) ([]byte, error) {
-	return codec.BinaryFromNative(nil, ve)
+	return codec.BinaryFromNative(nil, map[string]interface{}{
+		"type":          ve.Type,
+		"channel":       ve.Channel,
+		"id":            ve.ID.String(),
+		"createdAt":     ve.CreatedAt.Format(time.RFC3339),
+		"baseVoteValue": ve.BaseVoteValue.String(),
+		"voteTally":     ve.VoteTally,
+		"fundingSource": ve.FundingSource,
+	})
+}
+
+// CodecDecode - Decode using avro vote codec
+func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
+	native, _, err := codec.NativeFromBinary(binary)
+
+	// gross
+	v, err := json.Marshal(native)
+	if err != nil {
+		return fmt.Errorf("unable to decode avro payload: %w", err)
+	}
+	err = json.Unmarshal(v, ve)
+	if err != nil {
+		return fmt.Errorf("unable to encode decoded avro payload to VoteEvent: %w", err)
+	}
+
+	return nil
+}
+
+// DrainVoteQueue - event loop that waits a certain amount of time, and then
+// grabs from the vote queue and applies redemptions.
+func (service *Service) DrainVoteQueue(ctx context.Context, cadence time.Duration) {
+	go func(ctx context.Context) {
+	OUTER:
+		for {
+			select {
+			case <-ctx.Done():
+				// cancellation happened, kill this worker
+				log.Printf("cancellation envoked in drain vote queue!\n")
+				return
+			case <-time.After(cadence):
+				// pull vote from db queue
+				tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
+				if err != nil {
+					if tx != nil {
+						if err := tx.Rollback(); err != nil {
+							log.Printf("failed to rollback transaction in drain vote queue: %s", err)
+						}
+					}
+					log.Printf("failed to get vote in drain vote queue: %s", err)
+					continue OUTER
+				}
+				for _, record := range records {
+					if record == nil {
+						continue
+					}
+					fmt.Println("!!! a record!!!!", record)
+					var requestCredentials = []cbr.CredentialRedemption{}
+					err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
+					if err != nil {
+						fmt.Println("!!! unmarshal error !!!!", err)
+						// mark errored?
+						if err := tx.Rollback(); err != nil {
+							log.Printf(
+								"failed to rollback transaction in drain vote queue: %s", err)
+						}
+						continue OUTER
+					}
+					fmt.Println("!!! about to redeem !!!!")
+					// redeem the credentials
+					err = service.cbClient.RedeemCredentials(
+						ctx, requestCredentials, record.VoteText)
+					if err != nil {
+						log.Printf("failed to redeem credentials: %s", err)
+						if tx != nil {
+							if err := tx.Rollback(); err != nil {
+								log.Printf(
+									"failed to rollback transaction in drain vote queue: %s", err)
+							}
+						}
+						continue OUTER
+					}
+					// write the message to kafka if successful
+					fmt.Println("!!! about to write to kafka !!!!")
+					if err = service.kafkaWriter.WriteMessages(ctx,
+						kafka.Message{
+							Value: record.VoteEventBinary,
+						},
+					); err != nil {
+						log.Printf("failed to write vote to kafka: %s", err)
+						if tx != nil {
+							if err := tx.Rollback(); err != nil {
+								log.Printf("failed to rollback transaction in drain vote queue: %s", err)
+							}
+						}
+						continue OUTER
+					}
+					fmt.Println("!!! committing vote !!!!")
+					// update the particular record to not be picked again
+					err = service.datastore.CommitVote(ctx, *record, tx)
+					if err := tx.Rollback(); err != nil {
+						log.Printf("failed to rollback transaction in drain vote queue: %s", err)
+						continue OUTER
+					}
+				}
+				fmt.Println("!!! ending transaction !!!!")
+				// finalize the record
+				tx.Commit()
+			}
+		}
+	}(ctx)
 }
 
 // Vote based on the browser's attention
@@ -116,31 +228,35 @@ func (service *Service) Vote(
 
 	// get a new VoteEvent to emit to kafka based on our input vote
 	voteEvent, err := NewVoteEvent(vote)
+	if err != nil {
+		return fmt.Errorf("failed to convert vote to kafka vote event: %w", err)
+	}
 
-	// TODO insert serialized event into db
+	// encode the event for processing
+	voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
+	if err != nil {
+		return fmt.Errorf("failed to encode avro codec: %w", err)
+	}
 
-	go func() {
-		err = service.cbClient.RedeemCredentials(ctx, requestCredentials, voteText)
-		if err != nil {
-			return
-		}
-		// TODO: update db to say we redeemed creds right...?
+	rcSerial, err := json.Marshal(requestCredentials)
+	if err != nil {
+		return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
+	}
 
-		v, err := voteEvent.CodecEncode(service.codecs["vote"])
-		if err != nil {
-			log.Printf("failed to encode avro codec: %s", err)
-		}
+	fmt.Println("!!!!!! Inserting: ", string(rcSerial), voteText, voteEventBinary)
 
-		// write the message to kafka
-		if err = service.kafkaWriter.WriteMessages(ctx,
-			kafka.Message{
-				Value: v,
-			},
-		); err != nil {
-			log.Printf("failed to write to kafka: %s", err)
-		}
-		log.Printf("vote submitted for processing: %v", voteEvent)
-	}()
+	// insert serialized event into db
+	if err = service.datastore.InsertVote(
+		ctx, VoteRecord{
+			RequestCredentials: string(rcSerial),
+			VoteText:           voteText,
+			VoteEventBinary:    voteEventBinary,
+		}); err != nil {
+		return fmt.Errorf("datastore failure vote_drain: %w", err)
+	}
+
+	// at this point, after the vote is added to the database queue, we will let
+	// the service DrainVoteQueue handle the redemptions and kafka messages
 
 	return nil
 }

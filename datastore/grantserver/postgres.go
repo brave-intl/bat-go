@@ -66,7 +66,8 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	err = m.Migrate(8)
+	// TODO: this migration version number should be an environment variable?
+	err = m.Migrate(9)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}

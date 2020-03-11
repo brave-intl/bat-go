@@ -47,6 +47,7 @@ type Service struct {
 	codecs      map[string]*goavro.Codec
 	kafkaWriter *kafka.Writer
 	kafkaDialer *kafka.Dialer
+	cancel      context.CancelFunc
 }
 
 func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
@@ -205,15 +206,31 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 
+	// create a background context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+
 	service := &Service{
 		wallet:    *walletService,
 		cbClient:  cbClient,
 		datastore: datastore,
+		cancel:    cancel,
 	}
 	err = service.InitKafka()
 	if err != nil {
 		return nil, err
 	}
+
+	// init vote drain worker
+	err = service.InitKafka()
+	if err != nil {
+		return nil, err
+	}
+
+	// kick off async goroutine to monitor the vote
+	// queue of uncommitted votes in postgres, and
+	// push the votes through redemption and kafka
+	go service.DrainVoteQueue(ctx, 15*time.Second)
+
 	return service, nil
 }
 
