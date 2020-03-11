@@ -7,10 +7,13 @@ networks:
 services:
   web:
     container_name: grant-web
-    image: grant-web-builder
     build:
       context: .
-      target: builder
+      target: artifact
+      args:
+          VERSION: "${VERSION}"
+          COMMIT: "${COMMIT}"
+          BUILD_TIME: "${BUILD_TIME}"
     ports:
       - "3333:3333"
     environment:
