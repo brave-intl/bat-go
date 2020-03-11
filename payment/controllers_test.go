@@ -432,7 +432,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().NoError(err)
 
 	userWallet := generateWallet(suite.T())
-	err = pg.InsertWallet(&userWallet.Info)
+	err = pg.UpsertWallet(&userWallet.Info)
 	suite.Assert().NoError(err)
 
 	fundWallet(suite.T(), userWallet, order.TotalPrice)

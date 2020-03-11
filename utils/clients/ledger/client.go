@@ -35,9 +35,10 @@ type WalletAddresses struct {
 
 // WalletResponse contains information about the ledger wallet
 type WalletResponse struct {
-	Addresses   WalletAddresses          `json:"addresses"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey   string                   `json:"httpSigningPubKey"`
+	Addresses     WalletAddresses          `json:"addresses"`
+	AltCurrency   *altcurrency.AltCurrency `json:"altcurrency"`
+	PublicKey     string                   `json:"httpSigningPubKey"`
+	PayoutAddress *string                  `json:"anonymousAddress"`
 }
 
 // GetWallet retrieves wallet information
@@ -58,12 +59,13 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 	}
 
 	info := wallet.Info{
-		ID:          id.String(),
-		Provider:    "uphold",
-		ProviderID:  walletResponse.Addresses.ProviderID.String(),
-		AltCurrency: walletResponse.AltCurrency,
-		PublicKey:   walletResponse.PublicKey,
-		LastBalance: nil,
+		ID:            id.String(),
+		Provider:      "uphold",
+		ProviderID:    walletResponse.Addresses.ProviderID.String(),
+		AltCurrency:   walletResponse.AltCurrency,
+		PublicKey:     walletResponse.PublicKey,
+		LastBalance:   nil,
+		PayoutAddress: walletResponse.PayoutAddress,
 	}
 
 	return &info, err

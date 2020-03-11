@@ -6,15 +6,14 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// InsertWallet inserts the given wallet
-func (pg *Postgres) InsertWallet(wallet *wallet.Info) error {
-	// NOTE on conflict do nothing because none of the wallet information is updateable
+// UpsertWallet upserts the given wallet
+func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	statement := `
-	insert into wallets (id, provider, provider_id, public_key)
-	values ($1, $2, $3, $4)
-	on conflict do nothing
+	insert into wallets (id, provider, provider_id, public_key, payout_address)
+	values ($1, $2, $3, $4, $5)
+	on conflict (id) do update set payout_address = $5
 	returning *`
-	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
+	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.PayoutAddress)
 	if err != nil {
 		return err
 	}

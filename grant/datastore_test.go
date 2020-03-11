@@ -55,7 +55,7 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 		pg, err := promotion.NewPostgres("", false)
 		suite.Require().NoError(err)
 
-		suite.Require().NoError(pg.InsertWallet(&w), "Save wallet should succeed")
+		suite.Require().NoError(pg.UpsertWallet(&w), "Save wallet should succeed")
 
 		promotion1, err = pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(25.0), "")
 		suite.Require().NoError(err, "Create promotion should succeed")

@@ -16,6 +16,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+const currentMigrationVersion = 10
+
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
 	dbInstanceClassToMaxConn = map[string]int{
@@ -66,8 +68,7 @@ func (pg *Postgres) Migrate() error {
 		return err
 	}
 
-	// TODO: this migration version number should be an environment variable?
-	err = m.Migrate(9)
+	err = m.Migrate(currentMigrationVersion)
 	if err != migrate.ErrNoChange && err != nil {
 		return err
 	}
