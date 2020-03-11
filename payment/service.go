@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -24,19 +23,26 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var voteTopic = os.Getenv("ENV") + ".payment.vote"
-var kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "kafka_cert_not_before",
-	Help: "Date when the kafka certificate becomes valid.",
-})
-var kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "kafka_cert_not_after",
-	Help: "Date when the kafka certificate expires.",
-})
+var (
+	voteTopic          = os.Getenv("ENV") + ".payment.vote"
+	kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "kafka_cert_not_before",
+		Help: "Date when the kafka certificate becomes valid.",
+	})
+	kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "kafka_cert_not_after",
+		Help: "Date when the kafka certificate expires.",
+	})
+)
 
 func init() {
-	prometheus.MustRegister(kafkaCertNotBefore)
-	prometheus.MustRegister(kafkaCertNotAfter)
+	// gracefully try to register collectors for prom, no need to panic
+	if err := prometheus.Register(kafkaCertNotBefore); err != nil {
+		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
+	}
+	if err := prometheus.Register(kafkaCertNotAfter); err != nil {
+		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
+	}
 }
 
 // Service contains datastore
@@ -324,7 +330,6 @@ func (service *Service) CreateAnonCardTransaction(ctx context.Context, walletID 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error submitting anon card transaction")
 	}
-	fmt.Println(txInfo)
 
 	txn, err := service.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {

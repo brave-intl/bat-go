@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
@@ -139,8 +140,6 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 	return creds, nil
 }
 
-const datastoreCTXKey = "datastore"
-
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
 func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	var (
@@ -148,7 +147,7 @@ func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) 
 		issuers            = make(map[string]*Issuer)
 	)
 
-	db, ok := ctx.Value(datastoreCTXKey).(Datastore)
+	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
 	if !ok {
 		return nil, errors.New("failed to get datastore from context")
 	}

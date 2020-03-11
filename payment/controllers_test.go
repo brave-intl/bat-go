@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -500,6 +499,36 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
+	<-time.After(5 * time.Second)
+
+	// see if we can get our order creds
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	for rr.Code != http.StatusOK {
+		if rr.Code == http.StatusBadRequest {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			time.Sleep(50 * time.Millisecond)
+			rr = httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+		}
+	}
+	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+
 	// setup our make vote handler
 	handler = MakeVote(service)
 
@@ -542,7 +571,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	body, _ = ioutil.ReadAll(rr.Body)
-	fmt.Println("!!!!!!!!!" + string(body))
 
 	<-time.After(5 * time.Second)
 
@@ -562,11 +590,9 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = r.SetOffset(offset)
 	suite.Require().NoError(err)
 
-	fmt.Println("🌵🌵🌵🌵🌵🌵🌵🌵🌵🌵")
 	voteEventBinary, err := r.ReadMessage(context.Background())
 	suite.Require().NoError(err)
 
-	fmt.Println("🏜🏜🏜🏜🏜🏜🏜🏜🏜🏜")
 	voteEvent, _, err := codec.NativeFromBinary(voteEventBinary.Value)
 	suite.Require().NoError(err)
 
@@ -582,20 +608,13 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	suite.Assert().Contains(string(voteEventJSON), "id")
 
-	// suite.Assert().JSONEq(`{
-	// 	"id": "`+id+`",
-	// 	"createdAt": "`+createdAt+`",
-	// 	"type": "`+vote.Type+`",
-	// 	"channel": "`+vote.Channel+`",
-	// 	"totalAmount": "0.25",
-	// 	"funding": [
-	// 		{
-	// 			"type": "ugp",
-	// 			"amount": "0.25",
-	// 			"cohort": "control",
-	// 			"promotion": "`+promotion.ID.String()+`"
-	// 		}
-	// 	]
-	// }`, string(voteEventJSON), "Incorrect vote event")
+	var ve = new(VoteEvent)
+
+	err = json.Unmarshal(voteEventJSON, ve)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(ve.Type, vote.Type)
+	suite.Assert().Equal(ve.Channel, vote.Channel)
+	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
 
 }

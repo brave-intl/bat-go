@@ -10,7 +10,9 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -43,14 +45,14 @@ func (v *Vote) Decode(ctx context.Context, input []byte) error {
 }
 
 // Base64Decode unmarshalls the vote from a string.
-func (s *Vote) Base64Decode(text string) error {
+func (v *Vote) Base64Decode(text string) error {
 	var bytes []byte
 	bytes, err := base64.StdEncoding.DecodeString(text)
 	if err != nil {
 		return err
 	}
 
-	err = json.Unmarshal(bytes, s)
+	err = json.Unmarshal(bytes, v)
 	return err
 }
 
@@ -111,18 +113,31 @@ func (ve *VoteEvent) CodecEncode(codec *goavro.Codec) ([]byte, error) {
 // CodecDecode - Decode using avro vote codec
 func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
 	native, _, err := codec.NativeFromBinary(binary)
+	if err != nil {
+		return fmt.Errorf("unable to decode avro payload: %w", err)
+	}
 
 	// gross
 	v, err := json.Marshal(native)
 	if err != nil {
-		return fmt.Errorf("unable to decode avro payload: %w", err)
+		return fmt.Errorf("unable to marshal avro payload: %w", err)
 	}
+
 	err = json.Unmarshal(v, ve)
 	if err != nil {
-		return fmt.Errorf("unable to encode decoded avro payload to VoteEvent: %w", err)
+		return fmt.Errorf("unable to decode decoded avro payload to VoteEvent: %w", err)
 	}
 
 	return nil
+}
+
+func rollbackAndLogTx(tx *sqlx.Tx, wrap string, err error) {
+	log.Printf(wrap+": %s", err)
+	if tx != nil {
+		if err := tx.Rollback(); err != nil {
+			log.Printf("failed to rollback transaction in drain vote queue: %s", err)
+		}
+	}
 }
 
 // DrainVoteQueue - event loop that waits a certain amount of time, and then
@@ -140,70 +155,56 @@ func (service *Service) DrainVoteQueue(ctx context.Context, cadence time.Duratio
 				// pull vote from db queue
 				tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
 				if err != nil {
-					if tx != nil {
-						if err := tx.Rollback(); err != nil {
-							log.Printf("failed to rollback transaction in drain vote queue: %s", err)
-						}
-					}
-					log.Printf("failed to get vote in drain vote queue: %s", err)
+					rollbackAndLogTx(tx, "failed to get uncommitted votes from drain queue", err)
 					continue OUTER
 				}
 				for _, record := range records {
 					if record == nil {
 						continue
 					}
-					fmt.Println("!!! a record!!!!", record)
 					var requestCredentials = []cbr.CredentialRedemption{}
 					err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
 					if err != nil {
-						fmt.Println("!!! unmarshal error !!!!", err)
 						// mark errored?
-						if err := tx.Rollback(); err != nil {
-							log.Printf(
-								"failed to rollback transaction in drain vote queue: %s", err)
+						log.Printf("failed to decode credentials: %s", err)
+						if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+							rollbackAndLogTx(tx, "failed to marke vote as errored for creds redemption", err)
+							continue OUTER
 						}
-						continue OUTER
+						// okay if it is errored, we will update the errored column
 					}
-					fmt.Println("!!! about to redeem !!!!")
 					// redeem the credentials
-					err = service.cbClient.RedeemCredentials(
-						ctx, requestCredentials, record.VoteText)
+					err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
 					if err != nil {
 						log.Printf("failed to redeem credentials: %s", err)
-						if tx != nil {
-							if err := tx.Rollback(); err != nil {
-								log.Printf(
-									"failed to rollback transaction in drain vote queue: %s", err)
-							}
+						// mark errored?
+						if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+							rollbackAndLogTx(tx, "failed to marke vote as errored for creds redemption", err)
+							continue OUTER
 						}
-						continue OUTER
+						// okay if errored, update errored column
 					}
 					// write the message to kafka if successful
-					fmt.Println("!!! about to write to kafka !!!!")
 					if err = service.kafkaWriter.WriteMessages(ctx,
 						kafka.Message{
 							Value: record.VoteEventBinary,
 						},
 					); err != nil {
-						log.Printf("failed to write vote to kafka: %s", err)
-						if tx != nil {
-							if err := tx.Rollback(); err != nil {
-								log.Printf("failed to rollback transaction in drain vote queue: %s", err)
-							}
-						}
+						rollbackAndLogTx(tx, "failed to write vote to kafka", err)
 						continue OUTER
 					}
-					fmt.Println("!!! committing vote !!!!")
 					// update the particular record to not be picked again
-					err = service.datastore.CommitVote(ctx, *record, tx)
-					if err := tx.Rollback(); err != nil {
-						log.Printf("failed to rollback transaction in drain vote queue: %s", err)
+					if err = service.datastore.CommitVote(ctx, *record, tx); err != nil {
+						log.Printf("failed to commit vote in drain vote queue: %s", err)
+						rollbackAndLogTx(tx, "failed to commit vote to drain vote queue", err)
 						continue OUTER
 					}
 				}
-				fmt.Println("!!! ending transaction !!!!")
 				// finalize the record
-				tx.Commit()
+				if err := tx.Commit(); err != nil {
+					log.Printf("failed to commit transaction in drain vote queue: %s", err)
+					continue OUTER
+				}
 			}
 		}
 	}(ctx)
@@ -221,7 +222,7 @@ func (service *Service) Vote(
 
 	// generate all the cb credential redemptions
 	requestCredentials, err := generateCredentialRedemptions(
-		context.WithValue(ctx, datastoreCTXKey, service.datastore), credentials)
+		context.WithValue(ctx, appctx.DatastoreCTXKey, service.datastore), credentials)
 	if err != nil {
 		return fmt.Errorf("error generating credential redemptions: %w", err)
 	}
@@ -242,8 +243,6 @@ func (service *Service) Vote(
 	if err != nil {
 		return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
 	}
-
-	fmt.Println("!!!!!! Inserting: ", string(rcSerial), voteText, voteEventBinary)
 
 	// insert serialized event into db
 	if err = service.datastore.InsertVote(

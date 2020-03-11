@@ -52,6 +52,7 @@ type Datastore interface {
 	// Votes
 	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
 	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	InsertVote(ctx context.Context, vr VoteRecord) error
 }
 
@@ -342,8 +343,6 @@ FOR UPDATE
 		return nil, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
 	}
 
-	defer rows.Close()
-
 	for rows.Next() {
 		var vr = new(VoteRecord)
 		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
@@ -357,7 +356,21 @@ FOR UPDATE
 		return nil, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
 	}
 
+	if err := rows.Close(); err != nil {
+		return tx, results, fmt.Errorf("error closing rows: %w", err)
+	}
+
 	return tx, results, err
+}
+
+// MarkVoteErrored - Update a vote to show it has errored, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set erred=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
 }
 
 // CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
