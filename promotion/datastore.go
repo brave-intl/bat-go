@@ -148,7 +148,7 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer pg.RollbackTx(tx)
 	for _, id := range ids {
 		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
 		if err != nil {
@@ -261,19 +261,18 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if err != nil {
 		return nil, err
 	}
+	defer pg.RollbackTx(tx)
 
 	claims := []Claim{}
 
 	// Get legacy claims
 	err = tx.Select(&claims, `select * from claims where legacy_claimed and promotion_id = $1 and wallet_id = $2`, promotion.ID, wallet.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	legacyClaimExists := false
 	if len(claims) > 1 {
-		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
 		legacyClaimExists = true
@@ -283,15 +282,12 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
 		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 		promotionCount, err := res.RowsAffected()
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		} else if promotionCount != 1 {
-			_ = tx.Rollback()
 			return nil, errors.New("no matching active promotion")
 		}
 	}
@@ -314,10 +310,8 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	}
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	} else if len(claims) != 1 {
-		_ = tx.Rollback()
 		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
 	}
 	claim := claims[0]
@@ -325,7 +319,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	// This will error if user has already claimed due to uniqueness constraint
 	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -543,6 +536,7 @@ func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -568,12 +562,10 @@ on claim_cred.issuer_id = issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -583,13 +575,11 @@ on claim_cred.issuer_id = issuers.id`
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -627,6 +617,7 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// FIXME
 	type SuggestionJob struct {
@@ -647,12 +638,10 @@ limit 1`
 	jobs := []SuggestionJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -662,7 +651,6 @@ limit 1`
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -670,16 +658,14 @@ limit 1`
 	if err != nil {
 		// FIXME only non-retriable errors should set erred
 		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
-		if err != nil {
-			_ = tx.Rollback()
+		if err == nil {
+			err = tx.Commit()
 		}
-		err = tx.Commit()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
