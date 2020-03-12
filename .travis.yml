@@ -33,6 +33,6 @@ before_script:
 script:
 - docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
 - sleep 3
-- VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make
+- VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make
 after_script:
 - git diff-index --quiet HEAD --
