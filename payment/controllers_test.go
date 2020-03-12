@@ -381,6 +381,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
 	suite.Require().NoError(err)
 
+	// create topics
 	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
