@@ -35,14 +35,12 @@ func Router(service *Service) chi.Router {
 func KeyRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	if os.Getenv("ENV") != "local" {
-		r.Method("GET", "/{merchantId}", middleware.SimpleTokenAuthorizedOnly(GetKeys(service)))
-		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreateKey(service)))
-		r.Method("DELETE", "/{id}", middleware.SimpleTokenAuthorizedOnly(DeleteKey(service)))
-	} else {
-		r.Method("GET", "/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
-		r.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
-		r.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+		r.Use(middleware.SimpleTokenAuthorizedOnly)
 	}
+
+	r.Method("GET", "/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+	r.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
+	r.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
 	return r
 }
 
