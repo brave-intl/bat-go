@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -33,9 +34,15 @@ func Router(service *Service) chi.Router {
 // KeyRouter handles management of keys
 func KeyRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/keys", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
-	r.Method("DELETE", "/keys/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
-	r.Method("GET", "/keys/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+	if os.Getenv("ENV") != "local" {
+		r.Method("GET", "/{merchantId}", middleware.SimpleTokenAuthorizedOnly(GetKeys(service)))
+		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreateKey(service)))
+		r.Method("DELETE", "/{id}", middleware.SimpleTokenAuthorizedOnly(DeleteKey(service)))
+	} else {
+		r.Method("GET", "/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+		r.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
+		r.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+	}
 	return r
 }
 
