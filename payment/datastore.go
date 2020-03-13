@@ -128,10 +128,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 		`+expiredQuery,
 		merchant)
 
-	// AND (expired_at IS NULL or expired_at > CURRENT_TIMESTAMP)
-
 	if err != nil {
-		fmt.Println("This is an error")
 		fmt.Println(err)
 		return nil, err
 	}
@@ -140,8 +137,6 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 		keys[i].SetSecretKey()
 	}
 
-	// SELECT * FROM api_keys
-	// WHERE merchant_id = 'brave.com'
 	return &keys, nil
 }
 
