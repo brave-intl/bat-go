@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -46,6 +47,14 @@ type Datastore interface {
 	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
+
+	// CreateKey
+	CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error)
+	// DeleteKey
+	DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error)
+
+	// GetKeys ret
+	GetKeys(merchant string, showExpired bool) (*[]Key, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -60,6 +69,80 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 		return &Postgres{*pg}, err
 	}
 	return nil, err
+}
+
+// CreateKey FIXME
+func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error) {
+	// interface and create an api key
+	var key Key
+	err := pg.DB.Get(&key, `
+			INSERT INTO api_keys (merchant_id, encrypted_secret_key, nonce)
+			VALUES ($1, $2, $3)
+			RETURNING *
+		`,
+		merchant, encryptedSecretKey, nonce)
+
+	if err != nil {
+		return nil, err
+	}
+	key.SetSecretKey()
+
+	return &key, nil
+}
+
+// DeleteKey FIXME
+func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
+	// interface and create an api key
+	var key Key
+	err := pg.DB.Get(&key, `
+			UPDATE api_keys
+			SET expiry=(current_timestamp + $2)
+			WHERE id=$1
+			RETURNING *
+		`, id.String(), fmt.Sprintf("%vs", delaySeconds))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if &key == nil {
+		return nil, fmt.Errorf("No rows were affected")
+	}
+	key.SetSecretKey()
+
+	return &key, nil
+}
+
+// GetKeys returns a list of active API keys
+func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
+	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
+	if showExpired {
+		expiredQuery = ""
+	}
+
+	var keys []Key
+	err := pg.DB.Select(&keys, `
+			SELECT * FROM api_keys
+			WHERE merchant_id = $1
+
+		`+expiredQuery,
+		merchant)
+
+	// AND (expired_at IS NULL or expired_at > CURRENT_TIMESTAMP)
+
+	if err != nil {
+		fmt.Println("This is an error")
+		fmt.Println(err)
+		return nil, err
+	}
+
+	for i := 0; i < len(keys); i++ {
+		keys[i].SetSecretKey()
+	}
+
+	// SELECT * FROM api_keys
+	// WHERE merchant_id = 'brave.com'
+	return &keys, nil
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order

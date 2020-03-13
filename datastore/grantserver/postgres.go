@@ -16,7 +16,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-const currentMigrationVersion = 9
+const currentMigrationVersion = 11
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html

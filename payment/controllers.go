@@ -30,6 +30,125 @@ func Router(service *Service) chi.Router {
 	return r
 }
 
+// KeyRouter handles management of keys
+func KeyRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/keys", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
+	r.Method("DELETE", "/keys/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+	r.Method("GET", "/keys/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+	return r
+}
+
+// CreateKeyRequest includes information needed to create an order
+type CreateKeyRequest struct {
+	Merchant string `json:"merchant" valid:"-"`
+}
+
+// DeleteKeyRequest includes information needed to create an order
+type DeleteKeyRequest struct {
+	DelaySeconds int `json:"DelaySeconds" valid:"-"`
+}
+
+// CreateKey is the handler for creating keys for a merchant
+func CreateKey(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateKeyRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			// FIXME Ask Ben what he would like us to do here instead of wrapError
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		encrypted, nonce := GenerateSecret()
+		// var Key Key
+		key, err := service.datastore.CreateKey(req.Merchant, encrypted, nonce)
+		if err != nil {
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(key); err != nil {
+			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
+		}
+
+		return nil
+	})
+}
+
+// DeleteKey deletes a key
+func DeleteKey(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		reqID := chi.URLParam(r, "id")
+		if reqID == "" || !govalidator.IsUUIDv4(reqID) {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"id": "id must be a uuidv4",
+				},
+			)
+		}
+
+		id := uuid.Must(uuid.FromString(reqID))
+
+		var req DeleteKeyRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			// FIXME Ask Ben what he would like us to do here instead of wrapError
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		key, err := service.datastore.DeleteKey(id, req.DelaySeconds)
+		if err != nil {
+			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(key); err != nil {
+			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
+		}
+
+		return nil
+	})
+}
+
+// GetKeys FIXME
+func GetKeys(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		reqID := chi.URLParam(r, "merchant")
+		expired := r.URL.Query().Get("expired")
+		showExpired := expired == "true"
+
+		var keys *[]Key
+		keys, err := service.datastore.GetKeys(reqID, showExpired)
+		if err != nil {
+			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(keys); err != nil {
+			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
+		}
+
+		return nil
+	})
+}
+
 // VoteRouter for voting endpoint
 func VoteRouter(service *Service) chi.Router {
 	r := chi.NewRouter()

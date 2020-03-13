@@ -30,6 +30,7 @@ import (
 )
 
 type ControllersTestSuite struct {
+	service *Service
 	suite.Suite
 }
 
@@ -52,7 +53,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
+	AESKey = "AES256Key-32Characters1234567890"
+
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
+	suite.service = &Service{
+		datastore: pg,
+	}
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
@@ -108,19 +114,12 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
-	pg, err := NewPostgres("", false)
-	suite.Require().NoError(err, "Failed to get postgres conn")
-
-	service := &Service{
-		datastore: pg,
-	}
-
 	order := suite.setupCreateOrder(20)
 
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := GetOrder(service)
+	getOrderHandler := GetOrder(suite.service)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -262,13 +261,13 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	// Old order
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
-	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	updatedOrder, err := suite.service.datastore.GetOrder(order.ID)
 	suite.Assert().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
 	// Get all the transactions, should only be one
 
-	handler = GetTransactions(service)
+	handler = GetTransactions(suite.service)
 	req, err = http.NewRequest("GET", "/v1/orders/{orderID}/transactions", nil)
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
@@ -535,4 +534,134 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	suite.Require().NoError(err)
 
 	// FIXME check event is emitted
+}
+
+func (suite *ControllersTestSuite) SetupCreateKey() Key {
+	createRequest := &CreateKeyRequest{
+		Merchant: "brave.com",
+	}
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/Key", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	createAPIHandler := CreateKey(suite.service)
+	rctx := chi.NewRouteContext()
+	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	createAPIHandler.ServeHTTP(rr, postReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var key Key
+	err = json.Unmarshal(rr.Body.Bytes(), &key)
+	suite.Assert().NoError(err)
+
+	return key
+}
+
+func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
+	deleteRequest := &DeleteKeyRequest{
+		DelaySeconds: 0,
+	}
+
+	body, err := json.Marshal(&deleteRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("DELETE", "/v1/Key/{id}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	deleteAPIHandler := DeleteKey(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", key.ID)
+	deleteReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	deleteAPIHandler.ServeHTTP(rr, deleteReq)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var deletedKey Key
+	err = json.Unmarshal(rr.Body.Bytes(), &deletedKey)
+	suite.Assert().NoError(err)
+
+	return deletedKey
+}
+
+func (suite *ControllersTestSuite) TestCreateKey() {
+	Key := suite.SetupCreateKey()
+
+	suite.Assert().Equal("brave.com", Key.Merchant)
+}
+
+func (suite *ControllersTestSuite) TestDeleteKey() {
+	key := suite.SetupCreateKey()
+
+	deleteTime := time.Now()
+	deletedKey := suite.SetupDeleteKey(key)
+	// Ensure the expiry is within 5 seconds of when we made the call
+	suite.Assert().WithinDuration(deleteTime, *deletedKey.Expiry, 5*time.Second)
+}
+
+func (suite *ControllersTestSuite) TestGetKeys() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Delete transactions so we don't run into any validation errors
+	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	suite.Require().NoError(err)
+
+	key := suite.SetupCreateKey()
+
+	req, err := http.NewRequest("GET", "/v1/keys/{merchant}", nil)
+	suite.Require().NoError(err)
+
+	getAPIHandler := GetKeys(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchant", key.Merchant)
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getAPIHandler.ServeHTTP(rr, getReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var keys []Key
+	err = json.Unmarshal(rr.Body.Bytes(), &keys)
+	suite.Assert().NoError(err)
+
+	suite.Assert().Equal(1, len(keys))
+}
+
+func (suite *ControllersTestSuite) TestGetKeysFiltered() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Delete transactions so we don't run into any validation errors
+	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	suite.Require().NoError(err)
+
+	key := suite.SetupCreateKey()
+	toDelete := suite.SetupCreateKey()
+	suite.SetupDeleteKey(toDelete)
+
+	req, err := http.NewRequest("GET", "/v1/keys/{merchant}?expired=true", nil)
+	suite.Require().NoError(err)
+
+	getAPIHandler := GetKeys(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchant", key.Merchant)
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getAPIHandler.ServeHTTP(rr, getReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var keys []Key
+	err = json.Unmarshal(rr.Body.Bytes(), &keys)
+	suite.Assert().NoError(err)
+
+	suite.Assert().Equal(2, len(keys))
 }
