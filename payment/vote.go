@@ -140,74 +140,67 @@ func rollbackAndLogTx(tx *sqlx.Tx, wrap string, err error) {
 	}
 }
 
-// DrainVoteQueue - event loop that waits a certain amount of time, and then
-// grabs from the vote queue and applies redemptions.
-func (service *Service) DrainVoteQueue(ctx context.Context, cadence time.Duration) {
-	go func(ctx context.Context) {
-	OUTER:
-		for {
-			select {
-			case <-ctx.Done():
-				// cancellation happened, kill this worker
-				log.Printf("cancellation envoked in drain vote queue!\n")
-				return
-			case <-time.After(cadence):
-				// pull vote from db queue
-				tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
-				if err != nil {
-					rollbackAndLogTx(tx, "failed to get uncommitted votes from drain queue", err)
-					continue OUTER
+// RunNextVoteDrainJob - Attempt to drain the vote queue
+func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
+	select {
+	case <-ctx.Done():
+		// cancellation happened, kill this worker
+		log.Printf("cancellation envoked in drain vote queue!\n")
+		return false, nil
+	default:
+		// pull vote from db queue
+		tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
+		if err != nil {
+			rollbackAndLogTx(tx, "failed to get uncommitted votes from drain queue", err)
+			return true, fmt.Errorf("failed to get uncommitted votes from drain queue: %w", err)
+		}
+		for _, record := range records {
+			if record == nil {
+				continue
+			}
+			var requestCredentials = []cbr.CredentialRedemption{}
+			err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
+			if err != nil {
+				log.Printf("failed to decode credentials: %s", err)
+				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+					rollbackAndLogTx(tx, "failed to mark vote as errored for creds redemption", err)
+					return true, fmt.Errorf("failed to mark vote as errored for creds redemption: %w", err)
 				}
-				for _, record := range records {
-					if record == nil {
-						continue
-					}
-					var requestCredentials = []cbr.CredentialRedemption{}
-					err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
-					if err != nil {
-						// mark errored?
-						log.Printf("failed to decode credentials: %s", err)
-						if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
-							rollbackAndLogTx(tx, "failed to marke vote as errored for creds redemption", err)
-							continue OUTER
-						}
-						// okay if it is errored, we will update the errored column
-					}
-					// redeem the credentials
-					err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
-					if err != nil {
-						log.Printf("failed to redeem credentials: %s", err)
-						// mark errored?
-						if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
-							rollbackAndLogTx(tx, "failed to marke vote as errored for creds redemption", err)
-							continue OUTER
-						}
-						// okay if errored, update errored column
-					}
-					// write the message to kafka if successful
-					if err = service.kafkaWriter.WriteMessages(ctx,
-						kafka.Message{
-							Value: record.VoteEventBinary,
-						},
-					); err != nil {
-						rollbackAndLogTx(tx, "failed to write vote to kafka", err)
-						continue OUTER
-					}
-					// update the particular record to not be picked again
-					if err = service.datastore.CommitVote(ctx, *record, tx); err != nil {
-						log.Printf("failed to commit vote in drain vote queue: %s", err)
-						rollbackAndLogTx(tx, "failed to commit vote to drain vote queue", err)
-						continue OUTER
-					}
+				// okay if it is errored, we will update the errored column
+			}
+			// redeem the credentials
+			err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
+			if err != nil {
+				log.Printf("failed to redeem credentials: %s", err)
+				// mark errored?
+				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+					rollbackAndLogTx(tx, "failed to mark vote as errored for creds redemption", err)
+					return true, fmt.Errorf("failed to mark vote as errored for creds redemption: %w", err)
 				}
-				// finalize the record
-				if err := tx.Commit(); err != nil {
-					log.Printf("failed to commit transaction in drain vote queue: %s", err)
-					continue OUTER
-				}
+				// okay if errored, update errored column
+			}
+			// write the message to kafka if successful
+			if err = service.kafkaWriter.WriteMessages(ctx,
+				kafka.Message{
+					Value: record.VoteEventBinary,
+				},
+			); err != nil {
+				rollbackAndLogTx(tx, "failed to write vote to kafka", err)
+				return true, fmt.Errorf("failed to write vote to kafka: %w", err)
+			}
+			// update the particular record to not be picked again
+			if err = service.datastore.CommitVote(ctx, *record, tx); err != nil {
+				rollbackAndLogTx(tx, "failed to commit vote to drain vote queue", err)
+				return true, fmt.Errorf("failed to commit vote to drain vote queue: %w", err)
 			}
 		}
-	}(ctx)
+		// finalize the record
+		if err := tx.Commit(); err != nil {
+			log.Printf("failed to commit transaction in drain vote queue: %s", err)
+			return true, fmt.Errorf("failed to commit transaction in drain vote queue: %w", err)
+		}
+		return true, nil
+	}
 }
 
 // Vote based on the browser's attention

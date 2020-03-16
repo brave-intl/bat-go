@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	srv "github.com/brave-intl/bat-go/utils/service"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -41,7 +42,11 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return log.WithContext(ctx), &log
 }
 
-func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
+
+	// runnable jobs for the services created
+	jobs := []srv.Job{}
+
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -88,6 +93,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
+	// add runnable jobs:
+	jobs = append(jobs, grantService.Jobs()...)
+
 	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
@@ -108,6 +116,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
+	// add runnable jobs:
+	jobs = append(jobs, promotionService.Jobs()...)
+
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
@@ -123,6 +134,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			raven.CaptureErrorAndWait(err, nil)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
+
+		// add runnable jobs:
+		jobs = append(jobs, paymentService.Jobs()...)
+
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 	}
@@ -142,16 +157,19 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	return ctx, r, promotionService
+	return ctx, r, promotionService, jobs
 }
 
-func jobWorker(context context.Context, job func(context.Context) (bool, error), duration time.Duration) {
+func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
 	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
 	for {
-		attempted, err := job(context)
+		attempted, err := job(ctx)
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 		}
+
 		if !attempted || err != nil {
 			<-ticker.C
 		}
@@ -163,11 +181,18 @@ func main() {
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
-	serverCtx, r, service := setupRouter(serverCtx, logger)
+	serverCtx, r, _, jobs := setupRouter(serverCtx, logger)
 
-	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
-	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
-	go jobWorker(serverCtx, service.RunNextDrainJob, 5*time.Second)
+	serverCtx, cancel := context.WithCancel(serverCtx)
+	defer cancel()
+
+	for _, job := range jobs {
+		// iterate over jobs
+		for i := 0; i < job.Workers; i++ {
+			// spin up a job worker for each worker
+			go jobWorker(serverCtx, job.Func, job.Cadence)
+		}
+	}
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()

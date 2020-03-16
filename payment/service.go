@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
@@ -53,7 +54,12 @@ type Service struct {
 	codecs      map[string]*goavro.Codec
 	kafkaWriter *kafka.Writer
 	kafkaDialer *kafka.Dialer
-	cancel      context.CancelFunc
+	jobs        []srv.Job
+}
+
+// Jobs - Implement srv.JobService interface
+func (s *Service) Jobs() []srv.Job {
+	return s.jobs
 }
 
 func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
@@ -162,11 +168,11 @@ func tlsDialer() (*kafka.Dialer, error) {
 }
 
 // InitCodecs used for Avro encoding / decoding
-func (service *Service) InitCodecs() error {
-	service.codecs = make(map[string]*goavro.Codec)
+func (s *Service) InitCodecs() error {
+	s.codecs = make(map[string]*goavro.Codec)
 
 	voteEventCodec, err := goavro.NewCodec(string(voteSchema))
-	service.codecs["vote"] = voteEventCodec
+	s.codecs["vote"] = voteEventCodec
 	if err != nil {
 		return err
 	}
@@ -174,12 +180,12 @@ func (service *Service) InitCodecs() error {
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (service *Service) InitKafka() error {
+func (s *Service) InitKafka() error {
 	dialer, err := tlsDialer()
 	if err != nil {
 		return err
 	}
-	service.kafkaDialer = dialer
+	s.kafkaDialer = dialer
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
@@ -191,8 +197,8 @@ func (service *Service) InitKafka() error {
 		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
 	})
 
-	service.kafkaWriter = kafkaWriter
-	err = service.InitCodecs()
+	s.kafkaWriter = kafkaWriter
+	err = s.InitCodecs()
 	if err != nil {
 		return err
 	}
@@ -212,15 +218,26 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 
-	// create a background context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-
 	service := &Service{
 		wallet:    *walletService,
 		cbClient:  cbClient,
 		datastore: datastore,
-		cancel:    cancel,
 	}
+
+	// setup runnable jobs
+	service.jobs = []srv.Job{
+		{
+			Func:    service.RunNextVoteDrainJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextOrderJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+	}
+
 	err = service.InitKafka()
 	if err != nil {
 		return nil, err
@@ -232,16 +249,11 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 
-	// kick off async goroutine to monitor the vote
-	// queue of uncommitted votes in postgres, and
-	// push the votes through redemption and kafka
-	go service.DrainVoteQueue(ctx, 15*time.Second)
-
 	return service, nil
 }
 
 // CreateOrderFromRequest creates an order from the request
-func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	var currency string
@@ -262,25 +274,25 @@ func (service *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, 
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	order, err := service.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, orderItems)
+	order, err := s.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, orderItems)
 
 	return order, err
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
-func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
-	order, err := service.datastore.GetOrder(orderID)
+func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	order, err := s.datastore.GetOrder(orderID)
 	if err != nil {
 		return err
 	}
 
-	sum, err := service.datastore.GetSumForTransactions(orderID)
+	sum, err := s.datastore.GetSumForTransactions(orderID)
 	if err != nil {
 		return err
 	}
 
 	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = service.datastore.UpdateOrder(orderID, "paid")
+		err = s.datastore.UpdateOrder(orderID, "paid")
 		if err != nil {
 			return err
 		}
@@ -290,7 +302,7 @@ func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 }
 
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
-func (service *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
+func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
 	var wallet uphold.Wallet
 	upholdTransaction, err := wallet.GetTransaction(req.ExternalTransactionID)
 
@@ -303,19 +315,19 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 	currency := upholdTransaction.AltCurrency.String()
 	kind := "uphold"
 
-	transaction, err := service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
+	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error recording transaction")
 	}
 
-	isPaid, err := service.IsOrderPaid(transaction.OrderID)
+	isPaid, err := s.IsOrderPaid(transaction.OrderID)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error submitting anon card transaction")
 	}
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
-		err = service.datastore.UpdateOrder(transaction.OrderID, "paid")
+		err = s.datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
 			return nil, errors.Wrap(err, "Error updating order status")
 		}
@@ -325,18 +337,18 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 }
 
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
-func (service *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
-	txInfo, err := service.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
+func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
+	txInfo, err := s.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error submitting anon card transaction")
 	}
 
-	txn, err := service.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
+	txn, err := s.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error recording anon card transaction")
 	}
 
-	err = service.UpdateOrderStatus(orderID)
+	err = s.UpdateOrderStatus(orderID)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error updating order status")
 	}
@@ -345,14 +357,14 @@ func (service *Service) CreateAnonCardTransaction(ctx context.Context, walletID 
 }
 
 // IsOrderPaid determines if the order has been paid
-func (service *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
+func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	// Now that the transaction has been created let's check to see if that fulfilled the order.
-	order, err := service.datastore.GetOrder(orderID)
+	order, err := s.datastore.GetOrder(orderID)
 	if err != nil {
 		return false, err
 	}
 
-	sum, err := service.datastore.GetSumForTransactions(orderID)
+	sum, err := s.datastore.GetSumForTransactions(orderID)
 	if err != nil {
 		return false, err
 	}
@@ -361,6 +373,6 @@ func (service *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 }
 
 // RunNextOrderJob takes the next order job and completes it
-func (service *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextOrderJob(ctx, service)
+func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
+	return s.datastore.RunNextOrderJob(ctx, s)
 }

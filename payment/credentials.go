@@ -8,7 +8,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -104,13 +103,6 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 	if err != nil {
 		return errors.Wrap(err, "Error inserting order creds")
 	}
-
-	go func() {
-		_, err := service.RunNextOrderJob(ctx)
-		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
-		}
-	}()
 
 	return nil
 }

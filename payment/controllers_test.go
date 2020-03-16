@@ -403,7 +403,13 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// queue of uncommitted votes in postgres, and
 	// push the votes through redemption and kafka
 	ctx, cancel := context.WithCancel(context.Background())
-	go service.DrainVoteQueue(ctx, 1*time.Second)
+	go func() {
+		for {
+			_, err := service.RunNextVoteDrainJob(ctx)
+			suite.Require().NoError(err, "Failed to drain vote queue")
+			<-time.After(1 * time.Second)
+		}
+	}()
 	defer cancel()
 
 	// Create the order first
