@@ -465,6 +465,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
@@ -591,6 +594,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	codec := service.codecs["suggestion"]
 
 	// :cry:
+
 	err = r.SetOffset(offset)
 	suite.Require().NoError(err)
 
@@ -620,6 +624,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
+		"orderId": "",
 		"funding": [
 			{
 				"type": "ugp",
@@ -1149,4 +1154,190 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	_, err = wal.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Assert().NoError(err)
+}
+
+// THIS CODE IS A QUICK AND DIRTY HACK
+// WE SHOULD DELETE ALL OF THIS AND MOVE OVER TO THE PAYMENT SERVICE ONCE DEMO IS DONE.
+
+// CreateOrder creates orders given the total price, merchant ID, status and items of the order
+func (suite *ControllersTestSuite) CreateOrder() (string, error) {
+	pg, err := NewPostgres("", false)
+	tx := pg.DB.MustBegin()
+
+	var id string
+
+	err = tx.Get(&id, `
+			INSERT INTO orders (total_price, merchant_id, status, currency)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`, 0.25, "brave.com", "pending", "BAT")
+
+	err = tx.Commit()
+	if err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	return id, nil
+}
+
+func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, err := tlsDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	wallet := wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
+		reputationClient: mockReputation,
+	}
+
+	err = service.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+
+	handler := MakeSuggestion(service)
+
+	orderID, err := suite.CreateOrder()
+	suite.Require().NoError(err)
+	validOrderID := uuid.Must(uuid.FromString(orderID))
+
+	orderPending, err := service.datastore.GetOrder(validOrderID)
+	suite.Assert().NoError(err)
+	suite.Assert().Equal("pending", orderPending.Status)
+
+	suggestion := Suggestion{
+		Type:    "payment",
+		OrderID: &validOrderID,
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	suggestionReq := SuggestionRequest{
+		Suggestion: suggestionPayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(suggestionPayload)).Return(nil)
+
+	body, err := json.Marshal(&suggestionReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            suggestionTopic,
+		Dialer:           service.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	codec := service.codecs["suggestion"]
+
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	suite.Require().NoError(err)
+	suite.Assert().NotNil(suggestionEvent)
+
+	updatedOrder, err := service.datastore.GetOrder(validOrderID)
+	suite.Assert().NoError(err)
+	suite.Assert().Equal("paid", updatedOrder.Status)
 }

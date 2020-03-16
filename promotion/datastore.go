@@ -2,6 +2,7 @@ package promotion
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,6 +71,17 @@ type Datastore interface {
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
+
+	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
+
+	// GetOrder by ID
+	GetOrder(orderID uuid.UUID) (*Order, error)
+	// UpdateOrder updates an order when it has been paid
+	UpdateOrder(orderID uuid.UUID, status string) error
+	// CreateTransaction creates a transaction
+	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// GetSumForTransactions gets a decimal sum of for transactions for an order
+	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -677,6 +689,31 @@ limit 1`
 	return attempted, nil
 }
 
+// This code can be deleted once https://github.com/brave-intl/bat-go/issues/263 is addressed.
+
+// GetOrder queries the database and returns an order
+func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
+	statement := "SELECT * FROM orders WHERE id = $1"
+	order := Order{}
+	err := pg.DB.Get(&order, statement, orderID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("Failed to get order : %w", err)
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = "SELECT * FROM order_items WHERE order_id = $1"
+	err = pg.DB.Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, nil
+}
+
 // DrainClaim by marking the claim as drained and inserting a new drain entry
 func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
 	credentialsJSON, err := json.Marshal(credentials)
@@ -785,4 +822,61 @@ limit 1`
 	}
 
 	return attempted, nil
+}
+
+// UpdateOrder updates the orders status.
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
+}
+
+// CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
+func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
+	tx := pg.DB.MustBegin()
+
+	var transaction Transaction
+	err := tx.Get(&transaction,
+		`
+			INSERT INTO transactions (order_id, external_transaction_id, status, currency, kind, amount)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING *
+	`, orderID, externalTransactionID, status, currency, kind, amount)
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	return &transaction, nil
+}
+
+// GetSumForTransactions returns the calculated sum
+func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
+	var sum decimal.Decimal
+
+	err := pg.DB.Get(&sum, `
+		SELECT SUM(amount) as sum
+		FROM transactions
+		WHERE order_id = $1 AND status = 'completed'
+	`, orderID)
+
+	return sum, err
 }

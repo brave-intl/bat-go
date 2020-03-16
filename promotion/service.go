@@ -86,6 +86,11 @@ var (
 	)
 )
 
+// SetSuggestionTopic allows for a new topic to be suggested
+func SetSuggestionTopic(newTopic string) {
+	suggestionTopic = newTopic
+}
+
 func init() {
 	prometheus.MustRegister(
 		countContributionsTotal,
