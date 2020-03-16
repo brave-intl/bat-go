@@ -1,4 +1,6 @@
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
 _BINS := $(wildcard bin/*)
 TEST_PKG?=./...
@@ -21,23 +23,27 @@ target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
 
 docker:
-	docker build -t bat-go:latest .
+	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:latest .
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
 
 docker-up-dev:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.dev.yml up -d
 
 docker-up-dev-rep:
-	docker-compose -f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
 docker-test:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make test
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web /bin/bash
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev /bin/bash
 
 mac:
 	GOOS=darwin GOARCH=amd64 make bins

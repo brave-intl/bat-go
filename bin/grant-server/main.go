@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	raven "github.com/getsentry/raven-go"
 	"github.com/go-chi/chi"
@@ -21,6 +22,12 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	commit    string
+	version   string
+	buildTime string
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -142,6 +149,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
+
+	log.Printf("server version/buildtime = %s %s %s", version, commit, buildTime)
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
 
 	env := os.Getenv("ENV")
 	reputationServer := os.Getenv("REPUTATION_SERVER")

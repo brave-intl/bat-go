@@ -93,7 +93,6 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		totalPrice, merchantID, status, currency)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -108,13 +107,11 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		err = nstmt.Get(&orderItems[i], orderItems[i])
 
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -177,10 +174,15 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	_, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
 	}
 
 	return nil
@@ -199,14 +201,12 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	err = tx.Commit()
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -404,6 +404,7 @@ func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -429,12 +430,10 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -444,13 +443,11 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
