@@ -2,13 +2,14 @@ package promotion
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	raven "github.com/getsentry/raven-go"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -68,12 +69,12 @@ func (service *Service) ClaimPromotionForWallet(
 
 	wallet, err := service.datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
-		return nil, errors.Wrap(err, "Error getting wallet")
+		return nil, fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
+		return nil, fmt.Errorf("error checking previous claims for wallet: %w", err)
 	}
 
 	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
@@ -88,7 +89,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 
 		if !walletIsReputable {
-			return nil, errors.New("Insufficient wallet reputation for grant claim")
+			return nil, errors.New("insufficient wallet reputation for grant claim")
 		}
 	}
 

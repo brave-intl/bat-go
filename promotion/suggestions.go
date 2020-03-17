@@ -11,7 +11,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -141,7 +140,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if issuer, ok = issuers[publicKey]; !ok {
 			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
 			if err != nil {
-				err = errors.Wrap(err, "Error finding issuer")
+				err = fmt.Errorf("error finding issuer: %w", err)
 				return
 			}
 		}
@@ -153,7 +152,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if promotion, ok = promotions[publicKey]; !ok {
 			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
 			if err != nil {
-				err = errors.Wrap(err, "Error finding promotion")
+				err = fmt.Errorf("error finding promotion: %w", err)
 				return
 			}
 		}
@@ -178,7 +177,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	var suggestion Suggestion
 	err := suggestion.Base64Decode(suggestionText)
 	if err != nil {
-		return errors.Wrap(err, "Error decoding suggestion")
+		return fmt.Errorf("error decoding suggestion: %w", err)
 	}
 
 	_, err = govalidator.ValidateStruct(suggestion)

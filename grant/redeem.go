@@ -2,6 +2,7 @@ package grant
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -62,7 +62,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
 	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo, promotionType)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
+		return nil, fmt.Errorf("could not fetch grants ordered by expiration date: %w", err)
 	}
 
 	if len(unredeemedGrants) == 0 {
@@ -76,7 +76,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	}
 	userWallet, ok := providerWallet.(*uphold.Wallet)
 	if !ok {
-		return nil, errors.New("Only uphold wallets are supported")
+		return nil, errors.New("only uphold wallets are supported")
 	}
 	// this ensures we have a valid wallet if refreshBalance == true
 	balance, err := userWallet.GetBalance(refreshBalance)
@@ -111,7 +111,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 			}
 		}
 		if *grant.AltCurrency != altcurrency.BAT {
-			return nil, errors.New("All grants must be in BAT")
+			return nil, errors.New("all grants must be in BAT")
 		}
 		sumProbi = sumProbi.Add(grant.Probi)
 		grants = append(grants, grant)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -94,7 +93,7 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
 			if e.Cause != nil {
-				raven.CaptureError(errors.Wrap(e.Cause, e.Message), map[string]string{})
+				raven.CaptureError(fmt.Errorf("%s: %w", e.Message, e.Cause), map[string]string{})
 			} else {
 				raven.CaptureMessage(e.Message, map[string]string{})
 			}

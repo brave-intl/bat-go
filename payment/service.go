@@ -2,12 +2,12 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -104,19 +104,19 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 
 	transaction, err := service.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error recording transaction")
+		return nil, fmt.Errorf("error recording transaction: %w", err)
 	}
 
 	isPaid, err := service.IsOrderPaid(transaction.OrderID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error submitting anon card transaction")
+		return nil, fmt.Errorf("error submitting anon card transaction: %w", err)
 	}
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
 		err = service.datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
-			return nil, errors.Wrap(err, "Error updating order status")
+			return nil, fmt.Errorf("error updating order status: %w", err)
 		}
 	}
 
@@ -127,18 +127,18 @@ func (service *Service) CreateTransactionFromRequest(req CreateTransactionReques
 func (service *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
 	txInfo, err := service.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error submitting anon card transaction")
+		return nil, fmt.Errorf("error submitting anon card transaction: %w", err)
 	}
 	fmt.Println(txInfo)
 
 	txn, err := service.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error recording anon card transaction")
+		return nil, fmt.Errorf("error recording anon card transaction: %w", err)
 	}
 
 	err = service.UpdateOrderStatus(orderID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error updating order status")
+		return nil, fmt.Errorf("error updating order status: %w", err)
 	}
 
 	return txn, err

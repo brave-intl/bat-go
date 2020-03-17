@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -22,7 +24,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
@@ -184,7 +185,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if len(keyPassword) != 0 {
 		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
 		if err != nil {
-			return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
+			return nil, fmt.Errorf("decrypt KAFKA_SSL_KEY failed: %w", err)
 		}
 
 		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
@@ -192,7 +193,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse x509 keypair")
+		return nil, fmt.Errorf("could not parse x509 keypair: %w", err)
 	}
 
 	// Define TLS configuration
@@ -203,7 +204,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	// Instrument kafka cert expiration information
 	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse certificate")
+		return nil, fmt.Errorf("could not parse certificate: %w", err)
 	}
 	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
 	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
@@ -282,11 +283,11 @@ func (service *Service) InitHotWallet() error {
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+			return fmt.Errorf("grantWalletPublicKeyHex is invalid: %w", err)
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+			return fmt.Errorf("grantWalletPrivateKeyHex is invalid: %w", err)
 		}
 
 		service.hotWallet, err = uphold.New(info, privKey, pubKey)

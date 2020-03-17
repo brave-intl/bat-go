@@ -17,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -52,12 +51,12 @@ func SuggestionsRouter(service *Service) chi.Router {
 func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, errors.Wrap(err, "KeyID format is invalid")
+		return nil, fmt.Errorf("KeyID format is invalid: %w", err)
 	}
 
 	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error getting wallet")
+		return nil, fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	if wallet == nil {
@@ -320,7 +319,7 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 		}
 
 		if wallet == nil {
-			err := errors.New("wallet not found id: '" + walletID.String() + "'")
+			err := fmt.Errorf("wallet not found id: '%s'", walletID.String())
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
 

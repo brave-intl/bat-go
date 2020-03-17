@@ -8,7 +8,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/pkg/errors"
 )
 
 // CredentialBinding includes info needed to redeem a single credential
@@ -41,7 +40,7 @@ func (service *Service) Vote(ctx context.Context, credentials []CredentialBindin
 	var vote Vote
 	err := vote.Base64Decode(voteText)
 	if err != nil {
-		return errors.Wrap(err, "Error decoding vote")
+		return fmt.Errorf("error decoding vote: %w", err)
 	}
 
 	_, err = govalidator.ValidateStruct(vote)
@@ -61,7 +60,7 @@ func (service *Service) Vote(ctx context.Context, credentials []CredentialBindin
 		if issuer, ok = issuers[publicKey]; !ok {
 			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
 			if err != nil {
-				return errors.Wrap(err, "Error finding issuer")
+				return fmt.Errorf("error finding issuer: %w", err)
 			}
 		}
 
