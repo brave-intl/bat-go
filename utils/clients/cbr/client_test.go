@@ -5,9 +5,12 @@ package cbr
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"os"
 	"testing"
 
+	"github.com/brave-intl/bat-go/utils/clients"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	_ "github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +36,12 @@ func TestGetIssuer(t *testing.T) {
 
 	issuer, err := client.GetIssuer(ctx, issuerName)
 	assert.Error(t, err, "Should not be able to get issuer")
+	// checking the error
+	httpError, ok := err.(*errorutils.ErrorBundle)
+	assert.Equal(t, true, ok, "should be able to coerce to an error bundle")
+	httpState, ok := httpError.Data().(clients.HTTPState)
+	assert.Equal(t, true, ok, "should contain an HTTPState")
+	assert.Equal(t, http.StatusNotFound, httpState.Status, "status should be not found")
 
 	err = client.CreateIssuer(ctx, issuerName, 100)
 	assert.NoError(t, err, "Should be able to create issuer")
@@ -88,5 +97,4 @@ func TestSignAndRedeemCredentials(t *testing.T) {
 
 	err = client.RedeemCredentials(ctx, []CredentialRedemption{{Issuer: issuerName, TokenPreimage: preimage, Signature: sig}}, payload)
 	assert.NoError(t, err, "Should be able to bulk redeem tokens")
-
 }

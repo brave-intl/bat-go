@@ -3,10 +3,10 @@ package promotion
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -69,12 +69,12 @@ func (service *Service) ClaimPromotionForWallet(
 
 	wallet, err := service.datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
-		return nil, fmt.Errorf("error getting wallet: %w", err)
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
-		return nil, fmt.Errorf("error checking previous claims for wallet: %w", err)
+		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
 	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id

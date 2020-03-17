@@ -2,11 +2,10 @@ package service
 
 import (
 	"context"
-	"fmt"
-
 	"errors"
 
 	"github.com/brave-intl/bat-go/utils/clients/ledger"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -47,18 +46,18 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.ReadableDatastore().GetWallet(walletID)
 	if err != nil {
-		return nil, fmt.Errorf("error looking up wallet: %w", err)
+		return nil, errorutils.Wrap(err, "error looking up wallet")
 	}
 
 	if wallet == nil {
 		wallet, err = service.LedgerClient.GetWallet(ctx, walletID)
 		if err != nil {
-			return nil, fmt.Errorf("error looking up wallet: %w", err)
+			return nil, errorutils.Wrap(err, "error looking up wallet")
 		}
 		if wallet != nil {
 			err = service.Datastore.UpsertWallet(wallet)
 			if err != nil {
-				return nil, fmt.Errorf("error saving wallet: %w", err)
+				return nil, errorutils.Wrap(err, "error saving wallet")
 			}
 		}
 	}
@@ -69,12 +68,12 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 func (service *Service) UpsertWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.LedgerClient.GetWallet(ctx, walletID)
 	if err != nil {
-		return nil, fmt.Errorf("error looking up wallet: %w", err)
+		return nil, errorutils.Wrap(err, "error looking up wallet")
 	}
 	if wallet != nil {
 		err = service.Datastore.UpsertWallet(wallet)
 		if err != nil {
-			return nil, fmt.Errorf("error saving wallet: %w", err)
+			return nil, errorutils.Wrap(err, "error saving wallet")
 		}
 	}
 	return wallet, nil
@@ -84,7 +83,7 @@ func (service *Service) UpsertWallet(ctx context.Context, walletID uuid.UUID) (*
 func (service *Service) SubmitAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string) (*wallet.TransactionInfo, error) {
 	walletInfo, err := service.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
-		return nil, fmt.Errorf("error getting wallet: %w", err)
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 	providerWallet, err := provider.GetWallet(*walletInfo)
 	if err != nil {

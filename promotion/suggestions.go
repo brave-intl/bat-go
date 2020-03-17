@@ -10,6 +10,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
@@ -140,7 +141,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if issuer, ok = issuers[publicKey]; !ok {
 			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
 			if err != nil {
-				err = fmt.Errorf("error finding issuer: %w", err)
+				err = errorutils.Wrap(err, "error finding issuer")
 				return
 			}
 		}
@@ -152,7 +153,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if promotion, ok = promotions[publicKey]; !ok {
 			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
 			if err != nil {
-				err = fmt.Errorf("error finding promotion: %w", err)
+				err = errorutils.Wrap(err, "error finding promotion")
 				return
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -62,7 +63,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
 	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo, promotionType)
 	if err != nil {
-		return nil, fmt.Errorf("could not fetch grants ordered by expiration date: %w", err)
+		return nil, errorutils.Wrap(err, "could not fetch grants ordered by expiration date")
 	}
 
 	if len(unredeemedGrants) == 0 {

@@ -3,9 +3,9 @@ package payment
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
@@ -76,16 +76,16 @@ type OrderCreds struct {
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.datastore.GetOrder(orderID)
 	if err != nil {
-		return fmt.Errorf("error finding order: %w", err)
+		return errorutils.Wrap(err, "error finding order")
 	}
 
 	if !order.IsPaid() {
-		return errors.New("Order has not yet been paid")
+		return errors.New("order has not yet been paid")
 	}
 
 	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
 	if err != nil {
-		return fmt.Errorf("error finding issuer: %w", err)
+		return errorutils.Wrap(err, "error finding issuer")
 	}
 
 	orderCreds := OrderCreds{
@@ -97,7 +97,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 
 	err = service.datastore.InsertOrderCreds(&orderCreds)
 	if err != nil {
-		return fmt.Errorf("error inserting order creds: %w", err)
+		return errorutils.Wrap(err, "error inserting order creds")
 	}
 
 	go func() {
