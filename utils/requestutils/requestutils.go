@@ -21,7 +21,7 @@ func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
 func Read(body io.Reader) ([]byte, error) {
 	jsonString, err := ReadWithLimit(body, payloadLimit10MB)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error reading body")
+		return nil, errorutils.Wrap(err, "error reading body")
 	}
 	return jsonString, nil
 }
@@ -34,7 +34,7 @@ func ReadJSON(body io.Reader, intr interface{}) error {
 	}
 	err = json.Unmarshal(jsonString, &intr)
 	if err != nil {
-		return errorutils.Wrap(err, "Error unmarshalling body")
+		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 	return nil
 }

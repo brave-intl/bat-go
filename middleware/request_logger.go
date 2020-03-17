@@ -31,13 +31,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
@@ -59,6 +58,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			entry := hlog.FromRequest(r)
 			createSubLog(r, 0).
 				Msg("request started")
+
 			defer func() {
 				t2 := time.Now()
 
@@ -67,13 +67,9 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 					entry.Panic().Stack()
 
 					// Send panic info to Sentry
-					recStr := fmt.Sprint(rec)
-					packet := raven.NewPacket(
-						recStr,
-						raven.NewException(errors.New(recStr), raven.NewStacktrace(2, 3, nil)),
-						raven.NewHttp(r),
-					)
-					raven.Capture(packet, nil)
+					event := sentry.NewEvent()
+					event.Message = fmt.Sprint(rec)
+					sentry.CaptureEvent(event)
 
 					handlers.AppError{
 						Message: http.StatusText(http.StatusInternalServerError),

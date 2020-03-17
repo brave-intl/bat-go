@@ -27,12 +27,12 @@ type ClaimResponse struct {
 func (service *Service) ClaimPromotion(ctx context.Context, wallet wallet.Info, promotionID uuid.UUID) (*promotion.Claim, error) {
 	err := service.datastore.UpsertWallet(&wallet)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error saving wallet")
+		return nil, errorutils.Wrap(err, "error saving wallet")
 	}
 
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Could not find promotion")
+		return nil, errorutils.Wrap(err, "could not find promotion")
 	}
 
 	// No reputation check as this endpoint requires authorization

@@ -59,7 +59,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 
 	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error getting wallet")
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	if wallet == nil {
@@ -323,7 +323,7 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 		}
 
 		if wallet == nil {
-			err := errors.New("wallet not found id: '" + walletID.String() + "'")
+			err := fmt.Errorf("wallet not found id: '%s'", walletID.String())
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
 

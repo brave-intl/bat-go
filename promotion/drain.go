@@ -2,12 +2,14 @@ package promotion
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	"github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -16,7 +18,7 @@ import (
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
 	wallet, err := service.datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
-		return errors.Wrap(err, "Error getting wallet")
+		return fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	// A verified wallet will have a payout address
@@ -24,7 +26,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// Try to retrieve updated wallet from the ledger service
 		wallet, err = service.wallet.UpsertWallet(ctx, walletID)
 		if err != nil {
-			return errors.Wrap(err, "Error upserting wallet")
+			return fmt.Errorf("error upserting wallet: %w", err)
 		}
 
 		if wallet.PayoutAddress == nil {
@@ -47,7 +49,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		promotion.ID = v.PromotionID
 		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, &promotion)
 		if err != nil || claim == nil {
-			return errors.Wrap(err, "Error finding claim for wallet")
+			return fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
 		if v.Amount.GreaterThan(claim.ApproximateValue) {
@@ -59,13 +61,14 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// Mark corresponding claim as drained
 			err := service.datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
-				return errors.Wrap(err, "Error draining claim")
+				return fmt.Errorf("error draining claim: %w", err)
 			}
 
 			go func() {
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
-					raven.CaptureErrorAndWait(err, nil)
+					sentry.CaptureException(err)
+					sentry.Flush(time.Second * 2)
 				}
 			}()
 		}

@@ -314,19 +314,19 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 
 	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error recording transaction")
+		return nil, errorutils.Wrap(err, "error recording transaction")
 	}
 
 	isPaid, err := s.IsOrderPaid(transaction.OrderID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error submitting anon card transaction")
+		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
 	}
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
 		err = s.datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
-			return nil, errorutils.Wrap(err, "Error updating order status")
+			return nil, errorutils.Wrap(err, "error updating order status")
 		}
 	}
 
@@ -337,17 +337,17 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
 	txInfo, err := s.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error submitting anon card transaction")
+		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
 	}
 
 	txn, err := s.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error recording anon card transaction")
+		return nil, errorutils.Wrap(err, "error recording anon card transaction")
 	}
 
 	err = s.UpdateOrderStatus(orderID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error updating order status")
+		return nil, errorutils.Wrap(err, "error updating order status")
 	}
 
 	return txn, err

@@ -81,16 +81,16 @@ type OrderCreds struct {
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.datastore.GetOrder(orderID)
 	if err != nil {
-		return errorutils.Wrap(err, "Error finding order")
+		return errorutils.Wrap(err, "error finding order")
 	}
 
 	if !order.IsPaid() {
-		return errors.New("Order has not yet been paid")
+		return errors.New("order has not yet been paid")
 	}
 
 	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
 	if err != nil {
-		return errorutils.Wrap(err, "Error finding issuer")
+		return errorutils.Wrap(err, "error finding issuer")
 	}
 
 	orderCreds := OrderCreds{
@@ -102,7 +102,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 
 	err = service.datastore.InsertOrderCreds(&orderCreds)
 	if err != nil {
-		return errorutils.Wrap(err, "Error inserting order creds")
+		return errorutils.Wrap(err, "error inserting order creds")
 	}
 
 	return nil

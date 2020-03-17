@@ -8,7 +8,7 @@ import (
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
@@ -69,12 +69,12 @@ func (service *Service) ClaimPromotionForWallet(
 
 	wallet, err := service.datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
-		return nil, errorutils.Wrap(err, "Error getting wallet")
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "Error checking previous claims for wallet")
+		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
 	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
@@ -89,7 +89,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 
 		if !walletIsReputable {
-			return nil, errors.New("Insufficient wallet reputation for grant claim")
+			return nil, errors.New("insufficient wallet reputation for grant claim")
 		}
 	}
 
@@ -130,7 +130,8 @@ func (service *Service) ClaimPromotionForWallet(
 	if claim.LegacyClaimed {
 		err = service.balanceClient.InvalidateBalance(ctx, walletID)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
 		}
 	}
 
@@ -146,7 +147,8 @@ func (service *Service) ClaimPromotionForWallet(
 	go func() {
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, map[string]string{})
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
 		}
 	}()
 

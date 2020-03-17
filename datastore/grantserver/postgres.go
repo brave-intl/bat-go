@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/metrics"
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
@@ -140,6 +140,7 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	err := tx.Rollback()
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 	}
 }
