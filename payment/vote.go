@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
@@ -115,7 +115,7 @@ func (ve *VoteEvent) CodecEncode(codec *goavro.Codec) ([]byte, error) {
 func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
 	native, _, err := codec.NativeFromBinary(binary)
 	if err != nil {
-		return fmt.Errorf("unable to decode avro payload: %w", err)
+		return errorutils.Wrap(err, "error decoding vote")
 	}
 
 	// gross
@@ -132,10 +132,12 @@ func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
 	return nil
 }
 
-func rollbackTx(pg *grantserver.Postgres, tx *sqlx.Tx, wrap string, err error) error {
-	if tx != nil {
-		// will handle logging to sentry if there is an error
-		pg.RollbackTx(tx)
+func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
+	if pg, ok := ds.(*Postgres); ok {
+		if tx != nil {
+			// will handle logging to sentry if there is an error
+			pg.RollbackTx(tx)
+		}
 	}
 	return errorutils.Wrap(err, wrap)
 }
@@ -169,8 +171,6 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 			// redeem the credentials
 			err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
 			if err != nil {
-				log.Printf("failed to redeem credentials: %s", err)
-				// mark errored?
 				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
 					return true, rollbackTx(service.datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}

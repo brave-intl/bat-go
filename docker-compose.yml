@@ -39,6 +39,8 @@ services:
       - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - "RATIOS_SERVER=https://ratios.mercury.basicattentiontoken.org"
+      - RATIOS_TOKEN
     volumes:
       - ./test/secrets:/etc/kafka/secrets
     depends_on:
@@ -60,6 +62,8 @@ services:
       - "3333:3333"
     environment:
       - ENV=local
+      - PKG
+      - RUN
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
       - CHALLENGE_BYPASS_SERVER=http://challenge-bypass:2416

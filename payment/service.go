@@ -12,13 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"errors"
+
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -129,7 +132,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if len(keyPassword) != 0 {
 		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
 		if err != nil {
-			return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
+			return nil, errorutils.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
 		}
 
 		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
@@ -137,7 +140,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse x509 keypair")
+		return nil, errorutils.Wrap(err, "Could not parse x509 keypair")
 	}
 
 	// Define TLS configuration
@@ -148,7 +151,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	// Instrument kafka cert expiration information
 	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse certificate")
+		return nil, errorutils.Wrap(err, "Could not parse certificate")
 	}
 	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
 	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
@@ -243,12 +246,6 @@ func InitService(datastore Datastore) (*Service, error) {
 		return nil, err
 	}
 
-	// init vote drain worker
-	err = service.InitKafka()
-	if err != nil {
-		return nil, err
-	}
-
 	return service, nil
 }
 
@@ -317,19 +314,19 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 
 	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error recording transaction")
+		return nil, errorutils.Wrap(err, "Error recording transaction")
 	}
 
 	isPaid, err := s.IsOrderPaid(transaction.OrderID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error submitting anon card transaction")
+		return nil, errorutils.Wrap(err, "Error submitting anon card transaction")
 	}
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
 		err = s.datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
-			return nil, errors.Wrap(err, "Error updating order status")
+			return nil, errorutils.Wrap(err, "Error updating order status")
 		}
 	}
 
@@ -340,17 +337,17 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
 	txInfo, err := s.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error submitting anon card transaction")
+		return nil, errorutils.Wrap(err, "Error submitting anon card transaction")
 	}
 
 	txn, err := s.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error recording anon card transaction")
+		return nil, errorutils.Wrap(err, "Error recording anon card transaction")
 	}
 
 	err = s.UpdateOrderStatus(orderID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error updating order status")
+		return nil, errorutils.Wrap(err, "Error updating order status")
 	}
 
 	return txn, err
