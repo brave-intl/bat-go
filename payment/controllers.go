@@ -1,7 +1,6 @@
 package payment
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -70,19 +69,12 @@ func CreateKey(service *Service) handlers.AppHandler {
 		}
 
 		encrypted, nonce := GenerateSecret()
-		// var Key Key
 		key, err := service.datastore.CreateKey(req.Merchant, encrypted, nonce)
 		if err != nil {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(key); err != nil {
-			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
-		}
-
-		return nil
+		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
 	})
 }
 
@@ -118,13 +110,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(key); err != nil {
-			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
-		}
-
-		return nil
+		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
 	})
 }
 
@@ -141,13 +127,7 @@ func GetKeys(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusOK)
-
-		if err := json.NewEncoder(w).Encode(keys); err != nil {
-			return handlers.WrapError(err, "Error encoding the keys JSON", http.StatusInternalServerError)
-		}
-
-		return nil
+		return handlers.RenderContent(r.Context(), keys, w, http.StatusOK)
 	})
 }
 
@@ -197,11 +177,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
 	})
 }
 
@@ -225,15 +201,11 @@ func GetOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
+		status := http.StatusOK
 		if order == nil {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusOK)
+			status = http.StatusNotFound
 		}
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), order, w, status)
 	})
 }
 
@@ -252,16 +224,12 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 		id := uuid.Must(uuid.FromString(orderID))
 
-		order, err := service.datastore.GetTransactions(id)
+		transactions, err := service.datastore.GetTransactions(id)
 		if err != nil {
-			return handlers.WrapError(err, "Error retrieving the transactions for the order", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error retrieving the transactions for the transactions", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the transactions JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), transactions, w, http.StatusOK)
 	})
 }
 
@@ -311,11 +279,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
 	})
 }
 
@@ -351,12 +315,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
-		}
-		return nil
-
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
 	})
 }
 
@@ -405,7 +364,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return nil
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 
@@ -438,11 +397,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(creds); err != nil {
-			panic(err)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
 	})
 }
 

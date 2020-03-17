@@ -144,6 +144,20 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
 }
 
+func (suite *ControllersTestSuite) TestGetMissingOrder() {
+	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
+	suite.Require().NoError(err)
+
+	getOrderHandler := GetOrder(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", "9645ca16-bc93-4e37-8edf-cb35b1763216")
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getOrderHandler.ServeHTTP(rr, getReq)
+	suite.Assert().Equal(http.StatusNotFound, rr.Code)
+}
+
 func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
