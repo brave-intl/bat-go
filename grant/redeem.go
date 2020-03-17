@@ -10,7 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -129,7 +129,9 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 
 	if sumProbi.GreaterThan(ugpBalance.SpendableProbi) {
 		safeMode = true
-		raven.CaptureMessage("Hot wallet out of funds!!!", map[string]string{"out-of-funds": "true"})
+		sentry.CaptureMessage(
+			fmt.Sprintf("Hot wallet out of funds: %+v!!!",
+				map[string]string{"out-of-funds": "true"}))
 		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
 	}
 
@@ -198,7 +200,9 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 			Error().
 			Err(err).
 			Msgf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not get wallet after successful Consume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		sentry.CaptureMessage(
+			fmt.Sprintf("Could not get wallet after successful Consume: %+v",
+				map[string]string{"providerID": req.WalletInfo.ProviderID}))
 		return nil, err
 	}
 
@@ -209,7 +213,10 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 			Error().
 			Err(err).
 			Msgf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not fund wallet after successful VerifyAndConsume", map[string]string{"providerID": req.WalletInfo.ProviderID})
+		sentry.CaptureMessage(
+			fmt.Sprintf(
+				"Could not fund wallet after successful VerifyAndConsume: %+v",
+				map[string]string{"providerID": req.WalletInfo.ProviderID}))
 		return nil, err
 	}
 
@@ -257,9 +264,11 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*Dr
 			Error().
 			Err(err).
 			Msgf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		raven.CaptureMessage("Could not drain into wallet after successful Consume", map[string]string{
-			"providerId": req.WalletInfo.ProviderID,
-		})
+		sentry.CaptureMessage(
+			fmt.Sprintf("Could not drain into wallet after successful Consume: %+v",
+				map[string]string{
+					"providerId": req.WalletInfo.ProviderID,
+				}))
 		return nil, err
 	}
 	return &DrainGrantsResponse{grantFulfillmentInfo.Probi}, nil

@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	"github.com/brave-intl/bat-go/utils/handlers"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
@@ -78,40 +78,46 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
 
 	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
 	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
 
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
@@ -122,12 +128,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if os.Getenv("FEATURE_ORDERS") != "" {
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/orders", payment.Router(paymentService))
@@ -160,7 +168,8 @@ func jobWorker(context context.Context, job func(context.Context) (bool, error),
 	for {
 		attempted, err := job(context)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 		}
 		if !attempted || err != nil {
 			<-ticker.C
@@ -182,7 +191,8 @@ func main() {
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 }

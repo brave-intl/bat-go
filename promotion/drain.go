@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -66,7 +67,8 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			go func() {
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
-					raven.CaptureErrorAndWait(err, nil)
+					sentry.CaptureException(err)
+					sentry.Flush(time.Second * 2)
 				}
 			}()
 		}

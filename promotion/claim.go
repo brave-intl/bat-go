@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
@@ -130,7 +130,8 @@ func (service *Service) ClaimPromotionForWallet(
 	if claim.LegacyClaimed {
 		err = service.balanceClient.InvalidateBalance(ctx, walletID)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
 		}
 	}
 
@@ -146,7 +147,8 @@ func (service *Service) ClaimPromotionForWallet(
 	go func() {
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
 		}
 	}()
 

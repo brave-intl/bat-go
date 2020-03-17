@@ -14,7 +14,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/handlers"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 )
 
@@ -155,7 +155,7 @@ func logOut(
 	}
 	input, err := json.Marshal(hash)
 	if err != nil {
-		raven.CaptureError(err, nil)
+		sentry.CaptureException(err)
 	} else {
 		logger.Debug().
 			Str("type", "http."+outType).

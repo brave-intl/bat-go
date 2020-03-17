@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -103,7 +103,8 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 	go func() {
 		_, err := service.RunNextOrderJob(ctx)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
 		}
 	}()
 

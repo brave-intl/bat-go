@@ -10,7 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/ed25519"
 )
@@ -136,7 +136,7 @@ func (service *Service) Describe(ch chan<- *prometheus.Desc) {
 func (service *Service) Collect(ch chan<- prometheus.Metric) {
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
-		raven.CaptureError(err, map[string]string{})
+		sentry.CaptureException(err)
 		return
 	}
 

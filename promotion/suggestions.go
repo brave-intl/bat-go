@@ -10,7 +10,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -260,7 +260,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 					Error().
 					Err(err).
 					Msg("error processing suggestion job")
-				raven.CaptureMessage("error processing suggestion job", nil)
+				sentry.CaptureMessage("error processing suggestion job")
 			}
 		}()
 	}
