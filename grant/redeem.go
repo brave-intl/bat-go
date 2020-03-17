@@ -2,15 +2,16 @@ package grant
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -62,7 +63,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 	// 1. Sort grants, closest expiration to furthest, short circuit if no grants
 	unredeemedGrants, err := service.datastore.GetGrantsOrderedByExpiry(walletInfo, promotionType)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch grants ordered by expiration date")
+		return nil, errorutils.Wrap(err, "could not fetch grants ordered by expiration date")
 	}
 
 	if len(unredeemedGrants) == 0 {

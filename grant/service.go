@@ -2,14 +2,15 @@ package grant
 
 import (
 	"encoding/hex"
+	"errors"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/ed25519"
 )
@@ -89,11 +90,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
 		grantWallet, err = uphold.New(info, privKey, pubKey)

@@ -4,6 +4,7 @@ package promotion
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -12,7 +13,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	"github.com/brave-intl/bat-go/wallet"
 	gomock "github.com/golang/mock/gomock"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
