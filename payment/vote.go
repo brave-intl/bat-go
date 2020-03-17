@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -131,13 +132,12 @@ func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
 	return nil
 }
 
-func rollbackAndLogTx(tx *sqlx.Tx, wrap string, err error) {
-	log.Printf(wrap+": %s", err)
+func rollbackTx(pg *grantserver.Postgres, tx *sqlx.Tx, wrap string, err error) error {
 	if tx != nil {
-		if err := tx.Rollback(); err != nil {
-			log.Printf("failed to rollback transaction in drain vote queue: %s", err)
-		}
+		// will handle logging to sentry if there is an error
+		pg.RollbackTx(tx)
 	}
+	return errorutils.Wrap(err, wrap)
 }
 
 // RunNextVoteDrainJob - Attempt to drain the vote queue
@@ -151,8 +151,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 		// pull vote from db queue
 		tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
 		if err != nil {
-			rollbackAndLogTx(tx, "failed to get uncommitted votes from drain queue", err)
-			return true, fmt.Errorf("failed to get uncommitted votes from drain queue: %w", err)
+			return true, rollbackTx(service.datastore, tx, "failed to get uncommitted votes from drain queue", err)
 		}
 		for _, record := range records {
 			if record == nil {
@@ -163,8 +162,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 			if err != nil {
 				log.Printf("failed to decode credentials: %s", err)
 				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
-					rollbackAndLogTx(tx, "failed to mark vote as errored for creds redemption", err)
-					return true, fmt.Errorf("failed to mark vote as errored for creds redemption: %w", err)
+					return true, rollbackTx(service.datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
 				// okay if it is errored, we will update the errored column
 			}
@@ -174,8 +172,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 				log.Printf("failed to redeem credentials: %s", err)
 				// mark errored?
 				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
-					rollbackAndLogTx(tx, "failed to mark vote as errored for creds redemption", err)
-					return true, fmt.Errorf("failed to mark vote as errored for creds redemption: %w", err)
+					return true, rollbackTx(service.datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
 				// okay if errored, update errored column
 			}
@@ -185,18 +182,15 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 					Value: record.VoteEventBinary,
 				},
 			); err != nil {
-				rollbackAndLogTx(tx, "failed to write vote to kafka", err)
-				return true, fmt.Errorf("failed to write vote to kafka: %w", err)
+				return true, rollbackTx(service.datastore, tx, "failed to write vote to kafka", err)
 			}
 			// update the particular record to not be picked again
 			if err = service.datastore.CommitVote(ctx, *record, tx); err != nil {
-				rollbackAndLogTx(tx, "failed to commit vote to drain vote queue", err)
-				return true, fmt.Errorf("failed to commit vote to drain vote queue: %w", err)
+				return true, rollbackTx(service.datastore, tx, "failed to commit vote to drain vote queue", err)
 			}
 		}
 		// finalize the record
 		if err := tx.Commit(); err != nil {
-			log.Printf("failed to commit transaction in drain vote queue: %s", err)
 			return true, fmt.Errorf("failed to commit transaction in drain vote queue: %w", err)
 		}
 		return true, nil
