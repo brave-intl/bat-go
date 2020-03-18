@@ -85,7 +85,10 @@ func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce 
 	if err != nil {
 		return nil, err
 	}
-	key.SetSecretKey()
+	err = key.SetSecretKey()
+	if err != nil {
+		return nil, err
+	}
 
 	return &key, nil
 }
@@ -108,7 +111,11 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 	if &key == nil {
 		return nil, fmt.Errorf("No rows were affected")
 	}
-	key.SetSecretKey()
+
+	err = key.SetSecretKey()
+	if err != nil {
+		return nil, err
+	}
 
 	return &key, nil
 }
@@ -129,12 +136,14 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 		merchant)
 
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
 	for i := 0; i < len(keys); i++ {
-		keys[i].SetSecretKey()
+		err = keys[i].SetSecretKey()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &keys, nil

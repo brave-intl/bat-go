@@ -3,11 +3,11 @@ package payment
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -27,13 +27,18 @@ type Key struct {
 }
 
 // SetSecretKey decrypts the secret key from the database
-func (key *Key) SetSecretKey() {
-	// FIXME call decrypt
-	key.SecretKey = decryptSecretKey(key.EncryptedSecretKey, key.Nonce)
+func (key *Key) SetSecretKey() error {
+	secretKey, err := decryptSecretKey(key.EncryptedSecretKey, key.Nonce)
+	if err != nil {
+		return err
+	}
+
+	key.SecretKey = secretKey
+	return nil
 }
 
 // Taken from https://gist.github.com/kkirsche/e28da6754c39d5e7ea10
-func encryptSecretKey(secretKey string) (string, string) {
+func encryptSecretKey(secretKey string) (secretText string, nonceString string, err error) {
 	// The key argument should be the AES key, either 16 or 32 bytes
 	// to select AES-128 or AES-256.
 	key := []byte(AESKey)
@@ -41,26 +46,26 @@ func encryptSecretKey(secretKey string) (string, string) {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err.Error())
+		return "", "", err
 	}
 
 	// Never use more than 2^32 random nonces with a given key because of the risk of a repeat.
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
-		panic(err.Error())
+		return "", "", err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return "", "", err
 	}
 
 	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
 
-	return fmt.Sprintf("%x", ciphertext), fmt.Sprintf("%x", nonce)
+	return fmt.Sprintf("%x", ciphertext), fmt.Sprintf("%x", nonce), nil
 }
 
-func decryptSecretKey(encryptedSecretKey string, nonceKey string) string {
+func decryptSecretKey(encryptedSecretKey string, nonceKey string) (string, error) {
 	// The key argument should be the AES key, either 16 or 32 bytes
 	// to select AES-128 or AES-256.
 	key := []byte(AESKey)
@@ -70,35 +75,39 @@ func decryptSecretKey(encryptedSecretKey string, nonceKey string) string {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
-	return string(plaintext)
+	return string(plaintext), nil
 }
 
-func randomString(length int) string {
-	rand.Seed(time.Now().UnixNano())
-	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-		"abcdefghijklmnopqrstuvwxyz" +
-		"0123456789")
-	var b strings.Builder
-	for i := 0; i < length; i++ {
-		b.WriteRune(chars[rand.Intn(len(chars))])
+func randomString(n int) (string, error) {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	// Note that err == nil only if we read len(b) bytes.
+	if err != nil {
+		return "", err
 	}
-	return b.String()
+
+	return base64.URLEncoding.EncodeToString(b), nil
 }
 
 // GenerateSecret creates a random public and secret key
-func GenerateSecret() (string, string) {
-	return encryptSecretKey("sk_" + randomString(keyLength))
+func GenerateSecret() (secret string, nonce string, err error) {
+	unencryptedsecret, err := randomString(keyLength)
+	if err != nil {
+		return "", "", err
+	}
+
+	return encryptSecretKey(unencryptedsecret)
 }

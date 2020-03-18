@@ -59,7 +59,6 @@ func CreateKey(service *Service) handlers.AppHandler {
 		var req CreateKeyRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			// FIXME Ask Ben what he would like us to do here instead of wrapError
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
@@ -68,7 +67,11 @@ func CreateKey(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		encrypted, nonce := GenerateSecret()
+		encrypted, nonce, err := GenerateSecret()
+		if err != nil {
+			return handlers.WrapError(err, "Could not generate a secret key ", http.StatusInternalServerError)
+		}
+
 		key, err := service.datastore.CreateKey(req.Merchant, encrypted, nonce)
 		if err != nil {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
@@ -96,7 +99,6 @@ func DeleteKey(service *Service) handlers.AppHandler {
 		var req DeleteKeyRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			// FIXME Ask Ben what he would like us to do here instead of wrapError
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
