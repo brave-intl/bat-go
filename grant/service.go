@@ -33,20 +33,6 @@ var (
 	testSubmit                   = true  // for testing we can disable testing tx submit
 	registerGrantInstrumentation = true  // for testing we can disable grant claim / redeem instrumentation registration
 	safeMode                     = false // if set true disables grant redemption
-	claimedGrantsCounter         = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "claimed_grants_total",
-			Help: "Number of grants claimed since start.",
-		},
-		[]string{},
-	)
-	redeemedGrantsCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "redeemed_grants_total",
-			Help: "Number of grants redeemed since start.",
-		},
-		[]string{"promotionId"},
-	)
 )
 
 // Service contains datastore as well as prometheus metrics
@@ -119,9 +105,6 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		if datastore != nil {
 			prometheus.MustRegister(gs)
 		}
-
-		prometheus.MustRegister(claimedGrantsCounter)
-		prometheus.MustRegister(redeemedGrantsCounter)
 	}
 
 	return gs, nil

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/metrics"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/getsentry/sentry-go"
@@ -141,8 +142,8 @@ func (service *Service) ClaimPromotionForWallet(
 		"type":     promotion.Type,
 		"legacy":   strconv.FormatBool(claim.LegacyClaimed),
 	}
-	countGrantsClaimedTotal.With(labels).Inc()
-	countGrantsClaimedBatTotal.With(labels).Add(value)
+	metrics.CountGrantsClaimedTotal.With(labels).Inc()
+	metrics.CountGrantsClaimedBatTotal.With(labels).Add(value)
 
 	go func() {
 		_, err := service.RunNextClaimJob(ctx)

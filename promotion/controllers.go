@@ -141,7 +141,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		if len(filter) == 0 {
 			filter = "none"
 		}
-		promotionGetCount.With(prometheus.Labels{
+		metrics.PromotionGetCount.With(prometheus.Labels{
 			"filter":  filter,
 			"legacy":  fmt.Sprint(legacy),
 			"migrate": fmt.Sprint(migrate),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/brave-intl/bat-go/metrics"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"
@@ -168,7 +169,7 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 			return nil, err
 		}
 
-		redeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionID.String()}).Inc()
+		metrics.RedeemedGrantsCounter.With(prometheus.Labels{"promotionId": grant.PromotionID.String()}).Inc()
 	}
 
 	redeemTxInfo.Probi = sumProbi

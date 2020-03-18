@@ -11,7 +11,6 @@ import (
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
-	"github.com/prometheus/client_golang/prometheus"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -87,19 +86,8 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 		return nil, err
 	}
 
-	// setup instrumentation using sqlstats
 	if len(dbStatsPrefix) > 0 {
-		// Create a new collector, the name will be used as a label on the metrics
-		collector := metrics.NewStatsCollector(strings.Join(dbStatsPrefix, "_"), db)
-		// Register it with Prometheus
-		err := prometheus.Register(collector)
-
-		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			// take old collector, and add the new db
-			if sc, ok := ae.ExistingCollector.(*metrics.StatsCollector); ok {
-				sc.AddStatsGetter(strings.Join(dbStatsPrefix, "_"), db)
-			}
-		}
+		metrics.InitStatsCollector(strings.Join(dbStatsPrefix, "_"), db)
 	}
 
 	// if we have a connection longer than 5 minutes, kill it

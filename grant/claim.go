@@ -42,7 +42,7 @@ func (service *Service) ClaimPromotion(ctx context.Context, wallet wallet.Info, 
 		log.Error().Msg("Attempt to claim previously claimed grant!")
 		return nil, err
 	}
-	claimedGrantsCounter.With(prometheus.Labels{}).Inc()
+	metrics.ClaimedGrantsCounter.With(prometheus.Labels{}).Inc()
 
 	return claim, nil
 }

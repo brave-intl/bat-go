@@ -14,40 +14,21 @@ import (
 
 	"errors"
 
+	"github.com/brave-intl/bat-go/metrics"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 )
 
 var (
-	voteTopic          = os.Getenv("ENV") + ".payment.vote"
-	kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_before",
-		Help: "Date when the kafka certificate becomes valid.",
-	})
-	kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_after",
-		Help: "Date when the kafka certificate expires.",
-	})
+	voteTopic = os.Getenv("ENV") + ".payment.vote"
 )
-
-func init() {
-	// gracefully try to register collectors for prom, no need to panic
-	if err := prometheus.Register(kafkaCertNotBefore); err != nil {
-		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
-	}
-	if err := prometheus.Register(kafkaCertNotAfter); err != nil {
-		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
-	}
-}
 
 // Service contains datastore
 type Service struct {
@@ -153,8 +134,8 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if err != nil {
 		return nil, errorutils.Wrap(err, "Could not parse certificate")
 	}
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
+	metrics.KafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
+	metrics.KafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
 	if len(caPEM) > 0 {
 		caCertPool := x509.NewCertPool()

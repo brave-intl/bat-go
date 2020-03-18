@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/metrics"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -25,7 +26,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
-	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
@@ -34,74 +34,11 @@ const localEnv = "local"
 
 var (
 	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
-
-	// kafkaCertNotAfter checks when the kafka certificate becomes valid
-	kafkaCertNotBefore = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "kafka_cert_not_before",
-			Help: "Date when the kafka certificate becomes valid.",
-		},
-	)
-
-	// kafkaCertNotAfter checks when the kafka certificate expires
-	kafkaCertNotAfter = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "kafka_cert_not_after",
-			Help: "Date when the kafka certificate expires.",
-		},
-	)
-
-	// countContributionsTotal counts the number of contributions made broken down by funding and type
-	countContributionsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "contributions_total",
-			Help: "count of contributions made ( since last start ) broken down by funding and type",
-		},
-		[]string{"funding", "type"},
-	)
-
-	// countContributionsBatTotal counts the total value of contributions in terms of bat ( since last start ) broken down by funding and type
-	countContributionsBatTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "contributions_bat_total",
-			Help: "total value of contributions in terms of bat ( since last start ) broken down by funding and type",
-		},
-		[]string{"funding", "type"},
-	)
-
-	// countGrantsClaimedTotal counts the grants claimed, broken down by platform and type
-	countGrantsClaimedTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "grants_claimed_total",
-			Help: "count of grants claimed ( since last start ) broken down by platform and type",
-		},
-		[]string{"platform", "type", "legacy"},
-	)
-
-	// countGrantsClaimedBatTotal counts the total value of grants claimed in terms of bat ( since last start ) broken down by platform and type
-	countGrantsClaimedBatTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "grants_claimed_bat_total",
-			Help: "total value of grants claimed in terms of bat ( since last start ) broken down by platform and type",
-		},
-		[]string{"platform", "type", "legacy"},
-	)
 )
 
 // SetSuggestionTopic allows for a new topic to be suggested
 func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
-}
-
-func init() {
-	prometheus.MustRegister(
-		countContributionsTotal,
-		countContributionsBatTotal,
-		countGrantsClaimedTotal,
-		countGrantsClaimedBatTotal,
-		kafkaCertNotBefore,
-		kafkaCertNotAfter,
-	)
 }
 
 // Service contains datastore and challenge bypass / ledger client connections
@@ -213,8 +150,8 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if err != nil {
 		return nil, errorutils.Wrap(err, "Could not parse certificate")
 	}
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
+	metrics.KafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
+	metrics.KafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
 	if len(caPEM) > 0 {
 		caCertPool := x509.NewCertPool()
