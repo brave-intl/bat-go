@@ -17,7 +17,7 @@ func DecodeAndValidate(ctx context.Context, v DecodeValidate, input []byte) erro
 		return fmt.Errorf("failed decoding: %w", err)
 	}
 	if err := v.Validate(ctx); err != nil {
-		return fmt.Errorf("failed decoding: %w", err)
+		return fmt.Errorf("failed validation: %w", err)
 	}
 	return nil
 }

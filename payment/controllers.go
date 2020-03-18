@@ -8,6 +8,8 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -27,6 +29,14 @@ func Router(service *Service) chi.Router {
 	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 
+	return r
+}
+
+// MerchantRouter for merchant endpoint
+func MerchantRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("GET", "/{merchantID}/transactions",
+		middleware.InstrumentHandler("MerchantTransactions", MerchantTransactions(service)))
 	return r
 }
 
@@ -364,6 +374,50 @@ func MakeVote(service *Service) handlers.AppHandler {
 		}
 
 		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
+// MerchantTransactions is the handler for getting paginated merchant transactions
+func MerchantTransactions(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// inputs
+		// /merchants/{merchantID}/transactions?page=1&items=50&order=id
+		var (
+			ctx                = r.Context()
+			merchantID, mIDErr = inputs.NewMerchantID(ctx, chi.URLParam(r, "merchantID"))
+			pagination, pIDErr = inputs.NewPagination(ctx, r.URL.String(), "id", "createdAt")
+		)
+
+		// Check Validation Errors
+		if mIDErr != nil {
+			return handlers.WrapValidationError(mIDErr)
+		}
+		if pIDErr != nil {
+			return handlers.WrapValidationError(pIDErr)
+		}
+
+		// Get Paginated Results
+		transactions, total, err := service.datastore.GetPagedMerchantTransactions(
+			ctx, merchantID.UUID(), pagination)
+		if err != nil {
+			return handlers.WrapError(err, "error getting transactions", http.StatusInternalServerError)
+		}
+
+		// Build Response
+		response := &outputs.PaginationResponse{
+			Page:    pagination.Page,
+			Items:   pagination.Items,
+			MaxPage: total / pagination.Items,
+			Ordered: pagination.RawOrder,
+			Data:    transactions,
+		}
+
+		// render response
+		if err := response.Render(ctx, w, http.StatusOK); err != nil {
+			return handlers.WrapError(err, "error rendering response", http.StatusInternalServerError)
+		}
+
 		return nil
 	})
 }

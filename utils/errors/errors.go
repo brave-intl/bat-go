@@ -1,5 +1,7 @@
 package errors
 
+import "fmt"
+
 // ErrorBundle creates a new response error
 type ErrorBundle struct {
 	cause   error
@@ -38,4 +40,35 @@ func Wrap(cause error, message string) error {
 		message: message,
 		data:    nil,
 	}
+}
+
+// MultiError - allows for multiple errors, not necessarily chained
+type MultiError struct {
+	errs []error
+}
+
+// Append - append new errors to this multierror
+func (me *MultiError) Append(err ...error) {
+	if me.errs == nil {
+		me.errs = []error{}
+	}
+	me.errs = append(me.errs, err...)
+}
+
+// Count - get the number of errors contained herein
+func (me *MultiError) Count() int {
+	return len(me.errs)
+}
+
+// Error - implement Error interface
+func (me *MultiError) Error() string {
+	var errText string
+	for _, err := range me.errs {
+		if errText == "" {
+			errText = fmt.Sprintf("%s", err)
+		} else {
+			errText += fmt.Sprintf("; %s", err)
+		}
+	}
+	return errText
 }

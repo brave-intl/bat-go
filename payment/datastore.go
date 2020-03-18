@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
 
@@ -34,6 +35,8 @@ type Datastore interface {
 	GetTransaction(externalTransactionID string) (*Transaction, error)
 	// GetTransactions returns all the transactions for a specific order
 	GetTransactions(orderID uuid.UUID) (*[]Transaction, error)
+	// GetPagedMerchantTransactions returns all the transactions for a specific order
+	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagenation *inputs.Pagination) (*[]Transaction, int, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// InsertIssuer
@@ -141,6 +144,64 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// GetPagedMerchantTransactions - get a paginated list of transactions for a merchant
+func (pg *Postgres) GetPagedMerchantTransactions(
+	ctx context.Context, merchantID uuid.UUID, pagenation *inputs.Pagination) (*[]Transaction, int, error) {
+	var count int
+
+	countStatement := `
+			SELECT count(t.*) 
+			FROM transactions 
+				INNER JOIN order ON order.id = transaction.order_id
+			WHERE order.merchant_id = $1`
+
+	// get the total count
+	err := pg.DB.Select(&count, countStatement, merchantID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	getStatement := `
+		SELECT t.*
+		FROM transactions
+			INNER JOIN order ON order.id = transaction.order_id
+		WHERE order.merchant_id = $1`
+
+	// $ numbered params for query
+	params := []interface{}{
+		merchantID,
+	}
+
+	start := 1
+	orderBy, v := pagenation.GetOrderBy(start)
+	count = len(v) + start
+	if orderBy != "" {
+		getStatement += orderBy
+		params = append(params, v...)
+	}
+
+	offset := pagenation.Page * pagenation.Items
+	if offset > 0 {
+		getStatement += fmt.Sprintf(" OFFSET $%d", count)
+		count++
+		params = append(params, interface{}(offset))
+	}
+
+	if pagenation.Items > 0 {
+		getStatement += fmt.Sprintf(" FETCH NEXT $%d ROWS ONLY", count)
+		params = append(params, interface{}(pagenation.Items))
+	}
+
+	transactions := []Transaction{}
+	err = pg.DB.Select(&transactions, getStatement, params...)
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return &transactions, count, nil
 }
 
 // GetTransactions returns the list of transactions given an orderID
