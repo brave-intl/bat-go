@@ -109,7 +109,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 
 		key, err := service.datastore.DeleteKey(id, req.DelaySeconds)
 		if err != nil {
-			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
@@ -126,7 +126,7 @@ func GetKeys(service *Service) handlers.AppHandler {
 		var keys *[]Key
 		keys, err := service.datastore.GetKeys(reqID, showExpired)
 		if err != nil {
-			return handlers.WrapError(err, "Error deleting the keys", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error Getting Keys for Merchan", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), keys, w, http.StatusOK)
