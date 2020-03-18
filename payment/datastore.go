@@ -83,11 +83,11 @@ func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce 
 		merchant, encryptedSecretKey, nonce)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create key for merchant: %w", err)
 	}
 	err = key.SetSecretKey()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
 	}
 
 	return &key, nil
@@ -105,7 +105,7 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 		`, id.String(), fmt.Sprintf("%vs", delaySeconds))
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update key for merchant: %w", err)
 	}
 
 	if &key == nil {
@@ -114,7 +114,7 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 
 	err = key.SetSecretKey()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
 	}
 
 	return &key, nil
@@ -136,13 +136,13 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 		merchant)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get keys for merchant: %w", err)
 	}
 
 	for i := 0; i < len(keys); i++ {
 		err = keys[i].SetSecretKey()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
 		}
 	}
 
