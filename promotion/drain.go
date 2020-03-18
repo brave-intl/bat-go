@@ -2,6 +2,7 @@ package promotion
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -50,7 +51,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			return errors.Wrap(err, "Error finding claim for wallet")
 		}
 
-		if v.Amount.GreaterThan(claim.ApproximateValue) {
+		suggestionsExpected, err := claim.SuggestionsNeeded(&promotion)
+		if err != nil {
+			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
+		}
+
+		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
+		if v.Amount.GreaterThan(amountExpected) {
 			return errors.New("Cannot claim more funds than were earned")
 		}
 
