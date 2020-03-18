@@ -69,9 +69,15 @@ func decryptSecretKey(encryptedSecretKey string, nonceKey string) (string, error
 	// The key argument should be the AES key, either 16 or 32 bytes
 	// to select AES-128 or AES-256.
 	key := []byte(AESKey)
-	ciphertext, _ := hex.DecodeString(encryptedSecretKey)
+	ciphertext, err := hex.DecodeString(encryptedSecretKey)
+	if err != nil {
+		return "", nil
+	}
 
-	nonce, _ := hex.DecodeString(nonceKey)
+	nonce, err := hex.DecodeString(nonceKey)
+	if err != nil {
+		return "", nil
+	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
