@@ -116,7 +116,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 	})
 }
 
-// GetKeys FIXME
+// GetKeys returns all keys for a specified merchant
 func GetKeys(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		reqID := chi.URLParam(r, "merchant")

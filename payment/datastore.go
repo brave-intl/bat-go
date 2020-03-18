@@ -71,7 +71,7 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return nil, err
 }
 
-// CreateKey FIXME
+// CreateKey creates an encrypted key in the database based on the merchant
 func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error) {
 	// interface and create an api key
 	var key Key
@@ -93,7 +93,7 @@ func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce 
 	return &key, nil
 }
 
-// DeleteKey FIXME
+// DeleteKey updates a key with an expiration time based on the id
 func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 	// interface and create an api key
 	var key Key
