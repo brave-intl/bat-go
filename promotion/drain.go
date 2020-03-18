@@ -9,7 +9,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -52,7 +52,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			return fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
-		if v.Amount.GreaterThan(claim.ApproximateValue) {
+		suggestionsExpected, err := claim.SuggestionsNeeded(&promotion)
+		if err != nil {
+			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
+		}
+
+		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
+		if v.Amount.GreaterThan(amountExpected) {
 			return errors.New("Cannot claim more funds than were earned")
 		}
 
