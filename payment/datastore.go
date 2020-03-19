@@ -124,10 +124,6 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 		return nil, fmt.Errorf("failed to update key for merchant: %w", err)
 	}
 
-	if &key == nil {
-		return nil, fmt.Errorf("No rows were affected")
-	}
-
 	err = key.SetSecretKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
