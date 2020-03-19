@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/pkg/errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
 
 var payloadLimit10MB = int64(1024 * 1024 * 10)
@@ -21,7 +21,7 @@ func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
 func Read(body io.Reader) ([]byte, error) {
 	jsonString, err := ReadWithLimit(body, payloadLimit10MB)
 	if err != nil {
-		return nil, errors.WithMessage(err, "Error reading body")
+		return nil, errorutils.Wrap(err, "error reading body")
 	}
 	return jsonString, nil
 }
@@ -34,7 +34,7 @@ func ReadJSON(body io.Reader, intr interface{}) error {
 	}
 	err = json.Unmarshal(jsonString, &intr)
 	if err != nil {
-		return errors.WithMessage(err, "Error unmarshalling body")
+		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 	return nil
 }

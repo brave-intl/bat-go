@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -30,8 +31,9 @@ type CredentialBinding struct {
 
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
-	Type    string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel string `json:"channel" valid:"-"`
+	Type    string     `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip|payment)"`
+	Channel string     `json:"channel" valid:"-"`
+	OrderID *uuid.UUID `json:"orderId,omitempty" valid:"-"`
 }
 
 // Base64Decode unmarshalls the suggestion from a string.
@@ -139,7 +141,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if issuer, ok = issuers[publicKey]; !ok {
 			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
 			if err != nil {
-				err = errors.Wrap(err, "Error finding issuer")
+				err = errorutils.Wrap(err, "error finding issuer")
 				return
 			}
 		}
@@ -151,7 +153,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		if promotion, ok = promotions[publicKey]; !ok {
 			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
 			if err != nil {
-				err = errors.Wrap(err, "Error finding promotion")
+				err = errorutils.Wrap(err, "error finding promotion")
 				return
 			}
 		}
@@ -176,7 +178,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	var suggestion Suggestion
 	err := suggestion.Base64Decode(suggestionText)
 	if err != nil {
-		return errors.Wrap(err, "Error decoding suggestion")
+		return fmt.Errorf("error decoding suggestion: %w", err)
 	}
 
 	_, err = govalidator.ValidateStruct(suggestion)
@@ -212,12 +214,18 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		})
 	}
 
+	orderID := ""
+	if suggestion.OrderID != nil {
+		orderID = suggestion.OrderID.String()
+	}
+
 	eventMap := map[string]interface{}{
 		"id":          uuid.NewV4().String(),
 		"createdAt":   string(createdAt),
 		"channel":     suggestion.Channel,
 		"type":        suggestion.Type,
 		"totalAmount": total.String(),
+		"orderId":     orderID,
 		"funding":     fundings,
 	}
 
@@ -253,9 +261,34 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 					Error().
 					Err(err).
 					Msg("error processing suggestion job")
-				raven.CaptureMessage("error processing suggestion job", nil)
+				sentry.CaptureMessage("error processing suggestion job")
 			}
 		}()
+	}
+
+	return nil
+}
+
+// Delete this function once the issue is completed
+// https://github.com/brave-intl/bat-go/issues/263
+
+// UpdateOrderStatus checks to see if an order has been paid and updates it if so
+func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	order, err := service.datastore.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	sum, err := service.datastore.GetSumForTransactions(orderID)
+	if err != nil {
+		return err
+	}
+
+	if sum.GreaterThanOrEqual(order.TotalPrice) {
+		err = service.datastore.UpdateOrder(orderID, "paid")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -282,5 +315,33 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	if err != nil {
 		return err
 	}
+
+	// Delete this section once the issue is completed
+	// https://github.com/brave-intl/bat-go/issues/263
+
+	newInterface, _, err := service.codecs["suggestion"].NativeFromBinary(suggestion)
+	eventMap := newInterface.(map[string]interface{})
+	if err != nil {
+		return err
+	}
+
+	if eventMap["orderId"] != nil && eventMap["orderId"] != "" {
+		orderID := uuid.Must(uuid.FromString(eventMap["orderId"].(string)))
+		amount, err := decimal.NewFromString(eventMap["totalAmount"].(string))
+		if err != nil {
+			return err
+		}
+
+		_, err = service.datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
+		if err != nil {
+			return fmt.Errorf("Error recording order transaction : %w", err)
+		}
+
+		err = service.UpdateOrderStatus(orderID)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

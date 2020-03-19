@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -17,12 +18,13 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	srv "github.com/brave-intl/bat-go/utils/service"
 	w "github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
@@ -86,6 +88,11 @@ var (
 	)
 )
 
+// SetSuggestionTopic allows for a new topic to be suggested
+func SetSuggestionTopic(newTopic string) {
+	suggestionTopic = newTopic
+}
+
 func init() {
 	prometheus.MustRegister(
 		countContributionsTotal,
@@ -110,6 +117,12 @@ type Service struct {
 	kafkaDialer      *kafka.Dialer
 	hotWallet        *uphold.Wallet
 	drainChannel     chan *w.TransactionInfo
+	jobs             []srv.Job
+}
+
+// Jobs - Implement srv.JobService interface
+func (s *Service) Jobs() []srv.Job {
+	return s.jobs
 }
 
 func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
@@ -179,7 +192,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if len(keyPassword) != 0 {
 		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
 		if err != nil {
-			return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
+			return nil, errorutils.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
 		}
 
 		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
@@ -187,7 +200,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse x509 keypair")
+		return nil, errorutils.Wrap(err, "Could not parse x509 keypair")
 	}
 
 	// Define TLS configuration
@@ -198,7 +211,7 @@ func tlsDialer() (*kafka.Dialer, error) {
 	// Instrument kafka cert expiration information
 	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse certificate")
+		return nil, errorutils.Wrap(err, "Could not parse certificate")
 	}
 	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
 	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
@@ -218,11 +231,11 @@ func tlsDialer() (*kafka.Dialer, error) {
 }
 
 // InitCodecs used for Avro encoding / decoding
-func (service *Service) InitCodecs() error {
-	service.codecs = make(map[string]*goavro.Codec)
+func (s *Service) InitCodecs() error {
+	s.codecs = make(map[string]*goavro.Codec)
 
 	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
-	service.codecs["suggestion"] = suggestionEventCodec
+	s.codecs["suggestion"] = suggestionEventCodec
 	if err != nil {
 		return err
 	}
@@ -230,12 +243,12 @@ func (service *Service) InitCodecs() error {
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (service *Service) InitKafka() error {
+func (s *Service) InitKafka() error {
 	dialer, err := tlsDialer()
 	if err != nil {
 		return err
 	}
-	service.kafkaDialer = dialer
+	s.kafkaDialer = dialer
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
@@ -247,8 +260,8 @@ func (service *Service) InitKafka() error {
 		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
 	})
 
-	service.kafkaWriter = kafkaWriter
-	err = service.InitCodecs()
+	s.kafkaWriter = kafkaWriter
+	err = s.InitCodecs()
 	if err != nil {
 		return err
 	}
@@ -257,7 +270,7 @@ func (service *Service) InitKafka() error {
 }
 
 // InitHotWallet by reading the keypair and card id from the environment
-func (service *Service) InitHotWallet() error {
+func (s *Service) InitHotWallet() error {
 	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
@@ -277,14 +290,14 @@ func (service *Service) InitHotWallet() error {
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+			return errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+			return errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
-		service.hotWallet, err = uphold.New(info, privKey, pubKey)
+		s.hotWallet, err = uphold.New(info, privKey, pubKey)
 		if err != nil {
 			return err
 		}
@@ -327,6 +340,26 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		balanceClient:    balanceClient,
 		wallet:           *walletService,
 	}
+
+	// setup runnable jobs
+	service.jobs = []srv.Job{
+		{
+			Func:    service.RunNextClaimJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextSuggestionJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextDrainJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+	}
+
 	err = service.InitKafka()
 	if err != nil {
 		return nil, err
@@ -339,24 +372,24 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
-func (service *Service) ReadableDatastore() ReadOnlyDatastore {
-	if service.roDatastore != nil {
-		return service.roDatastore
+func (s *Service) ReadableDatastore() ReadOnlyDatastore {
+	if s.roDatastore != nil {
+		return s.roDatastore
 	}
-	return service.datastore
+	return s.datastore
 }
 
 // RunNextClaimJob takes the next claim job and completes it
-func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextClaimJob(ctx, service)
+func (s *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
+	return s.datastore.RunNextClaimJob(ctx, s)
 }
 
 // RunNextSuggestionJob takes the next suggestion job and completes it
-func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextSuggestionJob(ctx, service)
+func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
+	return s.datastore.RunNextSuggestionJob(ctx, s)
 }
 
 // RunNextDrainJob takes the next drain job and completes it
-func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextDrainJob(ctx, service)
+func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
+	return s.datastore.RunNextDrainJob(ctx, s)
 }

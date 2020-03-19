@@ -4,8 +4,8 @@ import (
 	"context"
 
 	promotion "github.com/brave-intl/bat-go/promotion"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -27,12 +27,12 @@ type ClaimResponse struct {
 func (service *Service) ClaimPromotion(ctx context.Context, wallet wallet.Info, promotionID uuid.UUID) (*promotion.Claim, error) {
 	err := service.datastore.UpsertWallet(&wallet)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error saving wallet")
+		return nil, errorutils.Wrap(err, "error saving wallet")
 	}
 
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not find promotion")
+		return nil, errorutils.Wrap(err, "could not find promotion")
 	}
 
 	// No reputation check as this endpoint requires authorization

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -48,13 +49,28 @@ type Datastore interface {
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
+	// GetKeys ret
+	GetKeys(merchant string, showExpired bool) (*[]Key, error)
 	// CreateKey
 	CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error)
 	// DeleteKey
 	DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error)
 
-	// GetKeys ret
-	GetKeys(merchant string, showExpired bool) (*[]Key, error)
+	// Votes
+	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
+	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	InsertVote(ctx context.Context, vr VoteRecord) error
+}
+
+// VoteRecord - how the ac votes are stored in the queue
+type VoteRecord struct {
+	ID                 uuid.UUID
+	RequestCredentials string
+	VoteText           string
+	VoteEventBinary    []byte
+	Erred              bool
+	Processed          bool
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -162,7 +178,6 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		totalPrice, merchantID, status, currency)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -177,13 +192,11 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		err = nstmt.Get(&orderItems[i], orderItems[i])
 
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -246,10 +259,15 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	_, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
 	}
 
 	return nil
@@ -268,14 +286,12 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	err = tx.Commit()
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -384,6 +400,88 @@ func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, err
 	return nil, nil
 }
 
+// GetUncommittedVotesForUpdate - row locking on number of votes we will be pulling
+// returns a transaction to commit, the vote records, and an error
+func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error) {
+	var (
+		results = make([]*VoteRecord, 100)
+		tx, err = pg.DB.Beginx()
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to aquire transaction: %w", err)
+	}
+
+	statement := `
+select
+	id, credentials, vote_text, vote_event, erred, processed
+from
+	vote_drain
+where
+	processed = false AND
+	erred = false
+limit 100
+FOR UPDATE
+`
+	rows, err := tx.QueryContext(ctx, statement)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
+	}
+
+	for rows.Next() {
+		var vr = new(VoteRecord)
+		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
+			&vr.VoteEventBinary, &vr.Erred, &vr.Processed); err != nil {
+			return nil, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
+		}
+		// add to results
+		results = append(results, vr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
+	}
+
+	if err := rows.Close(); err != nil {
+		return tx, results, fmt.Errorf("error closing rows: %w", err)
+	}
+
+	return tx, results, err
+}
+
+// MarkVoteErrored - Update a vote to show it has errored, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set erred=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
+}
+
+// CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set processed=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
+}
+
+// InsertVote - Add a vote to our "queue" to be processed
+func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
+	var (
+		statement = `
+	insert into vote_drain (credentials, vote_text, vote_event)
+	values ($1, $2, $3)`
+		_, err = pg.DB.Exec(statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert vote to drain: %w", err)
+	}
+	return nil
+}
+
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
 	tx, err := pg.DB.Beginx()
@@ -391,6 +489,7 @@ func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -416,12 +515,10 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -431,13 +528,11 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
