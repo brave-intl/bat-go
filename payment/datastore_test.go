@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,9 +17,18 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 	ctx := context.Background()
 	// setup mock DB we will inject into our pg
 	mockDB, mock, err := sqlmock.New()
-	defer mockDB.Close()
+	if err != nil {
+		t.Errorf("failed to create a sql mock: %s", err)
+	}
+	defer func() {
+		if err := mockDB.Close(); err != nil {
+			if !strings.Contains(err.Error(), "all expectations were already fulfilled") {
+				t.Errorf("failed to close the mock database: %s", err)
+			}
+		}
+	}()
 	// inject our mock db into our postgres
-	pg := &Postgres{grantserver.Postgres{sqlx.NewDb(mockDB, "sqlmock")}}
+	pg := &Postgres{Postgres: grantserver.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}}
 
 	// setup inputs
 	merchantID := uuid.NewV4()
