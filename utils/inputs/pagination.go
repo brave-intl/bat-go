@@ -110,7 +110,7 @@ func (p *Pagination) Decode(ctx context.Context, v []byte) error {
 	}
 
 	for _, v := range q["order"] {
-		parts := strings.Split(".", v)
+		parts := strings.Split(v, ".")
 		po := PageOrder{}
 		if parts[0] != "" {
 			po.Attribute = parts[0]
@@ -143,8 +143,9 @@ func NewPagination(ctx context.Context, url string, orderOptions ...string) (*Pa
 	ctx = context.WithValue(ctx, appctx.PaginationOrderOptionsCTXKey, order)
 
 	if err := DecodeAndValidate(ctx, pagination, []byte(url)); err != nil {
+		fmt.Println("!!!!! err: ", err)
 		return nil, handlers.ValidationError(
-			"Error decoding or validating request merchant id url parameter",
+			"Error decoding or validating request pagination url parameter",
 			map[string]interface{}{
 				"pagination": "pagination failed validation",
 			},

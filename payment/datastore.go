@@ -149,17 +149,22 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 // GetPagedMerchantTransactions - get a paginated list of transactions for a merchant
 func (pg *Postgres) GetPagedMerchantTransactions(
 	ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error) {
-	var count int
+	var (
+		total int
+		count int
+		err   error
+	)
 
 	countStatement := `
-			SELECT count(t.*) 
+			SELECT count(t.*) as total
 			FROM transactions 
 				INNER JOIN order ON order.id = transaction.order_id
 			WHERE order.merchant_id = $1`
 
 	// get the total count
-	err := pg.DB.Select(&count, countStatement, merchantID)
-	if err != nil {
+	row := pg.DB.QueryRow(countStatement, merchantID)
+
+	if err := row.Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -167,14 +172,16 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		SELECT t.*
 		FROM transactions
 			INNER JOIN order ON order.id = transaction.order_id
-		WHERE order.merchant_id = $1`
+		WHERE order.merchant_id = $1
+		ORDER BY
+		`
 
 	// $ numbered params for query
 	params := []interface{}{
 		merchantID,
 	}
 
-	start := 1
+	start := 2
 	orderBy, v := pagination.GetOrderBy(start)
 	count = len(v) + start
 	if orderBy != "" {
@@ -201,7 +208,7 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		return nil, 0, err
 	}
 
-	return &transactions, count, nil
+	return &transactions, total, nil
 }
 
 // GetTransactions returns the list of transactions given an orderID
