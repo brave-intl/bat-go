@@ -36,7 +36,7 @@ type Datastore interface {
 	// GetTransactions returns all the transactions for a specific order
 	GetTransactions(orderID uuid.UUID) (*[]Transaction, error)
 	// GetPagedMerchantTransactions returns all the transactions for a specific order
-	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagenation *inputs.Pagination) (*[]Transaction, int, error)
+	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// InsertIssuer
@@ -148,7 +148,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 // GetPagedMerchantTransactions - get a paginated list of transactions for a merchant
 func (pg *Postgres) GetPagedMerchantTransactions(
-	ctx context.Context, merchantID uuid.UUID, pagenation *inputs.Pagination) (*[]Transaction, int, error) {
+	ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error) {
 	var count int
 
 	countStatement := `
@@ -175,23 +175,23 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 	}
 
 	start := 1
-	orderBy, v := pagenation.GetOrderBy(start)
+	orderBy, v := pagination.GetOrderBy(start)
 	count = len(v) + start
 	if orderBy != "" {
 		getStatement += orderBy
 		params = append(params, v...)
 	}
 
-	offset := pagenation.Page * pagenation.Items
+	offset := pagination.Page * pagination.Items
 	if offset > 0 {
 		getStatement += fmt.Sprintf(" OFFSET $%d", count)
 		count++
 		params = append(params, interface{}(offset))
 	}
 
-	if pagenation.Items > 0 {
+	if pagination.Items > 0 {
 		getStatement += fmt.Sprintf(" FETCH NEXT $%d ROWS ONLY", count)
-		params = append(params, interface{}(pagenation.Items))
+		params = append(params, interface{}(pagination.Items))
 	}
 
 	transactions := []Transaction{}
