@@ -179,9 +179,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-
+	var attemptedCount = 0
 	for {
 		attempted, err := job(ctx)
 		if err != nil {
@@ -189,8 +187,14 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 			sentry.Flush(time.Second * 2)
 		}
 
-		if !attempted || err != nil {
-			<-ticker.C
+		if !attempted && attemptedCount < 5 {
+			// if it wasn't attempted try again up to max tries then bail
+			attemptedCount++
+			continue
+		} else {
+			// it was attempted, wait the specified duration
+			attemptedCount = 0
+			<-time.After(duration)
 		}
 	}
 }
