@@ -39,10 +39,9 @@ type Pagination struct {
 }
 
 // GetOrderBy - create the order by expression and parameters for pagination
-func (p Pagination) GetOrderBy(count int) (string, []interface{}) {
+func (p Pagination) GetOrderBy() string {
 	var (
 		statement string
-		v         = []interface{}{}
 	)
 
 	for _, po := range p.Order {
@@ -50,26 +49,26 @@ func (p Pagination) GetOrderBy(count int) (string, []interface{}) {
 			// not the first statement
 			statement += ", "
 		}
-		statement += fmt.Sprintf("$%d ", count)
-		v = append(v, po.Attribute)
-		count++
+		statement += fmt.Sprintf("%s ", po.Attribute)
 
 		if po.Direction != "" {
-			statement += fmt.Sprintf("$%d", count)
-			v = append(v, po.Direction)
-			count++
+			if po.Direction == Ascending {
+				statement += " ASC "
+			} else if po.Direction == Descending {
+				statement += " DESC "
+			}
 		}
 	}
-	return statement, v
+	return statement
 }
 
 // Validate - implementation of validatable interface
 func (p *Pagination) Validate(ctx context.Context) error {
 	var errs = new(errorutils.MultiError)
 	if p.Page < 0 {
-		errs.Append(errors.New("page value must be greater than 0"))
+		errs.Append(errors.New("page value must be greater than or equal to 0"))
 	}
-	if p.Items < 0 {
+	if p.Items <= 0 {
 		errs.Append(errors.New("items value must be greater than 0"))
 	}
 
@@ -99,14 +98,22 @@ func (p *Pagination) Decode(ctx context.Context, v []byte) error {
 	// get the query string parameters
 	q := u.Query()
 
-	p.Page, err = strconv.Atoi(q.Get("page"))
-	if err != nil {
-		return fmt.Errorf("failed to parse pagination page parameter: %w", err)
+	if q.Get("page") == "" {
+		p.Page = 0
+	} else {
+		p.Page, err = strconv.Atoi(q.Get("page"))
+		if err != nil {
+			return fmt.Errorf("failed to parse pagination page parameter: %w", err)
+		}
 	}
 
-	p.Items, err = strconv.Atoi(q.Get("items"))
-	if err != nil {
-		return fmt.Errorf("failed to parse pagination items parameter: %w", err)
+	if q.Get("items") == "" {
+		p.Items = 10
+	} else {
+		p.Items, err = strconv.Atoi(q.Get("items"))
+		if err != nil {
+			return fmt.Errorf("failed to parse pagination items parameter: %w", err)
+		}
 	}
 
 	for _, v := range q["order"] {

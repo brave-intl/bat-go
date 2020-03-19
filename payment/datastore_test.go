@@ -41,8 +41,8 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 	countRows := sqlmock.NewRows([]string{"total"}).AddRow(3)
 	mock.ExpectQuery(`
 			SELECT (.+) as total
-			FROM transactions 
-				INNER JOIN order ON order.id = transaction.order_id
+			FROM transactions as t
+				INNER JOIN orders as o ON o.id = t.order_id
 			WHERE (.+)`).WithArgs(merchantID).WillReturnRows(countRows)
 
 	transactionUUIDs := []uuid.UUID{uuid.NewV4(), uuid.NewV4(), uuid.NewV4()}
@@ -58,13 +58,10 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 
 	mock.ExpectQuery(`
 			SELECT (.+)
-			FROM transactions
-				INNER JOIN order ON order.id = transaction.order_id
-			WHERE order.merchant_id = (.+)
-			ORDER BY (.+)
-			OFFSET (.+)
-			FETCH NEXT (.+)
-			`).WithArgs(merchantID, "id", "ASC", "createdAt", "DESC", 2*50, 50).
+			FROM transactions as t
+				INNER JOIN orders as o ON o.id = t.order_id
+			WHERE o.merchant_id = (.+)
+			 ORDER BY (.+) OFFSET (.+) FETCH NEXT (.+)`).WithArgs(merchantID).
 		WillReturnRows(getRows)
 
 	// call function under test with inputs

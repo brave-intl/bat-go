@@ -3,6 +3,7 @@ package payment
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
@@ -35,6 +36,7 @@ func Router(service *Service) chi.Router {
 // MerchantRouter for merchant endpoint
 func MerchantRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
+	log.Printf("adding merchant transactions route: %s", "/{merchantID}/transactions")
 	r.Method("GET", "/{merchantID}/transactions",
 		middleware.InstrumentHandler("MerchantTransactions", MerchantTransactions(service)))
 	return r
@@ -386,7 +388,10 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		var (
 			ctx                = r.Context()
 			merchantID, mIDErr = inputs.NewMerchantID(ctx, chi.URLParam(r, "merchantID"))
-			pagination, pIDErr = inputs.NewPagination(ctx, r.URL.String(), "id", "createdAt")
+			pagination, pIDErr = inputs.NewPagination(ctx, r.URL.String(),
+				"id", "order_id", "created_at", "updated_at", "external_transaction_id",
+				"status", "currency", "kind", "amount",
+			)
 		)
 
 		// Check Validation Errors
@@ -408,7 +413,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		response := &outputs.PaginationResponse{
 			Page:    pagination.Page,
 			Items:   pagination.Items,
-			MaxPage: total / pagination.Items,
+			MaxPage: total/pagination.Items - 1, // 0 indexed
 			Ordered: pagination.RawOrder,
 			Data:    transactions,
 		}

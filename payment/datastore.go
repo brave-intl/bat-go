@@ -151,15 +151,14 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 	ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error) {
 	var (
 		total int
-		count int
 		err   error
 	)
 
 	countStatement := `
 			SELECT count(t.*) as total
-			FROM transactions 
-				INNER JOIN order ON order.id = transaction.order_id
-			WHERE order.merchant_id = $1`
+			FROM transactions as t
+				INNER JOIN orders as o ON o.id = t.order_id
+			WHERE o.merchant_id = $1`
 
 	// get the total count
 	row := pg.DB.QueryRow(countStatement, merchantID)
@@ -170,10 +169,9 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 
 	getStatement := `
 		SELECT t.*
-		FROM transactions
-			INNER JOIN order ON order.id = transaction.order_id
-		WHERE order.merchant_id = $1
-		ORDER BY
+		FROM transactions as t
+			INNER JOIN orders as o ON o.id = t.order_id
+		WHERE o.merchant_id = $1
 		`
 
 	// $ numbered params for query
@@ -181,29 +179,35 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		merchantID,
 	}
 
-	start := 2
-	orderBy, v := pagination.GetOrderBy(start)
-	count = len(v) + start
+	orderBy := pagination.GetOrderBy()
 	if orderBy != "" {
-		getStatement += orderBy
-		params = append(params, v...)
+		getStatement += fmt.Sprintf(" ORDER BY %s", orderBy)
 	}
 
 	offset := pagination.Page * pagination.Items
 	if offset > 0 {
-		getStatement += fmt.Sprintf(" OFFSET $%d", count)
-		count++
-		params = append(params, interface{}(offset))
+		getStatement += fmt.Sprintf(" OFFSET %d", offset)
 	}
 
 	if pagination.Items > 0 {
-		getStatement += fmt.Sprintf(" FETCH NEXT $%d ROWS ONLY", count)
-		params = append(params, interface{}(pagination.Items))
+		getStatement += fmt.Sprintf(" FETCH NEXT %d ROWS ONLY", pagination.Items)
 	}
 
 	transactions := []Transaction{}
-	err = pg.DB.Select(&transactions, getStatement, params...)
 
+	rows, err := pg.DB.Queryx(getStatement, params...)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var transaction = new(Transaction)
+		err := rows.StructScan(transaction)
+		if err != nil {
+			return nil, 0, err
+		}
+		transactions = append(transactions, *transaction)
+	}
+	err = rows.Close()
 	if err != nil {
 		return nil, 0, err
 	}

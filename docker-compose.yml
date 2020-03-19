@@ -87,6 +87,7 @@ services:
       - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
+      - FEATURE_ORDERS=true
     volumes:
       - ./test/secrets:/etc/kafka/secrets
     depends_on:
@@ -105,6 +106,7 @@ services:
       - "POSTGRES_PASSWORD=password"
     networks:
       - grant
+    command: ["postgres", "-c", "log_statement=all"]
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
     image: postgres:10.4

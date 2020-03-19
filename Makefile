@@ -28,9 +28,10 @@ target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
 
 docker:
+	docker rmi -f bat-go:latest
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:latest .
-	docker tag bat-go:latest bat-go:$(GIT_VERSION)
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:$(GIT_VERSION)$(BUILD_TIME) .
+	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
