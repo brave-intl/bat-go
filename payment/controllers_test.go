@@ -551,17 +551,12 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 }
 
 func (suite *ControllersTestSuite) SetupCreateKey() Key {
-	createRequest := &CreateKeyRequest{
-		Merchant: "brave.com",
-	}
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/Key", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", nil)
 	suite.Require().NoError(err)
 
 	createAPIHandler := CreateKey(suite.service)
 	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
 	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -584,7 +579,7 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 	body, err := json.Marshal(&deleteRequest)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("DELETE", "/v1/Key/{id}", bytes.NewBuffer(body))
+	req, err := http.NewRequest("DELETE", "/v1/merchants/id/key/{id}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	deleteAPIHandler := DeleteKey(suite.service)
@@ -606,7 +601,7 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 func (suite *ControllersTestSuite) TestCreateKey() {
 	Key := suite.SetupCreateKey()
 
-	suite.Assert().Equal("brave.com", Key.Merchant)
+	suite.Assert().Equal("48dc25ed-4121-44ef-8147-4416a76201f7", Key.Merchant)
 }
 
 func (suite *ControllersTestSuite) TestDeleteKey() {
@@ -628,12 +623,12 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 
 	key := suite.SetupCreateKey()
 
-	req, err := http.NewRequest("GET", "/v1/keys/{merchant}", nil)
+	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys", nil)
 	suite.Require().NoError(err)
 
 	getAPIHandler := GetKeys(suite.service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("merchant", key.Merchant)
+	rctx.URLParams.Add("merchantID", key.Merchant)
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -660,12 +655,12 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	toDelete := suite.SetupCreateKey()
 	suite.SetupDeleteKey(toDelete)
 
-	req, err := http.NewRequest("GET", "/v1/keys/{merchant}?expired=true", nil)
+	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys?expired=true", nil)
 	suite.Require().NoError(err)
 
 	getAPIHandler := GetKeys(suite.service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("merchant", key.Merchant)
+	rctx.URLParams.Add("merchantID", key.Merchant)
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()

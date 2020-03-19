@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +12,12 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
+)
+
+type key string
+
+const (
+	serviceKey key = "service"
 )
 
 // Router for order endpoints
@@ -30,22 +37,38 @@ func Router(service *Service) chi.Router {
 	return r
 }
 
-// KeyRouter handles management of keys
-func KeyRouter(service *Service) chi.Router {
+// MerchantRouter handles calls made for the merchant
+func MerchantRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	if os.Getenv("ENV") != "local" {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)
 	}
 
-	r.Method("GET", "/{merchantId}", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
-	r.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
-	r.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+	// Once instrument handler is refactored https://github.com/brave-intl/bat-go/issues/291
+	// We can use this service context instead of having
+	r.Use(newServiceCtx(service))
+
+	// RESTy routes for "merchant" resource
+	r.Route("/", func(r chi.Router) {
+		r.Route("/{merchantID}", func(mr chi.Router) {
+			mr.Route("/keys", func(kr chi.Router) {
+				kr.Method("GET", "/", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+				kr.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
+				kr.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+			})
+		})
+	})
+
 	return r
 }
 
-// CreateKeyRequest includes information needed to create an order
-type CreateKeyRequest struct {
-	Merchant string `json:"merchant" valid:"-"`
+func newServiceCtx(service *Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), serviceKey, service)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // DeleteKeyRequest includes information needed to create an order
@@ -56,23 +79,14 @@ type DeleteKeyRequest struct {
 // CreateKey is the handler for creating keys for a merchant
 func CreateKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req CreateKeyRequest
-		err := requestutils.ReadJSON(r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
-
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
+		reqMerchant := chi.URLParam(r, "merchantID")
 
 		encrypted, nonce, err := GenerateSecret()
 		if err != nil {
 			return handlers.WrapError(err, "Could not generate a secret key ", http.StatusInternalServerError)
 		}
 
-		key, err := service.datastore.CreateKey(req.Merchant, encrypted, nonce)
+		key, err := service.datastore.CreateKey(reqMerchant, encrypted, nonce)
 		if err != nil {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
@@ -119,7 +133,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 // GetKeys returns all keys for a specified merchant
 func GetKeys(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		reqID := chi.URLParam(r, "merchant")
+		reqID := chi.URLParam(r, "merchantID")
 		expired := r.URL.Query().Get("expired")
 		showExpired := expired == "true"
 

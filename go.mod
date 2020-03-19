@@ -21,6 +21,7 @@ require (
 	github.com/frankban/quicktest v1.4.2 // indirect
 	github.com/getsentry/raven-go v0.2.0
 	github.com/go-chi/chi v4.0.2+incompatible
+	github.com/go-chi/render v1.0.1
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang-migrate/migrate v3.5.4+incompatible

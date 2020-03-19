@@ -125,7 +125,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
-		r.Mount("/v1/keys", payment.KeyRouter(paymentService))
+		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
 

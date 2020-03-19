@@ -139,12 +139,12 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 		return nil, fmt.Errorf("failed to get keys for merchant: %w", err)
 	}
 
-	for i := 0; i < len(keys); i++ {
-		err = keys[i].SetSecretKey()
-		if err != nil {
-			return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
-		}
-	}
+	// for i := 0; i < len(keys); i++ {
+	// 	err = keys[i].SetSecretKey()
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
+	// 	}
+	// }
 
 	return &keys, nil
 }

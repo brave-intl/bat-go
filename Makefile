@@ -37,7 +37,7 @@ docker-test:
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web /bin/bash
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run -p 3333:3333 --rm web /bin/bash
 
 mac:
 	GOOS=darwin GOARCH=amd64 make bins
