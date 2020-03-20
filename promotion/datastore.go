@@ -82,6 +82,8 @@ type Datastore interface {
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
+	// ExecContext is a passthrough for ExecContext on the DB object
+	ExecContext(ctx context.Context, statement string, args ...interface{}) (sql.Result, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -879,4 +881,9 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	`, orderID)
 
 	return sum, err
+}
+
+// ExecContext is a passthrough for ExecContext on DB object
+func (pg *Postgres) ExecContext(ctx context.Context, statement string, args ...interface{}) (sql.Result, error) {
+	return pg.DB.ExecContext(ctx, statement, args...)
 }

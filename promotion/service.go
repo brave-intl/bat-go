@@ -372,8 +372,8 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 }
 
 // Datastore returns the datastore
-func (service *Service) Datastore() Datastore {
-	return service.datastore
+func (s *Service) Datastore() Datastore {
+	return s.datastore
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
@@ -381,7 +381,7 @@ func (s *Service) ReadableDatastore() ReadOnlyDatastore {
 	if s.roDatastore != nil {
 		return s.roDatastore
 	}
-	return service.Datastore()
+	return s.Datastore()
 }
 
 // RunNextClaimJob takes the next claim job and completes it

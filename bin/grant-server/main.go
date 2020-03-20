@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/getsentry/raven-go"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -191,7 +192,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 	}
 
-	mintService, err := mint.InitService(pgMint, roMintPg)
+	mintService, err := mint.InitService(pgMint, roMintPg, promotionService)
 	if err != nil {
 		raven.CaptureErrorAndWait(err, nil)
 		log.Panic().Err(err).Msg("unable to init mint service")

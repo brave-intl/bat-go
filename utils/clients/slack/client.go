@@ -46,11 +46,28 @@ func createPromotionCreateOpenModal(triggerID string, workflowID uuid.UUID) []by
 					},
 					"label": {
 						"type": "plain_text",
-						"text": "Wallet ID"
+						"text": "Wallet ID (comma separated)"
 					},
 					"hint": {
 						"type": "plain_text",
-						"text": "The wallet that the promotions should be created for"
+						"text": "The wallet(s) that the promotions should be created for"
+					}
+				},
+				{
+					"type": "input",
+					"block_id": "grants",
+					"element": {
+						"type": "plain_text_input",
+						"action_id": "grants",
+						"placeholder": {
+							"type": "plain_text",
+							"text": "1"
+						}
+					},
+					"label": {
+						"type": "plain_text",
+						"text": "Number of Grants",
+						"emoji": true
 					}
 				},
 				{
@@ -186,6 +203,24 @@ func createPromotionCreateOpenModal(triggerID string, workflowID uuid.UUID) []by
 					"label": {
 						"type": "plain_text",
 						"text": "Amount in BAT",
+						"emoji": true
+					}
+				},
+				{
+					"type": "input",
+					"block_id": "bonus",
+					"optional": true,
+					"element": {
+						"action_id": "bonus",
+						"type": "plain_text_input",
+						"placeholder": {
+							"type": "plain_text",
+							"text": "0.000000000000000000"
+						}
+					},
+					"label": {
+						"type": "plain_text",
+						"text": "Bonus in BAT",
 						"emoji": true
 					}
 				},
