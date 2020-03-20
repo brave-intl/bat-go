@@ -16,16 +16,17 @@ import (
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+	r = r.With(middleware.InstrumentHandler)
+	r.Method("POST", "/", CreateOrder(service))
+	r.Method("GET", "/{orderID}", GetOrder(service))
 
-	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
+	r.Method("GET", "/{orderID}/transactions", GetTransactions(service))
+	r.Method("POST", "/{orderID}/transactions/uphold", CreateUpholdTransaction(service))
 
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/anonymousCard", CreateAnonCardTransaction(service))
 
-	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
-	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+	r.Method("POST", "/{orderID}/credentials", CreateOrderCreds(service))
+	r.Method("GET", "/{orderID}/credentials", GetOrderCreds(service))
 
 	return r
 }
@@ -33,7 +34,8 @@ func Router(service *Service) chi.Router {
 // VoteRouter for voting endpoint
 func VoteRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
+	r = r.With(middleware.InstrumentHandler)
+	r.Method("POST", "/", MakeVote(service))
 	return r
 }
 

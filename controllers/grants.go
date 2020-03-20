@@ -22,6 +22,8 @@ import (
 // GrantsRouter is the router for grant endpoints
 func GrantsRouter(service *grant.Service) chi.Router {
 	r := chi.NewRouter()
+	r.Use(middleware.InstrumentHandler)
+
 	if os.Getenv("ENV") != "local" {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)
 	}
@@ -30,15 +32,15 @@ func GrantsRouter(service *grant.Service) chi.Router {
 		if err != nil {
 			panic("THROTTLE_GRANT_REQUESTS was provided but not a valid number")
 		}
-		r.Method("POST", "/", chiware.Throttle(int(throttle))(middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service))))
+		r.Method("POST", "/", chiware.Throttle(int(throttle))(RedeemGrants(service)))
 	} else {
-		r.Method("POST", "/", middleware.InstrumentHandler("RedeemGrants", RedeemGrants(service)))
+		r.Method("POST", "/", RedeemGrants(service))
 	}
 	// Hacky compatibility layer between for legacy grants and new datastore
-	r.Method("GET", "/active", middleware.InstrumentHandler("GetActive", GetActive(service)))
-	r.Method("POST", "/drain", middleware.InstrumentHandler("DrainGrants", DrainGrants(service)))
-	r.Method("POST", "/claim", middleware.InstrumentHandler("ClaimGrant", Claim(service)))
-	r.Method("GET", "/", middleware.InstrumentHandler("Status", handlers.AppHandler(Status)))
+	r.Method("GET", "/active", GetActive(service))
+	r.Method("POST", "/drain", DrainGrants(service))
+	r.Method("POST", "/claim", Claim(service))
+	r.Method("GET", "/", handlers.AppHandler(Status))
 	return r
 }
 

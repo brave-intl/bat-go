@@ -2,6 +2,9 @@ package middleware
 
 import (
 	"net/http"
+	"reflect"
+	"runtime"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -98,9 +101,27 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 	)
 }
 
+func getFunctionName(f interface{}) string {
+	// get the function name of what we are going to call.
+	var (
+		fn    = runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+		parts = strings.Split(fn, ".")
+	)
+	if len(parts) > 2 {
+		if parts[len(parts)-1] == "func1" {
+			return parts[len(parts)-2]
+		}
+		return parts[len(parts)-1]
+	}
+	return fn
+}
+
 // InstrumentHandler instruments an http.Handler to capture metrics like the number
 // the total number of requests served and latency information
-func InstrumentHandler(name string, h http.Handler) http.Handler {
+func InstrumentHandler(h http.Handler) http.Handler {
+	// get "next" function name so we don't have to specify in middleware call
+	var name = getFunctionName(h)
+
 	hRequests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name:        "api_requests_total",

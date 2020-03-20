@@ -34,19 +34,19 @@ func Router(service *Service) chi.Router {
 		r.Method("POST", "/", CreatePromotion(service))
 	}
 
-	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
-	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
-	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
-	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
-	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+	r.Method("GET", "/{claimType}/grants/summary", GetClaimSummary(service))
+	r.Method("GET", "/", GetAvailablePromotions(service))
+	r.Method("POST", "/reportclobberedclaims", PostReportClobberedClaims(service))
+	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(ClaimPromotion(service)))
+	r.Method("GET", "/{promotionId}/claims/{claimId}", GetClaim(service))
 	return r
 }
 
 // SuggestionsRouter for suggestions endpoints
 func SuggestionsRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
-	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
+	r.Method("POST", "/", MakeSuggestion(service))
+	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(DrainSuggestion(service)))
 	return r
 }
 

@@ -49,14 +49,15 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return log.WithContext(ctx), &log
 }
 
-func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, chi.Router, *promotion.Service, []srv.Job) {
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
 
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	r := chi.NewRouter()
+	var r chi.Router
+	r = chi.NewRouter()
 	r.Use(chiware.RequestID)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
@@ -77,6 +78,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
 	}
+
+	r = r.With(middleware.InstrumentHandler)
 
 	roDB := os.Getenv("RO_DATABASE_URL")
 
