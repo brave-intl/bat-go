@@ -121,6 +121,9 @@ func getFunctionName(f interface{}) string {
 func InstrumentHandler(h http.Handler) http.Handler {
 	// get "next" function name so we don't have to specify in middleware call
 	var name = getFunctionName(h)
+	if name == "Mount" || strings.Contains(name, "InstrumentHandler") {
+		return h
+	}
 
 	hRequests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
