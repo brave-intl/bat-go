@@ -21,8 +21,9 @@ import (
 
 // GrantsRouter is the router for grant endpoints
 func GrantsRouter(service *grant.Service) chi.Router {
-	r := chi.NewRouter()
-	r.Use(middleware.InstrumentHandler)
+	var r chi.Router
+	r = chi.NewRouter()
+	r = r.With(middleware.InstrumentHandler)
 
 	if os.Getenv("ENV") != "local" {
 		r.Use(middleware.SimpleTokenAuthorizedOnly)

@@ -15,7 +15,8 @@ import (
 
 // Router for order endpoints
 func Router(service *Service) chi.Router {
-	r := chi.NewRouter()
+	var r chi.Router
+	r = chi.NewRouter()
 	r = r.With(middleware.InstrumentHandler)
 	r.Method("POST", "/", CreateOrder(service))
 	r.Method("GET", "/{orderID}", GetOrder(service))
@@ -33,7 +34,8 @@ func Router(service *Service) chi.Router {
 
 // VoteRouter for voting endpoint
 func VoteRouter(service *Service) chi.Router {
-	r := chi.NewRouter()
+	var r chi.Router
+	r = chi.NewRouter()
 	r = r.With(middleware.InstrumentHandler)
 	r.Method("POST", "/", MakeVote(service))
 	return r

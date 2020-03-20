@@ -27,7 +27,9 @@ import (
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
-	r := chi.NewRouter()
+	var r chi.Router
+	r = chi.NewRouter()
+	r = r.With(middleware.InstrumentHandler)
 	if os.Getenv("ENV") != "local" {
 		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
 	} else {
@@ -44,7 +46,9 @@ func Router(service *Service) chi.Router {
 
 // SuggestionsRouter for suggestions endpoints
 func SuggestionsRouter(service *Service) chi.Router {
-	r := chi.NewRouter()
+	var r chi.Router
+	r = chi.NewRouter()
+	r = r.With(middleware.InstrumentHandler)
 	r.Method("POST", "/", MakeSuggestion(service))
 	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(DrainSuggestion(service)))
 	return r
