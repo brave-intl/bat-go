@@ -97,7 +97,7 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				scope.SetTags(map[string]string{
 					"reqID": requestutils.GetRequestID(r.Context()),
 				})
-				sentry.CaptureException(e)
+				sentry.CaptureMessage(e.Error())
 			})
 		}
 
