@@ -34,24 +34,28 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// Iterate through each credential and assemble list of funding sources
-	_, _, fundingSources, err := service.GetCredentialRedemptions(ctx, credentials)
+	_, _, fundingSources, promotions, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
 		return err
 	}
 
-	for _, v := range fundingSources {
+	for k, v := range fundingSources {
 		if v.Type != "ads" {
 			return errors.New("Only ads suggestions can be drained")
 		}
 
-		var promotion Promotion
-		promotion.ID = v.PromotionID
-		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, &promotion)
+		fmt.Println(k)
+		fmt.Println(v)
+		fmt.Println(promotions)
+
+		promotion := promotions[k]
+
+		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			return errors.Wrap(err, "Error finding claim for wallet")
 		}
 
-		suggestionsExpected, err := claim.SuggestionsNeeded(&promotion)
+		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
 			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
 		}

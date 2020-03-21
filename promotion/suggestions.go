@@ -120,14 +120,14 @@ type SuggestionWorker interface {
 }
 
 // GetCredentialRedemptions as well as total and funding sources from a list of credential bindings
-func (service *Service) GetCredentialRedemptions(ctx context.Context, credentials []CredentialBinding) (total decimal.Decimal, requestCredentials []cbr.CredentialRedemption, fundingSources map[string]FundingSource, err error) {
+func (service *Service) GetCredentialRedemptions(ctx context.Context, credentials []CredentialBinding) (total decimal.Decimal, requestCredentials []cbr.CredentialRedemption, fundingSources map[string]FundingSource, promotions map[string]*Promotion, err error) {
 	total = decimal.Zero
 	requestCredentials = make([]cbr.CredentialRedemption, len(credentials))
 	fundingSources = make(map[string]FundingSource)
+	promotions = make(map[string]*Promotion)
 	err = nil
 
 	issuers := make(map[string]*Issuer)
-	promotions := make(map[string]*Promotion)
 
 	for i := 0; i < len(credentials); i++ {
 		var ok bool
@@ -154,6 +154,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 				err = errors.Wrap(err, "Error finding promotion")
 				return
 			}
+			promotions[publicKey] = promotion
 		}
 		value := promotion.CredentialValue()
 		total = total.Add(value)
@@ -189,7 +190,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
-	total, requestCredentials, fundingSources, err := service.GetCredentialRedemptions(ctx, credentials)
+	total, requestCredentials, fundingSources, _, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
 		return err
 	}
