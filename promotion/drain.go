@@ -45,6 +45,10 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			return errors.New("Only ads suggestions can be drained")
 		}
 
+		fmt.Println(k)
+		fmt.Println(v)
+		fmt.Println(promotions)
+
 		promotion := promotions[k]
 
 		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)

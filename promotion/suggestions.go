@@ -156,6 +156,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 				err = errorutils.Wrap(err, "error finding promotion")
 				return
 			}
+			promotions[publicKey] = promotion
 		}
 		value := promotion.CredentialValue()
 		total = total.Add(value)
