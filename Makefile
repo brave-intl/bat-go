@@ -11,9 +11,9 @@ else
 endif
 
 TEST_PKG?=./...
-TEST_FLAGS= $(TEST_PKG)
+TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
-	TEST_FLAGS = $(TEST_PKG) --run=$(TEST_RUN)
+	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
 .PHONY: all bins docker test lint clean
