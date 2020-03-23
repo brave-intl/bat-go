@@ -56,8 +56,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	var r chi.Router
-	r = chi.NewRouter().With()
+	var r = chi.NewRouter().With()
 	r.Use(chiware.RequestID)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
