@@ -1,15 +1,25 @@
 package requestutils
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/closers"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
 
-var payloadLimit10MB = int64(1024 * 1024 * 10)
+type requestID string
+
+var (
+	payloadLimit10MB = int64(1024 * 1024 * 10)
+	// RequestIDHeaderKey is the request header key
+	RequestIDHeaderKey = "x-request-id"
+	// RequestID holds the type for request ids
+	RequestID = requestID(RequestIDHeaderKey)
+)
 
 // ReadWithLimit reads an io reader with a limit and closes
 func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
@@ -37,4 +47,17 @@ func ReadJSON(body io.Reader, intr interface{}) error {
 		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 	return nil
+}
+
+// SetRequestID transfers a request id from a context to a request header
+func SetRequestID(ctx context.Context, r *http.Request) {
+	r.Header.Set(RequestIDHeaderKey, GetRequestID(ctx))
+}
+
+// GetRequestID gets the request id
+func GetRequestID(ctx context.Context) string {
+	if reqID, ok := ctx.Value(RequestID).(string); ok {
+		return reqID
+	}
+	return ""
 }
