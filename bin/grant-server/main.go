@@ -193,11 +193,15 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 }
 
 func main() {
-	sentry.Init(sentry.ClientOptions{
+	serverCtx, logger := setupLogger(context.Background())
+	// setup sentry
+	err := sentry.Init(sentry.ClientOptions{
 		Dsn:     os.Getenv("SENTRY_DSN"),
 		Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
 	})
-	serverCtx, logger := setupLogger(context.Background())
+	if err != nil {
+		logger.Panic().Err(err).Msg("unable to setup reporting!")
+	}
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
@@ -215,7 +219,7 @@ func main() {
 	}
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureMessage(err.Error())
 		sentry.Flush(time.Second * 2)
