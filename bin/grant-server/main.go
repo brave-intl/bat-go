@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -192,6 +193,10 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 }
 
 func main() {
+	sentry.Init(sentry.ClientOptions{
+		Dsn:     os.Getenv("SENTRY_DSN"),
+		Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
+	})
 	serverCtx, logger := setupLogger(context.Background())
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
