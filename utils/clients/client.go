@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 )
@@ -40,7 +42,7 @@ func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
 	}, nil
 }
 
-func (c *SimpleHTTPClient) newRequest(
+func (c *SimpleHTTPClient) request(
 	method string,
 	resolvedURL string,
 	buf io.Reader,
@@ -60,13 +62,13 @@ func (c *SimpleHTTPClient) newRequest(
 	return req, nil
 }
 
-// NewRequest creaates a request, JSON encoding the body passed
-func (c *SimpleHTTPClient) NewRequest(
+// newRequest creaates a request, JSON encoding the body passed
+func (c *SimpleHTTPClient) newRequest(
 	ctx context.Context,
 	method,
 	path string,
 	body interface{},
-) (*http.Request, error) {
+) (*http.Request, int, error) {
 	var buf io.ReadWriter
 	resolvedURL := c.BaseURL.ResolveReference(&url.URL{Path: path})
 
@@ -74,25 +76,46 @@ func (c *SimpleHTTPClient) NewRequest(
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
 		if err != nil {
-			return nil, NewHTTPError(err, ErrUnableToEncodeBody, 0, nil)
+			return nil, 0, errors.Wrap(err, ErrUnableToEncodeBody)
 		}
 	}
 
-	req, err := c.newRequest(method, resolvedURL.String(), buf)
+	req, err := c.request(method, resolvedURL.String(), buf)
 	if err != nil {
-		return req, err
+		status := 0
+		switch err.(type) {
+		case url.EscapeError:
+			status = http.StatusBadRequest
+			err = errors.Wrap(err, ErrUnableToEscapeURL)
+		case url.InvalidHostError:
+			status = http.StatusBadRequest
+			err = errors.Wrap(err, ErrInvalidHost)
+		}
+		return nil, status, err
 	}
 
 	req.Header.Set("accept", "application/json")
 	if body != nil {
 		req.Header.Add("content-type", "application/json")
 	}
-
-	logOut(ctx, "request", *req.URL, 0, req.Header, body)
-
+	requestutils.SetRequestID(ctx, req)
 	req.Header.Set("authorization", "Bearer "+c.AuthToken)
+	return req, 0, nil
+}
 
-	return req, nil
+// NewRequest wraps the new request with a particular error type
+func (c *SimpleHTTPClient) NewRequest(
+	ctx context.Context,
+	method,
+	path string,
+	body interface{},
+) (*http.Request, error) {
+	req, status, err := c.newRequest(ctx, method, path, body)
+	if err != nil {
+		return nil, NewHTTPError(err, "request", status, body)
+	}
+	logOut(ctx, "request", *req.URL, 0, req.Header, body)
+	return req, err
 }
 
 // Do the specified http request, decoding the JSON result into v
@@ -118,19 +141,19 @@ func (c *SimpleHTTPClient) do(
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)
 			if err != nil {
-				return resp, NewHTTPError(err, ErrUnableToDecode, resp.StatusCode, v)
+				return resp, errors.Wrap(err, ErrUnableToDecode)
 			}
 		}
 		return resp, nil
 	}
-	return resp, NewHTTPError(err, ErrProtocolError, resp.StatusCode, v)
+	return resp, errors.Wrap(err, ErrProtocolError)
 }
 
 // Do the specified http request, decoding the JSON result into v
 func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 	resp, err := c.do(ctx, req, v)
 	if err != nil {
-		return resp, err
+		return resp, NewHTTPError(err, "response", resp.StatusCode, v)
 	}
 	logOut(ctx, "response", *req.URL, resp.StatusCode, resp.Header, v)
 	return resp, nil
