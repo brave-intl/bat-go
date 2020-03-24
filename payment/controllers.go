@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -331,25 +333,35 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 // GetOrderCredsByID is the handler for fetching order credentials by an item id
 func GetOrderCredsByID(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "orderID")
-		itemID := chi.URLParam(r, "itemID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return handlers.ValidationError("Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
-				})
-		}
-		if itemID == "" || !govalidator.IsUUIDv4(itemID) {
-			return handlers.ValidationError("Error validating request url parameter",
-				map[string]interface{}{
-					"itemID": "itemID must be a uuidv4",
-				})
+
+		// get the IDs from the URL
+		var (
+			orderID           = new(inputs.ID)
+			itemID            = new(inputs.ID)
+			validationPayload = map[string]interface{}{}
+			err               error
+		)
+
+		// decode and validate orderID url param
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationPayload["orderID"] = err.Error()
 		}
 
-		id := uuid.Must(uuid.FromString(orderID))
-		orderItemID := uuid.Must(uuid.FromString(itemID))
+		// decode and validate itemID url param
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
+			validationPayload["itemID"] = err.Error()
+		}
 
-		creds, err := service.datastore.GetOrderCredsByItemID(id, orderItemID)
+		// did we get any validation errors?
+		if len(validationPayload) > 0 {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				validationPayload)
+		}
+
+		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
