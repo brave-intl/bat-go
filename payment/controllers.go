@@ -343,14 +343,14 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 		)
 
 		// decode and validate orderID url param
-		if err = inputs.DecodeAndValidate(
-			context.Background(), orderID, []byte(chi.URLParam(r, "orderID"))); err != nil {
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			validationPayload["orderID"] = err.Error()
 		}
 
 		// decode and validate itemID url param
-		if err = inputs.DecodeAndValidate(
-			context.Background(), itemID, []byte(chi.URLParam(r, "itemID"))); err != nil {
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
 			validationPayload["itemID"] = err.Error()
 		}
 
