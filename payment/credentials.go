@@ -146,6 +146,7 @@ func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) 
 	}
 
 	for i := 0; i < len(cb); i++ {
+
 		var (
 			ok     bool
 			issuer *Issuer

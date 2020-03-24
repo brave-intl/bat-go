@@ -22,9 +22,10 @@ import (
 
 // Vote encapsulates information from the browser about attention
 type Vote struct {
-	Type      string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel   string `json:"channel" valid:"-"`
-	VoteTally int64  `json:"voteTally"`
+	Type          string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
+	Channel       string `json:"channel" valid:"-"`
+	VoteTally     int64  `json:"-"`
+	FundingSource string `json: "-"`
 }
 
 // Validate - implement inputs.Validatable interface for input
@@ -86,7 +87,7 @@ func NewVoteEvent(v Vote) (*VoteEvent, error) {
 			Channel:       v.Channel,
 			CreatedAt:     time.Now().UTC(),
 			VoteTally:     v.VoteTally,
-			FundingSource: "uphold",
+			FundingSource: v.FundingSource,
 		}
 		err error
 	)
@@ -210,35 +211,44 @@ func (service *Service) Vote(
 	// generate all the cb credential redemptions
 	requestCredentials, err := generateCredentialRedemptions(
 		context.WithValue(ctx, appctx.DatastoreCTXKey, service.datastore), credentials)
-	if err != nil {
-		return fmt.Errorf("error generating credential redemptions: %w", err)
-	}
 
-	// get a new VoteEvent to emit to kafka based on our input vote
-	voteEvent, err := NewVoteEvent(vote)
-	if err != nil {
-		return fmt.Errorf("failed to convert vote to kafka vote event: %w", err)
-	}
+	// foreach request credential, make vote
+	for _, rc := range requestCredentials {
+		// one vote per request credential
+		vote.VoteTally = 1
+		// set the funding source to the issuer
+		vote.FundingSource = rc.Issuer
 
-	// encode the event for processing
-	voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
-	if err != nil {
-		return fmt.Errorf("failed to encode avro codec: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("error generating credential redemptions: %w", err)
+		}
 
-	rcSerial, err := json.Marshal(requestCredentials)
-	if err != nil {
-		return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
-	}
+		// get a new VoteEvent to emit to kafka based on our input vote
+		voteEvent, err := NewVoteEvent(vote)
+		if err != nil {
+			return fmt.Errorf("failed to convert vote to kafka vote event: %w", err)
+		}
 
-	// insert serialized event into db
-	if err = service.datastore.InsertVote(
-		ctx, VoteRecord{
-			RequestCredentials: string(rcSerial),
-			VoteText:           voteText,
-			VoteEventBinary:    voteEventBinary,
-		}); err != nil {
-		return fmt.Errorf("datastore failure vote_drain: %w", err)
+		// encode the event for processing
+		voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
+		if err != nil {
+			return fmt.Errorf("failed to encode avro codec: %w", err)
+		}
+
+		rcSerial, err := json.Marshal([]cbr.CredentialRedemption{rc})
+		if err != nil {
+			return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
+		}
+
+		// insert serialized event into db
+		if err = service.datastore.InsertVote(
+			ctx, VoteRecord{
+				RequestCredentials: string(rcSerial),
+				VoteText:           voteText,
+				VoteEventBinary:    voteEventBinary,
+			}); err != nil {
+			return fmt.Errorf("datastore failure vote_drain: %w", err)
+		}
 	}
 
 	// at this point, after the vote is added to the database queue, we will let
