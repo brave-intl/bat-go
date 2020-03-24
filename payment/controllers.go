@@ -342,18 +342,19 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			err               error
 		)
 
-		for _, i := range []struct {
-			id    *inputs.ID
-			input string
-		}{
-			{orderID, chi.URLParam(r, "orderID")},
-			{itemID, chi.URLParam(r, "itemID")},
-		} {
-			if err = inputs.DecodeAndValidate(context.Background(), i.id, []byte(i.input)); err != nil {
-				validationPayload[i.input] = err.Error()
-			}
+		// decode and validate orderID url param
+		if err = inputs.DecodeAndValidate(
+			context.Background(), orderID, []byte(chi.URLParam(r, "orderID"))); err != nil {
+			validationPayload["orderID"] = err.Error()
 		}
 
+		// decode and validate itemID url param
+		if err = inputs.DecodeAndValidate(
+			context.Background(), itemID, []byte(chi.URLParam(r, "itemID"))); err != nil {
+			validationPayload["itemID"] = err.Error()
+		}
+
+		// did we get any validation errors?
 		if len(validationPayload) > 0 {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
