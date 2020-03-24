@@ -39,6 +39,8 @@ func (id *ID) Validate(ctx context.Context) error {
 
 // Decode - take raw []byte input and populate id with the ID
 func (id *ID) Decode(ctx context.Context, input []byte) error {
+	var err error
+
 	if len(input) == 0 {
 		return ErrIDDecodeEmpty
 	}
@@ -48,7 +50,8 @@ func (id *ID) Decode(ctx context.Context, input []byte) error {
 		return ErrIDDecodeNotUUID
 	}
 
-	id.raw = input
-	id.UUID = uuid.FromString(id.raw)
+	if id.uuid, err = uuid.FromString(id.raw); err != nil {
+		return ErrIDDecodeNotUUID
+	}
 	return nil
 }

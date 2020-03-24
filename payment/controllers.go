@@ -336,31 +336,28 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 
 		// get the IDs from the URL
 		var (
-			orderID = new(inputs.ID)
-			itemID  = new(inputs.ID)
-
-			// decode and validate our orderID from the URL
-			orderIDErr = inputs.DecodeAndValidate(
-				context.Background(), orderID, []byte(chi.URLParam(r, "orderID")))
-			// decode and validate our orderID from the URL
-			itemIDErr = inputs.DecodeAndValidate(
-				context.Background(), itemID, []byte(chi.URLParam(r, "itemID")))
-
+			orderID           = new(inputs.ID)
+			itemID            = new(inputs.ID)
 			validationPayload = map[string]interface{}{}
+			err               error
 		)
 
-		if orderIDErr != nil {
-			validationPayload["orderID"] = orderIDErr.Error()
-		}
-		if itemIDErr != nil {
-			validationPayload["itemID"] = itemIDErr.Error()
+		for _, i := range []struct {
+			id    *inputs.ID
+			input string
+		}{
+			{orderID, chi.URLParam(r, "orderID")},
+			{itemID, chi.URLParam(r, "orderID")},
+		} {
+			if err = inputs.DecodeAndValidate(context.Background(), i.id, []byte(i.input)); err != nil {
+				validationPayload[i.input] = err.Error()
+			}
 		}
 
-		if orderIDErr != nil || itemIDErr != nil {
-			return handlers.ValidationError("Error validating request url parameter",
-				map[string]interface{}{
-					"orderID": err.Error(),
-				})
+		if len(validationPayload) > 0 {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				validationPayload)
 		}
 
 		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID())
