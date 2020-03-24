@@ -26,6 +26,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
 	return r
 }
@@ -314,6 +315,48 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		if creds == nil {
 			return &handlers.AppError{
 				Message: "Order does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(creds); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
+
+// GetOrderCredsByID is the handler for fetching order credentials by an item id
+func GetOrderCredsByID(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		orderID := chi.URLParam(r, "orderID")
+		itemID := chi.URLParam(r, "itemID")
+		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+			return handlers.ValidationError("Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": "orderID must be a uuidv4",
+				})
+		}
+		if itemID == "" || !govalidator.IsUUIDv4(itemID) {
+			return handlers.ValidationError("Error validating request url parameter",
+				map[string]interface{}{
+					"itemID": "itemID must be a uuidv4",
+				})
+		}
+
+		id := uuid.Must(uuid.FromString(orderID))
+		orderItemID := uuid.Must(uuid.FromString(itemID))
+
+		creds, err := service.datastore.GetOrderCredsByItemID(id, orderItemID)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+		}
+
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "Credentials do not exist",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
 			}
