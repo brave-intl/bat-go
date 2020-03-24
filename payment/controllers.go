@@ -347,7 +347,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			input string
 		}{
 			{orderID, chi.URLParam(r, "orderID")},
-			{itemID, chi.URLParam(r, "orderID")},
+			{itemID, chi.URLParam(r, "itemID")},
 		} {
 			if err = inputs.DecodeAndValidate(context.Background(), i.id, []byte(i.input)); err != nil {
 				validationPayload[i.input] = err.Error()
