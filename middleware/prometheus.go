@@ -177,7 +177,6 @@ func InstrumentHandler(h http.Handler) http.Handler {
 		promhttp.InstrumentHandlerCounter(
 			hRequests, promhttp.InstrumentHandlerDuration(
 				hLatency, h)).ServeHTTP(w, r)
-		return
 	})
 }
 
