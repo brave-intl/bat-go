@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/go-chi/chi"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -101,6 +102,8 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 	)
 }
 
+// this does not work well if there are wrapped middlewares directly around a handler
+// such as HTTPSignedOnly and such
 func getFunctionName(f interface{}) string {
 	// get the function name of what we are going to call.
 	var (
@@ -119,46 +122,63 @@ func getFunctionName(f interface{}) string {
 // InstrumentHandler instruments an http.Handler to capture metrics like the number
 // the total number of requests served and latency information
 func InstrumentHandler(h http.Handler) http.Handler {
-	// get "next" function name so we don't have to specify in middleware call
-	var name = getFunctionName(h)
-	if name == "Mount" || strings.Contains(name, "InstrumentHandler") {
-		return h
-	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-	hRequests := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name:        "api_requests_total",
-			Help:        "Number of requests per handler.",
-			ConstLabels: prometheus.Labels{"handler": name},
-		},
-		[]string{"code", "method"},
-	)
-	if err := prometheus.Register(hRequests); err != nil {
-		if aerr, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			hRequests = aerr.ExistingCollector.(*prometheus.CounterVec)
-		} else {
-			panic(err)
+		// get "next" function name so we don't have to specify in middleware call
+		var (
+			name = getFunctionName(h)
+			path = chi.RouteContext(r.Context()).RoutePattern()
+		)
+
+		if name == "Mount" || strings.Contains(name, "InstrumentHandler") {
+			h.ServeHTTP(w, r)
+			return
 		}
-	}
 
-	hLatency := prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:        "request_duration_seconds",
-			Help:        "A histogram of latencies for requests.",
-			Buckets:     latencyBuckets,
-			ConstLabels: prometheus.Labels{"handler": name},
-		},
-		[]string{"method"},
-	)
-	if err := prometheus.Register(hLatency); err != nil {
-		if aerr, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			hLatency = aerr.ExistingCollector.(*prometheus.HistogramVec)
-		} else {
-			panic(err)
+		hRequests := prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "api_requests_total",
+				Help: "Number of requests per handler.",
+				ConstLabels: prometheus.Labels{
+					"handler": name,
+					"path":    path,
+				},
+			},
+			[]string{"code", "method"},
+		)
+		if err := prometheus.Register(hRequests); err != nil {
+			if aerr, ok := err.(prometheus.AlreadyRegisteredError); ok {
+				hRequests = aerr.ExistingCollector.(*prometheus.CounterVec)
+			} else {
+				panic(err)
+			}
 		}
-	}
 
-	return promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h))
+		hLatency := prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "request_duration_seconds",
+				Help:    "A histogram of latencies for requests.",
+				Buckets: latencyBuckets,
+				ConstLabels: prometheus.Labels{
+					"handler": name,
+					"path":    path,
+				},
+			},
+			[]string{"method"},
+		)
+		if err := prometheus.Register(hLatency); err != nil {
+			if aerr, ok := err.(prometheus.AlreadyRegisteredError); ok {
+				hLatency = aerr.ExistingCollector.(*prometheus.HistogramVec)
+			} else {
+				panic(err)
+			}
+		}
+
+		promhttp.InstrumentHandlerCounter(
+			hRequests, promhttp.InstrumentHandlerDuration(
+				hLatency, h)).ServeHTTP(w, r)
+		return
+	})
 }
 
 // Metrics returns a http.HandlerFunc for the prometheus /metrics endpoint
