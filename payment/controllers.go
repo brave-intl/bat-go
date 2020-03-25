@@ -368,7 +368,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 
 		if creds == nil {
 			return &handlers.AppError{
-				Message: "Credentials do not exist",
+				Message: "Could not find credentials",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
 			}
