@@ -374,11 +374,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(creds); err != nil {
-			panic(err)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
 	})
 }
 
