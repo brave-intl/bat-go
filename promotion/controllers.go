@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/metrics"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -147,7 +148,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			"migrate": fmt.Sprint(migrate),
 		}).Inc()
 		for _, promotion := range *promotions {
-			promotionExposureCount.With(prometheus.Labels{
+			metrics.PromotionExposureCount.With(prometheus.Labels{
 				"id": promotion.ID.String(),
 			}).Inc()
 		}

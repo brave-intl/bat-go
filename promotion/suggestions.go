@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/metrics"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -198,15 +199,15 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	fundings := []map[string]interface{}{}
-	metrics := map[string]decimal.Decimal{}
+	measurements := map[string]decimal.Decimal{}
 	fundingTypes := []string{}
 	for _, v := range fundingSources {
-		val, existed := metrics[v.Type]
+		val, existed := measurements[v.Type]
 		if !existed {
 			fundingTypes = append(fundingTypes, v.Type)
 			val = decimal.Zero
 		}
-		metrics[v.Type] = val.Add(v.Amount)
+		measurements[v.Type] = val.Add(v.Amount)
 		fundings = append(fundings, map[string]interface{}{
 			"type":      v.Type,
 			"cohort":    v.Cohort,
@@ -241,14 +242,14 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 	}
 
 	for _, fundingType := range fundingTypes {
-		total := metrics[fundingType]
+		total := measurements[fundingType]
 		value, _ := total.Float64()
 		labels := prometheus.Labels{
 			"type":    suggestion.Type,
 			"funding": fundingType,
 		}
-		countContributionsTotal.With(labels).Inc()
-		countContributionsBatTotal.With(labels).Add(value)
+		metrics.CountContributionsTotal.With(labels).Inc()
+		metrics.CountContributionsBatTotal.With(labels).Add(value)
 	}
 
 	if enableSuggestionJob {

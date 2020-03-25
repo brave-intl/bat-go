@@ -3,6 +3,7 @@ package grant
 import (
 	"context"
 
+	"github.com/brave-intl/bat-go/metrics"
 	promotion "github.com/brave-intl/bat-go/promotion"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/wallet"

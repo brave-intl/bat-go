@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/metrics"
+	"github.com/brave-intl/bat-go/metrics"
 	"github.com/getsentry/sentry-go"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
