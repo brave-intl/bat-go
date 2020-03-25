@@ -181,7 +181,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
 	for {
-		attempted, err := job(ctx)
+		_, err := job(ctx)
 		if err != nil {
 			sentry.CaptureMessage(err.Error())
 			sentry.Flush(time.Second * 2)
