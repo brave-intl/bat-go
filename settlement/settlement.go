@@ -159,7 +159,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 				return nil
 			}
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().Before(settlement.ValidUntil) {
+			if time.Now().UTC().Before(settlement.ValidUntil) {
 				return nil
 			}
 
@@ -241,7 +241,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 			break
 
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().After(settlement.ValidUntil) {
+			if time.Now().UTC().After(settlement.ValidUntil) {
 				log.Printf("quote has expired, must resubmit transaction for channel %s\n", settlement.Channel)
 				return nil
 			}

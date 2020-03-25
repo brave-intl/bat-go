@@ -66,15 +66,10 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 		walletID := r.URL.Query().Get("paymentId")
 
 		if len(walletID) == 0 || !govalidator.IsUUIDv4(walletID) {
-			return &handlers.AppError{
-				Message: "Error validating request query parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"paymentId": "paymentId must be a uuidv4",
-					},
-				},
-			}
+			return handlers.ValidationError("Error validating request query parameter",
+				map[string]string{
+					"paymentId": "paymentId must be a uuidv4",
+				})
 		}
 		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(walletID)))
 

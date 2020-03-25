@@ -302,13 +302,10 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		orderID := chi.URLParam(r, "orderID")
 		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
+			return handlers.ValidationError("Error validating request url parameter",
+				map[string]interface{}{
 					"orderID": "orderID must be a uuidv4",
-				},
-			}
+				})
 		}
 
 		id := uuid.Must(uuid.FromString(orderID))

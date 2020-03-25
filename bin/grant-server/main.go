@@ -70,6 +70,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
+	r.Use(middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(hlog.NewHandler(*logger))
