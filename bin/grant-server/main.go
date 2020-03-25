@@ -180,23 +180,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	var attemptedCount = 0
 	for {
 		attempted, err := job(ctx)
 		if err != nil {
 			sentry.CaptureMessage(err.Error())
 			sentry.Flush(time.Second * 2)
 		}
-
-		if !attempted && attemptedCount < 5 {
-			// if it wasn't attempted try again up to max tries then bail
-			attemptedCount++
-			continue
-		} else {
-			// it was attempted, wait the specified duration
-			attemptedCount = 0
-			<-time.After(duration)
-		}
+		// regardless if attempted or not, wait for the duration until retrying
+		<-time.After(duration)
 	}
 }
 
