@@ -324,7 +324,7 @@ func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx,
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to aquire transaction: %w", err)
+		return tx, nil, fmt.Errorf("failed to aquire transaction: %w", err)
 	}
 
 	statement := `
@@ -340,20 +340,20 @@ FOR UPDATE
 `
 	rows, err := tx.QueryContext(ctx, statement)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
+		return tx, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
 	}
 
 	for rows.Next() {
 		var vr = new(VoteRecord)
 		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
 			&vr.VoteEventBinary, &vr.Erred, &vr.Processed); err != nil {
-			return nil, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
+			return tx, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
 		}
 		// add to results
 		results = append(results, vr)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
+		return tx, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
 	}
 
 	if err := rows.Close(); err != nil {
