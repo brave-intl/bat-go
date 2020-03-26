@@ -50,6 +50,7 @@ services:
       - challenge-bypass
     networks:
       - grant
+
   web:
     container_name: grant-web
     build:
