@@ -23,7 +23,7 @@ import (
 type Datastore interface {
 	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -81,16 +81,16 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO orders (total_price, merchant_id, status, currency, location)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING *
 		`,
-		totalPrice, merchantID, status, currency)
+		totalPrice, merchantID, status, currency, location)
 
 	if err != nil {
 		return nil, err
@@ -100,8 +100,8 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		orderItems[i].OrderID = order.ID
 
 		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
-			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
+			INSERT INTO order_items (order_id, quantity, price, currency, subtotal, location, description)
+			VALUES (:order_id, :quantity, :price, :currency, :subtotal, :location, :description)
 			RETURNING *
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])

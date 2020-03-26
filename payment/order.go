@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"database/sql"
 	"strconv"
 	"strings"
 	"time"
@@ -18,24 +19,27 @@ type Order struct {
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`
+	Location   sql.NullString  `json:"location" db:"location"`
 	Status     string          `json:"status" db:"status"`
 	Items      []OrderItem     `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID        uuid.UUID       `json:"id" db:"id"`
-	OrderID   uuid.UUID       `json:"orderId" db:"order_id"`
-	CreatedAt *time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt *time.Time      `json:"updatedAt" db:"updated_at"`
-	Currency  string          `json:"currency" db:"currency"`
-	Quantity  int             `json:"quantity" db:"quantity"`
-	Price     decimal.Decimal `json:"price" db:"price"`
-	Subtotal  decimal.Decimal `json:"subtotal"`
+	ID          uuid.UUID       `json:"id" db:"id"`
+	OrderID     uuid.UUID       `json:"orderId" db:"order_id"`
+	CreatedAt   *time.Time      `json:"createdAt" db:"created_at"`
+	UpdatedAt   *time.Time      `json:"updatedAt" db:"updated_at"`
+	Currency    string          `json:"currency" db:"currency"`
+	Quantity    int             `json:"quantity" db:"quantity"`
+	Price       decimal.Decimal `json:"price" db:"price"`
+	Subtotal    decimal.Decimal `json:"subtotal"`
+	Location    string          `json:"location" db:"location"`
+	Description string          `json:"description" db:"description"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
 		return nil, err
@@ -56,6 +60,7 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+	orderItem.Location = mac.Location()
 
 	for i := 0; i < len(caveats); i++ {
 		caveat := mac.Caveats()[i]
@@ -72,6 +77,11 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			orderItem.ID = uuid
 		case "price":
 			orderItem.Price, err = decimal.NewFromString(value)
+			if err != nil {
+				return nil, err
+			}
+		case "description":
+			orderItem.Description = value
 			if err != nil {
 				return nil, err
 			}
