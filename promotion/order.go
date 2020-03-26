@@ -1,6 +1,7 @@
 package promotion
 
 import (
+	"database/sql"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -18,20 +19,23 @@ type Order struct {
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`
+	Location   sql.NullString  `json:"location" db:"location"`
 	Status     string          `json:"status" db:"status"`
 	Items      []OrderItem     `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID        uuid.UUID       `json:"id" db:"id"`
-	OrderID   uuid.UUID       `json:"order_id" db:"order_id"`
-	CreatedAt *time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt *time.Time      `json:"updatedAt" db:"updated_at"`
-	Currency  string          `json:"currency" db:"currency"`
-	Quantity  int             `json:"quantity" db:"quantity"`
-	Price     decimal.Decimal `json:"price" db:"price"`
-	Subtotal  decimal.Decimal `json:"subtotal"`
+	ID          uuid.UUID       `json:"id" db:"id"`
+	OrderID     uuid.UUID       `json:"orderId" db:"order_id"`
+	CreatedAt   *time.Time      `json:"createdAt" db:"created_at"`
+	UpdatedAt   *time.Time      `json:"updatedAt" db:"updated_at"`
+	Currency    string          `json:"currency" db:"currency"`
+	Quantity    int             `json:"quantity" db:"quantity"`
+	Price       decimal.Decimal `json:"price" db:"price"`
+	Subtotal    decimal.Decimal `json:"subtotal"`
+	Location    string          `json:"location" db:"location"`
+	Description string          `json:"description" db:"description"`
 }
 
 // IsPaid returns true if the order is paid
