@@ -1,7 +1,6 @@
 package promotion
 
 import (
-	"database/sql"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -19,7 +18,7 @@ type Order struct {
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`
-	Location   sql.NullString  `json:"location" db:"location"`
+	Location   *string         `json:"location" db:"location"`
 	Status     string          `json:"status" db:"status"`
 	Items      []OrderItem     `json:"items"`
 }
@@ -34,7 +33,7 @@ type OrderItem struct {
 	Quantity    int             `json:"quantity" db:"quantity"`
 	Price       decimal.Decimal `json:"price" db:"price"`
 	Subtotal    decimal.Decimal `json:"subtotal"`
-	Location    string          `json:"location" db:"location"`
+	Location    *string         `json:"location" db:"location"`
 	Description string          `json:"description" db:"description"`
 }
 

@@ -1,7 +1,6 @@
 package payment
 
 import (
-	"database/sql"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ type Order struct {
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`
-	Location   sql.NullString  `json:"location" db:"location"`
+	Location   string          `json:"location" db:"location"`
 	Status     string          `json:"status" db:"status"`
 	Items      []OrderItem     `json:"items"`
 }
