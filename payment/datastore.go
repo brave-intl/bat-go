@@ -234,7 +234,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	insert into order_cred_issuers (merchant_id, public_key)
 	values ($1, $2)
 	returning *`
-	issuers := []Issuer{}
+	var issuers []Issuer
 	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
 		return nil, err
@@ -249,9 +249,9 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1 limit 1"
-	issuer := Issuer{}
-	err := pg.DB.Select(&issuer, statement, merchantID)
+	statement := "select * from order_cred_issuers where merchant_id = $1"
+	var issuer Issuer
+	err := pg.DB.Get(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +261,8 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1 limit 1"
-	issuer := Issuer{}
+	statement := "select * from order_cred_issuers where public_key = $1"
+	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
 		return nil, nil
