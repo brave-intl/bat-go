@@ -14,12 +14,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type key string
-
-const (
-	serviceKey key = "service"
-)
-
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
@@ -65,7 +59,7 @@ func MerchantRouter(service *Service) chi.Router {
 func newServiceCtx(service *Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), serviceKey, service)
+			ctx := context.WithValue(r.Context(), ServiceKey, service)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
