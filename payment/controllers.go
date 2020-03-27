@@ -8,6 +8,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
@@ -59,7 +60,7 @@ func MerchantRouter(service *Service) chi.Router {
 func newServiceCtx(service *Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), ServiceKey, service)
+			ctx := context.WithValue(r.Context(), appctx.ServiceKey, service)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
