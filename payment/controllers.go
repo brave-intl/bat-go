@@ -1,14 +1,12 @@
 package payment
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
@@ -41,7 +39,7 @@ func MerchantRouter(service *Service) chi.Router {
 
 	// Once instrument handler is refactored https://github.com/brave-intl/bat-go/issues/291
 	// We can use this service context instead of having
-	r.Use(newServiceCtx(service))
+	r.Use(middleware.NewServiceCtx(service))
 
 	// RESTy routes for "merchant" resource
 	r.Route("/", func(r chi.Router) {
@@ -55,15 +53,6 @@ func MerchantRouter(service *Service) chi.Router {
 	})
 
 	return r
-}
-
-func newServiceCtx(service *Service) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), appctx.ServiceKey, service)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
 }
 
 // DeleteKeyRequest includes information needed to create an order
