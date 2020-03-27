@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -70,6 +71,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
+	r.Use(middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(hlog.NewHandler(*logger))
@@ -180,24 +182,30 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-
 	for {
-		attempted, err := job(ctx)
+		_, err := job(ctx)
 		if err != nil {
 			sentry.CaptureMessage(err.Error())
 			sentry.Flush(time.Second * 2)
 		}
-
-		if !attempted || err != nil {
-			<-ticker.C
-		}
+		// regardless if attempted or not, wait for the duration until retrying
+		<-time.After(duration)
 	}
 }
 
 func main() {
 	serverCtx, logger := setupLogger(context.Background())
+	// setup sentry
+	sentryDsn := os.Getenv("SENTRY_DSN")
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
+		})
+		if err != nil {
+			logger.Panic().Err(err).Msg("unable to setup reporting!")
+		}
+	}
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 

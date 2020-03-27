@@ -596,7 +596,7 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 	txInfo.ExchangeFee = resp.Destination.ExchangeFee
 	txInfo.Status = resp.Status
 	if txInfo.Status == "pending" {
-		txInfo.ValidUntil = time.Now().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
+		txInfo.ValidUntil = time.Now().UTC().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
 	}
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message

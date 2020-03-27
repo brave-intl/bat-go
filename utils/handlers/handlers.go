@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 )
@@ -116,11 +117,12 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
-			if e.Cause != nil {
-				sentry.CaptureException(fmt.Errorf("%s: %w", e.Message, e.Cause))
-			} else {
-				sentry.CaptureMessage(e.Message)
-			}
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTags(map[string]string{
+					"reqID": requestutils.GetRequestID(r.Context()),
+				})
+				sentry.CaptureMessage(e.Error())
+			})
 		}
 
 		l := zerolog.Ctx(r.Context())

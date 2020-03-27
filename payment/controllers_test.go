@@ -420,6 +420,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 		for {
 			_, err := service.RunNextVoteDrainJob(ctx)
 			suite.Require().NoError(err, "Failed to drain vote queue")
+			_, err = service.RunNextOrderJob(ctx)
+			suite.Require().NoError(err, "Failed to drain order queue")
 			<-time.After(1 * time.Second)
 		}
 	}()
