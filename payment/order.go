@@ -1,6 +1,8 @@
 package payment
 
 import (
+	"database/sql"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +12,26 @@ import (
 	macaroon "gopkg.in/macaroon.v2"
 )
 
+// NullString is a type that lets ya get a null field from the database
+type NullString struct {
+	sql.NullString
+}
+
+// MarshalJSON for NullString
+func (ns *NullString) MarshalJSON() ([]byte, error) {
+	if !ns.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(ns.String)
+}
+
+// UnmarshalJSON unmarshalls NullString
+func (ns *NullString) UnmarshalJSON(data []byte) error {
+	ns.String = strings.Trim(string(data), `"`)
+	ns.Valid = true
+	return nil
+}
+
 // Order includes information about a particular order
 type Order struct {
 	ID         uuid.UUID       `json:"id" db:"id"`
@@ -18,7 +40,7 @@ type Order struct {
 	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
 	MerchantID string          `json:"merchantId" db:"merchant_id"`
-	Location   string          `json:"location" db:"location"`
+	Location   NullString      `json:"location" db:"location"`
 	Status     string          `json:"status" db:"status"`
 	Items      []OrderItem     `json:"items"`
 }
@@ -33,8 +55,8 @@ type OrderItem struct {
 	Quantity    int             `json:"quantity" db:"quantity"`
 	Price       decimal.Decimal `json:"price" db:"price"`
 	Subtotal    decimal.Decimal `json:"subtotal"`
-	Location    string          `json:"location" db:"location"`
-	Description string          `json:"description" db:"description"`
+	Location    NullString      `json:"location" db:"location"`
+	Description NullString      `json:"description" db:"description"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
@@ -59,7 +81,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
-	orderItem.Location = mac.Location()
+	orderItem.Location.String = mac.Location()
 
 	for i := 0; i < len(caveats); i++ {
 		caveat := mac.Caveats()[i]
@@ -80,7 +102,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 				return nil, err
 			}
 		case "description":
-			orderItem.Description = value
+			orderItem.Description.String = value
 			if err != nil {
 				return nil, err
 			}

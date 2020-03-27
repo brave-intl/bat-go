@@ -264,9 +264,9 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
 		if location == "" {
-			location = orderItem.Location
+			location = orderItem.Location.String
 		}
-		if location != orderItem.Location {
+		if location != orderItem.Location.String {
 			return nil, errors.New("all order items must be from the same location")
 		}
 		if currency == "" {

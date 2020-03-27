@@ -32,6 +32,6 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	suite.Assert().Equal("BAT", orderItem.Currency)
 	suite.Assert().Equal("5c846da1-83cd-4e15-98dd-8e147a56b6fa", orderItem.ID.String())
 	suite.Assert().Equal("2", orderItem.Price.String())
-	suite.Assert().Equal("coffee coffee coffee", orderItem.Description)
-	suite.Assert().Equal("https://brave.com", orderItem.Location)
+	suite.Assert().Equal("coffee coffee coffee", orderItem.Description.String)
+	suite.Assert().Equal("https://brave.com", orderItem.Location.String)
 }
