@@ -68,13 +68,13 @@ func (service *Service) GetOrCreateIssuer(ctx context.Context, merchantID string
 
 // OrderCreds encapsulates the credentials to be signed in response to a completed order
 type OrderCreds struct {
-	ID           uuid.UUID                  `db:"item_id"`
-	OrderID      uuid.UUID                  `db:"order_id"`
-	IssuerID     uuid.UUID                  `db:"issuer_id"`
-	BlindedCreds jsonutils.JSONStringArray  `db:"blinded_creds"`
-	SignedCreds  *jsonutils.JSONStringArray `db:"signed_creds"`
-	BatchProof   *string                    `db:"batch_proof"`
-	PublicKey    *string                    `db:"public_key"`
+	ID           uuid.UUID                  `json:"itemID" db:"item_id"`
+	OrderID      uuid.UUID                  `json:"orderID" db:"order_id"`
+	IssuerID     uuid.UUID                  `json:"issuerID" db:"issuer_id"`
+	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
+	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
+	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
+	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
 // CreateOrderCreds if the order is complete
