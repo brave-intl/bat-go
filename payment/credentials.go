@@ -26,10 +26,10 @@ type CredentialBinding struct {
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
-	ID         uuid.UUID `db:"id"`
-	CreatedAt  time.Time `db:"created_at"`
-	MerchantID string    `db:"merchant_id"`
-	PublicKey  string    `db:"public_key"`
+	ID         uuid.UUID `json:"id" db:"id"`
+	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
+	MerchantID string    `json:"merchantID" db:"merchant_id"`
+	PublicKey  string    `json:"publicKey" db:"public_key"`
 }
 
 // CreateIssuer creates a new challenge bypass credential issuer, saving it's information into the datastore
