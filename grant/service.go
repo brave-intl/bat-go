@@ -2,14 +2,16 @@ package grant
 
 import (
 	"encoding/hex"
+	"errors"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/crypto/ed25519"
 )
@@ -52,6 +54,12 @@ type Service struct {
 	datastore              Datastore
 	roDatastore            ReadOnlyDatastore
 	grantWalletBalanceDesc *prometheus.Desc
+	jobs                   []srv.Job
+}
+
+// Jobs - Implement srv.JobService interface
+func (s *Service) Jobs() []srv.Job {
+	return s.jobs
 }
 
 // NewService is created
@@ -86,6 +94,9 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		),
 	}
 
+	// setup runnable jobs
+	gs.jobs = []srv.Job{}
+
 	if os.Getenv("ENV") != localEnv && !refreshBalance {
 		return nil, errors.New("refreshBalance must be true in production")
 	}
@@ -108,11 +119,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
 		grantWallet, err = uphold.New(info, privKey, pubKey)
@@ -137,32 +148,32 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
-func (service *Service) ReadableDatastore() ReadOnlyDatastore {
-	if service.roDatastore != nil {
-		return service.roDatastore
+func (s *Service) ReadableDatastore() ReadOnlyDatastore {
+	if s.roDatastore != nil {
+		return s.roDatastore
 	}
-	return service.datastore
+	return s.datastore
 }
 
 // Describe returns all descriptions of the collector.
 // We implement this and the Collect function to fulfill the prometheus.Collector interface
-func (service *Service) Describe(ch chan<- *prometheus.Desc) {
-	ch <- service.grantWalletBalanceDesc
+func (s *Service) Describe(ch chan<- *prometheus.Desc) {
+	ch <- s.grantWalletBalanceDesc
 }
 
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
-func (service *Service) Collect(ch chan<- prometheus.Metric) {
+func (s *Service) Collect(ch chan<- prometheus.Metric) {
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
-		raven.CaptureError(err, map[string]string{})
+		sentry.CaptureException(err)
 		return
 	}
 
 	spendable, _ := grantWallet.GetWalletInfo().AltCurrency.FromProbi(balance.SpendableProbi).Float64()
 
 	ch <- prometheus.MustNewConstMetric(
-		service.grantWalletBalanceDesc,
+		s.grantWalletBalanceDesc,
 		prometheus.GaugeValue,
 		spendable,
 	)

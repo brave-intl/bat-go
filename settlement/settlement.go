@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/shopspring/decimal"
 )
 
@@ -159,7 +159,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 				return nil
 			}
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().Before(settlement.ValidUntil) {
+			if time.Now().UTC().Before(settlement.ValidUntil) {
 				return nil
 			}
 
@@ -208,16 +208,16 @@ func SubmitPreparedTransactions(settlementWallet *uphold.Wallet, settlements []T
 func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Transaction) error {
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
-			baseMsg := "could not confirm settlement payout after multiple tries"
+			baseMsg := "could not confirm settlement payout after multiple tries: %+v"
 			log.Printf("%s for channel %s\n", baseMsg, settlement.Channel)
-			raven.CaptureMessage(baseMsg, map[string]string{
+			sentry.CaptureMessage(fmt.Sprintf(baseMsg, map[string]string{
 				"tries":        strconv.Itoa(maxConfirmTries - tries),
 				"channel":      settlement.Channel,
 				"hash":         settlement.ProviderID,
 				"publisher":    settlement.Publisher,
 				"settlementId": settlement.SettlementID,
 				"status":       settlement.Status,
-			})
+			}))
 		}
 
 		if settlement.IsComplete() {
@@ -241,7 +241,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 			break
 
 		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().After(settlement.ValidUntil) {
+			if time.Now().UTC().After(settlement.ValidUntil) {
 				log.Printf("quote has expired, must resubmit transaction for channel %s\n", settlement.Channel)
 				return nil
 			}

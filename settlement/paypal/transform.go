@@ -31,7 +31,7 @@ func CalculateTransactionAmounts(currency string, rate decimal.Decimal, payouts 
 
 // MergeAndTransformPayouts merges payouts to the same destination and transforms to paypal txn metadata
 func MergeAndTransformPayouts(batPayouts *[]settlement.Transaction) (*[]Metadata, error) {
-	executedAt := time.Now()
+	executedAt := time.Now().UTC()
 	rows := make([]Metadata, 0)
 	destinationToRow := map[string]*Metadata{}
 

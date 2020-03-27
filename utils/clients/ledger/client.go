@@ -2,6 +2,8 @@ package ledger
 
 import (
 	"context"
+	"errors"
+	"os"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
@@ -16,16 +18,21 @@ type Client interface {
 
 // HTTPClient wraps http.Client for interacting with the ledger server
 type HTTPClient struct {
-	clients.SimpleHTTPClient
+	client *clients.SimpleHTTPClient
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (*HTTPClient, error) {
-	client, err := clients.New("LEDGER_SERVER", "LEDGER_TOKEN")
+	serverEnvKey := "LEDGER_SERVER"
+	serverURL := os.Getenv("LEDGER_SERVER")
+	if len(serverURL) == 0 {
+		return nil, errors.New(serverEnvKey + " was empty")
+	}
+	client, err := clients.New(serverURL, os.Getenv("LEDGER_TOKEN"))
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{*client}, err
+	return &HTTPClient{client}, err
 }
 
 // WalletAddresses contains the wallet addresses
@@ -35,20 +42,21 @@ type WalletAddresses struct {
 
 // WalletResponse contains information about the ledger wallet
 type WalletResponse struct {
-	Addresses   WalletAddresses          `json:"addresses"`
-	AltCurrency *altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey   string                   `json:"httpSigningPubKey"`
+	Addresses     WalletAddresses          `json:"addresses"`
+	AltCurrency   *altcurrency.AltCurrency `json:"altcurrency"`
+	PublicKey     string                   `json:"httpSigningPubKey"`
+	PayoutAddress *string                  `json:"anonymousAddress"`
 }
 
 // GetWallet retrieves wallet information
 func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error) {
-	req, err := c.NewRequest(ctx, "GET", "v2/wallet/"+id.String()+"/info", nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v2/wallet/"+id.String()+"/info", nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var walletResponse WalletResponse
-	resp, err := c.Do(ctx, req, &walletResponse)
+	resp, err := c.client.Do(ctx, req, &walletResponse)
 
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
@@ -58,12 +66,13 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 	}
 
 	info := wallet.Info{
-		ID:          id.String(),
-		Provider:    "uphold",
-		ProviderID:  walletResponse.Addresses.ProviderID.String(),
-		AltCurrency: walletResponse.AltCurrency,
-		PublicKey:   walletResponse.PublicKey,
-		LastBalance: nil,
+		ID:            id.String(),
+		Provider:      "uphold",
+		ProviderID:    walletResponse.Addresses.ProviderID.String(),
+		AltCurrency:   walletResponse.AltCurrency,
+		PublicKey:     walletResponse.PublicKey,
+		LastBalance:   nil,
+		PayoutAddress: walletResponse.PayoutAddress,
 	}
 
 	return &info, err

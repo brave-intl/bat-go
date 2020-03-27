@@ -2,10 +2,10 @@ package promotion
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -67,6 +67,21 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
+	// DrainClaim by marking the claim as drained and inserting a new drain entry
+	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
+	// RunNextDrainJob to process deposits if there is one waiting
+	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
+
+	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
+
+	// GetOrder by ID
+	GetOrder(orderID uuid.UUID) (*Order, error)
+	// UpdateOrder updates an order when it has been paid
+	UpdateOrder(orderID uuid.UUID, status string) error
+	// CreateTransaction creates a transaction
+	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// GetSumForTransactions gets a decimal sum of for transactions for an order
+	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -145,7 +160,7 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer pg.RollbackTx(tx)
 	for _, id := range ids {
 		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
 		if err != nil {
@@ -258,25 +273,20 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if err != nil {
 		return nil, err
 	}
+	defer pg.RollbackTx(tx)
 
 	claims := []Claim{}
 
 	// Get legacy claims
 	err = tx.Select(&claims, `select * from claims where legacy_claimed and promotion_id = $1 and wallet_id = $2`, promotion.ID, wallet.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	legacyClaimExists := false
 	if len(claims) > 1 {
-		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
-		if os.Getenv("ENV") != "local" {
-			_ = tx.Rollback()
-			return nil, errors.New("legacy promotion is not available to claim")
-		}
 		legacyClaimExists = true
 	}
 
@@ -284,15 +294,12 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
 		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 		promotionCount, err := res.RowsAffected()
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		} else if promotionCount != 1 {
-			_ = tx.Rollback()
 			return nil, errors.New("no matching active promotion")
 		}
 	}
@@ -315,10 +322,8 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	}
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	} else if len(claims) != 1 {
-		_ = tx.Rollback()
 		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
 	}
 	claim := claims[0]
@@ -326,7 +331,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	// This will error if user has already claimed due to uniqueness constraint
 	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -544,6 +548,7 @@ func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -569,12 +574,10 @@ on claim_cred.issuer_id = issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -584,13 +587,11 @@ on claim_cred.issuer_id = issuers.id`
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -628,6 +629,7 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// FIXME
 	type SuggestionJob struct {
@@ -646,6 +648,134 @@ for update skip locked
 limit 1`
 
 	jobs := []SuggestionJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		return attempted, err
+	}
+
+	if len(jobs) != 1 {
+		return attempted, nil
+	}
+
+	job := jobs[0]
+	attempted = true
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		return attempted, err
+	}
+
+	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+	if err != nil {
+		// FIXME only non-retriable errors should set erred
+		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
+		if err == nil {
+			err = tx.Commit()
+		}
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+	if err != nil {
+		return attempted, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
+}
+
+// This code can be deleted once https://github.com/brave-intl/bat-go/issues/263 is addressed.
+
+// GetOrder queries the database and returns an order
+func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
+	statement := "SELECT * FROM orders WHERE id = $1"
+	order := Order{}
+	err := pg.DB.Get(&order, statement, orderID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("Failed to get order : %w", err)
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = "SELECT * FROM order_items WHERE order_id = $1"
+	err = pg.DB.Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, nil
+}
+
+// DrainClaim by marking the claim as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	tx, err := pg.DB.Beginx()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	statement := `
+	insert into claim_drain (credentials, wallet_id, total)
+	values ($1, $2, $3)
+	returning *`
+	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RunNextDrainJob to process deposits if there is one waiting
+func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+	tx, err := pg.DB.Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+
+	// FIXME maybe useful to later move definition outside of this method scope
+	type DrainJob struct {
+		ID            uuid.UUID       `db:"id"`
+		Credentials   string          `db:"credentials"`
+		WalletID      uuid.UUID       `db:"wallet_id"`
+		Total         decimal.Decimal `db:"total"`
+		TransactionID *string         `db:"transaction_id"`
+		Erred         bool            `db:"erred"`
+	}
+
+	statement := `
+select *
+from claim_drain
+where not erred and transaction_id is null
+for update skip locked
+limit 1`
+
+	jobs := []DrainJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
 		_ = tx.Rollback()
@@ -667,18 +797,20 @@ limit 1`
 		return attempted, err
 	}
 
-	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
-	if err != nil {
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
+	if err != nil || txn == nil {
 		// FIXME only non-retriable errors should set erred
-		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
-		if err != nil {
-			_ = tx.Rollback()
+		{
+			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
+			if err != nil {
+				_ = tx.Rollback()
+			}
+			_ = tx.Commit()
 		}
-		err = tx.Commit()
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return attempted, err
@@ -690,4 +822,61 @@ limit 1`
 	}
 
 	return attempted, nil
+}
+
+// UpdateOrder updates the orders status.
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
+}
+
+// CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
+func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
+	tx := pg.DB.MustBegin()
+
+	var transaction Transaction
+	err := tx.Get(&transaction,
+		`
+			INSERT INTO transactions (order_id, external_transaction_id, status, currency, kind, amount)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING *
+	`, orderID, externalTransactionID, status, currency, kind, amount)
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	return &transaction, nil
+}
+
+// GetSumForTransactions returns the calculated sum
+func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
+	var sum decimal.Decimal
+
+	err := pg.DB.Get(&sum, `
+		SELECT SUM(amount) as sum
+		FROM transactions
+		WHERE order_id = $1 AND status = 'completed'
+	`, orderID)
+
+	return sum, err
 }

@@ -8,9 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/crypto/ed25519"
@@ -358,9 +362,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
-func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
-	suite.T().Skip()
-
+func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	numVotes := 20
 
 	mockCtrl := gomock.NewController(suite.T())
@@ -370,6 +372,22 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	// Create connection to Kafka
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, err := tlsDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
+	suite.Require().NoError(err)
+
+	// create topics
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
 	service := &Service{
 		datastore: pg,
 		cbClient:  mockCB,
@@ -377,6 +395,24 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 			Datastore: pg,
 		},
 	}
+
+	err = service.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	// kick off async goroutine to monitor the vote
+	// queue of uncommitted votes in postgres, and
+	// push the votes through redemption and kafka
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for {
+			_, err := service.RunNextVoteDrainJob(ctx)
+			suite.Require().NoError(err, "Failed to drain vote queue")
+			_, err = service.RunNextOrderJob(ctx)
+			suite.Require().NoError(err, "Failed to drain order queue")
+			<-time.After(1 * time.Second)
+		}
+	}()
+	defer cancel()
 
 	// Create the order first
 	handler := CreateOrder(service)
@@ -404,7 +440,7 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	suite.Assert().NoError(err)
 
 	userWallet := generateWallet(suite.T())
-	err = pg.InsertWallet(&userWallet.Info)
+	err = pg.UpsertWallet(&userWallet.Info)
 	suite.Assert().NoError(err)
 
 	fundWallet(suite.T(), userWallet, order.TotalPrice)
@@ -472,17 +508,20 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 
+	<-time.After(5 * time.Second)
+
+	// see if we can get our order creds
 	handler = GetOrderCreds(service)
 	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
 	suite.Require().NoError(err)
 
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
-	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
 
 	for rr.Code != http.StatusOK {
 		if rr.Code == http.StatusBadRequest {
@@ -499,13 +538,13 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 	}
 	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
 
-	// FIXME read body
-
+	// setup our make vote handler
 	handler = MakeVote(service)
 
 	vote := Vote{
-		Type:    "auto-contribute",
-		Channel: "brave.com",
+		Type:      "auto-contribute",
+		Channel:   "brave.com",
+		VoteTally: 20,
 	}
 
 	voteBytes, err := json.Marshal(&vote)
@@ -521,18 +560,70 @@ func (suite *ControllersTestSuite) AnonymousCardTestE2E() {
 		}},
 	}
 
-	// FIXME re-enable once event is emitted
-	//mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
-	//Issuer:        issuerName,
-	//TokenPreimage: preimage,
-	//Signature:     sig,
-	//}}), gomock.Eq(votePayload)).Return(nil)
-
 	body, err = json.Marshal(&voteReq)
 	suite.Require().NoError(err)
 
+	// mocked redeem creds
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(votePayload)).Return(nil)
+
+	// perform post to vote endpoint
 	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	// FIXME check event is emitted
+	// actually perform the call
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	body, _ = ioutil.ReadAll(rr.Body)
+
+	<-time.After(5 * time.Second)
+
+	// Test the Kafka Event was put into place
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            voteTopic,
+		Dialer:           service.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+
+	codec := service.codecs["vote"]
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
+	voteEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	voteEvent, _, err := codec.NativeFromBinary(voteEventBinary.Value)
+	suite.Require().NoError(err)
+
+	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
+	suite.Require().NoError(err)
+
+	// eventMap, ok := voteEvent.(map[string]interface{})
+	// suite.Require().True(ok)
+	// id, ok := eventMap["id"].(string)
+	// suite.Require().True(ok)
+	// createdAt, ok := eventMap["createdAt"].(string)
+	// suite.Require().True(ok)
+
+	suite.Assert().Contains(string(voteEventJSON), "id")
+
+	var ve = new(VoteEvent)
+
+	err = json.Unmarshal(voteEventJSON, ve)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(ve.Type, vote.Type)
+	suite.Assert().Equal(ve.Channel, vote.Channel)
+	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
+
 }
