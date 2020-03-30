@@ -73,7 +73,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		switch key {
 		case "sku":
 			orderItem.SKU = value
-		case "price":
+		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
 				return nil, err
