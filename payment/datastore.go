@@ -46,6 +46,8 @@ type Datastore interface {
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	// GetOrderCredsByItemID retrieves an order credential by item id
+	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
@@ -232,7 +234,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	insert into order_cred_issuers (merchant_id, public_key)
 	values ($1, $2)
 	returning *`
-	issuers := []Issuer{}
+	var issuers []Issuer
 	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
 		return nil, err
@@ -247,9 +249,9 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1 limit 1"
-	issuer := Issuer{}
-	err := pg.DB.Select(&issuer, statement, merchantID)
+	statement := "select * from order_cred_issuers where merchant_id = $1"
+	var issuer Issuer
+	err := pg.DB.Get(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,8 +261,8 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1 limit 1"
-	issuer := Issuer{}
+	statement := "select * from order_cred_issuers where public_key = $1"
+	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -300,19 +302,17 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 	return nil, nil
 }
 
-// GetOrderCredsByItemID returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, error) {
-	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
-	if err != nil {
+// GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
+func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
+	orderCreds := OrderCreds{}
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2 and signed_creds is not null", orderID, itemID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
-	if len(orderCreds) > 0 {
-		return &orderCreds, nil
-	}
-
-	return nil, nil
+	return &orderCreds, nil
 }
 
 // GetUncommittedVotesForUpdate - row locking on number of votes we will be pulling

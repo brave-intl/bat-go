@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -26,6 +28,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
 	return r
 }
@@ -324,6 +327,54 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			panic(err)
 		}
 		return nil
+	})
+}
+
+// GetOrderCredsByID is the handler for fetching order credentials by an item id
+func GetOrderCredsByID(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		// get the IDs from the URL
+		var (
+			orderID           = new(inputs.ID)
+			itemID            = new(inputs.ID)
+			validationPayload = map[string]interface{}{}
+			err               error
+		)
+
+		// decode and validate orderID url param
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationPayload["orderID"] = err.Error()
+		}
+
+		// decode and validate itemID url param
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
+			validationPayload["itemID"] = err.Error()
+		}
+
+		// did we get any validation errors?
+		if len(validationPayload) > 0 {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				validationPayload)
+		}
+
+		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+		}
+
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "Could not find credentials",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
 	})
 }
 
