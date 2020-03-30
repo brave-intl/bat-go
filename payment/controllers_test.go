@@ -71,7 +71,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				SKU:      "MDAxY2xvY2F0aW9uIGxvY2FsaG9zdDo4MDgwCjAwMWVpZGVudGlmaWVyIEJyYXZlIFNLVSB2MS4wCjAwMWFjaWQgc2t1ID0gQlJBVkUtMTIzNDUKMDAxNWNpZCBwcmljZSA9IDAuMjUKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDJhY2lkIGRlc2NyaXB0aW9uID0gMTIgb3VuY2VzIG9mIENvZmZlZQowMDFjY2lkIGV4cGlyeSA9IDE1ODU2MDg4ODAKMDAyZnNpZ25hdHVyZSDO_XaGw_Z9ygbI8VyB0ssPja4RCiYmBdl4UYUGfu8KSgo",
 				Quantity: quantity,
 			},
 		},
@@ -100,15 +100,16 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	suite.Assert().Equal("10", order.TotalPrice.String())
 	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
+	suite.Assert().Equal("BAT", order.Currency)
 
 	// Check the order items
 	suite.Assert().Equal(len(order.Items), 1)
 	suite.Assert().Equal("BAT", order.Items[0].Currency)
-	suite.Assert().Equal("BAT", order.Currency)
 	suite.Assert().Equal("0.25", order.Items[0].Price.String())
 	suite.Assert().Equal(40, order.Items[0].Quantity)
 	suite.Assert().Equal(decimal.New(10, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
+	suite.Assert().Equal("BRAVE-12345", order.Items[0].SKU)
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
