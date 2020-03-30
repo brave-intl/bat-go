@@ -23,5 +23,8 @@ func (ns *NullString) MarshalJSON() ([]byte, error) {
 func (ns *NullString) UnmarshalJSON(data []byte) error {
 	ns.String = strings.Trim(string(data), `"`)
 	ns.Valid = true
+	if len(data) == 0 {
+		ns.Valid = false
+	}
 	return nil
 }
