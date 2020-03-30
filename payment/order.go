@@ -75,7 +75,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 				return nil, err
 			}
 			orderItem.ID = uuid
-		case "price":
+		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
 				return nil, err
