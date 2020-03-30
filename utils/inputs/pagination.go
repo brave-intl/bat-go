@@ -150,7 +150,6 @@ func NewPagination(ctx context.Context, url string, orderOptions ...string) (*Pa
 	ctx = context.WithValue(ctx, appctx.PaginationOrderOptionsCTXKey, order)
 
 	if err := DecodeAndValidate(ctx, pagination, []byte(url)); err != nil {
-		fmt.Println("!!!!! err: ", err)
 		return nil, handlers.ValidationError(
 			"Error decoding or validating request pagination url parameter",
 			map[string]interface{}{
