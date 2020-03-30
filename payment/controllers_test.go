@@ -538,6 +538,20 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	}
 	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
 
+	// Test getting the same order by item ID
+	handler = GetOrderCredsByID(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials/{itemID}", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	rctx.URLParams.Add("itemID", order.Items[0].ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
 	// setup our make vote handler
 	handler = MakeVote(service)
 

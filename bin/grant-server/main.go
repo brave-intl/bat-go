@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -195,6 +196,17 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 
 func main() {
 	serverCtx, logger := setupLogger(context.Background())
+	// setup sentry
+	sentryDsn := os.Getenv("SENTRY_DSN")
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
+		})
+		if err != nil {
+			logger.Panic().Err(err).Msg("unable to setup reporting!")
+		}
+	}
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
