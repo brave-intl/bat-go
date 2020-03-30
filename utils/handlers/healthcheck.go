@@ -44,3 +44,10 @@ func HealthCheckHandler(version, buildTime, commit string) http.HandlerFunc {
 			}
 		})
 }
+
+// PingHandler - used with pingdom check
+func PingHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("."))
+}

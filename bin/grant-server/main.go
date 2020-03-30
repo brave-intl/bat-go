@@ -57,7 +57,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	var r = chi.NewRouter().With()
+	var r chi.Router = chi.NewRouter().With()
 	r.Use(chiware.RequestID)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
@@ -66,8 +66,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// The grant server is only accessed by the ledger service, so headers are semi-trusted.
 	// Consequently we should consider the request IP as primarily "informational".
 	r.Use(chiware.RealIP)
-
-	r.Use(chiware.Heartbeat("/"))
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
@@ -81,6 +79,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 
 	r.Use(middleware.InstrumentHandler)
+
+	// ping testing
+	r.Get("/", handlers.PingHandler)
 
 	roDB := os.Getenv("RO_DATABASE_URL")
 
