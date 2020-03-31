@@ -195,6 +195,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
 	err := tx.Get(&transaction,
