@@ -1,13 +1,15 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 )
 
@@ -68,6 +70,28 @@ func WrapError(err error, msg string, passedCode int) *AppError {
 	}
 }
 
+// RenderContent based on the header
+func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, status int) *AppError {
+	switch w.Header().Get("content-type") {
+	case "application/json":
+		var b bytes.Buffer
+
+		if err := json.NewEncoder(&b).Encode(v); err != nil {
+			return WrapError(err, "Error encoding JSON", http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(status)
+		_, err := w.Write(b.Bytes())
+		// Should never happen :fingers_crossed:
+		if err != nil {
+			fmt.Println("UNexepectending")
+			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
+		}
+	}
+
+	return nil
+}
+
 // WrapValidationError from govalidator
 func WrapValidationError(err error) *AppError {
 	return ValidationError("request body", govalidator.ErrorsByField(err))
@@ -93,11 +117,12 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
-			if e.Cause != nil {
-				raven.CaptureError(errors.Wrap(e.Cause, e.Message), map[string]string{})
-			} else {
-				raven.CaptureMessage(e.Message, map[string]string{})
-			}
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTags(map[string]string{
+					"reqID": requestutils.GetRequestID(r.Context()),
+				})
+				sentry.CaptureMessage(e.Error())
+			})
 		}
 
 		l := zerolog.Ctx(r.Context())

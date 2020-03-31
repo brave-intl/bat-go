@@ -6,8 +6,8 @@ branches:
   - master
   - prod
 go:
-- "1.13.4"
-- "master"
+- 1.13.4
+- master
 services:
 - docker
 matrix:
@@ -24,8 +24,10 @@ env:
   - secure: glxxP+EJpAg/NS9u1WcK2rjBHB4W86160N2HdTGEDoLWrU210PBlreUBMRxxh3DkBAYvuKhlGcIMeEy2H+oF5x0UfNO2eR/CVTOhQzvuVshppUq6k/ppCanxMD0fhfTvBJhoATAIqV5e2edwacoWCF+fX5TiZztJ++wmuVF60fylpAoVIAFVx67dJ157/JT5Wh57mocB6j1PNzfTCohqA1LTQ9IbCwWj5omeq3koQ6r8mveay0XF7bGxhW5A7WEUmvzWDWfK2yM77BY0CGWykVZbdexzacK9uW0f9PJSoHhMYQq5mn8L3c7D2I3in/QWtdXl2E/RRCsyREeKxA+9/ZQtM5bcHjp1xfhXQrHCd+8VDuzKtit11+fjYGsuIb4d9qd9CTety/G3+0S63ubTrU6BpssnyImV3nLjLlNoCto74QZPTct06DFDVjw+InJHK95xj6rZmxjGao6VzKWdgiCHB6DM7FNwb3HCad14e3fX59xjpQ1v3KppGXIzqUF5CtZOb8wkgzdorZtdywUyqg1CPa8/poXnhRcaPEHjL5wzGsu9+yYFtNZ6HDcGTIAB4pkgePsfo52/t937dLQ+d3tQlPQpvdjsHkOThqhfqp0tsfB6n7vWfqRQj4F9WG6KhHjMDEx+C4eEAaslPs33hI6yTFW6M48aMnDfBIbMvHk=
   - secure: aXUfAxGtqjhBvNwOMyrY5HaWF63ikLgxeiJflG0DJARhpSroVJVAGOQKkCP2vXfbng2DCsXBYuv21PxyRI7ki61sMzN3tXEkvcE42UchWMTGRCHMEf5u8lVMseWu4I3ecfqp7caDZhSyG5rW8QGKkglYPQGcmO+Cryyfd4e0vfUjF9K7/GVXE0R0eFzbCCAWTEy8Ehjos2YyN5Fm+/ZptJY5RCunikSB5ON5Na7z1Jv0gWNeSSLRsUZB7xgj4esUQx9eb/kmMhlWg6XbguxKJgnu6rN0nKw3APoJR7e60srA8s6KpFM0Q691qxSCdG9gMv/5WG3FGdLF4W3W+weqJyLuOJ2on/DcotU7+g5hx7qBCUWtuA0W8GwwK8fEEBKeuTih9GxsmnqpvJEXoNWgDKam92sDKm5mYjjjsFJa4g6UcMVci+pbrXPgDgq4uEz/poQR6MY8B0CvflWNp/RTYjCfzZWz+DinCLvvngXN6bIKfrJh/HlTtmgMDGapq/EVT0htvuM+Hx/4etCZcenSoYGPSK37rEfrThw+yZdI6iZ5AXtxspeGT3sqjSS+sVGFBeZYm4/XpfaSuF0YzRngQnSWO3ihnqpUK9K0p4pO50DPshYjJgGA52Rc7ONwnWCTgDkk4qzmKVLoNDPq2cmMrgDhkTj1Ozv+ewvCPTAoJWg=
   - secure: JBtiqEcRtB9SoZQIJ4f0g8bod9MCl07sZ4q3CtQHwISq+SngT+porpZ33W49OPRbp2j44tCF7xnrgF/tqT2tjVAIy/k3rQ+edmesSLtDkh5GTFUjh9LegDr1uXmVCDgtHxFEipu1Erp5PqebZk2JAjc9jJv5e3RjQQZYNyTt+werpvoP5sH3XQ3n7IpByp5eHfP3E6UV9rh7B9k+7Tu3hfE3IfyFhjxIcS9tJjbSN0K6842QmI7n43Pzhl2VL8rvxPXWwo4MYT/T7dszY+ZuHpa/atxK1l2x20K5KiymWM3+G3i6lbLc8dyOX3Nw2Q9pP4uo4KLSRlJhrh6Io/Y76C156MSCMlSEohW63zq98fstKprOj50Ciop3ftJfPMlSRhoarXM2whIU+iUCCYscfqx7RgZqDrLJR4iWlLRp9n9+kMd4h76tFJ6rMyMsez3C2jp4cp8426pXmw7/xqwAxlueNYV3esZs8MguNS3oA5zE+6BP6/c6uOV1CVB6Rh8v4TzBjQqQCorZKtdAEBOh/Y7i/aQe8eXJKthhk/reC8eAiPYc37rDVXiIbAO8MlO5jm44gbbFjnBUdJBW3PMYEUw5a3TyOoc+FxLOGNleM1vo1CrTSzaDYf2dJOHIDh8VJmU5a5JpWjf6cwANdsrVPbYLxG/T0PIdjz6BjuSPsfU=
+  - secure: agYOUuLvl0nuHd019DvfT/0l4ObjdTfkbLYPNT1RiYzDRfx7YN4ffwi62aMCJPw1b8CUcxRjMT7Bd22aTEl+ieZ9Yn58pYfN6xBUM+xRSip4uKImdDN9XxWtFAc94dA7/rIFcUmcaRa85b3fb5VikCNe4a8Uh33PrEKT3T3tLmhvuQRZUN/dRB35v2iXlo1tyCFl1H8YzeUts/I6o6EXz1Iu4TQK9gKE2fItiuezpa6oAXPm/X9oOBkky8rHCsa8gBhf7YiV88xTlL4TTxgG8BSuzGaYaA9P9PPDT1WLmINQ8OF8SbvS1WgB43uS3sX65aBWDFeYmDvN307lfVTeB8H4XiXcYeT6tUT/94Impn8Q/B9ocIpT10/7yl6Ahe716rWC+CH/hNg+de9vgDJvfyE6Vkvn6RuliOrrHGTTtfqBDpn15vfIO4qgRGjlD0na+vUJZIo0C+8rCViZt4HZGA6MqFy38n4MPidyy9m8I64Sqd5RvLoZcwT+kpOqI2xfIe/lsfKCfAk3ajS6jYEO9XuuLOJWfo4UoVBI5BSxTNLJfdY1JYe9vFB2P91pUw5d+IO0/UnCeiRLv70vnDjahH2CBqq7YtG1BFkO3yc81u3Gx7o0h/956wugHVktoqc/pLvYjank8qRXfeh0eAykXJUFmCtdnObezVob+kCSqPg=
 before_install:
-- curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin latest
+- curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh |
+  sh -s -- -b $(go env GOPATH)/bin latest
 install:
 - go mod download
 before_script:
@@ -33,6 +35,8 @@ before_script:
 script:
 - docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
 - sleep 3
-- VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make
+- VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d
+  ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm
+  dev make
 after_script:
 - git diff-index --quiet HEAD --

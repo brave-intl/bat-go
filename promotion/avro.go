@@ -11,6 +11,7 @@ const suggestionEventSchema = `{
     { "name": "channel", "type": "string" },
     { "name": "createdAt", "type": "string" },
     { "name": "totalAmount", "type": "string" },
+    { "name": "orderId", "type": "string", "default": "" },
     { "name": "funding",
       "type": {
         "type": "array",

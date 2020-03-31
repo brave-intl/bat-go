@@ -44,7 +44,7 @@ func init() {
 		log.Fatalln(err)
 	}
 
-	ctx, r, _ := setupRouter(setupLogger(context.Background()))
+	ctx, r, _, _ := setupRouter(setupLogger(context.Background()))
 	handler = chi.ServerBaseContext(ctx, r)
 }
 

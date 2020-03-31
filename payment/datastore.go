@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -21,7 +23,7 @@ import (
 type Datastore interface {
 	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -44,8 +46,26 @@ type Datastore interface {
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	// GetOrderCredsByItemID retrieves an order credential by item id
+	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
+
+	// Votes
+	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
+	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
+	InsertVote(ctx context.Context, vr VoteRecord) error
+}
+
+// VoteRecord - how the ac votes are stored in the queue
+type VoteRecord struct {
+	ID                 uuid.UUID
+	RequestCredentials string
+	VoteText           string
+	VoteEventBinary    []byte
+	Erred              bool
+	Processed          bool
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -63,40 +83,39 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO orders (total_price, merchant_id, status, currency, location)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING *
 		`,
-		totalPrice, merchantID, status, currency)
+		totalPrice, merchantID, status, currency, location)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	for i := 0; i < len(orderItems); i++ {
-		orderItems[i].OrderID = order.ID
+		currentItem := orderItems[i]
 
-		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
-			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
+		err := tx.Get(&orderItems[i], `
+			INSERT INTO order_items (order_id, quantity, price, currency, subtotal, location, description)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING *
-		`)
-		err = nstmt.Get(&orderItems[i], orderItems[i])
+		`,
+			order.ID, currentItem.Quantity, currentItem.Price, currentItem.Currency,
+			currentItem.Subtotal, currentItem.Location.String, currentItem.Description.String,
+		)
 
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -159,10 +178,15 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	_, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
 	}
 
 	return nil
@@ -181,14 +205,12 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	err = tx.Commit()
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -214,7 +236,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	insert into order_cred_issuers (merchant_id, public_key)
 	values ($1, $2)
 	returning *`
-	issuers := []Issuer{}
+	var issuers []Issuer
 	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
 		return nil, err
@@ -229,9 +251,9 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1 limit 1"
-	issuer := Issuer{}
-	err := pg.DB.Select(&issuer, statement, merchantID)
+	statement := "select * from order_cred_issuers where merchant_id = $1"
+	var issuer Issuer
+	err := pg.DB.Get(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +263,8 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1 limit 1"
-	issuer := Issuer{}
+	statement := "select * from order_cred_issuers where public_key = $1"
+	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -282,19 +304,99 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 	return nil, nil
 }
 
-// GetOrderCredsByItemID returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, error) {
-	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
-	if err != nil {
+// GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
+func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
+	orderCreds := OrderCreds{}
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2 and signed_creds is not null", orderID, itemID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
-	if len(orderCreds) > 0 {
-		return &orderCreds, nil
+	return &orderCreds, nil
+}
+
+// GetUncommittedVotesForUpdate - row locking on number of votes we will be pulling
+// returns a transaction to commit, the vote records, and an error
+func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error) {
+	var (
+		results = make([]*VoteRecord, 100)
+		tx, err = pg.DB.Beginx()
+	)
+
+	if err != nil {
+		return tx, nil, fmt.Errorf("failed to aquire transaction: %w", err)
 	}
 
-	return nil, nil
+	statement := `
+select
+	id, credentials, vote_text, vote_event, erred, processed
+from
+	vote_drain
+where
+	processed = false AND
+	erred = false
+limit 100
+FOR UPDATE
+`
+	rows, err := tx.QueryContext(ctx, statement)
+	if err != nil {
+		return tx, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
+	}
+
+	for rows.Next() {
+		var vr = new(VoteRecord)
+		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
+			&vr.VoteEventBinary, &vr.Erred, &vr.Processed); err != nil {
+			return tx, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
+		}
+		// add to results
+		results = append(results, vr)
+	}
+	if err := rows.Err(); err != nil {
+		return tx, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
+	}
+
+	if err := rows.Close(); err != nil {
+		return tx, results, fmt.Errorf("error closing rows: %w", err)
+	}
+
+	return tx, results, err
+}
+
+// MarkVoteErrored - Update a vote to show it has errored, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set erred=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
+}
+
+// CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
+// a batch number of votes can be processed.
+func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
+	var (
+		statement = `update vote_drain set processed=true where id=$1`
+		_, err    = pg.DB.Exec(statement, vr.ID)
+	)
+	return fmt.Errorf("failed to commit vote from drain: %w", err)
+}
+
+// InsertVote - Add a vote to our "queue" to be processed
+func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
+	var (
+		statement = `
+	insert into vote_drain (credentials, vote_text, vote_event)
+	values ($1, $2, $3)`
+		_, err = pg.DB.Exec(statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert vote to drain: %w", err)
+	}
+	return nil
 }
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
@@ -304,6 +406,7 @@ func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -329,12 +432,10 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -344,13 +445,11 @@ on order_cred.issuer_id = order_cred_issuers.id`
 	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 

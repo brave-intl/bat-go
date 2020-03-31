@@ -1,12 +1,19 @@
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
 _BINS := $(wildcard bin/*)
-TEST_PKG?=./...
 
 ifdef GOOS
 	BINS := $(_BINS:bin/%=target/$(GOOS)_$(GOARCH)/%)
 else
 	BINS := $(_BINS:bin/%=target/release/%)
+endif
+
+TEST_PKG?=./...
+TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
+ifdef TEST_RUN
+	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
 .PHONY: all bins docker test lint clean
@@ -21,23 +28,27 @@ target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
 
 docker:
-	docker build -t bat-go:latest .
+	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:latest .
 	docker tag bat-go:latest bat-go:$(GIT_VERSION)
 
 docker-up-dev:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.dev.yml up -d
 
 docker-up-dev-rep:
-	docker-compose -f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
 docker-test:
-	docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make test
+	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web /bin/bash
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev /bin/bash
 
 mac:
 	GOOS=darwin GOARCH=amd64 make bins
@@ -76,7 +87,7 @@ download-vault:
 	cd target/settlement-tools && unzip -o vault_$(VAULT_VERSION)_$(GOOS)_$(GOARCH).zip vault && rm vault_$(VAULT_VERSION)_*
 
 test:
-	go test -v -p 1 --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
+	go test -v -p 1 $(TEST_FLAGS)
 
 format:
 	gofmt -s -w ./
