@@ -9,8 +9,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/formatters"
 	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 )

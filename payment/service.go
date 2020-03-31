@@ -15,8 +15,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	wallet "github.com/brave-intl/bat-go/wallet/service"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -215,13 +215,14 @@ func (s *Service) InitKafka() error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore) (*Service, error) {
+func InitService(postgres *Postgres) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
 	}
 
-	walletService, err := wallet.InitService(datastore, nil)
+	walletDS := wallet.Datastore(&wallet.Postgres{Postgres: postgres.Postgres})
+	walletService, err := wallet.InitService(walletDS, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +230,7 @@ func InitService(datastore Datastore) (*Service, error) {
 	service := &Service{
 		wallet:    *walletService,
 		cbClient:  cbClient,
-		datastore: datastore,
+		datastore: Datastore(postgres),
 	}
 
 	// setup runnable jobs
@@ -352,7 +353,12 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
-	txInfo, err := s.wallet.SubmitAnonCardTransaction(ctx, walletID, transaction)
+	txInfo, err := s.wallet.SubmitAnonCardTransaction(
+		ctx,
+		walletID,
+		transaction,
+		"",
+	)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
 	}

@@ -151,11 +151,9 @@ func (ve *VoteEvent) CodecDecode(codec *goavro.Codec, binary []byte) error {
 }
 
 func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
-	if pg, ok := ds.(*Postgres); ok {
-		if tx != nil {
-			// will handle logging to sentry if there is an error
-			pg.RollbackTx(tx)
-		}
+	if tx != nil {
+		// will handle logging to sentry if there is an error
+		_ = tx.Rollback()
 	}
 	return errorutils.Wrap(err, wrap)
 }

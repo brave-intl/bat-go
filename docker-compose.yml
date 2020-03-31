@@ -28,8 +28,12 @@ services:
       - DONOR_WALLET_PUBLIC_KEY
       - GRANT_SIGNATOR_PUBLIC_KEY
       - GRANT_WALLET_CARD_ID
+      - REPUTATION_SERVER
+      - REPUTATION_TOKEN
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
+      - TEST_PKG
+      - TEST_RUN
       - KAFKA_BROKERS=kafka:19092
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
@@ -84,6 +88,8 @@ services:
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY
       - GRANT_WALLET_PUBLIC_KEY
+      - TEST_PKG
+      - TEST_RUN
       - KAFKA_BROKERS=kafka:19092
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem

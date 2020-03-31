@@ -8,7 +8,7 @@ services:
   web:
     environment:
       - "REPUTATION_SERVER=http://reputation-web-grant:3334"
-      - "REPUTATION_TOKEN=foobarfoobar"
+      - "REPUTATION_TOKEN=636765a9-1f92-4b40-ab0b-85ebd1e2c23d"
     depends_on:
       - reputation-web-grant
   reputation-postgres-grant:
@@ -20,6 +20,8 @@ services:
       - "POSTGRES_DB=reputation"
     networks:
       - grant
+    ports:
+      - "3402:5432"
   reputation-web-grant:
     container_name: reputation-web-grant
     image: reputation-web
@@ -27,7 +29,7 @@ services:
     ports:
       - 3334:3334
     environment:
-      - "ENV=production"
+      # - "ENV=production"
       - "ALLOW_DEBUG_APK=1"
       - "API_APPLE_KEY_ID=1"
       - "API_APPLE_BASE_URL=https://api.development.devicecheck.apple.com"
@@ -37,7 +39,7 @@ services:
       - "DATABASE_MIGRATIONS_URL=file:///migrations"
       - "GRPC_ENABLED=1"
       - "IOS_ENROLLMENT_WAIT_HOURS=720h"
-      - "TOKEN_LIST=foobarfoobar"
+      - "TOKEN_LIST=636765a9-1f92-4b40-ab0b-85ebd1e2c23d"
       - "TEST_TAGS=integration"
       - "GOTEST=go test"
     depends_on:

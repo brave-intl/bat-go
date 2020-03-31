@@ -142,10 +142,16 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return pg, nil
 }
 
-// RollbackTx rolls back a transaction (useful with defer)
-func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
+// RollbackTxAndHandle rolls back a transaction
+func (pg *Postgres) RollbackTxAndHandle(tx *sqlx.Tx) error {
 	err := tx.Rollback()
 	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
 	}
+	return err
+}
+
+// RollbackTx rolls back a transaction (useful with defer)
+func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
+	_ = pg.RollbackTxAndHandle(tx)
 }

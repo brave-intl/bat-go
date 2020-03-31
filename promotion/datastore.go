@@ -11,8 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/wallet"
-	walletservice "github.com/brave-intl/bat-go/wallet/service"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -28,13 +27,12 @@ type ClobberedCreds struct {
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// DeactivatePromotion marks a particular promotion as inactive
 	DeactivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -42,7 +40,7 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
@@ -63,7 +61,7 @@ type Datastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
-	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
 	// RunNextClaimJob to sign claim credentials if there is a claim waiting
 	RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error)
 	// InsertSuggestion inserts a transaction awaiting validation
@@ -73,7 +71,7 @@ type Datastore interface {
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
-	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
+	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
@@ -91,11 +89,10 @@ type Datastore interface {
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
-	walletservice.ReadOnlyDatastore
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
@@ -112,7 +109,7 @@ type ReadOnlyDatastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
-	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -299,7 +296,7 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -391,7 +388,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -557,7 +554,7 @@ group by promos.promotion_type;`
 // GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 // with the given promotion and returns the grant if so
 func (pg *Postgres) GetClaimByWalletAndPromotion(
-	wallet *wallet.Info,
+	wallet *walletutils.Info,
 	promotion *Promotion,
 ) (*Claim, error) {
 	query := `
@@ -755,7 +752,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 }
 
 // DrainClaim by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
+func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
 	credentialsJSON, err := json.Marshal(credentials)
 	if err != nil {
 		return err

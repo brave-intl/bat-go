@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -42,8 +43,9 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // WrapError with an additional message as an AppError
 func WrapError(err error, msg string, passedCode int) *AppError {
 	// FIXME err should probably be first
-	appErr, ok := err.(AppError)
-	if !ok {
+	// appErr, ok := err.(*AppError)
+	var appErr *AppError
+	if !errors.As(err, &appErr) {
 		code := passedCode
 		if code == 0 {
 			code = http.StatusBadRequest

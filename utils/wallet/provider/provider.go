@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 )
 
 // GetWallet returns the wallet corresponding to the passed wallet info

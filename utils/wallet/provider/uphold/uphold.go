@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,8 @@ import (
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )
+
+var path string
 
 // Wallet a wallet information using Uphold as the provider
 // A wallet corresponds to a single Uphold "card"
@@ -114,6 +117,7 @@ func init() {
 				DialTLS: pindialer.MakeDialer(upholdCertFingerprint),
 			}, "uphold"),
 	}
+	_, path, _, _ = runtime.Caller(0)
 }
 
 // New returns an uphold wallet constructed using the provided parameters
@@ -178,12 +182,6 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	}
 
 	resp, err := client.Do(req)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	headers := map[string][]string(resp.Header)
-	jsonHeaders, err := json.MarshalIndent(headers, "", "    ")
 	if err != nil {
 		return nil, resp, err
 	}
@@ -543,7 +541,7 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 }
 
 // VerifyAnonCardTransaction calls VerifyTransaction and checks the currency, amount and destination
-func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string, requiredDestination string) (*wallet.TransactionInfo, error) {
 	txInfo, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
@@ -554,16 +552,21 @@ func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.Trans
 	if txInfo.Probi.LessThan(decimal.Zero) {
 		return nil, errors.New("anon card transaction cannot be for negative BAT")
 	}
-	if txInfo.Destination != AnonCardSettlementAddress {
+	if requiredDestination != "" && txInfo.Destination != requiredDestination {
 		return nil, errors.New("anon card transactions must have settlement as their destination")
 	}
 
 	return txInfo, nil
 }
 
+type upholdTransactionResponseDestinationNodeUser struct {
+	ID string `json:"id"`
+}
+
 type upholdTransactionResponseDestinationNode struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
+	Type string                                       `json:"type"`
+	ID   string                                       `json:"id"`
+	User upholdTransactionResponseDestinationNodeUser `json:"user"`
 }
 
 type upholdTransactionResponseDestination struct {
@@ -598,10 +601,13 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 		tmp := *resp.Denomination.Currency
 		txInfo.AltCurrency = &tmp
 	}
-	if len(resp.Destination.CardID) > 0 {
-		txInfo.Destination = resp.Destination.CardID
-	} else if len(resp.Destination.Node.ID) > 0 {
-		txInfo.Destination = resp.Destination.Node.ID
+	destination := resp.Destination
+	destinationNode := destination.Node
+	txInfo.UserID = destinationNode.User.ID
+	if len(destination.CardID) > 0 {
+		txInfo.Destination = destination.CardID
+	} else if len(destinationNode.ID) > 0 {
+		txInfo.Destination = destinationNode.ID
 	}
 
 	if len(resp.Origin.CardID) > 0 {
@@ -616,10 +622,10 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 		log.Fatalf("%s is not a valid ISO 8601 datetime\n", resp.CreatedAt)
 	}
 
-	txInfo.DestCurrency = resp.Destination.Currency
-	txInfo.DestAmount = resp.Destination.Amount
-	txInfo.TransferFee = resp.Destination.TransferFee
-	txInfo.ExchangeFee = resp.Destination.ExchangeFee
+	txInfo.DestCurrency = destination.Currency
+	txInfo.DestAmount = destination.Amount
+	txInfo.TransferFee = destination.TransferFee
+	txInfo.ExchangeFee = destination.ExchangeFee
 	txInfo.Status = resp.Status
 	if txInfo.Status == "pending" {
 		txInfo.ValidUntil = time.Now().UTC().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
@@ -858,5 +864,45 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 		return "", err
 	}
 	return details.ID, nil
+}
 
+// FundWallet should fund a given wallet from the donor card
+func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, error) {
+	var donorInfo wallet.Info
+	donorInfo.Provider = "uphold"
+	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
+	{
+		tmp := altcurrency.BAT
+		donorInfo.AltCurrency = &tmp
+	}
+	zero := decimal.NewFromFloat(0)
+	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
+	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	var donorPublicKey httpsignature.Ed25519PubKey
+	var donorPrivateKey ed25519.PrivateKey
+	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
+	if err != nil {
+		return zero, err
+	}
+	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
+	if err != nil {
+		return zero, err
+	}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+
+	if len(donorWallet.ID) > 0 {
+		return zero, errors.New("donor wallet does not have an ID")
+	}
+
+	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
+	if err != nil {
+		return zero, err
+	}
+
+	balance, err := destWallet.GetBalance(true)
+	if err != nil {
+		return zero, err
+	}
+
+	return balance.TotalProbi, nil
 }
