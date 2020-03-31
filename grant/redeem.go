@@ -130,9 +130,10 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 
 	if sumProbi.GreaterThan(ugpBalance.SpendableProbi) {
 		safeMode = true
-		sentry.CaptureException(
-			fmt.Errorf("Hot wallet out of funds: %+v!!!",
-				map[string]string{"out-of-funds": "true"}))
+		sentry.CaptureException(fmt.Errorf(
+			"hot wallet out of funds: %+v",
+			map[string]string{"out-of-funds": "true"},
+		))
 		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
 	}
 
