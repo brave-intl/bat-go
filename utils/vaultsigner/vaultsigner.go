@@ -93,13 +93,13 @@ func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.
 		key.HMACKey = tmp
 	}
 
-	key.CreationTime = time.Now()
+	key.CreationTime = time.Now().UTC()
 	key.DeprecatedCreationTime = key.CreationTime.Unix()
 
 	keyData := keysutil.KeyData{Policy: &keysutil.Policy{Keys: map[string]keysutil.KeyEntry{"1": key}}}
 
 	keyData.Policy.ArchiveVersion = 1
-	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now(), Version: 1}
+	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now().UTC(), Version: 1}
 	keyData.Policy.LatestVersion = 1
 	keyData.Policy.MinDecryptionVersion = 1
 	keyData.Policy.Name = importName

@@ -1,15 +1,25 @@
 package requestutils
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/closers"
-	"github.com/pkg/errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
 
-var payloadLimit10MB = int64(1024 * 1024 * 10)
+type requestID string
+
+var (
+	payloadLimit10MB = int64(1024 * 1024 * 10)
+	// RequestIDHeaderKey is the request header key
+	RequestIDHeaderKey = "x-request-id"
+	// RequestID holds the type for request ids
+	RequestID = requestID(RequestIDHeaderKey)
+)
 
 // ReadWithLimit reads an io reader with a limit and closes
 func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
@@ -21,7 +31,7 @@ func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
 func Read(body io.Reader) ([]byte, error) {
 	jsonString, err := ReadWithLimit(body, payloadLimit10MB)
 	if err != nil {
-		return nil, errors.WithMessage(err, "Error reading body")
+		return nil, errorutils.Wrap(err, "error reading body")
 	}
 	return jsonString, nil
 }
@@ -34,7 +44,20 @@ func ReadJSON(body io.Reader, intr interface{}) error {
 	}
 	err = json.Unmarshal(jsonString, &intr)
 	if err != nil {
-		return errors.WithMessage(err, "Error unmarshalling body")
+		return errorutils.Wrap(err, "error unmarshalling body")
 	}
 	return nil
+}
+
+// SetRequestID transfers a request id from a context to a request header
+func SetRequestID(ctx context.Context, r *http.Request) {
+	r.Header.Set(RequestIDHeaderKey, GetRequestID(ctx))
+}
+
+// GetRequestID gets the request id
+func GetRequestID(ctx context.Context) string {
+	if reqID, ok := ctx.Value(RequestID).(string); ok {
+		return reqID
+	}
+	return ""
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -14,12 +15,20 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
-	raven "github.com/getsentry/raven-go"
+	"github.com/brave-intl/bat-go/utils/handlers"
+	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	commit    string
+	version   string
+	buildTime string
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -41,7 +50,11 @@ func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return log.WithContext(ctx), &log
 }
 
-func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service) {
+func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
+
+	// runnable jobs for the services created
+	jobs := []srv.Job{}
+
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
@@ -58,6 +71,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(60 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
+	r.Use(middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(hlog.NewHandler(*logger))
@@ -71,42 +85,54 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
 
 	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
+
+	// add runnable jobs:
+	jobs = append(jobs, grantService.Jobs()...)
 
 	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
 
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
+
+	// add runnable jobs:
+	jobs = append(jobs, promotionService.Jobs()...)
 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
@@ -115,18 +141,27 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if os.Getenv("FEATURE_ORDERS") != "" {
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
+
+		// add runnable jobs:
+		jobs = append(jobs, paymentService.Jobs()...)
+
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
+
+	log.Printf("server version/buildtime = %s %s %s", version, commit, buildTime)
+	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
 
 	env := os.Getenv("ENV")
 	reputationServer := os.Getenv("REPUTATION_SERVER")
@@ -142,37 +177,55 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	return ctx, r, promotionService
+	return ctx, r, promotionService, jobs
 }
 
-func jobWorker(context context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	ticker := time.NewTicker(duration)
+func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
 	for {
-		attempted, err := job(context)
+		_, err := job(ctx)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
 		}
-		if !attempted || err != nil {
-			<-ticker.C
-		}
+		// regardless if attempted or not, wait for the duration until retrying
+		<-time.After(duration)
 	}
 }
 
 func main() {
 	serverCtx, logger := setupLogger(context.Background())
+	// setup sentry
+	sentryDsn := os.Getenv("SENTRY_DSN")
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
+		})
+		if err != nil {
+			logger.Panic().Err(err).Msg("unable to setup reporting!")
+		}
+	}
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
-	serverCtx, r, service := setupRouter(serverCtx, logger)
+	serverCtx, r, _, jobs := setupRouter(serverCtx, logger)
 
-	go jobWorker(serverCtx, service.RunNextClaimJob, 5*time.Second)
-	go jobWorker(serverCtx, service.RunNextSuggestionJob, 5*time.Second)
-	go jobWorker(serverCtx, service.RunNextDrainJob, 5*time.Second)
+	serverCtx, cancel := context.WithCancel(serverCtx)
+	defer cancel()
+
+	for _, job := range jobs {
+		// iterate over jobs
+		for i := 0; i < job.Workers; i++ {
+			// spin up a job worker for each worker
+			go jobWorker(serverCtx, job.Func, job.Cadence)
+		}
+	}
 
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 }

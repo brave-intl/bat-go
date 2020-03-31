@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/metrics"
+	"github.com/getsentry/sentry-go"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
@@ -16,7 +17,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-const currentMigrationVersion = 9
+const currentMigrationVersion = 11
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
@@ -133,4 +134,13 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	}
 
 	return pg, nil
+}
+
+// RollbackTx rolls back a transaction (useful with defer)
+func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
+	err := tx.Rollback()
+	if err != nil {
+		sentry.CaptureMessage(err.Error())
+		sentry.Flush(time.Second * 2)
+	}
 }

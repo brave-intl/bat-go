@@ -1,6 +1,7 @@
 package grant
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -98,19 +98,17 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 	if err != nil {
 		return nil, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
 	res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promo.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 	promotionCount, err := res.RowsAffected()
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	} else if promotionCount != 1 {
-		_ = tx.Rollback()
 		return nil, errors.New("no matching active promotion")
 	}
 
@@ -132,10 +130,8 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 	}
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	} else if len(claims) != 1 {
-		_ = tx.Rollback()
 		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
 	}
 
