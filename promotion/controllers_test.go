@@ -1163,6 +1163,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 	pg, err := NewPostgres("", false)
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var id string
 
@@ -1174,7 +1175,6 @@ func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 
 	err = tx.Commit()
 	if err != nil {
-		_ = tx.Rollback()
 		return "", err
 	}
 
