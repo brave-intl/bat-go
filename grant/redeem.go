@@ -130,8 +130,8 @@ func (service *Service) Consume(ctx context.Context, walletInfo wallet.Info, tra
 
 	if sumProbi.GreaterThan(ugpBalance.SpendableProbi) {
 		safeMode = true
-		sentry.CaptureMessage(
-			fmt.Sprintf("Hot wallet out of funds: %+v!!!",
+		sentry.CaptureException(
+			fmt.Errorf("Hot wallet out of funds: %+v!!!",
 				map[string]string{"out-of-funds": "true"}))
 		return nil, errors.New("ugp wallet lacks enough funds to fulfill grants")
 	}
@@ -201,8 +201,8 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 			Error().
 			Err(err).
 			Msgf("Could not get wallet %s from info after successful Consume", req.WalletInfo.ProviderID)
-		sentry.CaptureMessage(
-			fmt.Sprintf("Could not get wallet after successful Consume: %+v",
+		sentry.CaptureException(
+			fmt.Errorf("Could not get wallet after successful Consume: %+v",
 				map[string]string{"providerID": req.WalletInfo.ProviderID}))
 		return nil, err
 	}
@@ -214,8 +214,8 @@ func (service *Service) Redeem(ctx context.Context, req *RedeemGrantsRequest) (*
 			Error().
 			Err(err).
 			Msgf("Could not fund wallet %s after successful VerifyAndConsume", req.WalletInfo.ProviderID)
-		sentry.CaptureMessage(
-			fmt.Sprintf(
+		sentry.CaptureException(
+			fmt.Errorf(
 				"Could not fund wallet after successful VerifyAndConsume: %+v",
 				map[string]string{"providerID": req.WalletInfo.ProviderID}))
 		return nil, err
@@ -265,8 +265,8 @@ func (service *Service) Drain(ctx context.Context, req *DrainGrantsRequest) (*Dr
 			Error().
 			Err(err).
 			Msgf("Could not drain into wallet %s after successful Consume", req.WalletInfo.ProviderID)
-		sentry.CaptureMessage(
-			fmt.Sprintf("Could not drain into wallet after successful Consume: %+v",
+		sentry.CaptureException(
+			fmt.Errorf("Could not drain into wallet after successful Consume: %+v",
 				map[string]string{
 					"providerId": req.WalletInfo.ProviderID,
 				}))
