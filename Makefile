@@ -130,7 +130,6 @@ test:
 
 format:
 	gofmt -s -w ./
-
 format-lint:
 	make format && make lint
 lint:

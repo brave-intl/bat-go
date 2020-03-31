@@ -21,16 +21,15 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/crypto/ed25519"
 )
 
 type ControllersTestSuite struct {
@@ -347,50 +346,8 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
-func fundWallet(t *testing.T, destWallet *uphold.Wallet, amount decimal.Decimal) {
-	var donorInfo wallet.Info
-	donorInfo.Provider = "uphold"
-	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
-	{
-		tmp := altcurrency.BAT
-		donorInfo.AltCurrency = &tmp
-	}
-
-	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
-	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
-	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
-	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donorWallet := &uphold.Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
-
-	if len(donorWallet.ID) > 0 {
-		t.Fatal("FIXME")
-	}
-
-	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	balance, err := destWallet.GetBalance(true)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if balance.TotalProbi.Equals(decimal.Zero) {
-		t.Error("Submit with confirm should result in a balance.")
-	}
-}
-
 func generateWallet(t *testing.T) *uphold.Wallet {
-	var info wallet.Info
+	var info walletutils.Info
 	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
 	info.ProviderID = ""
@@ -441,8 +398,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	service := &Service{
 		datastore: pg,
 		cbClient:  mockCB,
-		wallet: walletservice.Service{
-			Datastore: pg,
+		wallet: wallet.Service{
+			Datastore: wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
 		},
 	}
 
@@ -493,7 +450,9 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = pg.UpsertWallet(&userWallet.Info)
 	suite.Require().NoError(err)
 
-	fundWallet(suite.T(), userWallet, order.TotalPrice)
+	balanceBefore, err := userWallet.GetBalance(true)
+	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
 

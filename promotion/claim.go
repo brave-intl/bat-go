@@ -85,7 +85,7 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errors.New("promotion did not exist")
 	}
 
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}

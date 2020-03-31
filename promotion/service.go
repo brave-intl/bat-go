@@ -23,9 +23,10 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
-	w "github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	wallet "github.com/brave-intl/bat-go/wallet/service"
+	w "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/wallet"
+	"github.com/golang-migrate/migrate/database/postgres"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
@@ -355,14 +356,19 @@ func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyD
 		}
 	}
 
-	walletService, err := wallet.InitService(datastore, roDatastore)
+	walletDS := wallet.Datastore(&wallet.Postgres{Postgres: postgres.Postgres})
+	if roPostgres == nil {
+		roPostgres = postgres
+	}
+	walletRODS := wallet.ReadOnlyDatastore(&wallet.Postgres{Postgres: roPostgres.Postgres})
+	walletService, err := wallet.InitService(walletDS, walletRODS)
 	if err != nil {
 		return nil, err
 	}
 
 	service := &Service{
-		datastore:        datastore,
-		roDatastore:      roDatastore,
+		datastore:        Datastore(postgres),
+		roDatastore:      ReadOnlyDatastore(roPostgres),
 		cbClient:         cbClient,
 		reputationClient: reputationClient,
 		balanceClient:    balanceClient,

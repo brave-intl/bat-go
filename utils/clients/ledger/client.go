@@ -7,7 +7,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -42,10 +42,10 @@ type WalletAddresses struct {
 
 // WalletResponse contains information about the ledger wallet
 type WalletResponse struct {
-	Addresses     WalletAddresses          `json:"addresses"`
-	AltCurrency   *altcurrency.AltCurrency `json:"altcurrency"`
-	PublicKey     string                   `json:"httpSigningPubKey"`
-	PayoutAddress *string                  `json:"anonymousAddress"`
+	Addresses        WalletAddresses          `json:"addresses"`
+	AltCurrency      *altcurrency.AltCurrency `json:"altcurrency"`
+	PublicKey        string                   `json:"httpSigningPubKey"`
+	AnonymousAddress *string                  `json:"anonymousAddress"`
 }
 
 // GetWallet retrieves wallet information
@@ -64,15 +64,18 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 		}
 		return nil, err
 	}
-
+	var anonymousAddress uuid.UUID
+	if walletResponse.AnonymousAddress != nil {
+		anonymousAddress, _ = uuid.FromString(*walletResponse.AnonymousAddress)
+	}
 	info := wallet.Info{
-		ID:            id.String(),
-		Provider:      "uphold",
-		ProviderID:    walletResponse.Addresses.ProviderID.String(),
-		AltCurrency:   walletResponse.AltCurrency,
-		PublicKey:     walletResponse.PublicKey,
-		LastBalance:   nil,
-		PayoutAddress: walletResponse.PayoutAddress,
+		ID:               id.String(),
+		Provider:         "uphold",
+		ProviderID:       walletResponse.Addresses.ProviderID.String(),
+		AltCurrency:      walletResponse.AltCurrency,
+		PublicKey:        walletResponse.PublicKey,
+		LastBalance:      nil,
+		AnonymousAddress: &anonymousAddress,
 	}
 
 	return &info, err

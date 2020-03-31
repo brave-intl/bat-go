@@ -2,18 +2,25 @@ package grantserver
 
 import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 )
 
 // UpsertWallet upserts the given wallet
 func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	statement := `
-	insert into wallets (id, provider, provider_id, public_key, payout_address)
-	values ($1, $2, $3, $4, $5)
-	on conflict (id) do update set payout_address = $5
+	insert into wallets (id, provider, provider_id, public_key, provider_linking_id, anonymous_address)
+	values ($1, $2, $3, $4, $5, $6)
+	on conflict (id) do
+	update set
+		provider_linking_id = $5,
+		anonymous_address = $6
 	returning *`
+<<<<<<< HEAD
 	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.PayoutAddress)
+=======
+	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress)
+>>>>>>> add wallet endpoints
 	if err != nil {
 		return err
 	}

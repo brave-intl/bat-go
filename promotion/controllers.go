@@ -327,7 +327,7 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 
 		logging.AddWalletIDToContext(r.Context(), walletID)
 
-		wallet, err := service.ReadableDatastore().GetWallet(walletID)
+		wallet, err := service.wallet.ReadableDatastore().GetWallet(walletID)
 		if err != nil {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
 		}

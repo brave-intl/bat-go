@@ -7,8 +7,13 @@ package grant
 import (
 	reflect "reflect"
 
+<<<<<<< HEAD
 	wallet "github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
+=======
+	promotion "github.com/brave-intl/bat-go/promotion"
+	wallet "github.com/brave-intl/bat-go/utils/wallet"
+>>>>>>> add wallet endpoints
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
 )

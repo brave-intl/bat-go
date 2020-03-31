@@ -47,7 +47,6 @@ func main() {
 	if (fi.Mode() & os.ModeNamedPipe) == 0 {
 		fmt.Print("Please enter your unseal key: ")
 		b, err = terminal.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
 	} else {
 		reader := bufio.NewReader(os.Stdin)
 		b, err = ioutil.ReadAll(reader)
