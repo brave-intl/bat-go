@@ -73,25 +73,25 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 	suite.Require().NoError(err)
 
 	_, err = pg.ClaimPromotionForWallet(promotion1, &w)
-	suite.Assert().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
+	suite.Require().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
 
 	_, err = pg.ClaimPromotionForWallet(promotion1, &w)
-	suite.Assert().Error(err, "Re-claim for wallet should fail")
+	suite.Require().Error(err, "Re-claim for wallet should fail")
 
 	_, err = pg.ClaimPromotionForWallet(promotion2, &w)
-	suite.Assert().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
+	suite.Require().NoError(err, "Claim for wallet should succeed, promotion is active and has grants left")
 
 	grants, err := pg.GetGrantsOrderedByExpiry(w, "")
-	suite.Assert().NoError(err, "Get grants ordered by expiry should succeed")
+	suite.Require().NoError(err, "Get grants ordered by expiry should succeed")
 
 	grantsSorted := make([]Grant, len(grants))
 	copy(grantsSorted, grants)
 	sort.Sort(ByExpiryTimestamp(grantsSorted))
-	suite.Assert().Equal(grants, grantsSorted)
+	suite.Require().Equal(grants, grantsSorted)
 
-	suite.Assert().Equal(promotion1.ID, grants[0].PromotionID)
+	suite.Require().Equal(promotion1.ID, grants[0].PromotionID)
 	// Check legacy grant type compatibility translation
-	suite.Assert().Equal("android", grants[1].Type)
+	suite.Require().Equal("android", grants[1].Type)
 }
 
 func TestPostgresTestSuite(t *testing.T) {

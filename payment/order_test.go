@@ -27,7 +27,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	//     expiry = 2020-04-01
 
 	orderItem, err := CreateOrderItemFromMacaroon(sku, 1)
-	suite.NoError(err)
+	suite.Require().NoError(err)
 
 	suite.Assert().Equal("BAT", orderItem.Currency)
 	suite.Assert().Equal("5c846da1-83cd-4e15-98dd-8e147a56b6fa", orderItem.ID.String())

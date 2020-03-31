@@ -84,11 +84,11 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var order Order
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	return order
 }
@@ -131,10 +131,10 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 
 	rr := httptest.NewRecorder()
 	getOrderHandler.ServeHTTP(rr, getReq)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	suite.Assert().Equal("5", order.TotalPrice.String())
 	suite.Assert().Equal("brave.com", order.MerchantID)
@@ -177,11 +177,11 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
 
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var transaction Transaction
 	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	// Check the transaction
 	suite.Assert().Equal(decimal.NewFromFloat32(1), transaction.Amount)
@@ -196,7 +196,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
 	updatedOrder, err := service.datastore.GetOrder(order.ID)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
 	// Test to make sure we can't submit the same externalTransactionID twice
@@ -210,8 +210,8 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
-	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
-	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
@@ -248,11 +248,11 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
 
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var transaction Transaction
 	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	// Check the transaction
 	suite.Assert().Equal(decimal.NewFromFloat32(12), transaction.Amount)
@@ -267,7 +267,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
 	updatedOrder, err := service.datastore.GetOrder(order.ID)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
 	// Get all the transactions, should only be one
@@ -283,10 +283,10 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, getReq)
 
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	var transactions []Transaction
 	err = json.Unmarshal(rr.Body.Bytes(), &transactions)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	// Check the transaction
 	suite.Assert().Equal(decimal.NewFromFloat32(12), transactions[0].Amount)
@@ -433,19 +433,19 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	var order Order
 	err = json.Unmarshal([]byte(rr.Body.String()), &order)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	userWallet := generateWallet(suite.T())
 	err = pg.UpsertWallet(&userWallet.Info)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	fundWallet(suite.T(), userWallet, order.TotalPrice)
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
 
 	walletID, err := uuid.FromString(userWallet.ID)
 	suite.Require().NoError(err)
@@ -468,7 +468,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusCreated, rr.Code)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
 
 	issuerName := "brave.com"
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
@@ -506,7 +506,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	<-time.After(5 * time.Second)
 
@@ -521,7 +521,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	for rr.Code != http.StatusOK {
 		if rr.Code == http.StatusBadRequest {
@@ -536,7 +536,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 			handler.ServeHTTP(rr, req)
 		}
 	}
-	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
 
 	// Test getting the same order by item ID
 	handler = GetOrderCredsByID(service)
@@ -550,7 +550,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	// setup our make vote handler
 	handler = MakeVote(service)
@@ -591,7 +591,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// actually perform the call
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	body, _ = ioutil.ReadAll(rr.Body)
 
@@ -639,5 +639,4 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.Type, vote.Type)
 	suite.Assert().Equal(ve.Channel, vote.Channel)
 	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
-
 }
