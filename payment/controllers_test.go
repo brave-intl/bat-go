@@ -211,7 +211,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Require().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
+	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {

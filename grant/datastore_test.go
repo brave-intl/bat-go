@@ -87,11 +87,11 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 	grantsSorted := make([]Grant, len(grants))
 	copy(grantsSorted, grants)
 	sort.Sort(ByExpiryTimestamp(grantsSorted))
-	suite.Require().Equal(grants, grantsSorted)
+	suite.Assert().Equal(grants, grantsSorted)
 
-	suite.Require().Equal(promotion1.ID, grants[0].PromotionID)
+	suite.Assert().Equal(promotion1.ID, grants[0].PromotionID)
 	// Check legacy grant type compatibility translation
-	suite.Require().Equal("android", grants[1].Type)
+	suite.Assert().Equal("android", grants[1].Type)
 }
 
 func TestPostgresTestSuite(t *testing.T) {

@@ -154,12 +154,12 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			}
 		}
 	}`
-	suite.Require().JSONEq(expectationFailure, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectationFailure, rr.Body.String(), "unexpected result")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
 	suite.Require().Equal(http.StatusOK, rr.Code)
-	suite.Require().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
 
 	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
@@ -183,7 +183,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		"promotions": [
 		]
 	}`
-	suite.Require().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 
 	err = service.datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
@@ -199,7 +199,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionDesktop) + `
 		]
 	}`
-	suite.Require().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqAndroid)
@@ -209,7 +209,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionGeneric) + `
 		]
 	}`
-	suite.Require().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 
 	statement := `
 	insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
@@ -225,7 +225,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionGeneric) + `
 		]
 	}`
-	suite.Require().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
 	url := fmt.Sprintf("/promotions?paymentId=%s&platform=osx&migrate=true", walletID.String())
 	reqOSX, err = http.NewRequest("GET", url, nil)
@@ -240,7 +240,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionDesktop) + `
 		]
 	}`
-	suite.Require().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
 func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
@@ -383,7 +383,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	expected := `{
 		"promotions": []
 	}`
-	suite.Require().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
+	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
 
 	mockReputation.EXPECT().IsWalletReputable(
 		gomock.Any(),
@@ -425,7 +425,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	rr = httptest.NewRecorder()
 	handler2.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Require().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
+	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
 
 	mockReputation.EXPECT().IsWalletReputable(
 		gomock.Any(),
@@ -618,7 +618,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	createdAt, ok := eventMap["createdAt"].(string)
 	suite.Require().True(ok)
 
-	suite.Require().JSONEq(`{
+	suite.Assert().JSONEq(`{
 		"id": "`+id+`",
 		"createdAt": "`+createdAt+`",
 		"type": "`+suggestion.Type+`",
@@ -647,7 +647,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	missingWalletID := uuid.NewV4().String()
 	body, code := suite.checkGetClaimSummary(service, missingWalletID, "ads")
 	suite.Require().Equal(http.StatusNotFound, code, "a 404 is sent back")
-	suite.Require().JSONEq(`{
+	suite.Assert().JSONEq(`{
 		"code": 404,
 		"message": "Error finding wallet: wallet not found id: '`+missingWalletID+`'"
 	}`, body, "an error is returned")
@@ -666,11 +666,11 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 
 	// no content returns an empty string on protocol level
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
-	suite.Require().Equal(``, body)
+	suite.Assert().Equal(``, body)
 	suite.Require().Equal(http.StatusNoContent, code)
 
 	body, code = suite.checkGetClaimSummary(service, "", "ads")
-	suite.Require().JSONEq(`{
+	suite.Assert().JSONEq(`{
 		"message": "Error validating query parameter",
 		"code": 400,
 		"data": {
@@ -689,7 +689,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Require().Equal(http.StatusOK, code)
-	suite.Require().JSONEq(`{
+	suite.Assert().JSONEq(`{
 		"earnings": "30",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
@@ -703,7 +703,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Require().Equal(http.StatusOK, code)
-	suite.Require().JSONEq(`{
+	suite.Assert().JSONEq(`{
 		"earnings": "40",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
@@ -844,7 +844,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	suite.Require().Equal(http.StatusOK, code)
 	claims := []ClobberedCreds{}
 	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id0)
+	suite.Assert().Equal(claims[0].ID, id0)
 
 	code = run([]uuid.UUID{
 		id0,
@@ -854,9 +854,9 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	suite.Require().Equal(http.StatusOK, code)
 	claims = []ClobberedCreds{}
 	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id0)
-	suite.Require().Equal(claims[1].ID, id1)
-	suite.Require().Equal(claims[2].ID, id2)
+	suite.Assert().Equal(claims[0].ID, id0)
+	suite.Assert().Equal(claims[1].ID, id1)
+	suite.Assert().Equal(claims[2].ID, id2)
 }
 
 func (suite *ControllersTestSuite) TestClaimCompatability() {
@@ -1339,5 +1339,5 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 
 	updatedOrder, err := service.datastore.GetOrder(validOrderID)
 	suite.Require().NoError(err)
-	suite.Require().Equal("paid", updatedOrder.Status)
+	suite.Assert().Equal("paid", updatedOrder.Status)
 }
