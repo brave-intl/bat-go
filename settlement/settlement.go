@@ -210,7 +210,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries: %+v"
 			log.Printf("%s for channel %s\n", baseMsg, settlement.Channel)
-			sentry.CaptureMessage(fmt.Sprintf(baseMsg, map[string]string{
+			sentry.CaptureException(fmt.Errorf(baseMsg, map[string]string{
 				"tries":        strconv.Itoa(maxConfirmTries - tries),
 				"channel":      settlement.Channel,
 				"hash":         settlement.ProviderID,

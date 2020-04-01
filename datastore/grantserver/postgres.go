@@ -1,6 +1,7 @@
 package grantserver
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"strings"
@@ -139,7 +140,7 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 // RollbackTx rolls back a transaction (useful with defer)
 func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	err := tx.Rollback()
-	if err != nil {
+	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
 		sentry.Flush(time.Second * 2)
 	}

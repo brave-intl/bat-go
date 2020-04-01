@@ -84,7 +84,6 @@ func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, st
 		_, err := w.Write(b.Bytes())
 		// Should never happen :fingers_crossed:
 		if err != nil {
-			fmt.Println("UNexepectending")
 			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
 		}
 	}
@@ -121,7 +120,7 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				scope.SetTags(map[string]string{
 					"reqID": requestutils.GetRequestID(r.Context()),
 				})
-				sentry.CaptureMessage(e.Error())
+				sentry.CaptureException(e)
 			})
 		}
 
