@@ -28,6 +28,7 @@ type Order struct {
 type OrderItem struct {
 	ID          uuid.UUID            `json:"id" db:"id"`
 	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU         string               `json:"sku" db:"sku"`
 	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
 	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
 	Currency    string               `json:"currency" db:"currency"`

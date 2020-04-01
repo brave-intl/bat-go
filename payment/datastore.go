@@ -99,16 +99,14 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	}
 
 	for i := 0; i < len(orderItems); i++ {
-		currentItem := orderItems[i]
+		orderItems[i].OrderID = order.ID
 
-		err := tx.Get(&orderItems[i], `
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal, location, description)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		nstmt, _ := tx.PrepareNamed(`
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
 			RETURNING *
-		`,
-			order.ID, currentItem.Quantity, currentItem.Price, currentItem.Currency,
-			currentItem.Subtotal, currentItem.Location.String, currentItem.Description.String,
-		)
+		`)
+		err = nstmt.Get(&orderItems[i], orderItems[i])
 
 		if err != nil {
 			return nil, err
