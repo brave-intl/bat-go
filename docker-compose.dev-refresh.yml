@@ -10,7 +10,7 @@ services:
     container_name: grant-dev-refresh
     image: golang:1.13.4
     ports:
-      - "3334:3333"
+      - "3335:3333"
     command: "go run bin/grant-server/main.go"
     volumes:
       - .:/src
