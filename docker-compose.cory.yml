@@ -5,7 +5,7 @@ services:
     container_name: grant-cory
     image: golang:1.13.4
     ports:
-      - "3334:3333"
+      - "3333:3333"
     command: "go run bin/grant-server/main.go"
     volumes:
       - .:/src
@@ -28,6 +28,7 @@ services:
       - DONOR_WALLET_CARD_ID
       - DONOR_WALLET_PRIVATE_KEY
       - DONOR_WALLET_PUBLIC_KEY
+      - FEATURE_ORDERS=true
       - GRANT_SIGNATOR_PUBLIC_KEY
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY
