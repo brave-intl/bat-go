@@ -98,7 +98,6 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
-	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
 
 	// Check the order items
@@ -137,7 +136,6 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().NoError(err)
 
 	suite.Assert().Equal("5", order.TotalPrice.String())
-	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
 
 	// Check the order items
