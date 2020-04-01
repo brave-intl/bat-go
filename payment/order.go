@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	macaroon "gopkg.in/macaroon.v2"
@@ -12,30 +13,34 @@ import (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID       `json:"id" db:"id"`
-	CreatedAt  time.Time       `json:"createdAt" db:"created_at"`
-	Currency   string          `json:"currency" db:"currency"`
-	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
-	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
-	MerchantID string          `json:"merchantId" db:"merchant_id"`
-	Status     string          `json:"status" db:"status"`
-	Items      []OrderItem     `json:"items"`
+	ID         uuid.UUID            `json:"id" db:"id"`
+	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
+	Currency   string               `json:"currency" db:"currency"`
+	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
+	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
+	MerchantID string               `json:"merchantId" db:"merchant_id"`
+	Location   datastore.NullString `json:"location" db:"location"`
+	Status     string               `json:"status" db:"status"`
+	Items      []OrderItem          `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID        uuid.UUID       `json:"id" db:"id"`
-	OrderID   uuid.UUID       `json:"orderId" db:"order_id"`
-	CreatedAt *time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt *time.Time      `json:"updatedAt" db:"updated_at"`
-	Currency  string          `json:"currency" db:"currency"`
-	Quantity  int             `json:"quantity" db:"quantity"`
-	Price     decimal.Decimal `json:"price" db:"price"`
-	Subtotal  decimal.Decimal `json:"subtotal"`
+	ID          uuid.UUID            `json:"id" db:"id"`
+	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU         string               `json:"sku" db:"sku"`
+	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency    string               `json:"currency" db:"currency"`
+	Quantity    int                  `json:"quantity" db:"quantity"`
+	Price       decimal.Decimal      `json:"price" db:"price"`
+	Subtotal    decimal.Decimal      `json:"subtotal"`
+	Location    datastore.NullString `json:"location" db:"location"`
+	Description datastore.NullString `json:"description" db:"description"`
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
 		return nil, err
@@ -56,6 +61,8 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+	orderItem.Location.String = mac.Location()
+	orderItem.Location.Valid = true
 
 	for i := 0; i < len(caveats); i++ {
 		caveat := mac.Caveats()[i]
@@ -64,14 +71,16 @@ func createOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		value := strings.TrimSpace(values[1])
 
 		switch key {
-		case "id":
-			uuid, err := uuid.FromString(value)
+		case "sku":
+			orderItem.SKU = value
+		case "price", "amount":
+			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
 				return nil, err
 			}
-			orderItem.ID = uuid
-		case "price":
-			orderItem.Price, err = decimal.NewFromString(value)
+		case "description":
+			orderItem.Description.String = value
+			orderItem.Description.Valid = true
 			if err != nil {
 				return nil, err
 			}

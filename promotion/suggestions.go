@@ -262,7 +262,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 					Error().
 					Err(err).
 					Msg("error processing suggestion job")
-				sentry.CaptureMessage("error processing suggestion job")
+				sentry.CaptureException(errorutils.Wrap(err, "error processing suggestion job"))
 			}
 		}()
 	}

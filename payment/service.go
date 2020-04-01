@@ -254,14 +254,21 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	var currency string
+	var location string
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := createOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
+		if location == "" {
+			location = orderItem.Location.String
+		}
+		if location != orderItem.Location.String {
+			return nil, errors.New("all order items must be from the same location")
+		}
 		if currency == "" {
 			currency = orderItem.Currency
 		}
@@ -271,7 +278,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	order, err := s.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, orderItems)
+	order, err := s.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, location, orderItems)
 
 	return order, err
 }
