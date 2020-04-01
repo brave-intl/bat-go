@@ -89,7 +89,7 @@ func (service *Service) GetAvailablePromotions(
 			return nil, nil
 		}
 
-		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
+		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy, migrate)
 		if err != nil {
 			return nil, err
 		}
