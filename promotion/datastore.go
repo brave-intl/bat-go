@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -30,8 +31,10 @@ type Datastore interface {
 	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
+	// DeactivatePromotion marks a particular promotion as inactive
+	DeactivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray, migrate bool) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -39,7 +42,7 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -90,7 +93,7 @@ type ReadOnlyDatastore interface {
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -173,7 +176,17 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 
 // ActivatePromotion marks a particular promotion as active
 func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
-	_, err := pg.DB.Exec("update promotions set active = true where id = $1", promotion.ID)
+	return pg.setPromotionActive(promotion, true)
+}
+
+// DeactivatePromotion marks a particular promotion as not active
+func (pg *Postgres) DeactivatePromotion(promotion *Promotion) error {
+	return pg.setPromotionActive(promotion, false)
+}
+
+// setPromotionActive marks a particular promotion's active value
+func (pg *Postgres) setPromotionActive(promotion *Promotion, active bool) error {
+	_, err := pg.DB.Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
 	if err != nil {
 		return err
 	}
@@ -263,7 +276,13 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(
+	promotion *Promotion,
+	issuer *Issuer,
+	wallet *wallet.Info,
+	blindedCreds jsonutils.JSONStringArray,
+	migrate bool,
+) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
@@ -343,13 +362,13 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
 		}
 	}
-	statement := `
+	statement := fmt.Sprintf(`
 		select
 			promos.id,
 			promos.promotion_type,
@@ -368,7 +387,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from
-		  (
+			(
 				select
 					promotions.*,
 					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
@@ -380,12 +399,14 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			promos.active and wallet_claims.redeemed is distinct from true and
+			(
+				%s or promos.active
+			) and wallet_claims.redeemed is distinct from true and
 			( wallet_claims.legacy_claimed is true or
 				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
 				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
 			)
-		order by promos.created_at;`
+		order by promos.created_at`, strconv.FormatBool(migrate))
 
 	if legacy {
 		statement = `

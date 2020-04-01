@@ -204,7 +204,8 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			panic(err) // Should not be possible
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
+		migrate := r.URL.Query().Get("migrate") == "true"
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds, migrate)
 
 		if err != nil {
 			var target *errorutils.ErrorBundle

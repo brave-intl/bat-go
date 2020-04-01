@@ -243,7 +243,14 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
+func (suite *ControllersTestSuite) ClaimGrant(
+	service *Service,
+	wallet wallet.Info,
+	privKey crypto.Signer,
+	promotion *Promotion,
+	blindedCreds []string,
+	migrate bool,
+) GetClaimResponse {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
 	walletID, err := uuid.FromString(wallet.ID)
@@ -257,7 +264,7 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	body, err := json.Marshal(&claimReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "/promotion/{promotionId}?migrate="+strconv.FormatBool(migrate), bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -372,7 +379,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	_ = suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	_ = suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
 
 	handler := GetAvailablePromotions(service)
 	req, err := http.NewRequest("GET", fmt.Sprintf("/promotions?paymentId=%s&platform=osx", walletID.String()), nil)
@@ -549,7 +556,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
 
 	handler := MakeSuggestion(service)
 
@@ -684,7 +691,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	// not ignored promotion
 	promotion, issuer, claim := suite.setupAdsClaim(service, w, 0)
 
-	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds, false)
 	suite.Require().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -698,7 +705,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	// not ignored bonus promotion
 	promotion, issuer, claim = suite.setupAdsClaim(service, w, 20)
 
-	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
+	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds, false)
 	suite.Require().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
@@ -878,8 +885,11 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 	}
 
+	later := time.Now().UTC().Add(1 * time.Second)
 	scenarios := []struct {
 		Legacy             bool
+		Migrate            bool
+		ExpiresAt          time.Time
 		Redeemed           bool
 		ChecksReputation   bool
 		InvalidatesBalance bool
@@ -887,6 +897,8 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 	}{
 		{
 			Legacy:             false,
+			Migrate:            false,
+			ExpiresAt:          later,
 			Redeemed:           false,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
@@ -894,6 +906,8 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 		{
 			Legacy:             false,
+			Migrate:            false,
+			ExpiresAt:          later,
 			Redeemed:           true,
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
@@ -901,6 +915,8 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 		{
 			Legacy:             true,
+			Migrate:            false,
+			ExpiresAt:          later,
 			Redeemed:           false,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
@@ -908,6 +924,17 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 		{
 			Legacy:             true,
+			Migrate:            false,
+			ExpiresAt:          later,
+			Redeemed:           true,
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+			Type:               "ugp",
+		},
+		{
+			Legacy:             true,
+			Migrate:            true,
+			ExpiresAt:          time.Now().UTC(),
 			Redeemed:           true,
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
@@ -943,6 +970,11 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		suite.Require().NoError(err, "Insert issuer should succeed")
 
 		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+		_, err = pg.DB.Exec("update promotions set expires_at = $2 where id = $1", promotion.ID, test.ExpiresAt)
+		suite.Require().NoError(err, "setting the expires_at property shouldn't fail")
+		if !later.Equal(test.ExpiresAt) {
+			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")
+		}
 
 		var claim *Claim
 		if test.Legacy {
@@ -979,7 +1011,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 					).
 					Return(nil)
 			}
-			_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
+			_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds, false)
 		}
 
 		if test.ChecksReputation {
@@ -1004,7 +1036,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		}
 
 		// if NOT redeemed, the mockCB's SignCredentials will be used up here
-		_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
+		_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds, test.Migrate)
 	}
 }
 
@@ -1095,7 +1127,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
 		Issuer:        issuerName,
@@ -1268,7 +1300,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
 
 	handler := MakeSuggestion(service)
 
