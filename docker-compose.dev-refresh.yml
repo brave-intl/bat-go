@@ -1,8 +1,13 @@
 version: "3.4"
 
 services:
-  cory:
-    container_name: grant-cory
+  # dev-refresh service will start up a grant server bound to host port 3334
+  # which allows one to do `docker restart grant-dev-refresh` when the user
+  # wants to "restart" the service running new code.  This is especially helpful
+  # when you hook it up to `fswatch` type utilities, causing a re-run of `go run`
+  # every time a file changes.
+  dev-refresh:
+    container_name: grant-dev-refresh
     image: golang:1.13.4
     ports:
       - "3334:3333"
