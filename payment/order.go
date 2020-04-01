@@ -18,7 +18,7 @@ type Order struct {
 	Currency   string               `json:"currency" db:"currency"`
 	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID string               `json:"merchantId" db:"merchant_id"`
+	MerchantID string               `json:"-" db:"merchant_id"`
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`

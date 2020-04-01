@@ -279,7 +279,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 		validOrderID := uuid.Must(uuid.FromString(orderID))
 
-		orderCreds, err := service.datastore.GetOrderCreds(validOrderID)
+		orderCreds, err := service.datastore.GetOrderCreds(validOrderID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -309,16 +309,23 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		id := uuid.Must(uuid.FromString(orderID))
 
-		creds, err := service.datastore.GetOrderCreds(id)
+		creds, err := service.datastore.GetOrderCreds(id, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
 
 		if creds == nil {
 			return &handlers.AppError{
-				Message: "Order does not exist",
+				Message: "Credentials do not exist",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
+			}
+		}
+
+		for i := 0; i < len(*creds); i++ {
+			if (*creds)[i].SignedCreds == nil {
+				w.WriteHeader(http.StatusAccepted)
+				break
 			}
 		}
 

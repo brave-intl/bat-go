@@ -511,7 +511,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	<-time.After(5 * time.Second)
 
 	// see if we can get our order creds
-	handler = GetOrderCreds(service)
+	handler = GetOrderCreds(service, true)
 	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
 	suite.Require().NoError(err)
 
