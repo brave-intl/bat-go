@@ -322,18 +322,15 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			}
 		}
 
+		status := http.StatusOK
 		for i := 0; i < len(*creds); i++ {
 			if (*creds)[i].SignedCreds == nil {
-				w.WriteHeader(http.StatusAccepted)
+				status = http.StatusAccepted
 				break
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(creds); err != nil {
-			panic(err)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 
