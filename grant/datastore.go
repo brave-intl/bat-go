@@ -136,7 +136,7 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 			where
 				id = $1 and
 				active and
-				p.created_at > NOW() - INTERVAL '3 months'
+				promotions.created_at > NOW() - INTERVAL '3 months'
 				`, promo.ID)
 	}
 
