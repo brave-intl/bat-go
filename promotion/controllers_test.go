@@ -885,7 +885,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 	}
 
-	later := time.Now().UTC().Add(1 * time.Second)
+	later := time.Now().UTC().Add(1000 * time.Second)
 	scenarios := []struct {
 		Legacy             bool
 		Migrate            bool
