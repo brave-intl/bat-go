@@ -311,7 +311,15 @@ func (pg *Postgres) ClaimForWallet(
 
 	if !legacyClaimExists {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+		res, err := tx.Exec(`
+			update promotions
+			set remaining_grants = remaining_grants - 1
+			where
+				id = $1 and
+				active and
+				p.created_at > NOW() - INTERVAL '3 months'`,
+			promotion.ID)
+
 		if err != nil {
 			return nil, err
 		}
@@ -402,9 +410,11 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			(
 				%s or promos.active
 			) and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			( wallet_claims.legacy_claimed is true or (
+				(
+					( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+					( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+				) and ( promos.created_at > NOW() - INTERVAL '3 months'))
 			)
 		order by promos.created_at`, strconv.FormatBool(migrate))
 
