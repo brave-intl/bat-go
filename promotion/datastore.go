@@ -317,7 +317,7 @@ func (pg *Postgres) ClaimForWallet(
 			where
 				id = $1 and
 				active and
-				p.created_at > NOW() - INTERVAL '3 months'`,
+				promotions.created_at > NOW() - INTERVAL '3 months'`,
 			promotion.ID)
 
 		if err != nil {
