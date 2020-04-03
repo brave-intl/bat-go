@@ -58,9 +58,14 @@ func MerchantRouter(service *Service) chi.Router {
 	return r
 }
 
-// DeleteKeyRequest includes information needed to create an order
+// DeleteKeyRequest includes information needed to delete a key
 type DeleteKeyRequest struct {
-	DelaySeconds int `json:"DelaySeconds" valid:"-"`
+	DelaySeconds int `json:"delaySeconds" valid:"-"`
+}
+
+// CreateKeyRequest includes information needed to create a key
+type CreateKeyRequest struct {
+	Name string `json:"name" valid:"required"`
 }
 
 // CreateKey is the handler for creating keys for a merchant
@@ -68,12 +73,18 @@ func CreateKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		reqMerchant := chi.URLParam(r, "merchantID")
 
+		var req CreateKeyRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
 		encrypted, nonce, err := GenerateSecret()
 		if err != nil {
 			return handlers.WrapError(err, "Could not generate a secret key ", http.StatusInternalServerError)
 		}
 
-		key, err := service.datastore.CreateKey(reqMerchant, encrypted, nonce)
+		key, err := service.datastore.CreateKey(reqMerchant, req.Name, encrypted, nonce)
 		if err != nil {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}

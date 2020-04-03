@@ -1,5 +1,6 @@
 create table api_keys (
   id uuid primary key not null default uuid_generate_v4(),
+  name text NOT NULL,
   merchant_id text NOT NULL,
   encrypted_secret_key text NOT NULL,
   nonce text NOT NULL,

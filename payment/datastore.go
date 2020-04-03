@@ -54,7 +54,7 @@ type Datastore interface {
 	// GetKeys ret
 	GetKeys(merchant string, showExpired bool) (*[]Key, error)
 	// CreateKey
-	CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error)
+	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
 	// DeleteKey
 	DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error)
 
@@ -90,15 +90,15 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 }
 
 // CreateKey creates an encrypted key in the database based on the merchant
-func (pg *Postgres) CreateKey(merchant string, encryptedSecretKey string, nonce string) (*Key, error) {
+func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error) {
 	// interface and create an api key
 	var key Key
 	err := pg.DB.Get(&key, `
-			INSERT INTO api_keys (merchant_id, encrypted_secret_key, nonce)
-			VALUES ($1, $2, $3)
+			INSERT INTO api_keys (merchant_id, name, encrypted_secret_key, nonce)
+			VALUES ($1, $2, $3, $4)
 			RETURNING *
 		`,
-		merchant, encryptedSecretKey, nonce)
+		merchant, name, encryptedSecretKey, nonce)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key for merchant: %w", err)

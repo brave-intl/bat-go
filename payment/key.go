@@ -18,6 +18,7 @@ var keyLength = 24
 // Key represents a merchant's keys to validate skus
 type Key struct {
 	ID                 string     `json:"id" db:"id"`
+	Name               string     `json:"name" db:"name"`
 	Merchant           string     `json:"merchant" db:"merchant_id"`
 	SecretKey          string     `json:"secretKey"`
 	EncryptedSecretKey string     `json:"-" db:"encrypted_secret_key"`
