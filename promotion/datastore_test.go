@@ -497,6 +497,16 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	w2 := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.UpsertWallet(w2), "Save wallet should succeed")
 
+	// create an ancient promotion to make sure no new claims can be made on it
+	ancient_promotion, err := pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "")
+	suite.Require().NoError(err, "Create Promotion should succeed")
+	changed, err := pg.DB.Exec(`
+		update promotions set created_at= NOW() - INTERVAL '4 months' where id=$1`, ancient_promotion.ID)
+	suite.Require().NoError(err, "should be able to set the promotion created_at to 4 months ago")
+	changed_rows, _ := changed.RowsAffected()
+	suite.Assert().Equal(int64(1), changed_rows)
+
+	// at this point the promotion should no longer show up for the wallet, making the list empty below:
 	promotions, err := pg.GetAvailablePromotionsForWallet(w, "", true, false)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions))
