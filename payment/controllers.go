@@ -378,7 +378,12 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			}
 		}
 
-		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
+		status := http.StatusOK
+		if creds.SignedCreds == nil {
+			status = http.StatusAccepted
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 

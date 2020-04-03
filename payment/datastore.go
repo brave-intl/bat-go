@@ -312,7 +312,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 // GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
 func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
-	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2 and signed_creds is not null", orderID, itemID)
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2", orderID, itemID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
