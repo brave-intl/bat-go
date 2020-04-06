@@ -624,5 +624,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.Type, vote.Type)
 	suite.Assert().Equal(ve.Channel, vote.Channel)
 	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
-
+	//issuerName := "brave.com"
+	// check that the funding source matches the issuer
+	suite.Assert().Equal(ve.FundingSource, issuerName)
 }
