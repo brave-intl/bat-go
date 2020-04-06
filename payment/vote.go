@@ -24,8 +24,8 @@ import (
 type Vote struct {
 	Type          string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
 	Channel       string `json:"channel" valid:"-"`
-	VoteTally     int64  `json:"-"`
-	FundingSource string `json: "-"`
+	VoteTally     int64  `json:"-" valid:"-"`
+	FundingSource string `json: "-" valid:"-"`
 }
 
 // Validate - implement inputs.Validatable interface for input

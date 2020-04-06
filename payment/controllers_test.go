@@ -542,9 +542,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler = MakeVote(service)
 
 	vote := Vote{
-		Type:      "auto-contribute",
-		Channel:   "brave.com",
-		VoteTally: 20,
+		Type:    "auto-contribute",
+		Channel: "brave.com",
 	}
 
 	voteBytes, err := json.Marshal(&vote)
