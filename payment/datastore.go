@@ -23,7 +23,7 @@ import (
 type Datastore interface {
 	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -45,7 +45,9 @@ type Datastore interface {
 	// InsertOrderCreds
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
-	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
+	// GetOrderCredsByItemID retrieves an order credential by item id
+	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
@@ -81,16 +83,16 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO orders (total_price, merchant_id, status, currency, location)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING *
 		`,
-		totalPrice, merchantID, status, currency)
+		totalPrice, merchantID, status, currency, location)
 
 	if err != nil {
 		return nil, err
@@ -100,8 +102,8 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		orderItems[i].OrderID = order.ID
 
 		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
-			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
 			RETURNING *
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])
@@ -191,6 +193,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
 	err := tx.Get(&transaction,
@@ -232,7 +235,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	insert into order_cred_issuers (merchant_id, public_key)
 	values ($1, $2)
 	returning *`
-	issuers := []Issuer{}
+	var issuers []Issuer
 	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
 		return nil, err
@@ -247,9 +250,9 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1 limit 1"
-	issuer := Issuer{}
-	err := pg.DB.Select(&issuer, statement, merchantID)
+	statement := "select * from order_cred_issuers where merchant_id = $1"
+	var issuer Issuer
+	err := pg.DB.Get(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,8 +262,8 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1 limit 1"
-	issuer := Issuer{}
+	statement := "select * from order_cred_issuers where public_key = $1"
+	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -286,9 +289,15 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 }
 
 // GetOrderCreds returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
+func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error) {
 	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
+
+	query := "select * from order_creds where order_id = $1"
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.DB.Select(&orderCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -300,19 +309,17 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 	return nil, nil
 }
 
-// GetOrderCredsByItemID returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID) (*[]OrderCreds, error) {
-	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
-	if err != nil {
+// GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
+func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
+	orderCreds := OrderCreds{}
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2", orderID, itemID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
-	if len(orderCreds) > 0 {
-		return &orderCreds, nil
-	}
-
-	return nil, nil
+	return &orderCreds, nil
 }
 
 // GetUncommittedVotesForUpdate - row locking on number of votes we will be pulling
@@ -324,7 +331,7 @@ func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx,
 	)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to aquire transaction: %w", err)
+		return tx, nil, fmt.Errorf("failed to aquire transaction: %w", err)
 	}
 
 	statement := `
@@ -340,20 +347,20 @@ FOR UPDATE
 `
 	rows, err := tx.QueryContext(ctx, statement)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
+		return tx, nil, fmt.Errorf("failed to perform query for vote drain: %w", err)
 	}
 
 	for rows.Next() {
 		var vr = new(VoteRecord)
 		if err := rows.Scan(&vr.ID, &vr.RequestCredentials, &vr.VoteText,
 			&vr.VoteEventBinary, &vr.Erred, &vr.Processed); err != nil {
-			return nil, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
+			return tx, nil, fmt.Errorf("failed to scan vote drain record: %w", err)
 		}
 		// add to results
 		results = append(results, vr)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
+		return tx, nil, fmt.Errorf("row errors after scanning vote drain: %w", err)
 	}
 
 	if err := rows.Close(); err != nil {

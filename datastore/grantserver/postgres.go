@@ -1,6 +1,7 @@
 package grantserver
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-const currentMigrationVersion = 10
+const currentMigrationVersion = 12
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
@@ -139,7 +140,7 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 // RollbackTx rolls back a transaction (useful with defer)
 func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	err := tx.Rollback()
-	if err != nil {
+	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
 		sentry.Flush(time.Second * 2)
 	}

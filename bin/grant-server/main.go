@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -84,14 +85,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
@@ -99,7 +100,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
@@ -110,14 +111,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
@@ -125,7 +126,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
@@ -140,13 +141,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if os.Getenv("FEATURE_ORDERS") != "" {
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
@@ -180,28 +181,30 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 }
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	var attemptedCount = 0
 	for {
-		attempted, err := job(ctx)
+		_, err := job(ctx)
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 		}
-
-		if !attempted && attemptedCount < 5 {
-			// if it wasn't attempted try again up to max tries then bail
-			attemptedCount++
-			continue
-		} else {
-			// it was attempted, wait the specified duration
-			attemptedCount = 0
-			<-time.After(duration)
-		}
+		// regardless if attempted or not, wait for the duration until retrying
+		<-time.After(duration)
 	}
 }
 
 func main() {
 	serverCtx, logger := setupLogger(context.Background())
+	// setup sentry
+	sentryDsn := os.Getenv("SENTRY_DSN")
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:     sentryDsn,
+			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
+		})
+		if err != nil {
+			logger.Panic().Err(err).Msg("unable to setup reporting!")
+		}
+	}
 	subLog := logger.Info().Str("prefix", "main")
 	subLog.Msg("Starting server")
 
@@ -221,7 +224,7 @@ func main() {
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
