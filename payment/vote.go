@@ -67,10 +67,10 @@ func (v *Vote) Base64Decode(text string) error {
 	}
 */
 
-// VoteEvent encapsulates user and server provided information about a request to contribute
+// VoteEvent encapsulates user and server provided information about a request to contribute kafka event
 type VoteEvent struct {
-	Type          string          `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel       string          `json:"channel" valid:"-"`
+	Type          string          `json:"type"`
+	Channel       string          `json:"channel"`
 	ID            uuid.UUID       `json:"id"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	BaseVoteValue decimal.Decimal `json:"baseVoteValue"`
