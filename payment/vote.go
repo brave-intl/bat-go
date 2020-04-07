@@ -211,17 +211,22 @@ func (service *Service) Vote(
 	// generate all the cb credential redemptions
 	requestCredentials, err := generateCredentialRedemptions(
 		context.WithValue(ctx, appctx.DatastoreCTXKey, service.datastore), credentials)
+	if err != nil {
+		return fmt.Errorf("error generating credential redemptions: %w", err)
+	}
 
-	// foreach request credential, make vote
-	for _, rc := range requestCredentials {
-		// one vote per request credential
-		vote.VoteTally = 1
-		// set the funding source to the issuer
-		vote.FundingSource = rc.Issuer
+	var credsByIssuer = map[string][]cbr.CredentialRedemption{}
 
-		if err != nil {
-			return fmt.Errorf("error generating credential redemptions: %w", err)
+	if len(requestCredentials) > 0 {
+		for _, rc := range requestCredentials {
+			credsByIssuer[rc.Issuer] = append(credsByIssuer[rc.Issuer], rc)
 		}
+	}
+
+	// for each issuer we will create a vote with a particular vote tally
+	for k, v := range credsByIssuer {
+		vote.VoteTally = int64(len(v))
+		vote.FundingSource = k
 
 		// get a new VoteEvent to emit to kafka based on our input vote
 		voteEvent, err := NewVoteEvent(vote)
@@ -235,7 +240,7 @@ func (service *Service) Vote(
 			return fmt.Errorf("failed to encode avro codec: %w", err)
 		}
 
-		rcSerial, err := json.Marshal([]cbr.CredentialRedemption{rc})
+		rcSerial, err := json.Marshal(v)
 		if err != nil {
 			return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
 		}
@@ -250,7 +255,6 @@ func (service *Service) Vote(
 			return fmt.Errorf("datastore failure vote_drain: %w", err)
 		}
 	}
-
 	// at this point, after the vote is added to the database queue, we will let
 	// the service DrainVoteQueue handle the redemptions and kafka messages
 
