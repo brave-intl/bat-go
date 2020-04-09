@@ -249,6 +249,7 @@ func (service *Service) Vote(
 			default:
 				// should not get here
 				vote.FundingSource = UnknownVoteSKU
+				log.Printf("funding source unknown based on the issuer-name: %s\n", k)
 			}
 		}
 
