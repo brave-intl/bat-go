@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -18,6 +19,15 @@ import (
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	// UserWalletVoteSKU - special vote sku to denote user wallet funding
+	UserWalletVoteSKU string = "user-wallet-vote"
+	// AnonCardVoteSKU - special vote sku to denote anon-card funding
+	AnonCardVoteSKU = "anon-card-vote"
+	// UnknownVoteSKU - special vote sku to denote unknown funding
+	UnknownVoteSKU = "unknown-vote"
 )
 
 // Vote encapsulates information from the browser about attention
@@ -226,7 +236,20 @@ func (service *Service) Vote(
 	// for each issuer we will create a vote with a particular vote tally
 	for k, v := range credsByIssuer {
 		vote.VoteTally = int64(len(v))
-		vote.FundingSource = k
+		// k holds the issuer name string, which has encoded in the funding source
+		// draw out the funding source and set it here.
+		var issuerNameParts = strings.Split(k, ".")
+		if len(issuerNameParts) > 1 {
+			switch issuerNameParts[1] {
+			case UserWalletVoteSKU:
+				vote.FundingSource = UserWalletVoteSKU
+			case AnonCardVoteSKU:
+				vote.FundingSource = AnonCardVoteSKU
+			default:
+				// should not get here
+				vote.FundingSource = UnknownVoteSKU
+			}
+		}
 
 		// get a new VoteEvent to emit to kafka based on our input vote
 		voteEvent, err := NewVoteEvent(vote)
