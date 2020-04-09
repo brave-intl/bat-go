@@ -240,7 +240,8 @@ func (service *Service) Vote(
 		// draw out the funding source and set it here.
 		var issuerNameParts = strings.Split(k, ".")
 		if len(issuerNameParts) > 1 {
-			switch issuerNameParts[1] {
+			// get the part after the last .
+			switch issuerNameParts[len(issuerNameParts)-1] {
 			case UserWalletVoteSKU:
 				vote.FundingSource = UserWalletVoteSKU
 			case AnonCardVoteSKU:

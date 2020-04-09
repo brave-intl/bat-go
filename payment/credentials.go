@@ -148,7 +148,7 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 }
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
-func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
 		issuers            = make(map[string]*Issuer)
