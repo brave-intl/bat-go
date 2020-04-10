@@ -725,10 +725,10 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	if err != nil {
 		return err
 	}
+	defer pg.RollbackTx(tx)
 
 	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
@@ -738,7 +738,6 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	returning *`
 	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
@@ -757,6 +756,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// FIXME maybe useful to later move definition outside of this method scope
 	type DrainJob struct {
@@ -778,12 +778,10 @@ limit 1`
 	jobs := []DrainJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -793,7 +791,6 @@ limit 1`
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -803,7 +800,7 @@ limit 1`
 		{
 			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
 			if err != nil {
-				_ = tx.Rollback()
+				pg.RollbackTx(tx)
 			}
 			_ = tx.Commit()
 		}
@@ -812,7 +809,6 @@ limit 1`
 
 	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -844,6 +840,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
 	err := tx.Get(&transaction,
@@ -854,14 +851,11 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	err = tx.Commit()
-
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 

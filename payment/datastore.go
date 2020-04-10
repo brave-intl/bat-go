@@ -23,7 +23,7 @@ import (
 type Datastore interface {
 	walletservice.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -45,7 +45,7 @@ type Datastore interface {
 	// InsertOrderCreds
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
-	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
 	// RunNextOrderJob
@@ -83,16 +83,16 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
 	tx := pg.DB.MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO orders (total_price, merchant_id, status, currency, location)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING *
 		`,
-		totalPrice, merchantID, status, currency)
+		totalPrice, merchantID, status, currency, location)
 
 	if err != nil {
 		return nil, err
@@ -102,8 +102,8 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		orderItems[i].OrderID = order.ID
 
 		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, quantity, price, currency, subtotal)
-			VALUES (:order_id, :quantity, :price, :currency, :subtotal)
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
 			RETURNING *
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])
@@ -193,6 +193,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
 	err := tx.Get(&transaction,
@@ -288,9 +289,15 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 }
 
 // GetOrderCreds returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
+func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error) {
 	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
+
+	query := "select * from order_creds where order_id = $1"
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.DB.Select(&orderCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +312,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 // GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
 func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
-	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2 and signed_creds is not null", orderID, itemID)
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2", orderID, itemID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
