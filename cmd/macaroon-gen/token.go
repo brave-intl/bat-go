@@ -9,8 +9,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Caveats - configuration representation of key pair caveats
 type Caveats map[string]string
 
+// Token - configuration representation of token metadata attributes
 type Token struct {
 	ID                string    `yaml:"id"`
 	Version           int       `yaml:"version"`
@@ -18,6 +20,7 @@ type Token struct {
 	FirstPartyCaveats []Caveats `yaml:"first_party_caveats"`
 }
 
+// Generate - Generate a Macaroon from the Token configuration
 func (t Token) Generate(secret string) (string, error) {
 	// create a new macaroon
 	m, err := macaroon.New([]byte(secret), []byte(t.ID), t.Location, macaroon.Version(t.Version))
@@ -27,8 +30,11 @@ func (t Token) Generate(secret string) (string, error) {
 
 	for _, caveat := range t.FirstPartyCaveats {
 		for k, v := range caveat {
-			m.AddFirstPartyCaveat(
+			err := m.AddFirstPartyCaveat(
 				[]byte(fmt.Sprintf("%s=%s", k, v)))
+			if err != nil {
+				return "", fmt.Errorf("failed to add caveat: %w", err)
+			}
 		}
 	}
 
@@ -40,10 +46,12 @@ func (t Token) Generate(secret string) (string, error) {
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
+// TokenConfig - structure of the token configuration file
 type TokenConfig struct {
 	Tokens []Token `yaml:"tokens"`
 }
 
+// Parse - Parse the token configuration file
 func (tc *TokenConfig) Parse(path string) (err error) {
 	// read file
 	buf, err := os.Open(path)

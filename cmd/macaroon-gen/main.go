@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 )
 
 var (
@@ -18,9 +19,10 @@ func main() {
 	// new config
 	var tc = new(TokenConfig)
 	// parse config file
-	tc.Parse(*config)
-
-	fmt.Printf("tc: %+v\n", tc)
+	if err := tc.Parse(*config); err != nil {
+		fmt.Println("unable to parse token config: ", err)
+		os.Exit(1)
+	}
 
 	for _, token := range tc.Tokens {
 		// generate token
@@ -30,6 +32,6 @@ func main() {
 			continue
 		}
 
-		fmt.Printf("%s: %s\n", token.ID, t)
+		fmt.Printf("%s: \n%s\n\n", token.ID, t)
 	}
 }
