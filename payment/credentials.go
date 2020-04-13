@@ -88,21 +88,35 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 		return errors.New("order has not yet been paid")
 	}
 
-	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
-	if err != nil {
-		return errorutils.Wrap(err, "error finding issuer")
-	}
+	// get the order items, need to create issuers based on the
+	// special sku values on the order items
+	for _, orderItem := range order.Items {
+		var issuerID string
+		switch orderItem.SKU {
+		case AnonCardVoteSKU:
+			issuerID = fmt.Sprintf("%s.%s", order.MerchantID, AnonCardVoteSKU)
+		case UserWalletVoteSKU:
+			issuerID = fmt.Sprintf("%s.%s", order.MerchantID, UserWalletVoteSKU)
+		default:
+			issuerID = order.MerchantID
+		}
+		// create the issuer
+		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
+		if err != nil {
+			return errorutils.Wrap(err, "error finding issuer")
+		}
 
-	orderCreds := OrderCreds{
-		ID:           itemID,
-		OrderID:      orderID,
-		IssuerID:     issuer.ID,
-		BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
-	}
+		orderCreds := OrderCreds{
+			ID:           itemID,
+			OrderID:      orderID,
+			IssuerID:     issuer.ID,
+			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
+		}
 
-	err = service.datastore.InsertOrderCreds(&orderCreds)
-	if err != nil {
-		return errorutils.Wrap(err, "error inserting order creds")
+		err = service.datastore.InsertOrderCreds(&orderCreds)
+		if err != nil {
+			return errorutils.Wrap(err, "error inserting order creds")
+		}
 	}
 
 	return nil
@@ -134,7 +148,7 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 }
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
-func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
 		issuers            = make(map[string]*Issuer)
