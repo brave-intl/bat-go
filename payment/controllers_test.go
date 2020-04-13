@@ -418,7 +418,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				SKU: "AgEJYnJhdmUuY29tAgpwdWJsaWMga2V5AAInaWQ9NWM4NDZkYTEtODNjZC00ZTE1LTk4ZGQtOGUxNDdhNTZiNmZhAAISc2t1PWFub24tY2FyZC12b3RlAAIMY3VycmVuY3k9QkFUAAIKcHJpY2U9MC4yNQAABiCBp8pJJYFZwJC7w2HjT-Sb6ogHOw-BnhLORRtGH36bhQ",
+				//SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
 				Quantity: numVotes,
 			},
 		},
@@ -469,7 +470,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName := "brave.com"
+	issuerName := "brave.com.anon-card-vote"
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
@@ -653,5 +654,5 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
 	//issuerName := "brave.com"
 	// check that the funding source matches the issuer
-	suite.Assert().Equal(ve.FundingSource, issuerName)
+	suite.Assert().Equal(ve.FundingSource, "anon-card-vote") // from SKU...
 }

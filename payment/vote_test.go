@@ -57,7 +57,7 @@ func TestVoteAnonCard(t *testing.T) {
 
 	defer func() {
 		if err := db.Close(); err != nil {
-			t.Error("failed to close mock database", err)
+			t.Log("failed to close mock database", err)
 		}
 	}()
 	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
