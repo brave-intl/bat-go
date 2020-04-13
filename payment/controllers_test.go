@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -470,7 +471,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName := "brave.com.anon-card-vote"
+	issuerName := fmt.Sprintf("%s%s%s", "brave.com", issuerSeperator, "anon-card-vote")
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}

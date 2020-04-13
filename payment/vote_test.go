@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -35,11 +36,12 @@ func (sc StringContains) Match(v driver.Value) bool {
 // TestVoteAnonCard - given an issuer that is suffixed with "anon-card-vote" we should get a vote with funding source anon-card-vote
 func TestVoteAnonCard(t *testing.T) {
 	var (
+		issuerName                        = fmt.Sprintf("%s%s%s", "brave.com", issuerSeperator, "anon-card-vote")
 		s                                 = new(Service)
 		fakeGenerateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 			return []cbr.CredentialRedemption{
 				{
-					Issuer: "brave.com.anon-card-vote",
+					Issuer: issuerName,
 				},
 			}, nil
 		}
@@ -64,7 +66,7 @@ func TestVoteAnonCard(t *testing.T) {
 
 	// make sure vote_drain was updated
 	mock.ExpectExec("insert into vote_drain").
-		WithArgs(StringContains(`issuer":"brave.com.anon-card-vote`), voteText, BytesContains(`anon-card-vote`)).
+		WithArgs(StringContains(`issuer":"`+issuerName), voteText, BytesContains(`anon-card-vote`)).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	generateCredentialRedemptions = fakeGenerateCredentialRedemptions
