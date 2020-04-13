@@ -78,6 +78,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
+		r.Use(chiware.Recoverer)
 	}
 
 	roDB := os.Getenv("RO_DATABASE_URL")

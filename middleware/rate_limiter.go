@@ -28,6 +28,7 @@ func RateLimiter(next http.Handler) http.Handler {
 		VaryBy: &throttled.VaryBy{
 			RemoteAddr: true,
 			Path:       true,
+			Method:     true,
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

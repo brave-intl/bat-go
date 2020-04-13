@@ -123,8 +123,12 @@ func DeleteKey(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
 		}
+		status := http.StatusOK
+		if key == nil {
+			status = http.StatusNotFound
+		}
 
-		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
+		return handlers.RenderContent(r.Context(), key, w, status)
 	})
 }
 

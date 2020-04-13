@@ -113,16 +113,17 @@ func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey s
 
 // DeleteKey updates a key with an expiration time based on the id
 func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
-	// interface and create an api key
 	var key Key
 	err := pg.DB.Get(&key, `
 			UPDATE api_keys
 			SET expiry=(current_timestamp + $2)
 			WHERE id=$1
-			RETURNING *
+		RETURNING *
 		`, id.String(), fmt.Sprintf("%vs", delaySeconds))
 
-	if err != nil {
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to update key for merchant: %w", err)
 	}
 
@@ -145,8 +146,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 	err := pg.DB.Select(&keys, `
 			SELECT * FROM api_keys
 			WHERE merchant_id = $1
-
-		`+expiredQuery,
+		`+expiredQuery+" ORDER BY name, created_at",
 		merchant)
 
 	if err != nil {
