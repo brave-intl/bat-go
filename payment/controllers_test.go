@@ -104,7 +104,6 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
-	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
 	suite.Assert().Equal("BAT", order.Currency)
 
@@ -137,7 +136,6 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal("5", order.TotalPrice.String())
-	suite.Assert().Equal("brave.com", order.MerchantID)
 	suite.Assert().Equal("pending", order.Status)
 
 	// Check the order items
@@ -521,6 +519,19 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	// Check to see if we have HTTP Accepted
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusAccepted, rr.Code)
 
 	<-time.After(5 * time.Second)
 

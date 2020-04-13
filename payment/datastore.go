@@ -45,7 +45,7 @@ type Datastore interface {
 	// InsertOrderCreds
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
-	GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error)
+	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
 	// RunNextOrderJob
@@ -363,9 +363,15 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 }
 
 // GetOrderCreds returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
+func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error) {
 	orderCreds := []OrderCreds{}
-	err := pg.DB.Select(&orderCreds, "select * from order_creds where order_id = $1 and signed_creds is not null", orderID)
+
+	query := "select * from order_creds where order_id = $1"
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.DB.Select(&orderCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +386,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID) (*[]OrderCreds, error) {
 // GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
 func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
-	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2 and signed_creds is not null", orderID, itemID)
+	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2", orderID, itemID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
