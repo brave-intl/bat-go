@@ -667,7 +667,13 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 }
 
 func (suite *ControllersTestSuite) SetupCreateKey() Key {
-	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", nil)
+	createRequest := &CreateKeyRequest{
+		Name: "BAT-GO",
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	createAPIHandler := CreateKey(suite.service)
