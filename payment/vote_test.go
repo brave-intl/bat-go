@@ -18,10 +18,7 @@ type BytesContains []byte
 
 func (bc BytesContains) Match(v driver.Value) bool {
 	if b, ok := v.([]byte); ok {
-		if strings.Contains(string(b), string(bc)) {
-			return true
-		}
-		return false
+		return strings.Contains(string(b), string(bc))
 	}
 	return false
 }
@@ -30,10 +27,7 @@ type StringContains string
 
 func (sc StringContains) Match(v driver.Value) bool {
 	if s, ok := v.(string); ok {
-		if strings.Contains(s, string(sc)) {
-			return true
-		}
-		return false
+		return strings.Contains(s, string(sc))
 	}
 	return false
 }
@@ -53,10 +47,19 @@ func TestVoteAnonCard(t *testing.T) {
 		db, mock, _                      = sqlmock.New()
 	)
 	// avro codecs
-	s.InitCodecs()
-	s.datastore = Datastore(&Postgres{grantserver.Postgres{sqlx.NewDb(db, "postgres")}})
+	if err := s.InitCodecs(); err != nil {
+		t.Error("failed to initialize avro codecs for test: ", err)
+	}
+	s.datastore = Datastore(
+		&Postgres{
+			grantserver.Postgres{
+				DB: sqlx.NewDb(db, "postgres")}})
 
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error("failed to close mock database", err)
+		}
+	}()
 	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
 
 	// make sure vote_drain was updated
