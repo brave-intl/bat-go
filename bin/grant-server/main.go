@@ -158,7 +158,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
-		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
+		if os.Getenv("FEATURE_ORDERS") != "" {
+			r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
+		}
 	}
 	r.Get("/metrics", middleware.Metrics())
 
