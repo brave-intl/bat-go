@@ -112,7 +112,13 @@ type AppHandler func(http.ResponseWriter, *http.Request) *AppError
 
 // ServeHTTP responds via the passed handler and handles returned errors
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("content-type", "application/json")
+	switch r.Header.Get("Accept") {
+	case "application/json", "", "*/*":
+		w.Header().Set("content-type", "application/json")
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		// return a 400 error here as we cannot supply the encoding type the client is asking for
+	}
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
