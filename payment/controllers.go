@@ -142,7 +142,7 @@ func GetKeys(service *Service) handlers.AppHandler {
 		var keys *[]Key
 		keys, err := service.datastore.GetKeys(reqID, showExpired)
 		if err != nil {
-			return handlers.WrapError(err, "Error Getting Keys for Merchan", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), keys, w, http.StatusOK)
@@ -244,7 +244,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 		transactions, err := service.datastore.GetTransactions(id)
 		if err != nil {
-			return handlers.WrapError(err, "Error retrieving the transactions for the transactions", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error retrieving the transactions", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), transactions, w, http.StatusOK)
