@@ -238,16 +238,14 @@ func (service *Service) Vote(
 		vote.VoteTally = int64(len(v))
 		// k holds the issuer name string, which has encoded in the funding source
 		// draw out the funding source and set it here.
-		var issuerNameParts = strings.Split(k, ".")
+		var issuerNameParts = strings.Split(k, issuerSeperator)
 		if len(issuerNameParts) > 1 {
-			// get the part after the last .
+			// get the part after the issuerSepartor
 			switch issuerNameParts[len(issuerNameParts)-1] {
-			case UserWalletVoteSKU:
-				vote.FundingSource = UserWalletVoteSKU
-			case AnonCardVoteSKU:
-				vote.FundingSource = AnonCardVoteSKU
+			case UserWalletVoteSKU, AnonCardVoteSKU:
+				vote.FundingSource = issuerNameParts[len(issuerNameParts)-1]
 			default:
-				// should not get here
+				// Will only get here if we get an unknown Vote SKU from issuer
 				vote.FundingSource = UnknownVoteSKU
 				log.Printf("funding source unknown based on the issuer-name: %s\n", k)
 			}
