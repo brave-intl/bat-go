@@ -29,6 +29,13 @@ var (
 	out      string
 )
 
+func must(err error) {
+	if err != nil {
+		log.Printf("failed to initialize: %s\n", err.Error())
+		os.Exit(1)
+	}
+}
+
 func init() {
 	// add complete and transform subcommand
 	paypalSettlementCmd.AddCommand(completePaypalSettlementCmd)
@@ -43,58 +50,65 @@ func init() {
 	// input (required by all)
 	paypalSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
 		"the file or comma delimited list of files that should be utilized")
-	viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input"))
-	viper.BindEnv("input", "INPUT")
-	paypalSettlementCmd.MarkPersistentFlagRequired("input")
+	must(viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input")))
+	must(viper.BindEnv("input", "INPUT"))
+	must(paypalSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
 	paypalSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./paypal-settlement",
 		"the location of the file")
-	viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out"))
-	viper.BindEnv("out", "OUT")
+	must(viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out")))
+	must(viper.BindEnv("out", "OUT"))
 
 	// currency (required by transform)
 	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
 		"a currency must be set")
-	viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency"))
-	viper.BindEnv("currency", "CURRENCY")
-	transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency")
+	must(viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
+	must(viper.BindEnv("currency", "CURRENCY"))
+	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
 
 	// txnID (required by complete)
 	completePaypalSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
-	viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id"))
-	viper.BindEnv("txn-id", "TXN_ID")
-	completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id")
+	must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	must(viper.BindEnv("txn-id", "TXN_ID"))
+	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
 	// rate-auth
 	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&auth, "rate-auth", "a", "",
 		"the rate auth service")
-	viper.BindPFlag("rate-auth", paypalSettlementCmd.PersistentFlags().Lookup("rate-auth"))
-	viper.BindEnv("rate-auth", "RATE_AUTH")
-	transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate-auth")
+	must(viper.BindPFlag("rate-auth", paypalSettlementCmd.PersistentFlags().Lookup("rate-auth")))
+	must(viper.BindEnv("rate-auth", "RATE_AUTH"))
+	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate-auth"))
 
 	// rate
 	paypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
 		"the rate to compute the currency conversion")
-	viper.BindPFlag("rate", paypalSettlementCmd.PersistentFlags().Lookup("rate"))
-	viper.BindEnv("rate", "RATE")
-	transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate")
+	must(viper.BindPFlag("rate", paypalSettlementCmd.PersistentFlags().Lookup("rate")))
+	must(viper.BindEnv("rate", "RATE"))
+	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate"))
 }
 
 // EmailTemplate performs template replacement of date fields in emails
-func EmailTemplate(inPath string, outPath string) error {
+func EmailTemplate(inPath string, outPath string) (err error) {
 	// read in email template
 	data, err := ioutil.ReadFile(inPath)
 	if err != nil {
-		return fmt.Errorf("failed to read template: %w", err)
+		err = fmt.Errorf("failed to read template: %w", err)
+		return
 	}
 	// perform template rendering to out
 	f, err := os.Create(outPath)
 	if err != nil {
-		return fmt.Errorf("failed to create output: %w", err)
+		err = fmt.Errorf("failed to create output: %w", err)
+		return
 	}
-	defer f.Close()
+	defer func() {
+		if err = f.Close(); err != nil {
+			err = fmt.Errorf("failed to create output: %w", err)
+			return
+		}
+	}()
 
 	var (
 		today = time.Now()
@@ -109,10 +123,11 @@ func EmailTemplate(inPath string, outPath string) error {
 		t = template.Must(template.New("email").Parse(string(data)))
 	)
 
-	if err := t.Execute(f, v); err != nil {
-		return fmt.Errorf("failed to execute template: %w", err)
+	if err = t.Execute(f, v); err != nil {
+		err = fmt.Errorf("failed to execute template: %w", err)
+		return
 	}
-	return nil
+	return
 }
 
 var (
