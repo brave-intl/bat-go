@@ -34,6 +34,7 @@ import (
 )
 
 type ControllersTestSuite struct {
+	service *Service
 	suite.Suite
 }
 
@@ -56,7 +57,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
+	AESKey = "AES256Key-32Characters1234567890"
+
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
+	suite.service = &Service{
+		datastore: pg,
+	}
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
@@ -112,19 +118,12 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
-	pg, err := NewPostgres("", false)
-	suite.Require().NoError(err, "Failed to get postgres conn")
-
-	service := &Service{
-		datastore: pg,
-	}
-
 	order := suite.setupCreateOrder(20)
 
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
 
-	getOrderHandler := GetOrder(service)
+	getOrderHandler := GetOrder(suite.service)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -146,6 +145,20 @@ func (suite *ControllersTestSuite) TestGetOrder() {
 	suite.Assert().Equal(20, order.Items[0].Quantity)
 	suite.Assert().Equal(decimal.New(5, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
+}
+
+func (suite *ControllersTestSuite) TestGetMissingOrder() {
+	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
+	suite.Require().NoError(err)
+
+	getOrderHandler := GetOrder(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", "9645ca16-bc93-4e37-8edf-cb35b1763216")
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getOrderHandler.ServeHTTP(rr, getReq)
+	suite.Assert().Equal(http.StatusNotFound, rr.Code)
 }
 
 func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
@@ -271,7 +284,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 
 	// Get all the transactions, should only be one
 
-	handler = GetTransactions(service)
+	handler = GetTransactions(suite.service)
 	req, err = http.NewRequest("GET", "/v1/orders/{orderID}/transactions", nil)
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
@@ -651,4 +664,135 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.Type, vote.Type)
 	suite.Assert().Equal(ve.Channel, vote.Channel)
 	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
+}
+
+func (suite *ControllersTestSuite) SetupCreateKey() Key {
+	createRequest := &CreateKeyRequest{
+		Name: "BAT-GO",
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	createAPIHandler := CreateKey(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
+	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	createAPIHandler.ServeHTTP(rr, postReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var key Key
+	err = json.Unmarshal(rr.Body.Bytes(), &key)
+	suite.Assert().NoError(err)
+
+	return key
+}
+
+func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
+	deleteRequest := &DeleteKeyRequest{
+		DelaySeconds: 0,
+	}
+
+	body, err := json.Marshal(&deleteRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("DELETE", "/v1/merchants/id/key/{id}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	deleteAPIHandler := DeleteKey(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", key.ID)
+	deleteReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	deleteAPIHandler.ServeHTTP(rr, deleteReq)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var deletedKey Key
+	err = json.Unmarshal(rr.Body.Bytes(), &deletedKey)
+	suite.Assert().NoError(err)
+
+	return deletedKey
+}
+
+func (suite *ControllersTestSuite) TestCreateKey() {
+	Key := suite.SetupCreateKey()
+
+	suite.Assert().Equal("48dc25ed-4121-44ef-8147-4416a76201f7", Key.Merchant)
+}
+
+func (suite *ControllersTestSuite) TestDeleteKey() {
+	key := suite.SetupCreateKey()
+
+	deleteTime := time.Now()
+	deletedKey := suite.SetupDeleteKey(key)
+	// Ensure the expiry is within 5 seconds of when we made the call
+	suite.Assert().WithinDuration(deleteTime, *deletedKey.Expiry, 5*time.Second)
+}
+
+func (suite *ControllersTestSuite) TestGetKeys() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Delete transactions so we don't run into any validation errors
+	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	suite.Require().NoError(err)
+
+	key := suite.SetupCreateKey()
+
+	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys", nil)
+	suite.Require().NoError(err)
+
+	getAPIHandler := GetKeys(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchantID", key.Merchant)
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getAPIHandler.ServeHTTP(rr, getReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var keys []Key
+	err = json.Unmarshal(rr.Body.Bytes(), &keys)
+	suite.Assert().NoError(err)
+
+	suite.Assert().Equal(1, len(keys))
+}
+
+func (suite *ControllersTestSuite) TestGetKeysFiltered() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Delete transactions so we don't run into any validation errors
+	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	suite.Require().NoError(err)
+
+	key := suite.SetupCreateKey()
+	toDelete := suite.SetupCreateKey()
+	suite.SetupDeleteKey(toDelete)
+
+	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys?expired=true", nil)
+	suite.Require().NoError(err)
+
+	getAPIHandler := GetKeys(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("merchantID", key.Merchant)
+	getReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	getAPIHandler.ServeHTTP(rr, getReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var keys []Key
+	err = json.Unmarshal(rr.Body.Bytes(), &keys)
+	suite.Assert().NoError(err)
+
+	suite.Assert().Equal(2, len(keys))
 }
