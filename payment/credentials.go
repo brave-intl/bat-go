@@ -1,7 +1,10 @@
 package payment
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -16,6 +19,72 @@ import (
 const (
 	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
 )
+
+func decodeIssuerID(issuerID string) (string, string, error) {
+	var (
+		merchantID string
+		sku        string
+		skuOffset  uint64
+	)
+	b, err := base64.StdEncoding.DecodeString(issuerID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to decode issuerID: %w", err)
+	}
+
+	skuOffsetBuf := bytes.NewReader(b[:8])
+	together := b[8:]
+
+	// read off the first 8 bytes as a uint64 to figure out where the split is
+	err = binary.Read(skuOffsetBuf, binary.LittleEndian, &skuOffset)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read skuOffset: %w", err)
+	}
+
+	merchantID = string(together[:skuOffset])
+	sku = string(together[skuOffset:])
+
+	return merchantID, sku, nil
+}
+
+func encodeIssuerID(merchantID, sku string) (string, error) {
+	var (
+		mIDBytes = []byte(merchantID)
+		skuBytes = []byte(sku)
+		// sku offset tells us where the sku begins
+		skuOffset uint64 = uint64(len(mIDBytes))
+		b                = []byte{}
+		buf              = bytes.NewBuffer(b)
+	)
+	// 8 bytes for offset (uint64) | variable bytes merchant id | variable bytes sku
+
+	// put the skuOffset in the buffer
+	if err := binary.Write(buf, binary.LittleEndian, &skuOffset); err != nil {
+		return "", fmt.Errorf("failed to write skuOffset to issuer: %w", err)
+	}
+
+	// put the merchant id in the buffer
+	n, err := buf.Write(mIDBytes)
+	if err != nil {
+		// error encoding merchant id
+		return "", fmt.Errorf("failed to write merchant id to issuer: %w", err)
+	}
+	if n != len(mIDBytes) {
+		// failed to write mid all the way
+		return "", errors.New("incorrect number of bytes written for merchant id")
+	}
+
+	// put the sku in the buffer
+	buf.Write(skuBytes)
+	if err != nil {
+		// error encoding sku
+		return "", fmt.Errorf("failed to write sku to issuer: %w", err)
+	}
+	if n != len(mIDBytes) {
+		// failed to write mid all the way
+		return "", errors.New("incorrect number of bytes written for sku")
+	}
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
 
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
@@ -96,9 +165,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 	// special sku values on the order items
 	for _, orderItem := range order.Items {
 		// generalized issuer based on sku and merchant id
-		// grammar {{ merchantID }} {{ separator }} {{ sku }}
-		var issuerID = fmt.Sprintf(
-			"%s%s%s", order.MerchantID, issuerSeperator, orderItem.SKU)
+		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
 
 		// create the issuer
 		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
