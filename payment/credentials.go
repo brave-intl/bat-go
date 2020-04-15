@@ -146,10 +146,6 @@ type OrderCreds struct {
 	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
-const (
-	issuerSeperator string = "!|!"
-)
-
 // CreateOrderCreds if the order is complete
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.datastore.GetOrder(orderID)
@@ -166,6 +162,9 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 	for _, orderItem := range order.Items {
 		// generalized issuer based on sku and merchant id
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+		if err != nil {
+			return errorutils.Wrap(err, "error encoding issuer name")
+		}
 
 		// create the issuer
 		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
