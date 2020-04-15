@@ -470,7 +470,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName := "CQAAAAAAAABicmF2ZS5jb21hbm9uLWNhcmQtdm90ZQ=="
+	issuerName := "brave.com?sku=anon-card-vote"
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}

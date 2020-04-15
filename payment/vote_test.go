@@ -35,7 +35,7 @@ func (sc StringContains) Match(v driver.Value) bool {
 // TestVoteAnonCard - given an issuer that is suffixed with "anon-card-vote" we should get a vote with funding source anon-card-vote
 func TestVoteAnonCard(t *testing.T) {
 	var (
-		issuerName                        = "CQAAAAAAAABicmF2ZS5jb21hbm9uLWNhcmQtdm90ZQ=="
+		issuerName                        = "brave.com?sku=anon-card-vote"
 		s                                 = new(Service)
 		fakeGenerateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 			return []cbr.CredentialRedemption{
