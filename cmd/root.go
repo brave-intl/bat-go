@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -12,6 +13,7 @@ var (
 		Use:   "bat-go",
 		Short: "bat-go provides go based services and processes for BAT",
 	}
+	ctx = context.Background()
 )
 
 // Execute - the main entrypoint for all subcommands in bat-go

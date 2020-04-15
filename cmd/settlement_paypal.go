@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/settlement/paypal"
 	"github.com/brave-intl/bat-go/utils/closers"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/gocarina/gocsv"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -21,12 +23,13 @@ import (
 )
 
 var (
-	input    string
-	currency string
-	txnID    string
-	auth     string
-	rate     float64
-	out      string
+	input             string
+	currency          string
+	txnID             string
+	rate              float64
+	out               string
+	ratiosAccessToken string
+	ratiosServer      string
 )
 
 func must(err error) {
@@ -74,17 +77,24 @@ func init() {
 	must(viper.BindEnv("txn-id", "TXN_ID"))
 	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
-	// rate-auth
-	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&auth, "rate-auth", "a", "",
-		"the rate auth service")
-	must(viper.BindPFlag("rate-auth", paypalSettlementCmd.PersistentFlags().Lookup("rate-auth")))
-	must(viper.BindEnv("rate-auth", "RATE_AUTH"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate-auth"))
+	// ratios-server
+	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&ratiosServer, "ratios-server", "s", "",
+		"the ratios server url")
+	must(viper.BindPFlag("ratios-server", paypalSettlementCmd.PersistentFlags().Lookup("ratios-server")))
+	must(viper.BindEnv("ratios-server", "RATIOS_SERVER"))
+	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("ratios-server"))
+
+	// ratios-access-token
+	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-access-token", "a", "",
+		"the ratios server url")
+	must(viper.BindPFlag("ratios-access-token", paypalSettlementCmd.PersistentFlags().Lookup("ratios-access-token")))
+	must(viper.BindEnv("ratios-access-token", "RATIOS_ACCESS_TOKEN"))
+	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("ratios-access-token"))
 
 	// rate
-	paypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
+	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
 		"the rate to compute the currency conversion")
-	must(viper.BindPFlag("rate", paypalSettlementCmd.PersistentFlags().Lookup("rate")))
+	must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
 	must(viper.BindEnv("rate", "RATE"))
 	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate"))
 }
@@ -161,11 +171,15 @@ var (
 	transformPaypalSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of paypal settlement for mass pay",
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// add flag values to our base context that need to be there
+			ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, ratiosServer)
+			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, ratiosAccessToken)
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := TransformForMassPay(TransformArgs{
 				In:       input,
 				Currency: currency,
-				Auth:     auth,
 				Rate:     decimal.NewFromFloat(rate),
 				Out:      out,
 			}); err != nil {
@@ -180,10 +194,10 @@ var (
 func CompleteSettlement(inPath string, outPath string, txnID string) error {
 	fmt.Println("RUNNING: complete")
 	if inPath == "" {
-		return errors.New("the 'in' flag must be set")
+		return errors.New("the '-i' or '--input' flag must be set")
 	}
 	if txnID == "" {
-		return errors.New("the 'txnID' flag must be set")
+		return errors.New("the '-t' or '--txn-id' flag must be set")
 	}
 	if outPath == "./paypal-settlement" {
 		// use a file with extension if none is passed
@@ -264,10 +278,10 @@ func WriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 func TransformForMassPay(args TransformArgs) (err error) {
 	fmt.Println("RUNNING: transform")
 	if args.In == "" {
-		return errors.New("the 'input' flag must be set")
+		return errors.New("the '-i' or '--input' flag must be set")
 	}
 	if args.Currency == "" {
-		return errors.New("the 'currency' flag must be set")
+		return errors.New("the '-c' or '--currency' flag must be set")
 	}
 
 	payouts, err := ReadFiles(args.In)
@@ -275,7 +289,7 @@ func TransformForMassPay(args TransformArgs) (err error) {
 		return err
 	}
 
-	rate, err := paypal.GetRate(args.Currency, args.Rate, args.Auth)
+	rate, err := paypal.GetRate(ctx, args.Currency, args.Rate)
 	if err != nil {
 		return err
 	}

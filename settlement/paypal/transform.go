@@ -67,13 +67,13 @@ func MergeAndTransformPayouts(batPayouts *[]settlement.Transaction) (*[]Metadata
 }
 
 // GetRate figures out which rate to use
-func GetRate(currency string, rate decimal.Decimal, auth string) (decimal.Decimal, error) {
+func GetRate(ctx context.Context, currency string, rate decimal.Decimal) (decimal.Decimal, error) {
 	if rate.Equal(decimal.NewFromFloat(0)) {
-		client, err := ratios.New()
+		client, err := ratios.NewWithContext(ctx)
 		if err != nil {
 			return rate, err
 		}
-		rateData, err := client.FetchRate(context.Background(), "BAT", currency)
+		rateData, err := client.FetchRate(ctx, "BAT", currency)
 		if err != nil {
 			return rate, err
 		}
