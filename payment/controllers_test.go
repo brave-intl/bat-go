@@ -431,7 +431,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				SKU:      "AgEJYnJhdmUuY29tAgpwdWJsaWMga2V5AAInaWQ9NWM4NDZkYTEtODNjZC00ZTE1LTk4ZGQtOGUxNDdhNTZiNmZhAAISc2t1PWFub24tY2FyZC12b3RlAAIMY3VycmVuY3k9QkFUAAIKcHJpY2U9MC4yNQAABiCBp8pJJYFZwJC7w2HjT-Sb6ogHOw-BnhLORRtGH36bhQ",
 				Quantity: numVotes,
 			},
 		},
@@ -482,7 +482,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName := "brave.com"
+	issuerName := "brave.com?sku=anon-card-vote"
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
@@ -581,9 +581,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler = MakeVote(service)
 
 	vote := Vote{
-		Type:      "auto-contribute",
-		Channel:   "brave.com",
-		VoteTally: 20,
+		Type:    "auto-contribute",
+		Channel: "brave.com",
 	}
 
 	voteBytes, err := json.Marshal(&vote)
@@ -647,13 +646,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
 	suite.Require().NoError(err)
 
-	// eventMap, ok := voteEvent.(map[string]interface{})
-	// suite.Require().True(ok)
-	// id, ok := eventMap["id"].(string)
-	// suite.Require().True(ok)
-	// createdAt, ok := eventMap["createdAt"].(string)
-	// suite.Require().True(ok)
-
 	suite.Assert().Contains(string(voteEventJSON), "id")
 
 	var ve = new(VoteEvent)
@@ -663,7 +655,10 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	suite.Assert().Equal(ve.Type, vote.Type)
 	suite.Assert().Equal(ve.Channel, vote.Channel)
-	suite.Assert().Equal(ve.VoteTally, vote.VoteTally)
+	// should be number of credentials for the vote
+	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
+	// check that the funding source matches the issuer
+	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
 }
 
 func (suite *ControllersTestSuite) SetupCreateKey() Key {

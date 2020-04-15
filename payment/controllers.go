@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
@@ -369,7 +370,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 		validOrderID := uuid.Must(uuid.FromString(orderID))
 
-		orderCreds, err := service.datastore.GetOrderCreds(validOrderID, false)
+		orderCreds, err := service.datastore.GetOrderCredsByItemID(validOrderID, req.ItemID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -455,7 +456,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID())
+		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -501,11 +502,13 @@ func MakeVote(service *Service) handlers.AppHandler {
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
+				log.Printf("failed vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
+				log.Printf("failed multiple vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			default:
-				// FIXME
+				log.Printf("failed to perform vote: %s", err)
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}
