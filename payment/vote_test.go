@@ -65,7 +65,7 @@ func TestVoteAnonCard(t *testing.T) {
 
 	// make sure vote_drain was updated
 	mock.ExpectExec("insert into vote_drain").
-		WithArgs(StringContains(`issuer":"`+issuerName), voteText, BytesContains(`anon-card-vote`)).
+		WithArgs(StringContains(`issuer":"`+issuerName), voteText, BytesContains(`anonymous-card`)).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	generateCredentialRedemptions = fakeGenerateCredentialRedemptions

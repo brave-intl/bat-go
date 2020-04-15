@@ -238,9 +238,15 @@ func (service *Service) Vote(
 		// k holds the issuer name string, which has encoded in the funding source
 		// draw out the funding source and set it here.
 
-		_, sku, err := decodeIssuerID(k)
+		merchantID, sku, err := decodeIssuerID(k)
 		if err != nil {
 			return fmt.Errorf("failed to decode issuer name for sku: %w", err)
+		}
+
+		if merchantID != "brave.com" {
+			// validate that the merchantID is brave.com
+			// if not do not log these votes
+			continue
 		}
 
 		// get the part after the issuerSepartor

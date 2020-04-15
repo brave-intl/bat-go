@@ -418,8 +418,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU: "AgEJYnJhdmUuY29tAgpwdWJsaWMga2V5AAInaWQ9NWM4NDZkYTEtODNjZC00ZTE1LTk4ZGQtOGUxNDdhNTZiNmZhAAISc2t1PWFub24tY2FyZC12b3RlAAIMY3VycmVuY3k9QkFUAAIKcHJpY2U9MC4yNQAABiCBp8pJJYFZwJC7w2HjT-Sb6ogHOw-BnhLORRtGH36bhQ",
-				//SKU:      "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDFhaWRlbnRpZmllciBwdWJsaWMga2V5CjAwMzJjaWQgaWQgPSA1Yzg0NmRhMS04M2NkLTRlMTUtOThkZC04ZTE0N2E1NmI2ZmEKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDE1Y2lkIHByaWNlID0gMC4yNQowMDJmc2lnbmF0dXJlICRlYyTuJdmlRFuPJ5XFQXjzHFZCLTek0yQ3Yc8JUKC0Cg",
+				SKU:      "AgEJYnJhdmUuY29tAgpwdWJsaWMga2V5AAInaWQ9NWM4NDZkYTEtODNjZC00ZTE1LTk4ZGQtOGUxNDdhNTZiNmZhAAISc2t1PWFub24tY2FyZC12b3RlAAIMY3VycmVuY3k9QkFUAAIKcHJpY2U9MC4yNQAABiCBp8pJJYFZwJC7w2HjT-Sb6ogHOw-BnhLORRtGH36bhQ",
 				Quantity: numVotes,
 			},
 		},
@@ -634,13 +633,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
 	suite.Require().NoError(err)
 
-	// eventMap, ok := voteEvent.(map[string]interface{})
-	// suite.Require().True(ok)
-	// id, ok := eventMap["id"].(string)
-	// suite.Require().True(ok)
-	// createdAt, ok := eventMap["createdAt"].(string)
-	// suite.Require().True(ok)
-
 	suite.Assert().Contains(string(voteEventJSON), "id")
 
 	var ve = new(VoteEvent)
@@ -652,7 +644,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.Channel, vote.Channel)
 	// should be number of credentials for the vote
 	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
-	//issuerName := "brave.com"
 	// check that the funding source matches the issuer
-	suite.Assert().Equal(ve.FundingSource, "anon-card-vote") // from SKU...
+	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
 }
