@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
@@ -411,11 +412,13 @@ func MakeVote(service *Service) handlers.AppHandler {
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
+				log.Printf("failed vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
+				log.Printf("failed multiple vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			default:
-				// FIXME
+				log.Printf("failed to perform vote: %s", err)
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}

@@ -245,11 +245,13 @@ func (service *Service) Vote(
 
 		// get the part after the issuerSepartor
 		switch sku {
-		case UserWalletVoteSKU, AnonCardVoteSKU:
-			vote.FundingSource = sku
+		case UserWalletVoteSKU:
+			vote.FundingSource = "user-wallet"
+		case AnonCardVoteSKU:
+			vote.FundingSource = "anonymous-card"
 		default:
 			// Will only get here if we get an unknown Vote SKU from issuer
-			vote.FundingSource = UnknownVoteSKU
+			vote.FundingSource = "unknown"
 			log.Printf("funding source unknown based on the issuer-name: %s\n", k)
 		}
 
