@@ -6,29 +6,149 @@ import (
 )
 
 func TestIssuerID(t *testing.T) {
-	merchantID := "brave.com"
-	sku := "anon-card-vote"
 
-	issuerID, err := encodeIssuerID(merchantID, sku)
-	if err != nil {
-		t.Error("failed to encode: ", err)
+	cases := []struct {
+		MerchantID string
+		SKU        string
+	}{
+		{
+			MerchantID: `
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			`,
+			SKU: `
+			!!jsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			kjsdflaskjdflaskdjflaskjdflaksjdflaksjdflaksjdflakjsdflkjasdflkjasdlfkjasdflkjasdflksajd
+			`,
+		},
+		{
+			MerchantID: "brave.com",
+			SKU:        "anon-card-vote",
+		},
+		{
+			MerchantID: "",
+			SKU:        "anon-card-vote",
+		},
+		{
+			MerchantID: "brave.com",
+			SKU:        "",
+		},
+		{
+			MerchantID: "",
+			SKU:        "",
+		},
 	}
 
-	fmt.Println("issuerID: ", issuerID)
+	for _, v := range cases {
 
-	merchantIDPrime, skuPrime, err := decodeIssuerID(issuerID)
-	if err != nil {
-		t.Error("failed to encode: ", err)
+		issuerID, err := encodeIssuerID(v.MerchantID, v.SKU)
+		if err != nil {
+			t.Error("failed to encode: ", err)
+		}
+
+		merchantIDPrime, skuPrime, err := decodeIssuerID(issuerID)
+		if err != nil {
+			t.Error("failed to encode: ", err)
+		}
+
+		if v.MerchantID != merchantIDPrime {
+			t.Error(
+				fmt.Sprintf("merchantID does not match decoded: %s != %s", v.MerchantID, merchantIDPrime))
+		}
+
+		if v.SKU != skuPrime {
+			t.Error(
+				fmt.Sprintf("sku does not match decoded: %s != %s", v.SKU, skuPrime))
+		}
 	}
-
-	if merchantID != merchantIDPrime {
-		t.Error(
-			fmt.Sprintf("merchantID does not match decoded: %s != %s", merchantID, merchantIDPrime))
-	}
-
-	if sku != skuPrime {
-		t.Error(
-			fmt.Sprintf("sku does not match decoded: %s != %s", sku, skuPrime))
-	}
-
 }
