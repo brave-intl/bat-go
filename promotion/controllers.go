@@ -31,12 +31,6 @@ import (
 // RouterV2 for promotion endpoints
 func RouterV2(service *Service) chi.Router {
 	r := chi.NewRouter()
-	if os.Getenv("ENV") != "local" {
-		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
-	} else {
-		r.Method("POST", "/", CreatePromotion(service))
-	}
-
 	// version 2 clobbered claims
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 2)))
 
@@ -529,11 +523,14 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 
 // CreateClaims creates claims
 func CreateClaims(service *Service) handlers.AppHandler {
+<<<<<<< HEAD
 	if os.Getenv("ENV") == "production" {
 		return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 			return handlers.RenderContent(r.Context(), nil, w, http.StatusNotFound)
 		})
 	}
+=======
+>>>>>>> added claim generation endpoint
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req []ClaimInput
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -551,6 +548,7 @@ func CreateClaims(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error topping up wallet claims", http.StatusBadRequest)
 		}
+<<<<<<< HEAD
 		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
 	})
 }
@@ -604,5 +602,9 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			status = http.StatusCreated
 		}
 		return handlers.RenderContent(r.Context(), nil, w, status)
+=======
+
+		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
+>>>>>>> added claim generation endpoint
 	})
 }
