@@ -46,12 +46,15 @@ func RouterV2(service *Service) chi.Router {
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	createPromotion := CreatePromotion(service)
+	createClaims := CreateClaims(service)
 	if os.Getenv("ENV") != "local" {
-		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
-	} else {
-		r.Method("POST", "/", CreatePromotion(service))
+		createPromotion = middleware.SimpleTokenAuthorizedOnly(createPromotion).(handlers.AppHandler)
+		createClaims = middleware.SimpleTokenAuthorizedOnly(createPromotion).(handlers.AppHandler)
 	}
 
+	r.Method("POST", "/", middleware.InstrumentHandler("CreatePromotion", createPromotion))
+	r.Method("POST", "/claims", middleware.InstrumentHandler("CreateClaims", createClaims))
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
 	// version 1 clobbered claims
@@ -525,6 +528,29 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 	})
 }
 
+// CreateClaims creates claims
+func CreateClaims(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req []ClaimInput
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+		for _, item := range req {
+			_, err = govalidator.ValidateStruct(item)
+			if err != nil {
+				return handlers.WrapValidationError(err)
+			}
+		}
+
+		claims, err := service.datastore.CreateManyClaims(r.Context(), req)
+		if err != nil {
+			return handlers.WrapError(err, "Error topping up wallet claims", http.StatusBadRequest)
+		}
+		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
+	})
+}
+
 // BatLossPayload holds the data needed to report that bat has been lost by client bug
 type BatLossPayload struct {
 	Amount decimal.Decimal `json:"amount" valid:"required"`
@@ -534,10 +560,7 @@ type BatLossPayload struct {
 func PostReportWalletEvent(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req BatLossPayload
-		err := requestutils.ReadJSON(r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
-		}
+		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
 
 		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
 		if err != nil {

@@ -99,6 +99,9 @@ type Datastore interface {
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
+
+	// CreateManyClaims creates many claims for many wallets and many promotions
+	CreateManyClaims(ctx context.Context, claimInputs []ClaimInput) (*[]Claim, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -980,4 +983,81 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	`, orderID)
 
 	return sum, err
+}
+
+// ClaimInput creates a claim
+type ClaimInput struct {
+	WalletID    uuid.UUID       `json:"walletId" valid:"-"`
+	PromotionID uuid.UUID       `json:"promotionId" valid:"-"`
+	Value       decimal.Decimal `json:"value" valid:"-"`
+	Bonus       decimal.Decimal `json:"bonus" valid:"-"`
+	Legacy      bool            `json:"legacy" valid:"-"`
+}
+
+// CreateManyClaims creates many claims at once
+func (pg *Postgres) CreateManyClaims(ctx context.Context, claimInputs []ClaimInput) (*[]Claim, error) {
+	tx, err := pg.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.RollbackTx(tx)
+
+	createdClaims := []Claim{}
+	for _, claimInput := range claimInputs {
+		var promotions []Promotion
+		err := tx.Select(&promotions, "select * from promotions where id = $1 limit 1", claimInput.PromotionID)
+		if err != nil {
+			return nil, err
+		}
+		if len(promotions) == 0 {
+			return nil, errors.New("unable to find promotion")
+		}
+		promotion := promotions[0]
+		value := claimInput.Value
+		if value.LessThanOrEqual(decimal.Zero) || value.GreaterThanOrEqual(promotion.ApproximateValue) {
+			value = promotion.ApproximateValue
+		}
+		claims := []Claim{}
+		err = tx.Select(&claims, `
+		SELECT
+			*
+		FROM claims
+		WHERE wallet_id = $1
+			AND promotion_id = $2
+			AND (legacy_claimed or redeemed)
+		ORDER BY created_at DESC
+		`, claimInput.WalletID, claimInput.PromotionID)
+		if err != nil {
+			return nil, err
+		}
+		if len(claims) != 0 {
+			return nil, errors.New("unable to create duplicate promotion claim for wallet")
+		}
+		err = tx.Select(&claims, `
+		insert into claims (promotion_id, wallet_id, approximate_value, bonus)
+		values ($1, $2, $3, $4)
+		returning *`, promotion.ID, claimInput.WalletID, claimInput.Value, claimInput.Bonus)
+		if err != nil {
+			return nil, err
+		}
+		if claimInput.Legacy {
+			_, err := tx.ExecContext(ctx, `update claims set legacy_claimed = true
+			where promotion_id = $1`, promotion.ID)
+			if err != nil {
+				return nil, err
+			}
+			_, err = tx.ExecContext(ctx, `update promotions set remaining_grants = $2
+			where id = $1`, promotion.ID, promotion.RemainingGrants-1)
+			if err != nil {
+				return nil, err
+			}
+		}
+		createdClaims = append(createdClaims, claims[0])
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return &createdClaims, nil
 }

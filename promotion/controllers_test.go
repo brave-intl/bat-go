@@ -37,6 +37,7 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/crypto/ed25519"
 )
 
 type ControllersTestSuite struct {
@@ -843,6 +844,97 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
 }
 
+func (suite *ControllersTestSuite) TestCreatePromotionClaims() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
+	}
+	var issuerName string
+	mockCB.EXPECT().
+		CreateIssuer(gomock.Any(), gomock.Any(), gomock.Eq(defaultMaxTokensPerIssuer)).
+		DoAndReturn(func(ctx context.Context, name string, maxTokens int) error {
+			issuerName = name
+			return nil
+		})
+	mockCB.EXPECT().
+		GetIssuer(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, name string) (*cbr.IssuerResponse, error) {
+			return &cbr.IssuerResponse{
+				Name:      issuerName,
+				PublicKey: "",
+			}, nil
+		})
+	handler := CreatePromotion(service)
+
+	createRequest := CreatePromotionRequest{
+		Type:      "ugp",
+		NumGrants: 10,
+		Value:     decimal.NewFromFloat(20.0),
+		Platform:  "desktop",
+		Active:    true,
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/promotions", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
+	var promotion Promotion
+	err = json.Unmarshal(rr.Body.Bytes(), &promotion)
+	suite.Require().NoError(err, "response should be a promotion")
+
+	handler = CreateClaims(service)
+
+	w1, _, _ := suite.createWallet()
+	w2, _, _ := suite.createWallet()
+	suite.Require().NoError(pg.UpsertWallet(w1), "could not insert wallet")
+	suite.Require().NoError(pg.UpsertWallet(w2), "could not insert wallet")
+
+	createClaimsRequest := []ClaimInput{
+		{
+			PromotionID: promotion.ID,
+			WalletID:    uuid.Must(uuid.FromString(w1.ID)),
+			Value:       decimal.NewFromFloat(5),
+			Bonus:       decimal.NewFromFloat(10),
+			Legacy:      false,
+		}, {
+			PromotionID: promotion.ID,
+			WalletID:    uuid.Must(uuid.FromString(w2.ID)),
+			Value:       decimal.NewFromFloat(5),
+			Bonus:       decimal.NewFromFloat(10),
+			Legacy:      true,
+		},
+	}
+
+	body, err = json.Marshal(&createClaimsRequest)
+	suite.Require().NoError(err)
+
+	req, err = http.NewRequest("POST", "/v1/promotions/claims", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusCreated, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
+}
+
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
@@ -1133,6 +1225,22 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
 	}
+}
+
+func (suite *ControllersTestSuite) createWallet() (*wallet.Info, httpsignature.Ed25519PubKey, ed25519.PrivateKey) {
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	return &wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}, publicKey, privKey
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
