@@ -9,7 +9,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -35,24 +35,34 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// Iterate through each credential and assemble list of funding sources
-	_, _, fundingSources, err := service.GetCredentialRedemptions(ctx, credentials)
+	_, _, fundingSources, promotions, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
 		return err
 	}
 
-	for _, v := range fundingSources {
+	for k, v := range fundingSources {
 		if v.Type != "ads" {
 			return errors.New("Only ads suggestions can be drained")
 		}
 
-		var promotion Promotion
-		promotion.ID = v.PromotionID
-		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, &promotion)
+		fmt.Println(k)
+		fmt.Println(v)
+		fmt.Println(promotions)
+
+		promotion := promotions[k]
+
+		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			return fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
-		if v.Amount.GreaterThan(claim.ApproximateValue) {
+		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
+		if err != nil {
+			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
+		}
+
+		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
+		if v.Amount.GreaterThan(amountExpected) {
 			return errors.New("Cannot claim more funds than were earned")
 		}
 

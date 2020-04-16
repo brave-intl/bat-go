@@ -8,4 +8,6 @@ const (
 	DatastoreCTXKey CTXKey = "datastore"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key
 	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
+	// ServiceKey - the key used for service context
+	ServiceKey CTXKey = "service"
 )

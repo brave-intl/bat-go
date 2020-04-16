@@ -54,13 +54,13 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			}
 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			t1 := time.Now()
+			t1 := time.Now().UTC()
 			entry := hlog.FromRequest(r)
 			createSubLog(r, 0).
 				Msg("request started")
 
 			defer func() {
-				t2 := time.Now()
+				t2 := time.Now().UTC()
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {

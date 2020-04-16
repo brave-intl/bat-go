@@ -39,16 +39,18 @@ services:
       - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
-      - "RATIOS_SERVER=https://ratios.mercury.basicattentiontoken.org"
-      - RATIOS_TOKEN
+      - "RATIOS_SERVER=https://ratios-staging.mercury.basicattentiontoken.org"
+      - RATIOS_ACCESS_TOKEN
     volumes:
       - ./test/secrets:/etc/kafka/secrets
+      - ./migrations:/src/migrations
     depends_on:
       - kafka
       - postgres
       - challenge-bypass
     networks:
       - grant
+
   web:
     container_name: grant-web
     build:
@@ -73,6 +75,8 @@ services:
       - DONOR_WALLET_CARD_ID
       - DONOR_WALLET_PRIVATE_KEY
       - DONOR_WALLET_PUBLIC_KEY
+      - ENCRYPTION_KEY
+      - FEATURE_ORDERS
       - GRANT_SIGNATOR_PUBLIC_KEY
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY
@@ -90,6 +94,7 @@ services:
       - FEATURE_ORDERS
     volumes:
       - ./test/secrets:/etc/kafka/secrets
+      - ./migrations:/src/migrations
     depends_on:
       - kafka
       - postgres

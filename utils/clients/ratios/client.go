@@ -28,7 +28,7 @@ func New() (*HTTPClient, error) {
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	client, err := clients.New(serverURL, os.Getenv("RATIOS_TOKEN"))
+	client, err := clients.New(serverURL, os.Getenv("RATIOS_ACCESS_TOKEN"))
 	if err != nil {
 		return nil, err
 	}

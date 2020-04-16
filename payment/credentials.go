@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -17,6 +18,36 @@ const (
 	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
 )
 
+func decodeIssuerID(issuerID string) (string, string, error) {
+	var (
+		merchantID string
+		sku        string
+	)
+
+	u, err := url.Parse(issuerID)
+	if err != nil {
+		return "", "", fmt.Errorf("parse issuer name: %w", err)
+	}
+
+	sku = u.Query().Get("sku")
+	u.RawQuery = ""
+	merchantID = u.String()
+
+	return merchantID, sku, nil
+}
+
+func encodeIssuerID(merchantID, sku string) (string, error) {
+	v := url.Values{}
+	v.Add("sku", sku)
+
+	u, err := url.Parse(merchantID + "?" + v.Encode())
+	if err != nil {
+		return "", fmt.Errorf("parse merchant id: %w", err)
+	}
+
+	return u.String(), nil
+}
+
 // CredentialBinding includes info needed to redeem a single credential
 type CredentialBinding struct {
 	PublicKey     string `json:"publicKey" valid:"base64"`
@@ -26,10 +57,10 @@ type CredentialBinding struct {
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
-	ID         uuid.UUID `db:"id"`
-	CreatedAt  time.Time `db:"created_at"`
-	MerchantID string    `db:"merchant_id"`
-	PublicKey  string    `db:"public_key"`
+	ID         uuid.UUID `json:"id" db:"id"`
+	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
+	MerchantID string    `json:"merchantId" db:"merchant_id"`
+	PublicKey  string    `json:"publicKey" db:"public_key"`
 }
 
 // CreateIssuer creates a new challenge bypass credential issuer, saving it's information into the datastore
@@ -68,13 +99,13 @@ func (service *Service) GetOrCreateIssuer(ctx context.Context, merchantID string
 
 // OrderCreds encapsulates the credentials to be signed in response to a completed order
 type OrderCreds struct {
-	ID           uuid.UUID                  `db:"item_id"`
-	OrderID      uuid.UUID                  `db:"order_id"`
-	IssuerID     uuid.UUID                  `db:"issuer_id"`
-	BlindedCreds jsonutils.JSONStringArray  `db:"blinded_creds"`
-	SignedCreds  *jsonutils.JSONStringArray `db:"signed_creds"`
-	BatchProof   *string                    `db:"batch_proof"`
-	PublicKey    *string                    `db:"public_key"`
+	ID           uuid.UUID                  `json:"id" db:"item_id"`
+	OrderID      uuid.UUID                  `json:"orderId" db:"order_id"`
+	IssuerID     uuid.UUID                  `json:"issuerId" db:"issuer_id"`
+	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
+	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
+	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
+	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
 // CreateOrderCreds if the order is complete
@@ -88,21 +119,32 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 		return errors.New("order has not yet been paid")
 	}
 
-	issuer, err := service.GetOrCreateIssuer(ctx, order.MerchantID)
-	if err != nil {
-		return errorutils.Wrap(err, "error finding issuer")
-	}
+	// get the order items, need to create issuers based on the
+	// special sku values on the order items
+	for _, orderItem := range order.Items {
+		// generalized issuer based on sku and merchant id
+		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+		if err != nil {
+			return errorutils.Wrap(err, "error encoding issuer name")
+		}
 
-	orderCreds := OrderCreds{
-		ID:           itemID,
-		OrderID:      orderID,
-		IssuerID:     issuer.ID,
-		BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
-	}
+		// create the issuer
+		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
+		if err != nil {
+			return errorutils.Wrap(err, "error finding issuer")
+		}
 
-	err = service.datastore.InsertOrderCreds(&orderCreds)
-	if err != nil {
-		return errorutils.Wrap(err, "error inserting order creds")
+		orderCreds := OrderCreds{
+			ID:           itemID,
+			OrderID:      orderID,
+			IssuerID:     issuer.ID,
+			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
+		}
+
+		err = service.datastore.InsertOrderCreds(&orderCreds)
+		if err != nil {
+			return errorutils.Wrap(err, "error inserting order creds")
+		}
 	}
 
 	return nil
@@ -134,7 +176,7 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 }
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
-func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
 		issuers            = make(map[string]*Issuer)
@@ -146,6 +188,7 @@ func generateCredentialRedemptions(ctx context.Context, cb []CredentialBinding) 
 	}
 
 	for i := 0; i < len(cb); i++ {
+
 		var (
 			ok     bool
 			issuer *Issuer

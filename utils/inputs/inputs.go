@@ -11,6 +11,11 @@ type DecodeValidate interface {
 	Decodable
 }
 
+// DecodeAndValidateString - perform decode and validate of input in one swipe of a string input
+func DecodeAndValidateString(ctx context.Context, v DecodeValidate, input string) error {
+	return DecodeAndValidate(ctx, v, []byte(input))
+}
+
 // DecodeAndValidate - perform decode and validate of input in one swipe
 func DecodeAndValidate(ctx context.Context, v DecodeValidate, input []byte) error {
 	if err := v.Decode(ctx, input); err != nil {

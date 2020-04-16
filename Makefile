@@ -11,9 +11,9 @@ else
 endif
 
 TEST_PKG?=./...
-TEST_FLAGS= $(TEST_PKG)
+TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
-	TEST_FLAGS = $(TEST_PKG) --run=$(TEST_RUN)
+	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
 .PHONY: all bins docker test lint clean
@@ -45,11 +45,15 @@ docker-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm web make test
+	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev /bin/bash
+
+docker-refresh-dev:
+	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
 
 mac:
 	GOOS=darwin GOARCH=amd64 make bins
@@ -92,6 +96,7 @@ test:
 
 format:
 	gofmt -s -w ./
+
 format-lint:
 	make format && make lint
 lint:

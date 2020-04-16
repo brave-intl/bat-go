@@ -92,15 +92,10 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 		if len(walletIDText) > 0 {
 			if !govalidator.IsUUIDv4(walletIDText) {
-				return &handlers.AppError{
-					Message: "Error validating request query parameter",
-					Code:    http.StatusBadRequest,
-					Data: map[string]interface{}{
-						"validationErrors": map[string]string{
-							"paymentId": "paymentId must be a uuidv4",
-						},
-					},
-				}
+				return handlers.ValidationError("Error validating request query parameter",
+					map[string]string{
+						"paymentId": "paymentId must be a uuidv4",
+					})
 			}
 
 			tmp, err := uuid.FromString(walletIDText)
@@ -247,15 +242,10 @@ func GetClaim(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		claimID := chi.URLParam(r, "claimId")
 		if claimID == "" || !govalidator.IsUUIDv4(claimID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"claimId": "claimId must be a uuidv4",
-					},
-				},
-			}
+			return handlers.ValidationError("Error validating request url parameter",
+				map[string]string{
+					"claimId": "claimId must be a uuidv4",
+				})
 		}
 
 		id, err := uuid.FromString(claimID)

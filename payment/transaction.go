@@ -10,9 +10,9 @@ import (
 // Transaction includes information about a particular order. Status can be pending, failure, completed, or error.
 type Transaction struct {
 	ID                    uuid.UUID       `json:"id" db:"id"`
-	OrderID               uuid.UUID       `json:"order_id" db:"order_id"`
-	CreatedAt             time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt             time.Time       `json:"updated_at" db:"updated_at"`
+	OrderID               uuid.UUID       `json:"orderId" db:"order_id"`
+	CreatedAt             time.Time       `json:"createdAt" db:"created_at"`
+	UpdatedAt             time.Time       `json:"updatedAt" db:"updated_at"`
 	ExternalTransactionID string          `json:"external_transaction_id" db:"external_transaction_id"`
 	Status                string          `json:"status" db:"status"`
 	Currency              string          `json:"currency" db:"currency"`
