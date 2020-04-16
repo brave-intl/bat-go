@@ -32,7 +32,7 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 
 	// setup inputs
 	merchantID := uuid.NewV4()
-	pagination, err := inputs.NewPagination(ctx, "/?page=2&items=50&order=id.asc&order=createdAt.desc", "id", "createdAt")
+	ctx, pagination, err := inputs.NewPagination(ctx, "/?page=2&items=50&order=id.asc&order=createdAt.desc", new(Transaction))
 	if err != nil {
 		t.Errorf("failed to create pagination: %s\n", err)
 	}
@@ -65,7 +65,7 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 		WillReturnRows(getRows)
 
 	// call function under test with inputs
-	transactions, c, err := pg.GetPagedMerchantTransactions(context.Background(), merchantID, pagination)
+	transactions, c, err := pg.GetPagedMerchantTransactions(ctx, merchantID, pagination)
 
 	// test assertions
 	if err != nil {

@@ -525,12 +525,8 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		// inputs
 		// /merchants/{merchantID}/transactions?page=1&items=50&order=id
 		var (
-			ctx                = r.Context()
-			merchantID, mIDErr = inputs.NewMerchantID(ctx, chi.URLParam(r, "merchantID"))
-			pagination, pIDErr = inputs.NewPagination(ctx, r.URL.String(),
-				"id", "order_id", "created_at", "updated_at", "external_transaction_id",
-				"status", "currency", "kind", "amount",
-			)
+			merchantID, mIDErr      = inputs.NewMerchantID(r.Context(), chi.URLParam(r, "merchantID"))
+			ctx, pagination, pIDErr = inputs.NewPagination(r.Context(), r.URL.String(), new(Transaction))
 		)
 
 		// Check Validation Errors

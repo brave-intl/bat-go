@@ -255,7 +255,7 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 		merchantID,
 	}
 
-	orderBy := pagination.GetOrderBy()
+	orderBy := pagination.GetOrderBy(ctx)
 	if orderBy != "" {
 		getStatement += fmt.Sprintf(" ORDER BY %s", orderBy)
 	}

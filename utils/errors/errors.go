@@ -44,26 +44,26 @@ func Wrap(cause error, message string) error {
 
 // MultiError - allows for multiple errors, not necessarily chained
 type MultiError struct {
-	errs []error
+	Errs []error
 }
 
 // Append - append new errors to this multierror
 func (me *MultiError) Append(err ...error) {
-	if me.errs == nil {
-		me.errs = []error{}
+	if me.Errs == nil {
+		me.Errs = []error{}
 	}
-	me.errs = append(me.errs, err...)
+	me.Errs = append(me.Errs, err...)
 }
 
 // Count - get the number of errors contained herein
 func (me *MultiError) Count() int {
-	return len(me.errs)
+	return len(me.Errs)
 }
 
 // Error - implement Error interface
 func (me *MultiError) Error() string {
 	var errText string
-	for _, err := range me.errs {
+	for _, err := range me.Errs {
 		if errText == "" {
 			errText = fmt.Sprintf("%s", err)
 		} else {

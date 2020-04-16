@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -39,23 +41,25 @@ type Pagination struct {
 }
 
 // GetOrderBy - create the order by expression and parameters for pagination
-func (p Pagination) GetOrderBy() string {
+func (p Pagination) GetOrderBy(ctx context.Context) string {
 	var (
 		statement string
 	)
+	// get allowed values for order from context, if nothing allow all values
+	if okOrder, ok := ctx.Value(appctx.PaginationOrderOptionsCTXKey).(map[string]string); ok {
+		for _, po := range p.Order {
+			if statement != "" {
+				// not the first statement
+				statement += ", "
+			}
+			statement += fmt.Sprintf("%s ", okOrder[po.Attribute])
 
-	for _, po := range p.Order {
-		if statement != "" {
-			// not the first statement
-			statement += ", "
-		}
-		statement += fmt.Sprintf("%s ", po.Attribute)
-
-		if po.Direction != "" {
-			if po.Direction == Ascending {
-				statement += " ASC "
-			} else if po.Direction == Descending {
-				statement += " DESC "
+			if po.Direction != "" {
+				if po.Direction == Ascending {
+					statement += " ASC "
+				} else if po.Direction == Descending {
+					statement += " DESC "
+				}
 			}
 		}
 	}
@@ -73,7 +77,7 @@ func (p *Pagination) Validate(ctx context.Context) error {
 	}
 
 	// get allowed values for order from context, if nothing allow all values
-	if okOrder, ok := ctx.Value(appctx.PaginationOrderOptionsCTXKey).(map[string]bool); ok {
+	if okOrder, ok := ctx.Value(appctx.PaginationOrderOptionsCTXKey).(map[string]string); ok {
 		for _, o := range p.Order {
 			if _, ok := okOrder[o.Attribute]; !ok {
 				errs.Append(fmt.Errorf("order parameter '%s' is not allowed", o.Attribute))
@@ -125,9 +129,10 @@ func (p *Pagination) Decode(ctx context.Context, v []byte) error {
 		if len(parts) > 1 && parts[1] != "" {
 			if string(Ascending) == strings.ToUpper(parts[1]) {
 				po.Direction = Ascending
-			}
-			if string(Descending) == strings.ToUpper(parts[1]) {
+			} else if string(Descending) == strings.ToUpper(parts[1]) {
 				po.Direction = Descending
+			} else {
+				return fmt.Errorf("failed to parse order direction: %s", strings.ToUpper(parts[1]))
 			}
 		}
 		p.Order = append(p.Order, po)
@@ -137,25 +142,58 @@ func (p *Pagination) Decode(ctx context.Context, v []byte) error {
 	return nil
 }
 
+var (
+	jsonTagRE = regexp.MustCompile(`json:"(.*?)"`)
+	dbTagRE   = regexp.MustCompile(`db:"(.*?)"`)
+)
+
 // NewPagination - create a new Pagination struct and populate from url and order options
-func NewPagination(ctx context.Context, url string, orderOptions ...string) (*Pagination, error) {
+func NewPagination(ctx context.Context, url string, v interface{}) (context.Context, *Pagination, error) {
 	var (
 		pagination = new(Pagination)
-		order      = map[string]bool{}
+		order      = map[string]string{}
 	)
-	// allowed pagination ordering attributes
-	for _, o := range orderOptions {
-		order[o] = true
+
+	// for the number of fields the struct v has
+	for i := 0; i < reflect.TypeOf(v).Elem().NumField(); i++ {
+		// get the struct tags to produce a mapping of json -> db
+		tag := string(reflect.TypeOf(v).Elem().Field(i).Tag)
+
+		// if we do have a tag
+		if tag != "" {
+			var (
+				k string
+				v string
+			)
+
+			// find the json tag
+			jsonMatch := jsonTagRE.FindStringSubmatch(tag)
+			if len(jsonMatch) > 1 {
+				k = strings.Split(jsonMatch[1], ",")[0]
+			}
+			dbMatch := dbTagRE.FindStringSubmatch(tag)
+			if len(dbMatch) > 1 {
+				v = strings.Split(dbMatch[1], ",")[0]
+			}
+
+			if k != "" && v != "" {
+				order[k] = v
+			}
+		}
 	}
+
 	ctx = context.WithValue(ctx, appctx.PaginationOrderOptionsCTXKey, order)
 
 	if err := DecodeAndValidate(ctx, pagination, []byte(url)); err != nil {
-		return nil, handlers.ValidationError(
-			"Error decoding or validating request pagination url parameter",
-			map[string]interface{}{
-				"pagination": "pagination failed validation",
-			},
+		var (
+			veParam        = map[string]interface{}{}
+			message string = err.Error()
+			me      *errorutils.MultiError
 		)
+		if errors.As(err, &me) {
+			veParam["pagination"] = me.Errs
+		}
+		return ctx, nil, handlers.ValidationError(message, veParam)
 	}
-	return pagination, nil
+	return ctx, pagination, nil
 }
