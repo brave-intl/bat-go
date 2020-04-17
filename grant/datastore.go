@@ -124,10 +124,11 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 		res sql.Result
 	)
 
+	fmt.Println("reclaim", reclaim)
 	// if !reclaim, then we need to put in place a 3 month lockout based on the created at
 	if reclaim {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err = tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promo.ID)
+		res, err = tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active and expires_at > NOW()`, promo.ID)
 	} else {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
 		res, err = tx.Exec(`
