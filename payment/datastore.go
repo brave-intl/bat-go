@@ -47,9 +47,16 @@ type Datastore interface {
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	// GetOrderCredsByItemID retrieves an order credential by item id
-	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error)
+	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
+
+	// GetKeys ret
+	GetKeys(merchant string, showExpired bool) (*[]Key, error)
+	// CreateKey
+	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
+	// DeleteKey
+	DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error)
 
 	// Votes
 	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
@@ -80,6 +87,73 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 		return &Postgres{*pg}, err
 	}
 	return nil, err
+}
+
+// CreateKey creates an encrypted key in the database based on the merchant
+func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error) {
+	// interface and create an api key
+	var key Key
+	err := pg.DB.Get(&key, `
+			INSERT INTO api_keys (merchant_id, name, encrypted_secret_key, nonce)
+			VALUES ($1, $2, $3, $4)
+			RETURNING *
+		`,
+		merchant, name, encryptedSecretKey, nonce)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key for merchant: %w", err)
+	}
+	err = key.SetSecretKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
+	}
+
+	return &key, nil
+}
+
+// DeleteKey updates a key with an expiration time based on the id
+func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
+	var key Key
+	err := pg.DB.Get(&key, `
+			UPDATE api_keys
+			SET expiry=(current_timestamp + $2)
+			WHERE id=$1
+		RETURNING *
+		`, id.String(), fmt.Sprintf("%vs", delaySeconds))
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to update key for merchant: %w", err)
+	}
+
+	err = key.SetSecretKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
+	}
+
+	return &key, nil
+}
+
+// GetKeys returns a list of active API keys
+func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
+	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
+	if showExpired {
+		expiredQuery = ""
+	}
+
+	var keys []Key
+	err := pg.DB.Select(&keys, `
+			SELECT * FROM api_keys
+			WHERE merchant_id = $1
+		`+expiredQuery+" ORDER BY name, created_at",
+		merchant)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get keys for merchant: %w", err)
+	}
+
+	return &keys, nil
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
@@ -310,9 +384,15 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 }
 
 // GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
-func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*OrderCreds, error) {
+func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
-	err := pg.DB.Get(&orderCreds, "select * from order_creds where order_id = $1 and item_id = $2", orderID, itemID)
+
+	query := "select * from order_creds where order_id = $1 and item_id = $2"
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.DB.Get(&orderCreds, query, orderID, itemID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {

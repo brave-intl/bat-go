@@ -78,6 +78,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
+		r.Use(chiware.Recoverer)
 	}
 
 	roDB := os.Getenv("RO_DATABASE_URL")
@@ -157,6 +158,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+		if os.Getenv("FEATURE_ORDERS") != "" {
+			r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
+		}
 	}
 	r.Get("/metrics", middleware.Metrics())
 

@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
+	// ServiceKey - the key used for service context
+	ServiceKey CTXKey = "service"
 	// RatiosServerCTXKey - the context key for getting the ratios server
 	RatiosServerCTXKey CTXKey = "ratios_server"
 	// RatiosAccessTokenCTXKey - the context key for getting the ratios server access token

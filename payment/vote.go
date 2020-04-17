@@ -20,11 +20,21 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const (
+	// UserWalletVoteSKU - special vote sku to denote user wallet funding
+	UserWalletVoteSKU string = "user-wallet-vote"
+	// AnonCardVoteSKU - special vote sku to denote anon-card funding
+	AnonCardVoteSKU = "anon-card-vote"
+	// UnknownVoteSKU - special vote sku to denote unknown funding
+	UnknownVoteSKU = "unknown-vote"
+)
+
 // Vote encapsulates information from the browser about attention
 type Vote struct {
-	Type      string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel   string `json:"channel" valid:"-"`
-	VoteTally int64  `json:"voteTally"`
+	Type          string `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
+	Channel       string `json:"channel" valid:"-"`
+	VoteTally     int64  `json:"-" valid:"-"`
+	FundingSource string `json:"-" valid:"-"`
 }
 
 // Validate - implement inputs.Validatable interface for input
@@ -66,10 +76,10 @@ func (v *Vote) Base64Decode(text string) error {
 	}
 */
 
-// VoteEvent encapsulates user and server provided information about a request to contribute
+// VoteEvent encapsulates user and server provided information about a request to contribute kafka event
 type VoteEvent struct {
-	Type          string          `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip)"`
-	Channel       string          `json:"channel" valid:"-"`
+	Type          string          `json:"type"`
+	Channel       string          `json:"channel"`
 	ID            uuid.UUID       `json:"id"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	BaseVoteValue decimal.Decimal `json:"baseVoteValue"`
@@ -86,7 +96,7 @@ func NewVoteEvent(v Vote) (*VoteEvent, error) {
 			Channel:       v.Channel,
 			CreatedAt:     time.Now().UTC(),
 			VoteTally:     v.VoteTally,
-			FundingSource: "uphold",
+			FundingSource: v.FundingSource,
 		}
 		err error
 	)
@@ -214,33 +224,70 @@ func (service *Service) Vote(
 		return fmt.Errorf("error generating credential redemptions: %w", err)
 	}
 
-	// get a new VoteEvent to emit to kafka based on our input vote
-	voteEvent, err := NewVoteEvent(vote)
-	if err != nil {
-		return fmt.Errorf("failed to convert vote to kafka vote event: %w", err)
+	var credsByIssuer = map[string][]cbr.CredentialRedemption{}
+
+	if len(requestCredentials) > 0 {
+		for _, rc := range requestCredentials {
+			credsByIssuer[rc.Issuer] = append(credsByIssuer[rc.Issuer], rc)
+		}
 	}
 
-	// encode the event for processing
-	voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
-	if err != nil {
-		return fmt.Errorf("failed to encode avro codec: %w", err)
-	}
+	// for each issuer we will create a vote with a particular vote tally
+	for k, v := range credsByIssuer {
+		vote.VoteTally = int64(len(v))
+		// k holds the issuer name string, which has encoded in the funding source
+		// draw out the funding source and set it here.
 
-	rcSerial, err := json.Marshal(requestCredentials)
-	if err != nil {
-		return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
-	}
+		merchantID, sku, err := decodeIssuerID(k)
+		if err != nil {
+			return fmt.Errorf("failed to decode issuer name for sku: %w", err)
+		}
 
-	// insert serialized event into db
-	if err = service.datastore.InsertVote(
-		ctx, VoteRecord{
-			RequestCredentials: string(rcSerial),
-			VoteText:           voteText,
-			VoteEventBinary:    voteEventBinary,
-		}); err != nil {
-		return fmt.Errorf("datastore failure vote_drain: %w", err)
-	}
+		if merchantID != "brave.com" {
+			// validate that the merchantID is brave.com
+			// if not do not log these votes
+			continue
+		}
 
+		// get the part after the issuerSepartor
+		switch sku {
+		case UserWalletVoteSKU:
+			vote.FundingSource = "user-wallet"
+		case AnonCardVoteSKU:
+			vote.FundingSource = "anonymous-card"
+		default:
+			// Will only get here if we get an unknown Vote SKU from issuer
+			vote.FundingSource = "unknown"
+			log.Printf("funding source unknown based on the issuer-name: %s\n", k)
+		}
+
+		// get a new VoteEvent to emit to kafka based on our input vote
+		voteEvent, err := NewVoteEvent(vote)
+		if err != nil {
+			return fmt.Errorf("failed to convert vote to kafka vote event: %w", err)
+		}
+
+		// encode the event for processing
+		voteEventBinary, err := voteEvent.CodecEncode(service.codecs["vote"])
+		if err != nil {
+			return fmt.Errorf("failed to encode avro codec: %w", err)
+		}
+
+		rcSerial, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("failed to encode request credentials for vote drain: %w", err)
+		}
+
+		// insert serialized event into db
+		if err = service.datastore.InsertVote(
+			ctx, VoteRecord{
+				RequestCredentials: string(rcSerial),
+				VoteText:           voteText,
+				VoteEventBinary:    voteEventBinary,
+			}); err != nil {
+			return fmt.Errorf("datastore failure vote_drain: %w", err)
+		}
+	}
 	// at this point, after the vote is added to the database queue, we will let
 	// the service DrainVoteQueue handle the redemptions and kafka messages
 
