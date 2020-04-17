@@ -58,7 +58,6 @@ func (service *Service) ClaimPromotionForWallet(
 	promotionID uuid.UUID,
 	walletID uuid.UUID,
 	blindedCreds []string,
-	migrate bool,
 ) (*uuid.UUID, error) {
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
@@ -123,13 +122,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	claim, err = service.datastore.ClaimForWallet(
-		promotion,
-		issuer,
-		wallet,
-		jsonutils.JSONStringArray(blindedCreds),
-		migrate,
-	)
+	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
