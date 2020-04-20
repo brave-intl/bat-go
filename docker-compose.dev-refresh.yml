@@ -32,6 +32,7 @@ services:
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
       - ENCRYPTION_KEY=AES256Key-32Characters1234567890
       - FEATURE_ORDERS=true
+      - FEATURE_MERCHANT=true
       - DONOR_WALLET_CARD_ID
       - DONOR_WALLET_PRIVATE_KEY
       - DONOR_WALLET_PUBLIC_KEY
