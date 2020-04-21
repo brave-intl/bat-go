@@ -985,7 +985,7 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	return sum, err
 }
 
-// ClaimInput creates a claim
+// ClaimInput contains the information needed to create a claim
 type ClaimInput struct {
 	WalletID    uuid.UUID       `json:"walletId" valid:"-"`
 	PromotionID uuid.UUID       `json:"promotionId" valid:"-"`

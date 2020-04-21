@@ -50,9 +50,8 @@ func Router(service *Service) chi.Router {
 	createClaims := CreateClaims(service)
 	if os.Getenv("ENV") != "local" {
 		createPromotion = middleware.SimpleTokenAuthorizedOnly(createPromotion).(handlers.AppHandler)
-		createClaims = middleware.SimpleTokenAuthorizedOnly(createPromotion).(handlers.AppHandler)
+		createClaims = middleware.SimpleTokenAuthorizedOnly(createClaims).(handlers.AppHandler)
 	}
-
 	r.Method("POST", "/", middleware.InstrumentHandler("CreatePromotion", createPromotion))
 	r.Method("POST", "/claims", middleware.InstrumentHandler("CreateClaims", createClaims))
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
@@ -530,6 +529,11 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 
 // CreateClaims creates claims
 func CreateClaims(service *Service) handlers.AppHandler {
+	if os.Getenv("ENV") == "production" {
+		return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+			return handlers.RenderContent(r.Context(), nil, w, http.StatusNotFound)
+		})
+	}
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req []ClaimInput
 		err := requestutils.ReadJSON(r.Body, &req)
