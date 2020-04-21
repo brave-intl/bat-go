@@ -47,13 +47,16 @@ func MerchantRouter(service *Service) chi.Router {
 	// We can use this service context instead of having
 	r.Use(middleware.NewServiceCtx(service))
 
+	// Instrumentation Handler must be last middleware in chain
+	r.Use(middleware.InstrumentHandler)
+
 	// RESTy routes for "merchant" resource
 	r.Route("/", func(r chi.Router) {
 		r.Route("/{merchantID}", func(mr chi.Router) {
 			mr.Route("/keys", func(kr chi.Router) {
-				kr.Method("GET", "/", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
-				kr.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
-				kr.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+				kr.Method("GET", "/", GetKeys(service))
+				kr.Method("POST", "/", CreateKey(service))
+				kr.Method("DELETE", "/{id}", DeleteKey(service))
 			})
 		})
 	})
