@@ -54,6 +54,9 @@ func MerchantRouter(service *Service) chi.Router {
 				kr.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
 				kr.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
 			})
+			mr.Route("/transactions", func(kr chi.Router) {
+				kr.Method("GET", "/", middleware.InstrumentHandler("MerchantTransactions", MerchantTransactions(service)))
+			})
 		})
 	})
 
