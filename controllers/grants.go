@@ -40,7 +40,7 @@ func GrantsRouter(service *grant.Service) chi.Router {
 	// Hacky compatibility layer between for legacy grants and new datastore
 	r.Method("GET", "/active", GetActive(service))
 	r.Method("POST", "/drain", DrainGrants(service))
-	r.Method("POST", "/claim", Claim(service))
+	r.Method("POST", "/claim", ClaimGrant(service))
 	r.Method("GET", "/", handlers.AppHandler(Status))
 	return r
 }
@@ -88,8 +88,8 @@ func GetActive(service *grant.Service) handlers.AppHandler {
 	})
 }
 
-// Claim is the handler for claiming grants
-func Claim(service *grant.Service) handlers.AppHandler {
+// ClaimGrant is the handler for claiming grants
+func ClaimGrant(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		if os.Getenv("ENV") != "local" {
 			return handlers.WrapError(errors.New("claiming is currently unavailable"), "unable to claim", 503)

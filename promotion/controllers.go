@@ -38,7 +38,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", GetClaimSummary(service))
 	r.Method("GET", "/", GetAvailablePromotions(service))
-	r.Method("POST", "/reportclobberedclaims", PostReportClobberedClaims(service))
+	r.Method("POST", "/reportclobberedclaims", ReportClobberedClaims(service))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(ClaimPromotion(service)))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", GetClaim(service))
 	return r
@@ -484,8 +484,8 @@ type ClobberedClaimsRequest struct {
 	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
 }
 
-// PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
-func PostReportClobberedClaims(service *Service) handlers.AppHandler {
+// ReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
+func ReportClobberedClaims(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Body, &req)
