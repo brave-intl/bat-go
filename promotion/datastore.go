@@ -247,13 +247,14 @@ VALUES ($1, $2, $3, $4)`
 		return false, err
 	}
 	if len(BATLossEvents) == 0 {
-		_, err = tx.Exec(
+		_, err := tx.Exec(
 			insertBATLossEventStatement,
 			paymentID.String(),
 			reportID,
 			amount,
 			platform,
 		)
+
 		if err != nil {
 			return false, err
 		}

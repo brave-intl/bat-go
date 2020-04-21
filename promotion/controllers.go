@@ -523,14 +523,11 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 
 // CreateClaims creates claims
 func CreateClaims(service *Service) handlers.AppHandler {
-<<<<<<< HEAD
 	if os.Getenv("ENV") == "production" {
 		return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 			return handlers.RenderContent(r.Context(), nil, w, http.StatusNotFound)
 		})
 	}
-=======
->>>>>>> added claim generation endpoint
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req []ClaimInput
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -548,7 +545,6 @@ func CreateClaims(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error topping up wallet claims", http.StatusBadRequest)
 		}
-<<<<<<< HEAD
 		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
 	})
 }
@@ -562,7 +558,10 @@ type BatLossPayload struct {
 func PostReportWalletEvent(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req BatLossPayload
-		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
 
 		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
 		if err != nil {
@@ -591,6 +590,7 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			req.Amount,
 			platform,
 		)
+		fmt.Println("erred", err)
 		if err != nil {
 			if errors.Is(err, errorutils.ErrConflictBATLossEvent) {
 				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
@@ -602,9 +602,5 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			status = http.StatusCreated
 		}
 		return handlers.RenderContent(r.Context(), nil, w, status)
-=======
-
-		return handlers.RenderContent(r.Context(), claims, w, http.StatusCreated)
->>>>>>> added claim generation endpoint
 	})
 }

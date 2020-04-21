@@ -1034,12 +1034,11 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	}
 	suite.Require().Equal(http.StatusCreated, run(walletID1, decimal.NewFromFloat(10), "").Code)
 	suite.Require().Equal(http.StatusOK, run(walletID1, decimal.NewFromFloat(10), "").Code)
-	suite.Require().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(11), "").Code)
+	suite.Assert().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(11), "").Code)
 
 	walletEvents := []BATLossEvent{}
 	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events`))
 	serializedActual1, err := json.Marshal(&walletEvents)
-	// fmt.Println("serialized", string(serialized))
 	serializedExpected1, err := json.Marshal([]BATLossEvent{{
 		ID:       walletEvents[0].ID,
 		WalletID: walletID1,
