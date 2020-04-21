@@ -158,9 +158,21 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
-		if os.Getenv("FEATURE_ORDERS") != "" {
-			r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
+	}
+	if os.Getenv("FEATURE_MERCHANT") != "" {
+		paymentPG, err := payment.NewPostgres("", true, "payment_db")
+		if err != nil {
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
+			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
+		paymentService, err := payment.InitService(paymentPG)
+		if err != nil {
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
+			log.Panic().Err(err).Msg("Payment service initialization failed")
+		}
+		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
 
