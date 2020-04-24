@@ -96,7 +96,7 @@ func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey s
 	err := pg.DB.Get(&key, `
 			INSERT INTO api_keys (merchant_id, name, encrypted_secret_key, nonce)
 			VALUES ($1, $2, $3, $4)
-			RETURNING *
+			RETURNING id, name, merchant_id, encrypted_secret_key, nonce, created_at, expiry
 		`,
 		merchant, name, encryptedSecretKey, nonce)
 
@@ -118,18 +118,13 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 			UPDATE api_keys
 			SET expiry=(current_timestamp + $2)
 			WHERE id=$1
-		RETURNING *
+			RETURNING id, name, merchant_id, created_at, expiry
 		`, id.String(), fmt.Sprintf("%vs", delaySeconds))
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to update key for merchant: %w", err)
-	}
-
-	err = key.SetSecretKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
 	}
 
 	return &key, nil
@@ -144,7 +139,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 
 	var keys []Key
 	err := pg.DB.Select(&keys, `
-			SELECT * FROM api_keys
+			SELECT id, name, merchant_id, created_at, expiry FROM api_keys
 			WHERE merchant_id = $1
 		`+expiredQuery+" ORDER BY name, created_at",
 		merchant)
@@ -164,7 +159,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	err := tx.Get(&order, `
 			INSERT INTO orders (total_price, merchant_id, status, currency, location)
 			VALUES ($1, $2, $3, $4, $5)
-			RETURNING *
+			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status
 		`,
 		totalPrice, merchantID, status, currency, location)
 
@@ -178,7 +173,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		nstmt, _ := tx.PrepareNamed(`
 			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
 			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
-			RETURNING *
+			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])
 
@@ -198,7 +193,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
-	statement := "SELECT * FROM orders WHERE id = $1"
+	statement := `
+		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status
+		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.DB.Get(&order, statement, orderID)
 	if err == sql.ErrNoRows {
@@ -208,7 +205,9 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	foundOrderItems := []OrderItem{}
-	statement = "SELECT * FROM order_items WHERE order_id = $1"
+	statement = `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description
+		FROM order_items WHERE order_id = $1`
 	err = pg.DB.Select(&foundOrderItems, statement, orderID)
 
 	order.Items = foundOrderItems
@@ -221,7 +220,9 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 // GetTransactions returns the list of transactions given an orderID
 func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
-	statement := "SELECT * FROM transactions WHERE order_id = $1"
+	statement := `
+		SELECT id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
+		FROM transactions WHERE order_id = $1`
 	transactions := []Transaction{}
 	err := pg.DB.Select(&transactions, statement, orderID)
 
@@ -234,7 +235,9 @@ func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
 
 // GetTransaction returns a single of transaction given an external transaction Id
 func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, error) {
-	statement := "SELECT * FROM transactions WHERE external_transaction_id = $1"
+	statement := `
+		SELECT id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
+		FROM transactions WHERE external_transaction_id = $1`
 	transaction := Transaction{}
 	err := pg.DB.Get(&transaction, statement, externalTransactionID)
 
@@ -274,7 +277,7 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 		`
 			INSERT INTO transactions (order_id, external_transaction_id, status, currency, kind, amount)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING *
+			RETURNING id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
@@ -306,9 +309,9 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 // InsertIssuer inserts the given issuer
 func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	statement := `
-	insert into order_cred_issuers (merchant_id, public_key)
-	values ($1, $2)
-	returning *`
+	INSERT INTO order_cred_issuers (merchant_id, public_key)
+	VALUES ($1, $2)
+	RETURNING id, created_at, merchant_id, public_key`
 	var issuers []Issuer
 	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
@@ -324,7 +327,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 
 // GetIssuer retrieves the given issuer
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where merchant_id = $1"
+	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where merchant_id = $1"
 	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, merchantID)
 	if err != nil {
@@ -336,7 +339,7 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 
 // GetIssuerByPublicKey or return an error
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
-	statement := "select * from order_cred_issuers where public_key = $1"
+	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where public_key = $1"
 	var issuer Issuer
 	err := pg.DB.Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
@@ -366,7 +369,10 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error) {
 	orderCreds := []OrderCreds{}
 
-	query := "select * from order_creds where order_id = $1"
+	query := `
+		select item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		from order_creds
+		where order_id = $1`
 	if isSigned {
 		query += " and signed_creds is not null"
 	}
@@ -387,7 +393,10 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
 
-	query := "select * from order_creds where order_id = $1 and item_id = $2"
+	query := `
+		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		FROM order_creds
+		WHERE order_id = $1 AND item_id = $2`
 	if isSigned {
 		query += " and signed_creds is not null"
 	}
@@ -500,19 +509,23 @@ func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bo
 	}
 
 	statement := `
-select
-	order_cred_issuers.*,
+SELECT
+	order_cred_issuers.id,
+	order_cred_issuers.created_at,
+	order_cred_issuers.merchant_id,
+	order_cred_issuers.public_key,
 	order_cred.order_id,
 	order_cred.blinded_creds
-from
-	(select *
-	from order_creds
-	where batch_proof is null
-	for update skip locked
-	limit 1
-) order_cred
-inner join order_cred_issuers
-on order_cred.issuer_id = order_cred_issuers.id`
+FROM
+	(
+		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		FROM order_creds
+		WHERE batch_proof is null
+		FOR UPDATE skip locked
+		limit 1
+	) order_cred
+INNER JOIN order_cred_issuers
+ON order_cred.issuer_id = order_cred_issuers.id`
 
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
