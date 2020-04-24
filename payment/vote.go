@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	// ErrInvalidSKU - the sku was invalid
+	// ErrInvalidSKUToken - the sku was invalid
 	ErrInvalidSKUToken = errors.New("failed to validate sku token")
 	// ErrInvalidSKUTokenSKU - the sku was invalid
 	ErrInvalidSKUTokenSKU = fmt.Errorf("invalid sku in sku token: %w", ErrInvalidSKUToken)
