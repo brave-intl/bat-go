@@ -281,6 +281,10 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		return nil, err
 	}
 
+	if promotion.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, errors.New("unable to claim expired promotion")
+	}
+
 	tx, err := pg.DB.Beginx()
 	if err != nil {
 		return nil, err
@@ -300,9 +304,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
 		legacyClaimExists = true
-		if promotion.ExpiresAt.Before(time.Now().UTC()) {
-			return nil, errors.New("unable to claim expired promotion")
-		}
 	}
 
 	if !legacyClaimExists {
