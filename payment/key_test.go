@@ -1,9 +1,32 @@
 package payment
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 )
+
+func TestGenerateSecret(t *testing.T) {
+	// set up the aes key, typically done with env variable atm
+	oldAESKey := AESKey
+	defer func() {
+		AESKey = oldAESKey
+	}()
+	AESKey = "123456789012345678901234"
+	s, n, err := GenerateSecret()
+	if err != nil {
+		t.Error("error in generate secret: ", err)
+	}
+	secretKey, err := decryptSecretKey(s, n)
+	// secretKey is random, so i guess just make sure it is base64?
+	k, err := base64.URLEncoding.DecodeString(secretKey)
+	if err != nil {
+		t.Error("error decoding generated secret: ", err)
+	}
+	if len(k) < 0 {
+		t.Error("the key should be bigger than nothing")
+	}
+}
 
 func TestSecretKey(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
