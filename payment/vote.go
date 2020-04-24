@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -25,8 +26,15 @@ const (
 	UserWalletVoteSKU string = "user-wallet-vote"
 	// AnonCardVoteSKU - special vote sku to denote anon-card funding
 	AnonCardVoteSKU = "anon-card-vote"
-	// UnknownVoteSKU - special vote sku to denote unknown funding
-	UnknownVoteSKU = "unknown-vote"
+)
+
+var (
+	// ErrInvalidSKU - the sku was invalid
+	ErrInvalidSKUToken = errors.New("failed to validate sku token")
+	// ErrInvalidSKUTokenSKU - the sku was invalid
+	ErrInvalidSKUTokenSKU = fmt.Errorf("invalid sku in sku token: %w", ErrInvalidSKUToken)
+	// ErrInvalidSKUTokenBadMerchant - the merchant in the sku is invalid
+	ErrInvalidSKUTokenBadMerchant = fmt.Errorf("invalid merchant id in sku token: %w", ErrInvalidSKUToken)
 )
 
 // Vote encapsulates information from the browser about attention
@@ -245,8 +253,8 @@ func (service *Service) Vote(
 
 		if merchantID != "brave.com" {
 			// validate that the merchantID is brave.com
-			// if not do not log these votes
-			continue
+			// if not hard fail the request, and return an error stating the problem
+			return fmt.Errorf("merchant id != brave.com: %w", ErrInvalidSKUTokenBadMerchant)
 		}
 
 		// get the part after the issuerSepartor
@@ -257,9 +265,11 @@ func (service *Service) Vote(
 			vote.FundingSource = "anonymous-card"
 		default:
 			// Will only get here if we get an unknown Vote SKU from issuer
-			vote.FundingSource = "unknown"
-			log.Printf("funding source unknown based on the issuer-name: %s\n", k)
+			log.Printf("sku is invalid in sku token - should be either user-wallet or anonymous-card: %s\n", sku)
+			return fmt.Errorf("%s is an invalid sku: %w", sku, ErrInvalidSKUTokenSKU)
 		}
+
+		// validation has completed.
 
 		// get a new VoteEvent to emit to kafka based on our input vote
 		voteEvent, err := NewVoteEvent(vote)
