@@ -30,6 +30,8 @@ type Datastore interface {
 	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
+	// DeactivatePromotion marks a particular promotion as inactive
+	DeactivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
@@ -173,7 +175,17 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 
 // ActivatePromotion marks a particular promotion as active
 func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
-	_, err := pg.DB.Exec("update promotions set active = true where id = $1", promotion.ID)
+	return pg.setPromotionActive(promotion, true)
+}
+
+// DeactivatePromotion marks a particular promotion as not active
+func (pg *Postgres) DeactivatePromotion(promotion *Promotion) error {
+	return pg.setPromotionActive(promotion, false)
+}
+
+// setPromotionActive marks a particular promotion's active value
+func (pg *Postgres) setPromotionActive(promotion *Promotion, active bool) error {
+	_, err := pg.DB.Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
 	if err != nil {
 		return err
 	}
@@ -269,6 +281,10 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		return nil, err
 	}
 
+	if promotion.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, errors.New("unable to claim expired promotion")
+	}
+
 	tx, err := pg.DB.Beginx()
 	if err != nil {
 		return nil, err
@@ -292,7 +308,15 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 
 	if !legacyClaimExists {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+		res, err := tx.Exec(`
+			update promotions
+			set remaining_grants = remaining_grants - 1
+			where
+				id = $1 and
+				active and
+				promotions.created_at > NOW() - INTERVAL '3 months'`,
+			promotion.ID)
+
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +392,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from
-		  (
+			(
 				select
 					promotions.*,
 					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
@@ -380,10 +404,13 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			promos.active and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			wallet_claims.redeemed is distinct from true and (
+				wallet_claims.legacy_claimed is true or (
+					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
+						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+					)
+				)
 			)
 		order by promos.created_at;`
 
@@ -821,7 +848,7 @@ limit 1`
 }
 
 // UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 

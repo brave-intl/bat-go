@@ -2,6 +2,7 @@ package grant
 
 import (
 	"context"
+	"errors"
 
 	promotion "github.com/brave-intl/bat-go/promotion"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -33,6 +34,10 @@ func (service *Service) ClaimPromotion(ctx context.Context, wallet wallet.Info, 
 	promotion, err := service.datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "could not find promotion")
+	}
+
+	if promotion == nil {
+		return nil, errors.New("unable to find promotion")
 	}
 
 	// No reputation check as this endpoint requires authorization
