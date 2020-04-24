@@ -34,7 +34,7 @@ type OrderItem struct {
 	Currency    string               `json:"currency" db:"currency"`
 	Quantity    int                  `json:"quantity" db:"quantity"`
 	Price       decimal.Decimal      `json:"price" db:"price"`
-	Subtotal    decimal.Decimal      `json:"subtotal"`
+	Subtotal    decimal.Decimal      `json:"subtotal" db:"subtotal"`
 	Location    datastore.NullString `json:"location" db:"location"`
 	Description datastore.NullString `json:"description" db:"description"`
 }
