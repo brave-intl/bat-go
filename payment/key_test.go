@@ -18,6 +18,9 @@ func TestGenerateSecret(t *testing.T) {
 		t.Error("error in generate secret: ", err)
 	}
 	secretKey, err := decryptSecretKey(s, n)
+	if err != nil {
+		t.Error("error in decrypt secret: ", err)
+	}
 	// secretKey is random, so i guess just make sure it is base64?
 	k, err := base64.URLEncoding.DecodeString(secretKey)
 	if err != nil {
