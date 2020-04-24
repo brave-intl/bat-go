@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -42,7 +41,7 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -93,7 +92,7 @@ type ReadOnlyDatastore interface {
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -367,13 +366,13 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool, migrate bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
 		}
 	}
-	statement := fmt.Sprintf(`
+	statement := `
 		select
 			promos.id,
 			promos.promotion_type,
@@ -404,16 +403,15 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			(
-				%s or promos.active
-			) and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or (
-				(
-					( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-					( promos.promotion_type = 'ads' and wallet_claims.id is not null )
-				) and ( promos.created_at > NOW() - INTERVAL '3 months'))
+			wallet_claims.redeemed is distinct from true and (
+				wallet_claims.legacy_claimed is true or (
+					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
+						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+					)
+				)
 			)
-		order by promos.created_at`, strconv.FormatBool(migrate))
+		order by promos.created_at;`
 
 	if legacy {
 		statement = `
@@ -849,7 +847,7 @@ limit 1`
 }
 
 // UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 

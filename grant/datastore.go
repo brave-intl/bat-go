@@ -1,7 +1,6 @@
 package grant
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -101,46 +100,8 @@ func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *
 	}
 	defer pg.RollbackTx(tx)
 
-	// Does this request match a claim with legacy_claimed=true?  Then it is a re-claim, allow so
-	// long as the promotion is active.
-	var reclaim bool
-	err = tx.Get(&reclaim, `
-		select true
-		from promotions as p, claims as c
-		where
-			p.id=c.promotion_id and
-			promotion_id = $1 and
-			wallet_id = $2 and
-			c.legacy_claimed=true
-		`, promo.ID, wallet.ID)
-	if err != nil {
-		if err != sql.ErrNoRows {
-			return nil, err
-		}
-		// ok to have no rows, reclaim will be false
-	}
-
-	var (
-		res sql.Result
-	)
-
-	fmt.Println("reclaim", reclaim)
-	// if !reclaim, then we need to put in place a 3 month lockout based on the created at
-	if reclaim {
-		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err = tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active and expires_at > NOW()`, promo.ID)
-	} else {
-		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err = tx.Exec(`
-			update promotions
-			set remaining_grants = remaining_grants - 1
-			where
-				id = $1 and
-				active and
-				promotions.created_at > NOW() - INTERVAL '3 months'
-				`, promo.ID)
-	}
-
+	// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
+	res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promo.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -973,7 +973,6 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			PublicKey:   hexPublicKey,
 			LastBalance: nil,
 		}
-		// fmt.Println(test)
 		suite.Require().NoError(pg.UpsertWallet(w), "could not insert wallet")
 
 		blindedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
