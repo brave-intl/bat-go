@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/brave-intl/bat-go/payment"
 	"gopkg.in/macaroon.v2"
 	"gopkg.in/yaml.v2"
 )
@@ -16,12 +19,39 @@ type Caveats map[string]string
 type Token struct {
 	ID                string    `yaml:"id"`
 	Version           int       `yaml:"version"`
+	PaymentBaseURL    string    `yaml:"payment_base_url"`
 	Location          string    `yaml:"location"`
 	FirstPartyCaveats []Caveats `yaml:"first_party_caveats"`
 }
 
 // Generate - Generate a Macaroon from the Token configuration
 func (t Token) Generate(secret string) (string, error) {
+	// if secret is "" try to get the secret from the merchant api
+	if secret == "" {
+		// fetch from merchant api
+		// GET /v1/merchants/${t.Location}/keys/
+		if t.PaymentBaseURL != "" {
+			resp, err := http.Get(
+				fmt.Sprintf("%s/v1/merchants/%s/keys/", t.PaymentBaseURL, t.Location))
+
+			if err != nil {
+				panic(fmt.Sprintf("unable to GET keys endpoint: %s", err))
+			}
+			// take the results and get the first key??
+			var keys = []*payment.Key{}
+			if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+				panic(fmt.Sprintf("unable to decode response body: %s", err))
+			}
+			if len(keys) > 0 {
+				secret = keys[0].SecretKey
+			} else {
+				panic("no keys for merchant")
+			}
+		} else {
+			panic("cannot make a macaroon without a secret")
+		}
+	}
+
 	// create a new macaroon
 	m, err := macaroon.New([]byte(secret), []byte(t.ID), t.Location, macaroon.Version(t.Version))
 	if err != nil {
