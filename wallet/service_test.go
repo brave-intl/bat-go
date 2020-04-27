@@ -12,7 +12,7 @@ import (
 )
 
 func TestGetOrCreateWallet(t *testing.T) {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	if err != nil {
 		t.Fatal(err)
 	}

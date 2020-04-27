@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -268,20 +267,6 @@ func (_d DatastoreWithPrometheus) GetUncommittedVotesForUpdate(ctx context.Conte
 	return _d.base.GetUncommittedVotesForUpdate(ctx)
 }
 
-// GetWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetWallet(id)
-}
-
 // InsertIssuer implements Datastore
 func (_d DatastoreWithPrometheus) InsertIssuer(issuer *Issuer) (ip1 *Issuer, err error) {
 	_since := time.Now()
@@ -387,6 +372,20 @@ func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	return
 }
 
+// RollbackTxAndHandle implements Datastore
+func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RollbackTxAndHandle(tx)
+}
+
 // RunNextOrderJob implements Datastore
 func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker OrderWorker) (b1 bool, err error) {
 	_since := time.Now()
@@ -413,18 +412,4 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateOrder(orderID, status)
-}
-
-// UpsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) UpsertWallet(wallet *wallet.Info) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UpsertWallet(wallet)
 }

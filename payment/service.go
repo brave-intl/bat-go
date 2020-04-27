@@ -53,9 +53,9 @@ func init() {
 
 // Service contains datastore
 type Service struct {
-	wallet      wallet.Service
+	wallet      *wallet.Service
 	cbClient    cbr.Client
-	datastore   Datastore
+	Datastore   Datastore
 	codecs      map[string]*goavro.Codec
 	kafkaWriter *kafka.Writer
 	kafkaDialer *kafka.Dialer
@@ -215,22 +215,16 @@ func (s *Service) InitKafka() error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(postgres *Postgres) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
 	}
 
-	walletDS := wallet.Datastore(&wallet.Postgres{Postgres: postgres.Postgres})
-	walletService, err := wallet.InitService(walletDS, nil)
-	if err != nil {
-		return nil, err
-	}
-
 	service := &Service{
-		wallet:    *walletService,
+		wallet:    walletService,
 		cbClient:  cbClient,
-		datastore: Datastore(postgres),
+		Datastore: datastore,
 	}
 
 	// setup runnable jobs
@@ -284,25 +278,25 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	order, err := s.datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, location, orderItems)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, location, orderItems)
 
 	return order, err
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
-	order, err := s.datastore.GetOrder(orderID)
+	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
 	}
 
-	sum, err := s.datastore.GetSumForTransactions(orderID)
+	sum, err := s.Datastore.GetSumForTransactions(orderID)
 	if err != nil {
 		return err
 	}
 
 	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = s.datastore.UpdateOrder(orderID, "paid")
+		err = s.Datastore.UpdateOrder(orderID, "paid")
 		if err != nil {
 			return err
 		}
@@ -330,7 +324,7 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 		return nil, errors.New("error recording transaction: invalid settlement address")
 	}
 
-	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, amount)
+	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, amount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording transaction")
 	}
@@ -342,7 +336,7 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
-		err = s.datastore.UpdateOrder(transaction.OrderID, "paid")
+		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
 			return nil, errorutils.Wrap(err, "error updating order status")
 		}
@@ -363,7 +357,7 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
 	}
 
-	txn, err := s.datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
+	txn, err := s.Datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording anon card transaction")
 	}
@@ -379,12 +373,12 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 // IsOrderPaid determines if the order has been paid
 func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	// Now that the transaction has been created let's check to see if that fulfilled the order.
-	order, err := s.datastore.GetOrder(orderID)
+	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return false, err
 	}
 
-	sum, err := s.datastore.GetSumForTransactions(orderID)
+	sum, err := s.Datastore.GetSumForTransactions(orderID)
 	if err != nil {
 		return false, err
 	}
@@ -394,5 +388,5 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 
 // RunNextOrderJob takes the next order job and completes it
 func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	return s.datastore.RunNextOrderJob(ctx, s)
+	return s.Datastore.RunNextOrderJob(ctx, s)
 }

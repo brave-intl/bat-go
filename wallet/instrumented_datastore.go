@@ -1,15 +1,15 @@
-package service
+package wallet
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using ../../.prom-gowrap.tmpl template
+// using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/wallet/service -i Datastore -t ../../.prom-gowrap.tmpl -o instrumented_datastore.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_datastore.go
 
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,8 +41,22 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// GetByProviderLinkingID implements Datastore
+func (_d DatastoreWithPrometheus) GetByProviderLinkingID(providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetByProviderLinkingID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetByProviderLinkingID(providerLinkingID)
+}
+
 // GetWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err error) {
+func (_d DatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -52,7 +66,35 @@ func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWallet(id)
+	return _d.base.GetWallet(ID)
+}
+
+// InsertWallet implements Datastore
+func (_d DatastoreWithPrometheus) InsertWallet(wallet *walletutils.Info) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertWallet(wallet)
+}
+
+// LinkWallet implements Datastore
+func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.LinkWallet(ID, providerLinkingID, anonymousAddress)
 }
 
 // Migrate implements Datastore
@@ -104,8 +146,50 @@ func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	return
 }
 
+// RollbackTxAndHandle implements Datastore
+func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// SetAnonymousAddress implements Datastore
+func (_d DatastoreWithPrometheus) SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetAnonymousAddress", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetAnonymousAddress(ID, anonymousAddress)
+}
+
+// TxLinkWalletInfo implements Datastore
+func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "TxLinkWalletInfo", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress)
+}
+
 // UpsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) UpsertWallet(wallet *wallet.Info) (err error) {
+func (_d DatastoreWithPrometheus) UpsertWallet(wallet *walletutils.Info) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -9,7 +9,7 @@ package grant
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,7 +41,7 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 }
 
 // GetGrantsOrderedByExpiry implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) (ga1 []Grant, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) (ga1 []Grant, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -101,4 +101,18 @@ func (_d ReadOnlyDatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	}()
 	_d.base.RollbackTx(tx)
 	return
+}
+
+// RollbackTxAndHandle implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RollbackTxAndHandle(tx)
 }

@@ -8,6 +8,8 @@ import (
 var (
 	// ErrConflictBATLossEvent is an error created when trying to update a bat loss event with a different amount
 	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
+	// ErrWalletNotFound when ledger sends back a 404
+	ErrWalletNotFound = errors.New("unable to find wallet")
 )
 
 // ErrorBundle creates a new response error

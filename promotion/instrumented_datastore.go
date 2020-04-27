@@ -12,7 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -60,7 +60,7 @@ func (_d DatastoreWithPrometheus) ActivatePromotion(promotion *Promotion) (err e
 }
 
 // ClaimForWallet implements Datastore
-func (_d DatastoreWithPrometheus) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (cp1 *Claim, err error) {
+func (_d DatastoreWithPrometheus) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (cp1 *Claim, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -130,7 +130,7 @@ func (_d DatastoreWithPrometheus) DeactivatePromotion(promotion *Promotion) (err
 }
 
 // DrainClaim implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) (err error) {
+func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -158,7 +158,7 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string) (pa1 [
 }
 
 // GetAvailablePromotionsForWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) (pa1 []Promotion, err error) {
+func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -172,7 +172,7 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet
 }
 
 // GetClaimByWalletAndPromotion implements Datastore
-func (_d DatastoreWithPrometheus) GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (cp1 *Claim, err error) {
+func (_d DatastoreWithPrometheus) GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (cp1 *Claim, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -311,20 +311,6 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 	return _d.base.GetSumForTransactions(orderID)
 }
 
-// GetWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetWallet(id)
-}
-
 // InsertBATLossEvent implements Datastore
 func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (b1 bool, err error) {
 	_since := time.Now()
@@ -430,6 +416,20 @@ func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	return
 }
 
+// RollbackTxAndHandle implements Datastore
+func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RollbackTxAndHandle(tx)
+}
+
 // RunNextClaimJob implements Datastore
 func (_d DatastoreWithPrometheus) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (b1 bool, err error) {
 	_since := time.Now()
@@ -498,18 +498,4 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateOrder(orderID, status)
-}
-
-// UpsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) UpsertWallet(wallet *wallet.Info) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UpsertWallet(wallet)
 }

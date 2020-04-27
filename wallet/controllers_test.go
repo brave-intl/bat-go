@@ -17,10 +17,12 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uphold "github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/go-chi/chi"
+	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -35,7 +37,7 @@ func TestWalletControllersTestSuite(t *testing.T) {
 }
 
 func (suite *WalletControllersTestSuite) SetupSuite() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -63,11 +65,11 @@ func (suite *WalletControllersTestSuite) TearDownTest() {
 func (suite *WalletControllersTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
@@ -93,11 +95,17 @@ func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect d
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWallet() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
 	service := &Service{
-		Datastore: pg,
+		Datastore:    pg,
+		LedgerClient: mockLedger,
 	}
 
 	w1 := suite.NewWallet(service, "uphold")
@@ -127,32 +135,33 @@ func (suite *WalletControllersTestSuite) TestLinkWallet() {
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCard(service, w1, settlement, http.StatusOK, bat1, noUUID())
+	suite.claimCard(service, mockLedger, w1, settlement, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCard(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.claimCard(service, mockLedger, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
 	suite.CheckBalance(w2, bat1)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCard(service, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCard(service, mockLedger, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w2, zero)
 
 	suite.CheckBalance(w3, bat1)
-	suite.claimCard(service, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCard(service, mockLedger, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w3, zero)
 
 	suite.CheckBalance(w4, bat1)
-	suite.claimCard(service, w4, w3ProviderID, http.StatusConflict, bat1, noUUID())
+	suite.claimCard(service, mockLedger, w4, w3ProviderID, http.StatusConflict, bat1, noUUID())
 	suite.CheckBalance(w4, bat1)
 
 	suite.CheckBalance(w3, zero)
-	suite.claimCard(service, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
+	suite.claimCard(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, zero)
 }
 
 func (suite *WalletControllersTestSuite) claimCard(
 	service *Service,
+	mockLedgerClient *mockledger.MockClient,
 	w *uphold.Wallet,
 	destination string,
 	status int,
@@ -167,12 +176,15 @@ func (suite *WalletControllersTestSuite) claimCard(
 	}
 	body, err := json.Marshal(&reqBody)
 	suite.Require().NoError(err, "unable to marshal claim body")
-	handler := PostLinkWalletCompat(service)
+
+	info := w.GetWalletInfo()
+	mockLedgerClient.EXPECT().GetMemberWallets(gomock.Any(), gomock.Eq(uuid.Must(uuid.FromString(info.ID)))).Return(&[]walletutils.Info{info}, nil)
+	handler := LinkWalletCompat(service)
 	req, err := http.NewRequest("POST", "/v1/wallet/{paymentID}/claim", bytes.NewBuffer(body))
 	suite.Require().NoError(err, "wallet claim request could not be created")
 
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentID", w.GetWalletInfo().ID)
+	rctx.URLParams.Add("paymentID", info.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -228,8 +240,9 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 }
 
 func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
+
 	service := &Service{
 		Datastore: pg,
 	}

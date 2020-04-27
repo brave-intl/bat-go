@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -13,6 +14,8 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/getsentry/sentry-go"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -36,6 +39,7 @@ type BATLossEvent struct {
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	grantserver.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
 	// DeactivatePromotion marks a particular promotion as inactive
@@ -100,6 +104,7 @@ type Datastore interface {
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
+	grantserver.Datastore
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -128,8 +133,8 @@ type Postgres struct {
 	grantserver.Postgres
 }
 
-// NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
+// NewDB creates a new Postgres Datastore
+func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
@@ -139,8 +144,8 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return nil, err
 }
 
-// NewROPostgres creates a new Postgres RO Datastore
-func NewROPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+// NewRODB creates a new Postgres RO Datastore
+func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
@@ -148,6 +153,26 @@ func NewROPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...s
 		}, err
 	}
 	return nil, err
+}
+
+// NewPostgres creates new postgres connections
+func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
+	var roPg ReadOnlyDatastore
+	pg, err := NewDB("", true, "promotion_db")
+	if err != nil {
+		fmt.Println(err)
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	roDB := os.Getenv("RO_DATABASE_URL")
+	if len(roDB) > 0 {
+		roPg, err = NewRODB(roDB, false, "promotion_read_only_db")
+		if err != nil {
+			sentry.CaptureException(err)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
+	return pg, roPg, err
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants

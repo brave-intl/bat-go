@@ -11,6 +11,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -23,7 +24,7 @@ import (
 // Router for suggestions endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/{paymentId}/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostLinkWalletCompat", PostLinkWalletCompat(service))))
+	r.Method("POST", "/{paymentId}/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("LinkWalletCompat", LinkWalletCompat(service))))
 	r.Method("GET", "/{paymentId}", middleware.InstrumentHandler("GetWallet", GetWallet(service)))
 	r.Method("POST", "/", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service))))
 	return r
@@ -47,8 +48,8 @@ type LinkWalletRequest struct {
 	AnonymousAddress *uuid.UUID `json:"anonymousAddress"`
 }
 
-// PostLinkWalletCompat links wallets using provided ids
-func PostLinkWalletCompat(service *Service) handlers.AppHandler {
+// LinkWalletCompat links wallets using provided ids
+func LinkWalletCompat(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		paymentIDString := chi.URLParam(r, "paymentID")
 		paymentID, err := uuid.FromString(paymentIDString)
@@ -70,9 +71,12 @@ func PostLinkWalletCompat(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 		// remove this check and merge when ledger endpoint is depricated
-		wallet, err := service.GetOrCreateWallet(r.Context(), paymentID)
-		if err != nil || wallet == nil {
-			return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
+		wallet, err := service.GetAndCreateMemberWallets(r.Context(), paymentID)
+		if err != nil {
+			if err == errorutils.ErrWalletNotFound {
+				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
+			}
+			return handlers.WrapError(err, "unable to backfill wallets", http.StatusServiceUnavailable)
 		}
 		err = service.LinkWallet(r.Context(), wallet, body.SignedTx, body.AnonymousAddress)
 		if err != nil {

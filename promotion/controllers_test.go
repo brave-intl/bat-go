@@ -48,7 +48,7 @@ func TestControllersTestSuite(t *testing.T) {
 }
 
 func (suite *ControllersTestSuite) SetupSuite() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -78,7 +78,7 @@ func (suite *ControllersTestSuite) TearDownTest() {
 func (suite *ControllersTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
@@ -89,7 +89,10 @@ func (suite *ControllersTestSuite) CleanDB() {
 
 func (suite *ControllersTestSuite) TestGetPromotions() {
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	cbClient, err := cbr.New()
@@ -112,10 +115,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&w, nil)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  cbClient,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 	}
@@ -169,10 +172,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
 
-	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	promotionGeneric, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
-	promotionDesktop, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
+	promotionDesktop, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
@@ -193,10 +196,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 
-	err = service.datastore.ActivatePromotion(promotionGeneric)
+	err = service.Datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
 	// promotion needs an issuer
-	_, err = service.datastore.InsertIssuer(&Issuer{
+	_, err = service.Datastore.InsertIssuer(&Issuer{
 		ID:          uuid.NewV4(),
 		PromotionID: promotionGeneric.ID,
 		Cohort:      "control",
@@ -204,10 +207,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	})
 	suite.Require().NoError(err, "Failed to insert issuer promotion")
 
-	err = service.datastore.ActivatePromotion(promotionDesktop)
+	err = service.Datastore.ActivatePromotion(promotionDesktop)
 	suite.Require().NoError(err, "Failed to activate promotion")
 	// promotion needs an issuer
-	_, err = service.datastore.InsertIssuer(&Issuer{
+	_, err = service.Datastore.InsertIssuer(&Issuer{
 		ID:          uuid.NewV4(),
 		PromotionID: promotionDesktop.ID,
 		Cohort:      "control",
@@ -239,7 +242,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	statement := `
 	insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
 	values ($1, $2, $3, true)`
-	_, err = pg.DB.Exec(statement, promotionDesktop.ID, w.ID, promotionDesktop.ApproximateValue)
+	_, err = pg.RawDB().Exec(statement, promotionDesktop.ID, w.ID, promotionDesktop.ApproximateValue)
 	promotionDesktop.LegacyClaimed = true
 
 	rr = httptest.NewRecorder()
@@ -270,7 +273,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 func (suite *ControllersTestSuite) ClaimGrant(
 	service *Service,
-	wallet wallet.Info,
+	w walletutils.Info,
 	privKey crypto.Signer,
 	promotion *Promotion,
 	blindedCreds []string,
@@ -360,7 +363,10 @@ func (suite *ControllersTestSuite) WaitForClaimToPropagate(service *Service, pro
 }
 
 func (suite *ControllersTestSuite) TestClaimGrant() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	cbClient, err := cbr.New()
@@ -396,18 +402,18 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  cbClient,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 		reputationClient: mockReputation,
 	}
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	blindedCreds := make([]string, promotion.SuggestionsPerGrant)
@@ -415,7 +421,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -506,7 +512,10 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
@@ -558,10 +567,10 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 		reputationClient: mockReputation,
@@ -570,9 +579,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = service.InitKafka()
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	issuerName := promotion.ID.String() + ":control"
@@ -593,7 +602,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -682,13 +691,15 @@ func (suite *ControllersTestSuite) TestSuggest() {
 }
 
 func (suite *ControllersTestSuite) TestGetClaimSummary() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
-		wallet: wallet.Service{
-			Datastore: wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		Datastore: pg,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 
@@ -763,19 +774,19 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *walletutils.Info, claimBonus float64) (*Promotion, *Issuer, *Claim) {
 	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
-	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount, "")
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, promoAmount, "")
 	suite.Require().NoError(err, "a promotion could not be created")
 
 	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
-	issuer, err = service.datastore.InsertIssuer(issuer)
+	issuer, err = service.Datastore.InsertIssuer(issuer)
 	suite.Require().NoError(err, "Insert issuer should succeed")
 
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "a promotion should be activated")
 
 	grantAmount := decimal.NewFromFloat(30.0)
-	claim, err := service.datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	claim, err := service.Datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
 	suite.Require().NoError(err, "create a claim for a promotion")
 
 	return promotion, issuer, claim
@@ -796,7 +807,10 @@ func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, wallet
 }
 
 func (suite *ControllersTestSuite) TestCreatePromotion() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	mockCtrl := gomock.NewController(suite.T())
@@ -807,10 +821,10 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 	}
@@ -853,14 +867,14 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
+		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
@@ -985,19 +999,21 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 func (suite *ControllersTestSuite) TestClaimCompatability() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "could not connect to db")
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
+		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
-		wallet: wallet.Service{
-			Datastore: wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 
@@ -1064,7 +1080,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		suite.Require().NoError(err, "Failed to create wallet keypair")
 		bat := altcurrency.BAT
 		hexPublicKey := hex.EncodeToString(publicKey)
-		info := &walletutils.Info{
+		info := walletutils.Info{
 			ID:          walletID.String(),
 			Provider:    "uphold",
 			ProviderID:  "-",
@@ -1072,7 +1088,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			PublicKey:   hexPublicKey,
 			LastBalance: nil,
 		}
-		suite.Require().NoError(pg.UpsertWallet(info), "could not insert wallet")
+		suite.Require().NoError(service.wallet.Datastore.UpsertWallet(&info), "could not insert wallet")
 
 		blindedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
 		signedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
@@ -1095,7 +1111,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 
 		var claim *Claim
 		if test.Legacy {
-			claim, err = service.datastore.CreateClaim(promotion.ID, info.ID, promotionValue, decimal.NewFromFloat(0.0))
+			claim, err = service.Datastore.CreateClaim(promotion.ID, info.ID, promotionValue, decimal.NewFromFloat(0.0))
 			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
 			_, err = pg.RawDB().Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
 			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
@@ -1130,7 +1146,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 				).
 				Return(nil)
 		}
-		claimID := suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds, test.FailToClaim)
+		claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, test.FailToClaim)
 		if !test.FailToClaim {
 			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
@@ -1138,7 +1154,10 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	ch := make(chan *walletutils.TransactionInfo)
@@ -1180,10 +1199,10 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 		reputationClient: mockReputation,
@@ -1193,9 +1212,9 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = service.InitHotWallet(context.Background())
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
-	promotion, err := service.datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	err = service.wallet.Datastore.UpsertWallet(&info)
@@ -1203,7 +1222,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	claimBonus := 0.25
 	grantAmount := decimal.NewFromFloat(0.25)
-	_, err = service.datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus))
 	suite.Require().NoError(err, "create a claim for a promotion")
 
 	issuerName := promotion.ID.String() + ":control"
@@ -1224,7 +1243,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1291,7 +1310,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
 func (suite *ControllersTestSuite) CreateOrder() (string, error) {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	tx := pg.RawDB().MustBegin()
 	defer pg.RollbackTx(tx)
 
@@ -1314,7 +1333,9 @@ func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
 	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// FIXME stick kafka setup in suite setup
@@ -1363,10 +1384,10 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: wallet.Service{
-			Datastore:    wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore:    walletDB,
 			LedgerClient: mockLedger,
 		},
 		reputationClient: mockReputation,
@@ -1375,9 +1396,9 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = service.InitKafka()
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	issuerName := promotion.ID.String() + ":control"
@@ -1398,7 +1419,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1407,7 +1428,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	suite.Require().NoError(err)
 	validOrderID := uuid.Must(uuid.FromString(orderID))
 
-	orderPending, err := service.datastore.GetOrder(validOrderID)
+	orderPending, err := service.Datastore.GetOrder(validOrderID)
 	suite.Require().NoError(err)
 	suite.Require().Equal("pending", orderPending.Status)
 
@@ -1468,7 +1489,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	suite.Require().NoError(err)
 	suite.Require().NotNil(suggestionEvent)
 
-	updatedOrder, err := service.datastore.GetOrder(validOrderID)
+	updatedOrder, err := service.Datastore.GetOrder(validOrderID)
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 }
