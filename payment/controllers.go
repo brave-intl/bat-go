@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -508,6 +509,20 @@ func MakeVote(service *Service) handlers.AppHandler {
 				log.Printf("failed multiple vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			default:
+				// check for custom vote invalidations
+				if errors.Is(err, ErrInvalidSKUToken) {
+					verr := handlers.ValidationError("failed to validate sku token", nil)
+					data := []string{}
+					if errors.Is(err, ErrInvalidSKUTokenSKU) {
+						data = append(data, "invalid sku value")
+					}
+					if errors.Is(err, ErrInvalidSKUTokenBadMerchant) {
+						data = append(data, "invalid merchant value")
+					}
+					verr.Data = data
+					log.Printf("failed sku validations: %s", err)
+					return verr
+				}
 				log.Printf("failed to perform vote: %s", err)
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
