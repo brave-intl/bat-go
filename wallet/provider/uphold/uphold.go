@@ -53,12 +53,15 @@ const (
 )
 
 var (
-	// SettlementDestination is the address of the settlement wallet
-	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	accessToken           = os.Getenv("UPHOLD_ACCESS_TOKEN")
-	environment           = os.Getenv("UPHOLD_ENVIRONMENT")
-	upholdProxy           = os.Getenv("UPHOLD_HTTP_PROXY")
-	upholdAPIBase         = map[string]string{
+	// AnonCardSettlementAddress is the address of the settlement wallet
+	AnonCardSettlementAddress = os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
+	// UpholdSettlementAddress is the address of the settlement wallet
+	UpholdSettlementAddress = os.Getenv("UPHOLD_SETTLEMENT_ADDRESS")
+
+	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
+	upholdAPIBase = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
@@ -528,7 +531,7 @@ func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.Trans
 	if txInfo.Probi.LessThan(decimal.Zero) {
 		return nil, errors.New("anon card transaction cannot be for negative BAT")
 	}
-	if txInfo.Destination != SettlementDestination {
+	if txInfo.Destination != AnonCardSettlementAddress {
 		return nil, errors.New("anon card transactions must have settlement as their destination")
 	}
 

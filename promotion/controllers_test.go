@@ -1182,7 +1182,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	tx := <-ch
 	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 
-	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	settlementAddr := os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
 	_, err = wal.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 }

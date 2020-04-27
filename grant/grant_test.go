@@ -22,7 +22,7 @@ func TestConsume(t *testing.T) {
 	testSubmit = false
 	registerGrantInstrumentation = false
 
-	uphold.SettlementDestination = "foo@bar.com"
+	uphold.AnonCardSettlementAddress = "foo@bar.com"
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
