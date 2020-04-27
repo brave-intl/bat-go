@@ -456,7 +456,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	fundWallet(suite.T(), userWallet, order.TotalPrice)
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.AnonCardSettlementAddress, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
 
 	walletID, err := uuid.FromString(userWallet.ID)

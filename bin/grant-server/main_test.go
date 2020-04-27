@@ -397,7 +397,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal("Expected two active android grant worth 20 BAT total")
 	}
 
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, txBAT, uphold.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, txBAT, uphold.AnonCardSettlementAddress, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestRedeem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn, err = userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, uphold.SettlementDestination, "bat-go:grant-server.TestRedeem")
+	txn, err = userWallet.PrepareTransaction(altcurrency.BAT, totalBAT, uphold.AnonCardSettlementAddress, "bat-go:grant-server.TestRedeem")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +619,7 @@ func TestDrain(t *testing.T) {
 		t.Fatal("Expected zero active grants")
 	}
 
-	_, err = userWallet.Transfer(altcurrency.BAT, expectedBAT, uphold.SettlementDestination)
+	_, err = userWallet.Transfer(altcurrency.BAT, expectedBAT, uphold.AnonCardSettlementAddress)
 	if err != nil {
 		t.Log(err)
 	}
