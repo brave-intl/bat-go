@@ -26,7 +26,6 @@ import (
 	w "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/golang-migrate/migrate/database/postgres"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
@@ -132,9 +131,9 @@ func init() {
 
 // Service contains datastore and challenge bypass / ledger client connections
 type Service struct {
-	wallet           wallet.Service
-	datastore        Datastore
-	roDatastore      ReadOnlyDatastore
+	wallet           *wallet.Service
+	Datastore        Datastore
+	RoDatastore      ReadOnlyDatastore
 	cbClient         cbr.Client
 	reputationClient reputation.Client
 	balanceClient    balance.Client
@@ -337,7 +336,12 @@ func (s *Service) InitHotWallet(ctx context.Context) error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(
+	ctx context.Context,
+	promotionDB Datastore,
+	promotionRODB ReadOnlyDatastore,
+	walletService *wallet.Service,
+) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -356,23 +360,13 @@ func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyD
 		}
 	}
 
-	walletDS := wallet.Datastore(&wallet.Postgres{Postgres: postgres.Postgres})
-	if roPostgres == nil {
-		roPostgres = postgres
-	}
-	walletRODS := wallet.ReadOnlyDatastore(&wallet.Postgres{Postgres: roPostgres.Postgres})
-	walletService, err := wallet.InitService(walletDS, walletRODS)
-	if err != nil {
-		return nil, err
-	}
-
 	service := &Service{
-		datastore:        Datastore(postgres),
-		roDatastore:      ReadOnlyDatastore(roPostgres),
+		Datastore:        promotionDB,
+		RoDatastore:      promotionRODB,
 		cbClient:         cbClient,
 		reputationClient: reputationClient,
 		balanceClient:    balanceClient,
-		wallet:           *walletService,
+		wallet:           walletService,
 	}
 
 	// setup runnable jobs
@@ -412,25 +406,25 @@ func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyD
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
 func (s *Service) ReadableDatastore() ReadOnlyDatastore {
-	if s.roDatastore != nil {
-		return s.roDatastore
+	if s.RoDatastore != nil {
+		return s.RoDatastore
 	}
-	return s.datastore
+	return s.Datastore
 }
 
 // RunNextClaimJob takes the next claim job and completes it
 func (s *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return s.datastore.RunNextClaimJob(ctx, s)
+	return s.Datastore.RunNextClaimJob(ctx, s)
 }
 
 // RunNextSuggestionJob takes the next suggestion job and completes it
 func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
-	return s.datastore.RunNextSuggestionJob(ctx, s)
+	return s.Datastore.RunNextSuggestionJob(ctx, s)
 }
 
 // RunNextDrainJob takes the next drain job and completes it
 func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
-	return s.datastore.RunNextDrainJob(ctx, s)
+	return s.Datastore.RunNextDrainJob(ctx, s)
 }
 
 // RunNextPromotionMissingIssuer takes the next job and completes it
@@ -442,7 +436,7 @@ func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, erro
 	}
 
 	// create issuer for all of the promotions without an issuer
-	uuids, err := s.roDatastore.GetPromotionsMissingIssuer(100)
+	uuids, err := s.RoDatastore.GetPromotionsMissingIssuer(100)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get promotions from datastore")
 		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)

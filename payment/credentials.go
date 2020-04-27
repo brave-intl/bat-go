@@ -94,7 +94,7 @@ func (service *Service) CreateIssuer(ctx context.Context, merchantID string) (*I
 
 	issuer.PublicKey = resp.PublicKey
 
-	return service.datastore.InsertIssuer(issuer)
+	return service.Datastore.InsertIssuer(issuer)
 }
 
 // Name returns the name of the issuer as known by the challenge bypass server
@@ -104,7 +104,7 @@ func (issuer *Issuer) Name() string {
 
 // GetOrCreateIssuer gets a matching issuer if one exists and otherwise creates one
 func (service *Service) GetOrCreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer, err := service.datastore.GetIssuer(merchantID)
+	issuer, err := service.Datastore.GetIssuer(merchantID)
 	if issuer == nil {
 		issuer, err = service.CreateIssuer(ctx, merchantID)
 	}
@@ -125,7 +125,7 @@ type OrderCreds struct {
 
 // CreateOrderCreds if the order is complete
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
-	order, err := service.datastore.GetOrder(orderID)
+	order, err := service.Datastore.GetOrder(orderID)
 	if err != nil {
 		return errorutils.Wrap(err, "error finding order")
 	}
@@ -156,7 +156,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
 		}
 
-		err = service.datastore.InsertOrderCreds(&orderCreds)
+		err = service.Datastore.InsertOrderCreds(&orderCreds)
 		if err != nil {
 			return errorutils.Wrap(err, "error inserting order creds")
 		}

@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	uuid "github.com/satori/go.uuid"
@@ -38,6 +38,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 		base:         base,
 		instanceName: instanceName,
 	}
+}
+
+// GetMemberWallets implements Client
+func (_d ClientWithPrometheus) GetMemberWallets(ctx context.Context, id uuid.UUID) (iap1 *[]wallet.Info, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "GetMemberWallets", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetMemberWallets(ctx, id)
 }
 
 // GetWallet implements Client

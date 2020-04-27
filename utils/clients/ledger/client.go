@@ -14,6 +14,7 @@ import (
 // Client abstracts over the underlying client
 type Client interface {
 	GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error)
+	GetMemberWallets(ctx context.Context, id uuid.UUID) (*[]wallet.Info, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the ledger server
@@ -42,10 +43,28 @@ type WalletAddresses struct {
 
 // WalletResponse contains information about the ledger wallet
 type WalletResponse struct {
+	ID               uuid.UUID                `json:"paymentId"`
 	Addresses        WalletAddresses          `json:"addresses"`
 	AltCurrency      *altcurrency.AltCurrency `json:"altcurrency"`
 	PublicKey        string                   `json:"httpSigningPubKey"`
 	AnonymousAddress *string                  `json:"anonymousAddress"`
+}
+
+// ToInfo converts a wallet response into an info object
+func (wr WalletResponse) ToInfo() wallet.Info {
+	var anonymousAddress uuid.UUID
+	if wr.AnonymousAddress != nil {
+		anonymousAddress = uuid.Must(uuid.FromString(*wr.AnonymousAddress))
+	}
+	return wallet.Info{
+		ID:               wr.ID.String(),
+		Provider:         "uphold",
+		ProviderID:       wr.Addresses.ProviderID.String(),
+		AltCurrency:      wr.AltCurrency,
+		PublicKey:        wr.PublicKey,
+		LastBalance:      nil,
+		AnonymousAddress: &anonymousAddress,
+	}
 }
 
 // GetWallet retrieves wallet information
@@ -64,19 +83,30 @@ func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info,
 		}
 		return nil, err
 	}
-	var anonymousAddress uuid.UUID
-	if walletResponse.AnonymousAddress != nil {
-		anonymousAddress, _ = uuid.FromString(*walletResponse.AnonymousAddress)
-	}
-	info := wallet.Info{
-		ID:               id.String(),
-		Provider:         "uphold",
-		ProviderID:       walletResponse.Addresses.ProviderID.String(),
-		AltCurrency:      walletResponse.AltCurrency,
-		PublicKey:        walletResponse.PublicKey,
-		LastBalance:      nil,
-		AnonymousAddress: &anonymousAddress,
+	info := walletResponse.ToInfo()
+	return &info, err
+}
+
+// GetMemberWallets retrieves wallet information that is linked together through the user id
+func (c *HTTPClient) GetMemberWallets(ctx context.Context, id uuid.UUID) (*[]wallet.Info, error) {
+	req, err := c.client.NewRequest(ctx, "GET", "v2/wallet/"+id.String()+"/members", nil)
+	if err != nil {
+		return nil, err
 	}
 
-	return &info, err
+	var walletsResponse []WalletResponse
+	resp, err := c.client.Do(ctx, req, &walletsResponse)
+
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var wallets []wallet.Info
+	for _, wr := range walletsResponse {
+		wallets = append(wallets, wr.ToInfo())
+	}
+
+	return &wallets, err
 }

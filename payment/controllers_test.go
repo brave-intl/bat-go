@@ -61,7 +61,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 }
 
@@ -70,7 +70,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	handler := CreateOrder(service)
 
@@ -122,7 +122,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	handler := CreateOrder(service)
 
@@ -196,7 +196,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	order := suite.setupCreateOrder(1 / .25)
 
@@ -237,7 +237,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	// Old order
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
-	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	updatedOrder, err := service.Datastore.GetOrder(order.ID)
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
@@ -261,7 +261,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 
 	// Delete transactions so we don't run into any validation errors
@@ -315,7 +315,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	// Old order
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
-	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	updatedOrder, err := service.Datastore.GetOrder(order.ID)
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
@@ -378,6 +378,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Create connection to Kafka
 	// FIXME stick kafka setup in suite setup
@@ -396,10 +398,10 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: wallet.Service{
-			Datastore: wallet.Datastore(&wallet.Postgres{Postgres: pg.Postgres}),
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 
@@ -447,7 +449,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	userWallet := generateWallet(suite.T())
-	err = pg.UpsertWallet(&userWallet.Info)
+	err = walletDB.UpsertWallet(&userWallet.Info)
 	suite.Require().NoError(err)
 
 	balanceBefore, err := userWallet.GetBalance(true)

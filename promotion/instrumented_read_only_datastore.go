@@ -9,7 +9,8 @@ package promotion
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -55,7 +56,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotions(platform string
 }
 
 // GetAvailablePromotionsForWallet implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) (pa1 []Promotion, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -69,7 +70,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet
 }
 
 // GetClaimByWalletAndPromotion implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (cp1 *Claim, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (cp1 *Claim, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -180,8 +181,8 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) 
 	return _d.base.GetPromotionsMissingIssuer(limit)
 }
 
-// GetWallet implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err error) {
+// Migrate implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) Migrate() (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -189,9 +190,23 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.I
 			result = "error"
 		}
 
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Migrate", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWallet(id)
+	return _d.base.Migrate()
+}
+
+// NewMigrate implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) NewMigrate() (mp1 *migrate.Migrate, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "NewMigrate", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.NewMigrate()
 }
 
 // RawDB implements ReadOnlyDatastore
@@ -202,4 +217,29 @@ func (_d ReadOnlyDatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RawDB", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RawDB()
+}
+
+// RollbackTx implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	_d.base.RollbackTx(tx)
+	return
+}
+
+// RollbackTxAndHandle implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RollbackTxAndHandle(tx)
 }

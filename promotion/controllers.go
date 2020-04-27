@@ -265,7 +265,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 			)
 		}
 
-		claim, err := service.datastore.GetClaimCreds(claimID.UUID())
+		claim, err := service.Datastore.GetClaimCreds(claimID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -462,13 +462,13 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		promotion, err := service.datastore.CreatePromotion(req.Type, req.NumGrants, req.Value, req.Platform)
+		promotion, err := service.Datastore.CreatePromotion(req.Type, req.NumGrants, req.Value, req.Platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating promotion", http.StatusBadRequest)
 		}
 
 		if req.Active {
-			err = service.datastore.ActivatePromotion(promotion)
+			err = service.Datastore.ActivatePromotion(promotion)
 			if err != nil {
 				return handlers.WrapError(err, "Error marking promotion active", http.StatusBadRequest)
 			}
@@ -506,7 +506,7 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
+		err = service.Datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
 		if err != nil {
 			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
 		}

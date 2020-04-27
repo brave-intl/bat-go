@@ -48,7 +48,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		promotion := promotions[k]
 
-		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			return fmt.Errorf("error finding claim for wallet: %w", err)
 		}
@@ -66,7 +66,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
+			err := service.Datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
 				return fmt.Errorf("error draining claim: %w", err)
 			}

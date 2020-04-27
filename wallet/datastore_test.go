@@ -1,5 +1,3 @@
-// +build integration
-
 package wallet
 
 import (
@@ -20,7 +18,7 @@ func TestWalletPostgresTestSuite(t *testing.T) {
 }
 
 func (suite *WalletPostgresTestSuite) SetupSuite() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -48,17 +46,17 @@ func (suite *WalletPostgresTestSuite) TearDownTest() {
 func (suite *WalletPostgresTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
 
 func (suite *WalletPostgresTestSuite) TestInsertWallet() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
@@ -67,18 +65,28 @@ func (suite *WalletPostgresTestSuite) TestInsertWallet() {
 	suite.Require().NoError(pg.InsertWallet(wallet), "Save wallet should succeed")
 }
 
+func (suite *WalletPostgresTestSuite) TestUpsertWallet() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+
+	wallet := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
+	suite.Require().NoError(pg.UpsertWallet(wallet), "Save wallet should succeed")
+}
+
 func (suite *WalletPostgresTestSuite) TestGetWallet() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	id := uuid.NewV4()
 
-	walletc := altcurrency.BAT
-	origWallet := &walletutils.Info{ID: id.String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey, AltCurrency: &walletc}
-	suite.Require().NoError(pg.InsertWallet(origWallet), "Save wallet should succeed")
+	tmp := altcurrency.BAT
+	origWallet := &walletutils.Info{ID: id.String(), Provider: "uphold", AltCurrency: &tmp, ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
+	suite.Require().NoError(pg.UpsertWallet(origWallet), "Save wallet should succeed")
 
 	wallet, err := pg.GetWallet(id)
 	suite.Require().NoError(err, "Get wallet should succeed")
-	suite.Require().Equal(origWallet, wallet)
+	suite.Assert().Equal(origWallet, wallet)
 }

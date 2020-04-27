@@ -159,7 +159,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		publicKey := credentials[i].PublicKey
 
 		if issuer, ok = issuers[publicKey]; !ok {
-			issuer, err = service.datastore.GetIssuerByPublicKey(publicKey)
+			issuer, err = service.Datastore.GetIssuerByPublicKey(publicKey)
 			if err != nil {
 				err = errorutils.Wrap(err, "error finding issuer")
 				return
@@ -171,7 +171,7 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 		requestCredentials[i].Signature = credentials[i].Signature
 
 		if promotion, ok = promotions[publicKey]; !ok {
-			promotion, err = service.datastore.GetPromotion(issuer.PromotionID)
+			promotion, err = service.Datastore.GetPromotion(issuer.PromotionID)
 			if err != nil {
 				err = errorutils.Wrap(err, "error finding promotion")
 				return
@@ -255,7 +255,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		return err
 	}
 
-	err = service.datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
+	err = service.Datastore.InsertSuggestion(requestCredentials, suggestionText, eventBinary)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 				prometheus.Labels{
 					"method": "SuggestionJob",
 				}).Inc()
-			_, err := service.datastore.RunNextSuggestionJob(ctx, service)
+			_, err := service.Datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				log.Ctx(ctx).
 					Error().
@@ -304,18 +304,18 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
-	order, err := service.datastore.GetOrder(orderID)
+	order, err := service.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
 	}
 
-	sum, err := service.datastore.GetSumForTransactions(orderID)
+	sum, err := service.Datastore.GetSumForTransactions(orderID)
 	if err != nil {
 		return err
 	}
 
 	if sum.GreaterThanOrEqual(order.TotalPrice) {
-		err = service.datastore.UpdateOrder(orderID, "paid")
+		err = service.Datastore.UpdateOrder(orderID, "paid")
 		if err != nil {
 			return err
 		}
@@ -362,7 +362,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 			return err
 		}
 
-		_, err = service.datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
+		_, err = service.Datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
 		if err != nil {
 			return fmt.Errorf("Error recording order transaction : %w", err)
 		}

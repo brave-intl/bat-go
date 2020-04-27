@@ -1,6 +1,14 @@
 package errors
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrWalletNotFound when ledger sends back a 404
+	ErrWalletNotFound = errors.New("unable to find wallet")
+)
 
 // ErrorBundle creates a new response error
 type ErrorBundle struct {

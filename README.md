@@ -75,13 +75,4 @@ is installed then run `make docker`.
 
 
 ## Build mock files
-```bash
-mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
-mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
-mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
-mockgen -source=./utils/clients/ledger/client.go -destination=utils/clients/ledger/mock/mock.go -package=mock_ledger
-mockgen -source=./utils/clients/balance/client.go -destination=utils/clients/balance/mock/mock.go -package=mock_balance
-mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ledger
-mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
-mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
-```
+`make mock`
