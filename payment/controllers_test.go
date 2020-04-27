@@ -57,7 +57,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
-	AESKey = "AES256Key-32Characters1234567890"
+	EncryptionKey = "AES256Key-32Characters1234567890"
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
