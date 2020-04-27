@@ -319,6 +319,11 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 	currency := upholdTransaction.AltCurrency.String()
 	kind := "uphold"
 
+	// check if destination is the right address
+	if upholdTransaction.Destination != uphold.UpholdSettlementAddress {
+		return nil, errors.New("error recording transaction: invalid settlement address")
+	}
+
 	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording transaction")
