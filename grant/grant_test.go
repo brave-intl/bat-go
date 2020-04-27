@@ -23,6 +23,14 @@ func TestConsume(t *testing.T) {
 	registerGrantInstrumentation = false
 
 	uphold.SettlementDestination = "foo@bar.com"
+	oldUpholdSettlementAddress := uphold.UpholdSettlementAddress
+	uphold.UpholdSettlementAddress = "foo@bar.com"
+	oldAnonCardSettlementAddress := uphold.AnonCardSettlementAddress
+	uphold.AnonCardSettlementAddress = "foo@bar.com"
+	defer func() {
+		uphold.UpholdSettlementAddress = oldUpholdSettlementAddress
+		uphold.AnonCardSettlementAddress = oldAnonCardSettlementAddress
+	}()
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
