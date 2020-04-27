@@ -8,11 +8,11 @@ import (
 
 func TestGenerateSecret(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldAESKey := AESKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		AESKey = oldAESKey
+		EncryptionKey = oldEncryptionKey
 	}()
-	AESKey = "123456789012345678901234"
+	EncryptionKey = "123456789012345678901234"
 	s, n, err := GenerateSecret()
 	if err != nil {
 		t.Error("error in generate secret: ", err)
@@ -33,11 +33,11 @@ func TestGenerateSecret(t *testing.T) {
 
 func TestSecretKey(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldAESKey := AESKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		AESKey = oldAESKey
+		EncryptionKey = oldEncryptionKey
 	}()
-	AESKey = "123456789012345678901234"
+	EncryptionKey = "123456789012345678901234"
 	var (
 		sk, err = randomString(20)
 		expiry  = time.Now().Add(1 * time.Minute)
