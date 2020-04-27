@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
@@ -77,5 +78,115 @@ func TestVoteAnonCard(t *testing.T) {
 		context.Background(), []CredentialBinding{}, voteText)
 	if err != nil {
 		t.Error("encountered an error in Vote call: ", err.Error())
+	}
+}
+
+// TestVoteUnknownSKU - given an issuer that is suffixed with "anon-card-vote" we should get a vote with funding source anon-card-vote
+func TestVoteUnknownSKU(t *testing.T) {
+	var (
+		issuerName                        = "brave.com?sku=bad-sku"
+		s                                 = new(Service)
+		fakeGenerateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+			return []cbr.CredentialRedemption{
+				{
+					Issuer: issuerName,
+				},
+			}, nil
+		}
+		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+	)
+	// avro codecs
+	if err := s.InitCodecs(); err != nil {
+		t.Error("failed to initialize avro codecs for test: ", err)
+	}
+	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
+
+	generateCredentialRedemptions = fakeGenerateCredentialRedemptions
+	defer func() {
+		generateCredentialRedemptions = oldGenerateCredentialRedemptions
+	}()
+
+	err := s.Vote(
+		context.Background(), []CredentialBinding{}, voteText)
+	if err == nil {
+		t.Error("should have encountered an error in Vote call: ")
+	}
+	if !errors.Is(err, ErrInvalidSKUTokenSKU) {
+		t.Error("invalid error, should have gotten invalidskutokensku: ", err)
+	}
+}
+
+// TestVoteUnknownBadMerch - given an issuer that is suffixed with "anon-card-vote" we should get a vote with funding source anon-card-vote
+func TestVoteUnknownBadMerch(t *testing.T) {
+	var (
+		issuerName                        = "notbrave.com?sku=anon-card-vote"
+		s                                 = new(Service)
+		fakeGenerateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+			return []cbr.CredentialRedemption{
+				{
+					Issuer: issuerName,
+				},
+			}, nil
+		}
+		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+	)
+	// avro codecs
+	if err := s.InitCodecs(); err != nil {
+		t.Error("failed to initialize avro codecs for test: ", err)
+	}
+	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
+
+	generateCredentialRedemptions = fakeGenerateCredentialRedemptions
+	defer func() {
+		generateCredentialRedemptions = oldGenerateCredentialRedemptions
+	}()
+
+	err := s.Vote(
+		context.Background(), []CredentialBinding{}, voteText)
+	if err == nil {
+		t.Error("should have encountered an error in Vote call: ")
+	}
+	if !errors.Is(err, ErrInvalidSKUTokenBadMerchant) {
+		t.Error("invalid error, should have gotten invalidskutokenbadmerchant: ", err)
+	}
+}
+
+// TestVoteGoodAndBadSKU - one good credential, and one bad credential should result in no votes
+func TestVoteGoodAndBadSKU(t *testing.T) {
+	var (
+		issuerName1                       = "brave.com?sku=bad-sku"
+		issuerName2                       = "brave.com?sku=bad-sku"
+		s                                 = new(Service)
+		fakeGenerateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+			return []cbr.CredentialRedemption{
+				{
+					Issuer: issuerName1,
+				},
+				{
+					Issuer: issuerName2,
+				},
+			}, nil
+		}
+		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+	)
+	// avro codecs
+	if err := s.InitCodecs(); err != nil {
+		t.Error("failed to initialize avro codecs for test: ", err)
+	}
+	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
+
+	generateCredentialRedemptions = fakeGenerateCredentialRedemptions
+	defer func() {
+		generateCredentialRedemptions = oldGenerateCredentialRedemptions
+	}()
+
+	err := s.Vote(
+		context.Background(), []CredentialBinding{}, voteText)
+	if err == nil {
+		t.Error("should have encountered an error in Vote call: ")
+	}
+
+	if !errors.Is(err, ErrInvalidSKUTokenSKU) {
+		t.Error("invalid error, should have gotten invalidskutokensku: ", err)
 	}
 }

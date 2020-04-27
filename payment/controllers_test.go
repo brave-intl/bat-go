@@ -250,6 +250,13 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
 
+	oldUpholdSettlementAddress := uphold.UpholdSettlementAddress
+	uphold.UpholdSettlementAddress = "6654ecb0-6079-4f6c-ba58-791cc890a561"
+
+	defer func() {
+		uphold.UpholdSettlementAddress = oldUpholdSettlementAddress
+	}()
+
 	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
