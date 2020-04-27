@@ -46,7 +46,7 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
 	# fix everything called datastore...
-	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' ./grant/instrumented_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
 	sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./promotion/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./promotion/instrumented_read_only_datastore.go
