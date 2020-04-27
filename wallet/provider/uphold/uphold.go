@@ -53,6 +53,8 @@ const (
 )
 
 var (
+	// LegacySettlementAddress is the address of the settlement wallet
+	LegacySettlementAddress = os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	// AnonCardSettlementAddress is the address of the settlement wallet
 	AnonCardSettlementAddress = os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
 	// UpholdSettlementAddress is the address of the settlement wallet
@@ -75,6 +77,12 @@ var (
 )
 
 func init() {
+	if AnonCardSettlementAddress == "" && LegacySettlementAddress != "" {
+		AnonCardSettlementAddress = LegacySettlementAddress
+	}
+	if UpholdSettlementAddress == "" && LegacySettlementAddress != "" {
+		UpholdSettlementAddress = LegacySettlementAddress
+	}
 	var proxy func(*http.Request) (*url.URL, error)
 	if len(upholdProxy) > 0 {
 		proxyURL, err := url.Parse(upholdProxy)
