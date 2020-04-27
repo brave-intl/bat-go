@@ -236,6 +236,26 @@ func (service *Service) Vote(
 
 	if len(requestCredentials) > 0 {
 		for _, rc := range requestCredentials {
+			// validate the issuer / sku of all credentials for validation
+			// we accept all the votes, or none of the votes.
+			merchantID, sku, err := decodeIssuerID(rc.Issuer)
+			if err != nil {
+				return fmt.Errorf("failed to decode issuer name for sku: %w", err)
+			}
+
+			if merchantID != "brave.com" {
+				// validate that the merchantID is brave.com
+				// if not hard fail the request, and return an error stating the problem
+				log.Printf("merchantID is invalid in vote sku token - should be brave.com: %s\n", merchantID)
+				return fmt.Errorf("merchant id != brave.com: %w", ErrInvalidSKUTokenBadMerchant)
+			}
+
+			if sku != UserWalletVoteSKU && sku != AnonCardVoteSKU {
+				log.Printf("sku is invalid in sku token - should be either user-wallet or anonymous-card: %s\n", sku)
+				return fmt.Errorf("%s is an invalid sku: %w", sku, ErrInvalidSKUTokenSKU)
+			}
+
+			// validation has completed.
 			credsByIssuer[rc.Issuer] = append(credsByIssuer[rc.Issuer], rc)
 		}
 	}
@@ -245,31 +265,20 @@ func (service *Service) Vote(
 		vote.VoteTally = int64(len(v))
 		// k holds the issuer name string, which has encoded in the funding source
 		// draw out the funding source and set it here.
-
-		merchantID, sku, err := decodeIssuerID(k)
+		_, sku, err := decodeIssuerID(k)
 		if err != nil {
 			return fmt.Errorf("failed to decode issuer name for sku: %w", err)
 		}
-
-		if merchantID != "brave.com" {
-			// validate that the merchantID is brave.com
-			// if not hard fail the request, and return an error stating the problem
-			return fmt.Errorf("merchant id != brave.com: %w", ErrInvalidSKUTokenBadMerchant)
-		}
-
-		// get the part after the issuerSepartor
 		switch sku {
 		case UserWalletVoteSKU:
 			vote.FundingSource = "user-wallet"
 		case AnonCardVoteSKU:
 			vote.FundingSource = "anonymous-card"
 		default:
-			// Will only get here if we get an unknown Vote SKU from issuer
+			// should not get here, doing validation above on each issuer name
 			log.Printf("sku is invalid in sku token - should be either user-wallet or anonymous-card: %s\n", sku)
 			return fmt.Errorf("%s is an invalid sku: %w", sku, ErrInvalidSKUTokenSKU)
 		}
-
-		// validation has completed.
 
 		// get a new VoteEvent to emit to kafka based on our input vote
 		voteEvent, err := NewVoteEvent(vote)
