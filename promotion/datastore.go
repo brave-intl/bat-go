@@ -517,6 +517,7 @@ func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*Clai
 select
 	max(claims.created_at) as "last_claim",
 	sum(claims.approximate_value - claims.bonus) as earnings,
+	sum(claims.approximate_value - claims.bonus) as amount,
 	promos.promotion_type as type
 from claims, (
 	select

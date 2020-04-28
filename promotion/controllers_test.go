@@ -714,6 +714,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Require().Equal(http.StatusOK, code)
 	suite.Assert().JSONEq(`{
+		"amount": "30",
 		"earnings": "30",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
@@ -728,6 +729,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Require().Equal(http.StatusOK, code)
 	suite.Assert().JSONEq(`{
+		"amount": "40",
 		"earnings": "40",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
