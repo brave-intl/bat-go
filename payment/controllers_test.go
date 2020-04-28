@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -57,7 +58,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
-	EncryptionKey = "AES256Key-32Characters1234567890"
+	cryptography.EncryptionKey = "YmtpOHhrZXN6WEcxVHhvOXVsMExxakQxVmIwTG9DU3g="
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
