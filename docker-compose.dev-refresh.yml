@@ -30,7 +30,7 @@ services:
       - CHALLENGE_BYPASS_TOKEN
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
-      - ENCRYPTION_KEY=AES256Key-32Characters1234567890
+      - ENCRYPTION_KEY=QUVTMjU2S2V5LTMyQ2hhcmFjdGVyczEyMzQ1Njc4OTA=
       - FEATURE_ORDERS=true
       - FEATURE_MERCHANT=true
       - DONOR_WALLET_CARD_ID

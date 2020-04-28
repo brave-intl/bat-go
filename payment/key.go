@@ -57,7 +57,7 @@ func randomString(n int) (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// GenerateSecret creates a random public and secret key
+// GenerateSecret creates a random key for merchants
 func GenerateSecret() (secret string, nonce string, err error) {
 	unencryptedSecret, err := randomString(keyLength)
 	if err != nil {
