@@ -11,7 +11,7 @@ import (
 )
 
 // EncryptionKey for encrypting secrets
-var EncryptionKey, err = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+var EncryptionKey, _ = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
 
 // Both what the encryption key length should be
 var keyLength = 32

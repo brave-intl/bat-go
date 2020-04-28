@@ -16,17 +16,20 @@ func TestGenerateSecret(t *testing.T) {
 	defer func() {
 		cryptography.EncryptionKey = oldEncryptionKey
 	}()
-	cryptography.EncryptionKey = []byte("123456789012345678901234")
+	cryptography.EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
 	s, n, err := GenerateSecret()
 	if err != nil {
 		t.Error("error in generate secret: ", err)
 	}
 
 	encrypted, err := hex.DecodeString(s)
-	t.Error(err)
-
+	if err != nil {
+		t.Error("error while decoding the encrypted string", err)
+	}
 	nonce, err := hex.DecodeString(n)
-	t.Error(err)
+	if err != nil {
+		t.Error("error while decoding the nonce", err)
+	}
 
 	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
 	if err != nil {
@@ -48,7 +51,7 @@ func TestSecretKey(t *testing.T) {
 	defer func() {
 		cryptography.EncryptionKey = oldEncryptionKey
 	}()
-	cryptography.EncryptionKey = []byte("123456789012345678901234")
+	cryptography.EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
 	var (
 		sk, err = randomString(20)
 		expiry  = time.Now().Add(1 * time.Minute)
