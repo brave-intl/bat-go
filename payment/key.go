@@ -59,11 +59,11 @@ func randomString(n int) (string, error) {
 
 // GenerateSecret creates a random public and secret key
 func GenerateSecret() (secret string, nonce string, err error) {
-	unencryptedsecret, err := randomString(keyLength)
+	unencryptedSecret, err := randomString(keyLength)
 	if err != nil {
 		return "", "", err
 	}
-	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(unencryptedsecret))
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }
