@@ -16,6 +16,11 @@ var EncryptionKey, _ = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY
 // Both what the encryption key length should be
 var keyLength = 32
 
+var (
+	// ErrEncryptedFieldTooLarge - the sku was invalid
+	ErrEncryptedFieldTooLarge = errors.New("Encrypted field is greater than 16 KB - this must be chunked")
+)
+
 // EncryptMessage uses SecretBox to encrypt the message
 func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err error) {
 	var nonce [24]byte
@@ -23,6 +28,12 @@ func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err e
 	// The key argument should be 32 bytes long
 	if len(EncryptionKey) != keyLength {
 		return nil, nonce, errors.New("Encryption Key is not the correct key length")
+	}
+
+	// large amounts of data should be chunked
+	// If in doubt, 16KB is a reasonable chunk size.
+	if len(field) >= (16 * 1000) {
+		return nil, nonce, ErrEncryptedFieldTooLarge
 	}
 
 	var encryptionKey [32]byte

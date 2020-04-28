@@ -31,6 +31,10 @@ func TestGenerateSecret(t *testing.T) {
 		t.Error("error while decoding the nonce", err)
 	}
 
+	if len(nonce) != 24 {
+		t.Error("Nonce does not have correct length", err)
+	}
+
 	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
@@ -39,6 +43,9 @@ func TestGenerateSecret(t *testing.T) {
 	k, err := base64.URLEncoding.DecodeString(secretKey)
 	if err != nil {
 		t.Error("error decoding generated secret: ", err)
+	}
+	if len(secretKey) != 32 {
+		t.Error("Secret key does not have correct length", err)
 	}
 	if len(k) < 0 {
 		t.Error("the key should be bigger than nothing")
