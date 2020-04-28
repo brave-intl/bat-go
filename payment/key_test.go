@@ -15,8 +15,11 @@ func TestGenerateSecret(t *testing.T) {
 	oldEncryptionKey := cryptography.EncryptionKey
 	defer func() {
 		cryptography.EncryptionKey = oldEncryptionKey
+		cryptography.Init()
 	}()
 	cryptography.EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	cryptography.Init()
+
 	s, n, err := GenerateSecret()
 	if err != nil {
 		t.Error("error in generate secret: ", err)

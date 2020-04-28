@@ -12,6 +12,7 @@ import (
 
 // EncryptionKey for encrypting secrets
 var EncryptionKey, _ = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+var byteEncryptionKey [32]byte
 
 // Both what the encryption key length should be
 var keyLength = 32
@@ -20,6 +21,11 @@ var (
 	// ErrEncryptedFieldTooLarge - the sku was invalid
 	ErrEncryptedFieldTooLarge = errors.New("Encrypted field is greater than 16 KB - this must be chunked")
 )
+
+// Init copies the specified encryption key into memory once
+func Init() {
+	copy(byteEncryptionKey[:], []byte(EncryptionKey))
+}
 
 // EncryptMessage uses SecretBox to encrypt the message
 func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err error) {
@@ -36,27 +42,21 @@ func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err e
 		return nil, nonce, ErrEncryptedFieldTooLarge
 	}
 
-	var encryptionKey [32]byte
-	copy(encryptionKey[:], []byte(EncryptionKey))
-
 	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
 		return nil, nonce, err
 	}
 
 	out := make([]byte, 0, secretbox.Overhead+len(field))
-	encryptedField := secretbox.Seal(out[:], field, &nonce, &encryptionKey)
+	encryptedField := secretbox.Seal(out[:], field, &nonce, &byteEncryptionKey)
 
 	return encryptedField, nonce, nil
 }
 
 // DecryptMessage uses SecretBox to decrypt the message
 func DecryptMessage(encryptedField []byte, nonce []byte) (string, error) {
-	var encryptionKey [32]byte
-	copy(encryptionKey[:], []byte(EncryptionKey))
-
 	var decryptNonce [24]byte
 	copy(decryptNonce[:], nonce)
-	decrypted, ok := secretbox.Open(nil, encryptedField, &decryptNonce, &encryptionKey)
+	decrypted, ok := secretbox.Open(nil, encryptedField, &decryptNonce, &byteEncryptionKey)
 	if !ok {
 		return "", errors.New("Could not decrypt the value of the secret")
 	}

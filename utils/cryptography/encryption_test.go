@@ -14,6 +14,7 @@ func TestEncryptionMessage(t *testing.T) {
 		EncryptionKey = oldEncryptionKey
 	}()
 	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	Init()
 
 	tooLarge := make([]byte, 16001)
 
