@@ -43,7 +43,7 @@ func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err e
 		return nil, nonce, err
 	}
 
-	var out []byte
+	out := make([]byte, 0, secretbox.Overhead+len(field))
 	encryptedField := secretbox.Seal(out[:], field, &nonce, &encryptionKey)
 
 	return encryptedField, nonce, nil
