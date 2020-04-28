@@ -3,9 +3,7 @@ package crytography
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 
@@ -19,46 +17,35 @@ var EncryptionKey, err = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_K
 var keyLength = 32
 
 // EncryptMessage uses SecretBox to encrypt the message
-func EncryptMessage(message string) (secretText string, nonceString string, err error) {
+func EncryptMessage(field []byte) (encrypted []byte, nonceString [24]byte, err error) {
+	var nonce [24]byte
+
 	// The key argument should be 32 bytes long
 	if len(EncryptionKey) != keyLength {
-		return "", "", errors.New("Encryption Key is not the correct key length")
+		return nil, nonce, errors.New("Encryption Key is not the correct key length")
 	}
 
 	var encryptionKey [32]byte
 	copy(encryptionKey[:], []byte(EncryptionKey))
 
-	plaintext := []byte(message)
-
-	var nonce [24]byte
 	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-		return "", "", err
+		return nil, nonce, err
 	}
 
 	var out []byte
-	ciphertext := secretbox.Seal(out[:], plaintext, &nonce, &encryptionKey)
+	encryptedField := secretbox.Seal(out[:], field, &nonce, &encryptionKey)
 
-	return fmt.Sprintf("%x", ciphertext), fmt.Sprintf("%x", nonce), nil
+	return encryptedField, nonce, nil
 }
 
 // DecryptMessage uses SecretBox to decrypt the message
-func DecryptMessage(encryptedMessage string, nonceKey string) (string, error) {
+func DecryptMessage(encryptedField []byte, nonce []byte) (string, error) {
 	var encryptionKey [32]byte
 	copy(encryptionKey[:], []byte(EncryptionKey))
 
-	ciphertext, err := hex.DecodeString(encryptedMessage)
-	if err != nil {
-		return "", nil
-	}
-
-	nonce, err := hex.DecodeString(nonceKey)
-	if err != nil {
-		return "", nil
-	}
-
 	var decryptNonce [24]byte
 	copy(decryptNonce[:], nonce)
-	decrypted, ok := secretbox.Open(nil, ciphertext, &decryptNonce, &encryptionKey)
+	decrypted, ok := secretbox.Open(nil, encryptedField, &decryptNonce, &encryptionKey)
 	if !ok {
 		return "", errors.New("Could not decrypt the value of the secret")
 	}

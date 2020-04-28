@@ -2,22 +2,33 @@ package payment
 
 import (
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
+
+	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 )
 
 func TestGenerateSecret(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldEncryptionKey := EncryptionKey
+	oldEncryptionKey := cryptography.EncryptionKey
 	defer func() {
-		EncryptionKey = oldEncryptionKey
+		cryptography.EncryptionKey = oldEncryptionKey
 	}()
-	EncryptionKey = "123456789012345678901234"
+	cryptography.EncryptionKey = []byte("123456789012345678901234")
 	s, n, err := GenerateSecret()
 	if err != nil {
 		t.Error("error in generate secret: ", err)
 	}
-	secretKey, err := decryptSecretKey(s, n)
+
+	encrypted, err := hex.DecodeString(s)
+	t.Error(err)
+
+	nonce, err := hex.DecodeString(n)
+	t.Error(err)
+
+	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
 	}
@@ -33,11 +44,11 @@ func TestGenerateSecret(t *testing.T) {
 
 func TestSecretKey(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldEncryptionKey := EncryptionKey
+	oldEncryptionKey := cryptography.EncryptionKey
 	defer func() {
-		EncryptionKey = oldEncryptionKey
+		cryptography.EncryptionKey = oldEncryptionKey
 	}()
-	EncryptionKey = "123456789012345678901234"
+	cryptography.EncryptionKey = []byte("123456789012345678901234")
 	var (
 		sk, err = randomString(20)
 		expiry  = time.Now().Add(1 * time.Minute)
@@ -54,8 +65,10 @@ func TestSecretKey(t *testing.T) {
 	if err != nil {
 		t.Error("failed to generate a secret key: ", err)
 	}
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(k.SecretKey))
 
-	k.EncryptedSecretKey, k.Nonce, err = encryptSecretKey(k.SecretKey)
+	k.EncryptedSecretKey = fmt.Sprintf("%x", encryptedBytes)
+	k.Nonce = fmt.Sprintf("%x", nonceBytes)
 	if err != nil {
 		t.Error("failed to encrypt secret key: ", err)
 	}

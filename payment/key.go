@@ -3,12 +3,12 @@ package payment
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"os"
+	"encoding/hex"
+	"fmt"
 	"time"
-)
 
-// EncryptionKey for encrypting secrets
-var EncryptionKey, err = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
+)
 
 // What the merchant key length should be
 var keyLength = 24
@@ -27,7 +27,17 @@ type Key struct {
 
 // SetSecretKey decrypts the secret key from the database
 func (key *Key) SetSecretKey() error {
-	secretKey, err := DecryptMessage(key.EncryptedSecretKey, key.Nonce)
+	encrypted, err := hex.DecodeString(key.EncryptedSecretKey)
+	if err != nil {
+		return err
+	}
+
+	nonce, err := hex.DecodeString(key.Nonce)
+	if err != nil {
+		return err
+	}
+
+	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
 	if err != nil {
 		return err
 	}
@@ -53,6 +63,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(unencryptedsecret))
 
-	return EncryptMessage(unencryptedsecret)
+	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }
