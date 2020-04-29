@@ -17,7 +17,7 @@ func TestGenerateSecret(t *testing.T) {
 		EncryptionKey = oldEncryptionKey
 	}()
 
-	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
 	InitEncryptionKeys()
 
 	var byteEncryptionKey [32]byte
@@ -65,7 +65,7 @@ func TestSecretKey(t *testing.T) {
 		EncryptionKey = oldEncryptionKey
 		InitEncryptionKeys()
 	}()
-	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
 	InitEncryptionKeys()
 
 	var (

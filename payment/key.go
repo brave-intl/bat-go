@@ -12,7 +12,7 @@ import (
 )
 
 // EncryptionKey for encrypting secrets
-var EncryptionKey, _ = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 var byteEncryptionKey [32]byte
 
 // What the merchant key length should be
