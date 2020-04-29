@@ -2,22 +2,46 @@ package payment
 
 import (
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
+
+	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 )
 
 func TestGenerateSecret(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldAESKey := AESKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		AESKey = oldAESKey
+		EncryptionKey = oldEncryptionKey
 	}()
-	AESKey = "123456789012345678901234"
+
+	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
+	InitEncryptionKeys()
+
+	var byteEncryptionKey [32]byte
+	copy(byteEncryptionKey[:], EncryptionKey)
+
 	s, n, err := GenerateSecret()
 	if err != nil {
 		t.Error("error in generate secret: ", err)
 	}
-	secretKey, err := decryptSecretKey(s, n)
+
+	encrypted, err := hex.DecodeString(s)
+	if err != nil {
+		t.Error("error while decoding the encrypted string", err)
+	}
+	nonce, err := hex.DecodeString(n)
+	if err != nil {
+		t.Error("error while decoding the nonce", err)
+	}
+
+	if len(nonce) != 24 {
+		t.Error("Nonce does not have correct length", err)
+	}
+
+	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
 	}
@@ -26,6 +50,9 @@ func TestGenerateSecret(t *testing.T) {
 	if err != nil {
 		t.Error("error decoding generated secret: ", err)
 	}
+	if len(secretKey) != 32 {
+		t.Error("Secret key does not have correct length", err)
+	}
 	if len(k) < 0 {
 		t.Error("the key should be bigger than nothing")
 	}
@@ -33,11 +60,14 @@ func TestGenerateSecret(t *testing.T) {
 
 func TestSecretKey(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldAESKey := AESKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		AESKey = oldAESKey
+		EncryptionKey = oldEncryptionKey
+		InitEncryptionKeys()
 	}()
-	AESKey = "123456789012345678901234"
+	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
+	InitEncryptionKeys()
+
 	var (
 		sk, err = randomString(20)
 		expiry  = time.Now().Add(1 * time.Minute)
@@ -54,8 +84,10 @@ func TestSecretKey(t *testing.T) {
 	if err != nil {
 		t.Error("failed to generate a secret key: ", err)
 	}
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(k.SecretKey))
 
-	k.EncryptedSecretKey, k.Nonce, err = encryptSecretKey(k.SecretKey)
+	k.EncryptedSecretKey = fmt.Sprintf("%x", encryptedBytes)
+	k.Nonce = fmt.Sprintf("%x", nonceBytes)
 	if err != nil {
 		t.Error("failed to encrypt secret key: ", err)
 	}
