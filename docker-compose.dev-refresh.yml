@@ -1,0 +1,54 @@
+version: "3.4"
+
+services:
+  # dev-refresh service will start up a grant server bound to host port 3334
+  # which allows one to do `docker restart grant-dev-refresh` when the user
+  # wants to "restart" the service running new code.  This is especially helpful
+  # when you hook it up to `fswatch` type utilities, causing a re-run of `go run`
+  # every time a file changes.
+  dev-refresh:
+    container_name: grant-dev-refresh
+    image: golang:1.13.4
+    ports:
+      - "3335:3333"
+    command: "go run bin/grant-server/main.go"
+    volumes:
+      - .:/src
+      - ./test/secrets:/etc/kafka/secrets
+    working_dir: /src
+    depends_on:
+      - kafka
+      - postgres
+      - challenge-bypass
+    networks:
+      - grant
+    environment:
+      - ENV=local
+      - DEBUG=1
+      - BAT_SETTLEMENT_ADDRESS
+      - CHALLENGE_BYPASS_SERVER=http://challenge-bypass:2416
+      - CHALLENGE_BYPASS_TOKEN
+      - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
+      - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
+      - ENCRYPTION_KEY=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0
+      - FEATURE_ORDERS=true
+      - FEATURE_MERCHANT=true
+      - DONOR_WALLET_CARD_ID
+      - DONOR_WALLET_PRIVATE_KEY
+      - DONOR_WALLET_PUBLIC_KEY
+      - GRANT_SIGNATOR_PUBLIC_KEY
+      - GRANT_WALLET_CARD_ID
+      - GRANT_WALLET_PRIVATE_KEY
+      - GRANT_WALLET_PUBLIC_KEY
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_SSL_KEY_PASSWORD=confluent
+      - KAFKA_REQUIRED_ACKS=1
+      - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
+      - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
+      - TOKEN_LIST
+      - UPHOLD_ACCESS_TOKEN
+      - "RATIOS_SERVER=https://ratios-staging.mercury.basicattentiontoken.org"
+      - RATIOS_ACCESS_TOKEN

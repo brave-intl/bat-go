@@ -78,6 +78,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
+		r.Use(chiware.Recoverer)
 	}
 
 	roDB := os.Getenv("RO_DATABASE_URL")
@@ -85,14 +86,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var grantRoPg grant.ReadOnlyDatastore
 	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
@@ -100,7 +101,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
@@ -111,14 +112,14 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	var roPg promotion.ReadOnlyDatastore
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
@@ -126,7 +127,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
@@ -141,13 +142,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if os.Getenv("FEATURE_ORDERS") != "" {
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
@@ -157,6 +158,22 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 		r.Mount("/v1/orders", payment.Router(paymentService))
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+	}
+	if os.Getenv("FEATURE_MERCHANT") != "" {
+		payment.InitEncryptionKeys()
+		paymentPG, err := payment.NewPostgres("", true, "payment_db")
+		if err != nil {
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
+			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+		}
+		paymentService, err := payment.InitService(paymentPG)
+		if err != nil {
+			sentry.CaptureException(err)
+			sentry.Flush(time.Second * 2)
+			log.Panic().Err(err).Msg("Payment service initialization failed")
+		}
+		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 	r.Get("/metrics", middleware.Metrics())
 
@@ -184,7 +201,7 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 	for {
 		_, err := job(ctx)
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
+			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 		}
 		// regardless if attempted or not, wait for the duration until retrying
@@ -224,7 +241,7 @@ func main() {
 	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
 	err := srv.ListenAndServe()
 	if err != nil {
-		sentry.CaptureMessage(err.Error())
+		sentry.CaptureException(err)
 		sentry.Flush(time.Second * 2)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}

@@ -30,6 +30,8 @@ type Datastore interface {
 	walletservice.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
+	// DeactivatePromotion marks a particular promotion as inactive
+	DeactivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
@@ -173,7 +175,17 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 
 // ActivatePromotion marks a particular promotion as active
 func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
-	_, err := pg.DB.Exec("update promotions set active = true where id = $1", promotion.ID)
+	return pg.setPromotionActive(promotion, true)
+}
+
+// DeactivatePromotion marks a particular promotion as not active
+func (pg *Postgres) DeactivatePromotion(promotion *Promotion) error {
+	return pg.setPromotionActive(promotion, false)
+}
+
+// setPromotionActive marks a particular promotion's active value
+func (pg *Postgres) setPromotionActive(promotion *Promotion, active bool) error {
+	_, err := pg.DB.Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
 	if err != nil {
 		return err
 	}
@@ -269,6 +281,10 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		return nil, err
 	}
 
+	if promotion.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, errors.New("unable to claim expired promotion")
+	}
+
 	tx, err := pg.DB.Beginx()
 	if err != nil {
 		return nil, err
@@ -292,7 +308,15 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 
 	if !legacyClaimExists {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+		res, err := tx.Exec(`
+			update promotions
+			set remaining_grants = remaining_grants - 1
+			where
+				id = $1 and
+				active and
+				promotions.created_at > NOW() - INTERVAL '3 months'`,
+			promotion.ID)
+
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +392,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from
-		  (
+			(
 				select
 					promotions.*,
 					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
@@ -380,10 +404,13 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			promos.active and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			wallet_claims.redeemed is distinct from true and (
+				wallet_claims.legacy_claimed is true or (
+					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
+						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+					)
+				)
 			)
 		order by promos.created_at;`
 
@@ -490,6 +517,7 @@ func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*Clai
 select
 	max(claims.created_at) as "last_claim",
 	sum(claims.approximate_value - claims.bonus) as earnings,
+	sum(claims.approximate_value - claims.bonus) as amount,
 	promos.promotion_type as type
 from claims, (
 	select
@@ -725,10 +753,10 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	if err != nil {
 		return err
 	}
+	defer pg.RollbackTx(tx)
 
 	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
@@ -738,7 +766,6 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	returning *`
 	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
@@ -757,6 +784,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// FIXME maybe useful to later move definition outside of this method scope
 	type DrainJob struct {
@@ -778,12 +806,10 @@ limit 1`
 	jobs := []DrainJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -793,7 +819,6 @@ limit 1`
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -803,7 +828,7 @@ limit 1`
 		{
 			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
 			if err != nil {
-				_ = tx.Rollback()
+				pg.RollbackTx(tx)
 			}
 			_ = tx.Commit()
 		}
@@ -812,7 +837,6 @@ limit 1`
 
 	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -825,7 +849,7 @@ limit 1`
 }
 
 // UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
+//	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
@@ -844,6 +868,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
 	tx := pg.DB.MustBegin()
+	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
 	err := tx.Get(&transaction,
@@ -854,14 +879,11 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 	`, orderID, externalTransactionID, status, currency, kind, amount)
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	err = tx.Commit()
-
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 

@@ -2,9 +2,11 @@ package payment
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -31,6 +33,122 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
 	return r
+}
+
+// MerchantRouter handles calls made for the merchant
+func MerchantRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	if os.Getenv("ENV") != "local" {
+		r.Use(middleware.SimpleTokenAuthorizedOnly)
+	}
+
+	// Once instrument handler is refactored https://github.com/brave-intl/bat-go/issues/291
+	// We can use this service context instead of having
+	r.Use(middleware.NewServiceCtx(service))
+
+	// RESTy routes for "merchant" resource
+	r.Route("/", func(r chi.Router) {
+		r.Route("/{merchantID}", func(mr chi.Router) {
+			mr.Route("/keys", func(kr chi.Router) {
+				kr.Method("GET", "/", middleware.InstrumentHandler("GetKeys", GetKeys(service)))
+				kr.Method("POST", "/", middleware.InstrumentHandler("CreateKey", CreateKey(service)))
+				kr.Method("DELETE", "/{id}", middleware.InstrumentHandler("DeleteKey", DeleteKey(service)))
+			})
+		})
+	})
+
+	return r
+}
+
+// DeleteKeyRequest includes information needed to delete a key
+type DeleteKeyRequest struct {
+	DelaySeconds int `json:"delaySeconds" valid:"-"`
+}
+
+// CreateKeyRequest includes information needed to create a key
+type CreateKeyRequest struct {
+	Name string `json:"name" valid:"required"`
+}
+
+// CreateKey is the handler for creating keys for a merchant
+func CreateKey(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		reqMerchant := chi.URLParam(r, "merchantID")
+
+		var req CreateKeyRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		encrypted, nonce, err := GenerateSecret()
+		if err != nil {
+			return handlers.WrapError(err, "Could not generate a secret key ", http.StatusInternalServerError)
+		}
+
+		key, err := service.datastore.CreateKey(reqMerchant, req.Name, encrypted, nonce)
+		if err != nil {
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
+	})
+}
+
+// DeleteKey deletes a key
+func DeleteKey(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		reqID := chi.URLParam(r, "id")
+		if reqID == "" || !govalidator.IsUUIDv4(reqID) {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"id": "id must be a uuidv4",
+				},
+			)
+		}
+
+		id := uuid.Must(uuid.FromString(reqID))
+
+		var req DeleteKeyRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		key, err := service.datastore.DeleteKey(id, req.DelaySeconds)
+		if err != nil {
+			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
+		}
+		status := http.StatusOK
+		if key == nil {
+			status = http.StatusNotFound
+		}
+
+		return handlers.RenderContent(r.Context(), key, w, status)
+	})
+}
+
+// GetKeys returns all keys for a specified merchant
+func GetKeys(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		reqID := chi.URLParam(r, "merchantID")
+		expired := r.URL.Query().Get("expired")
+		showExpired := expired == "true"
+
+		var keys *[]Key
+		keys, err := service.datastore.GetKeys(reqID, showExpired)
+		if err != nil {
+			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), keys, w, http.StatusOK)
+	})
 }
 
 // VoteRouter for voting endpoint
@@ -79,12 +197,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
 	})
 }
 
@@ -108,16 +221,11 @@ func GetOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
+		status := http.StatusOK
 		if order == nil {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusOK)
+			status = http.StatusNotFound
 		}
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the orders JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), order, w, status)
 	})
 }
 
@@ -136,17 +244,12 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 		id := uuid.Must(uuid.FromString(orderID))
 
-		order, err := service.datastore.GetTransactions(id)
+		transactions, err := service.datastore.GetTransactions(id)
 		if err != nil {
-			return handlers.WrapError(err, "Error retrieving the transactions for the order", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error retrieving the transactions", http.StatusInternalServerError)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(order); err != nil {
-			return handlers.WrapError(err, "Error encoding the transactions JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), transactions, w, http.StatusOK)
 	})
 }
 
@@ -196,12 +299,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
-		}
-		return nil
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
 	})
 }
 
@@ -237,13 +335,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(transaction); err != nil {
-			return handlers.WrapError(err, "Error encoding the transaction JSON", http.StatusInternalServerError)
-		}
-		return nil
-
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
 	})
 }
 
@@ -279,7 +371,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		}
 		validOrderID := uuid.Must(uuid.FromString(orderID))
 
-		orderCreds, err := service.datastore.GetOrderCreds(validOrderID)
+		orderCreds, err := service.datastore.GetOrderCredsByItemID(validOrderID, req.ItemID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -292,7 +384,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
 
-		return nil
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 
@@ -309,24 +401,28 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		id := uuid.Must(uuid.FromString(orderID))
 
-		creds, err := service.datastore.GetOrderCreds(id)
+		creds, err := service.datastore.GetOrderCreds(id, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
 
 		if creds == nil {
 			return &handlers.AppError{
-				Message: "Order does not exist",
+				Message: "Credentials do not exist",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
 			}
 		}
 
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(creds); err != nil {
-			panic(err)
+		status := http.StatusOK
+		for i := 0; i < len(*creds); i++ {
+			if (*creds)[i].SignedCreds == nil {
+				status = http.StatusAccepted
+				break
+			}
 		}
-		return nil
+
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 
@@ -361,7 +457,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID())
+		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -374,7 +470,12 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 			}
 		}
 
-		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
+		status := http.StatusOK
+		if creds.SignedCreds == nil {
+			status = http.StatusAccepted
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 
@@ -402,11 +503,27 @@ func MakeVote(service *Service) handlers.AppHandler {
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
+				log.Printf("failed vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
+				log.Printf("failed multiple vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			default:
-				// FIXME
+				// check for custom vote invalidations
+				if errors.Is(err, ErrInvalidSKUToken) {
+					verr := handlers.ValidationError("failed to validate sku token", nil)
+					data := []string{}
+					if errors.Is(err, ErrInvalidSKUTokenSKU) {
+						data = append(data, "invalid sku value")
+					}
+					if errors.Is(err, ErrInvalidSKUTokenBadMerchant) {
+						data = append(data, "invalid merchant value")
+					}
+					verr.Data = data
+					log.Printf("failed sku validations: %s", err)
+					return verr
+				}
+				log.Printf("failed to perform vote: %s", err)
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}

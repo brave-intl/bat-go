@@ -3,10 +3,12 @@ package ratios
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -19,6 +21,27 @@ type Client interface {
 // HTTPClient wraps http.Client for interacting with the ledger server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
+}
+
+// NewWithContext returns a new HTTPClient, retrieving the base URL from the context
+func NewWithContext(ctx context.Context) (*HTTPClient, error) {
+	// get the server url from context
+	serverURL, err := appctx.GetStringFromContext(ctx, appctx.RatiosServerCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get RatiosServer from context: %w", err)
+	}
+
+	// get the server access token from context
+	accessToken, err := appctx.GetStringFromContext(ctx, appctx.RatiosAccessTokenCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get RatiosAccessToken from context: %w", err)
+	}
+
+	client, err := clients.New(serverURL, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	return &HTTPClient{client}, err
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
