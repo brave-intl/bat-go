@@ -472,7 +472,7 @@ func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx
 	logger.Debug().Msg("about to set errored to true for this vote")
 	var (
 		statement = `update vote_drain set erred=true where id=$1`
-		_, err    = pg.DB.Exec(statement, vr.ID)
+		_, err    = tx.ExecContext(ctx, statement, vr.ID)
 	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to update vote_drain")
@@ -508,7 +508,7 @@ func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) 
 	logger.Debug().Msg("about to set processed to true for this vote")
 	var (
 		statement = `update vote_drain set processed=true where id=$1`
-		_, err    = pg.DB.Exec(statement, vr.ID)
+		_, err    = tx.ExecContext(ctx, statement, vr.ID)
 	)
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to update processed=true for vote drain job")
@@ -522,7 +522,7 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		statement = `
 	insert into vote_drain (credentials, vote_text, vote_event)
 	values ($1, $2, $3)`
-		_, err = pg.DB.Exec(statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+		_, err = tx.ExecContext(ctx, statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
