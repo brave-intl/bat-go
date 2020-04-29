@@ -5,10 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"time"
 
 	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 )
+
+// EncryptionKey for encrypting secrets
+var EncryptionKey, _ = base64.StdEncoding.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+var byteEncryptionKey [32]byte
 
 // What the merchant key length should be
 var keyLength = 24
@@ -25,6 +30,11 @@ type Key struct {
 	Expiry             *time.Time `json:"expiry" db:"expiry"`
 }
 
+// InitEncryptionKeys copies the specified encryption key into memory once
+func InitEncryptionKeys() {
+	copy(byteEncryptionKey[:], []byte(EncryptionKey))
+}
+
 // SetSecretKey decrypts the secret key from the database
 func (key *Key) SetSecretKey() error {
 	encrypted, err := hex.DecodeString(key.EncryptedSecretKey)
@@ -37,7 +47,7 @@ func (key *Key) SetSecretKey() error {
 		return err
 	}
 
-	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
+	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
 		return err
 	}
@@ -63,7 +73,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(unencryptedSecret))
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }

@@ -12,13 +12,16 @@ import (
 
 func TestGenerateSecret(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldEncryptionKey := cryptography.EncryptionKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		cryptography.EncryptionKey = oldEncryptionKey
-		cryptography.Init()
+		EncryptionKey = oldEncryptionKey
 	}()
-	cryptography.EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
-	cryptography.Init()
+
+	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	InitEncryptionKeys()
+
+	var byteEncryptionKey [32]byte
+	copy(byteEncryptionKey[:], EncryptionKey)
 
 	s, n, err := GenerateSecret()
 	if err != nil {
@@ -38,7 +41,7 @@ func TestGenerateSecret(t *testing.T) {
 		t.Error("Nonce does not have correct length", err)
 	}
 
-	secretKey, err := cryptography.DecryptMessage(encrypted, nonce)
+	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
 	}
@@ -57,11 +60,14 @@ func TestGenerateSecret(t *testing.T) {
 
 func TestSecretKey(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldEncryptionKey := cryptography.EncryptionKey
+	oldEncryptionKey := EncryptionKey
 	defer func() {
-		cryptography.EncryptionKey = oldEncryptionKey
+		EncryptionKey = oldEncryptionKey
+		InitEncryptionKeys()
 	}()
-	cryptography.EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
+	InitEncryptionKeys()
+
 	var (
 		sk, err = randomString(20)
 		expiry  = time.Now().Add(1 * time.Minute)
@@ -78,7 +84,7 @@ func TestSecretKey(t *testing.T) {
 	if err != nil {
 		t.Error("failed to generate a secret key: ", err)
 	}
-	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage([]byte(k.SecretKey))
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(k.SecretKey))
 
 	k.EncryptedSecretKey = fmt.Sprintf("%x", encryptedBytes)
 	k.Nonce = fmt.Sprintf("%x", nonceBytes)

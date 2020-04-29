@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
-	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/getsentry/sentry-go"
@@ -161,7 +160,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 	}
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		cryptography.Init()
+		payment.InitEncryptionKeys()
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
 			sentry.CaptureException(err)

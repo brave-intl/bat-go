@@ -20,7 +20,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
-	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -58,7 +57,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
-	cryptography.EncryptionKey, err = base64.StdEncoding.DecodeString("YmtpOHhrZXN6WEcxVHhvOXVsMExxakQxVmIwTG9DU3g=")
+	EncryptionKey, err = base64.StdEncoding.DecodeString("YmtpOHhrZXN6WEcxVHhvOXVsMExxakQxVmIwTG9DU3g=")
 	if err != nil {
 		suite.Require().NoError(err)
 	}

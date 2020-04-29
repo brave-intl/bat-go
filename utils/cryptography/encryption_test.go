@@ -9,21 +9,17 @@ import (
 
 func TestEncryptionMessage(t *testing.T) {
 	// set up the aes key, typically done with env variable atm
-	oldEncryptionKey := EncryptionKey
-	defer func() {
-		EncryptionKey = oldEncryptionKey
-	}()
-	EncryptionKey = []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0")
-	Init()
+	var byteEncryptionKey [32]byte
+	copy(byteEncryptionKey[:], []byte("MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"))
 
 	tooLarge := make([]byte, 16001)
 
-	_, _, err := EncryptMessage(tooLarge)
+	_, _, err := EncryptMessage(byteEncryptionKey, tooLarge)
 	if !errors.Is(err, ErrEncryptedFieldTooLarge) {
 		t.Error("Encrypted field failed validations", err)
 	}
 
-	encryptedBytes, n, err := EncryptMessage([]byte("Hello World!"))
+	encryptedBytes, n, err := EncryptMessage(byteEncryptionKey, []byte("Hello World!"))
 	if err != nil {
 		t.Error("error while running encrypt message", err)
 	}
@@ -41,7 +37,7 @@ func TestEncryptionMessage(t *testing.T) {
 		t.Error("Nonce does not have correct length", err)
 	}
 
-	secretKey, err := DecryptMessage(encrypted, nonce)
+	secretKey, err := DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
 	}
