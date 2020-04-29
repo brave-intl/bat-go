@@ -476,8 +476,9 @@ func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx
 	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to update vote_drain")
+		return fmt.Errorf("failed to commit vote from drain: %w", err)
 	}
-	return fmt.Errorf("failed to commit vote from drain: %w", err)
+	return nil
 }
 
 func ifNoLoggerMakeLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -512,8 +513,9 @@ func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) 
 	)
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to update processed=true for vote drain job")
+		return fmt.Errorf("failed to commit vote from drain: %w", err)
 	}
-	return fmt.Errorf("failed to commit vote from drain: %w", err)
+	return nil
 }
 
 // InsertVote - Add a vote to our "queue" to be processed
