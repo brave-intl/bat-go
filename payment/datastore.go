@@ -522,7 +522,7 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		statement = `
 	insert into vote_drain (credentials, vote_text, vote_event)
 	values ($1, $2, $3)`
-		_, err = tx.ExecContext(ctx, statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+		_, err = pg.DB.ExecContext(ctx, statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
