@@ -14,9 +14,9 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
-	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -163,8 +163,10 @@ func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
 
 // RunNextVoteDrainJob - Attempt to drain the vote queue
 func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
-	var logger *zerolog.Logger
-	ctx, logger = ifNoLoggerMakeLogger(ctx)
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
 
 	select {
 	case <-ctx.Done():

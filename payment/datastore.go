@@ -6,18 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/logging"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
 
 	// needed for magic migration
@@ -467,13 +464,15 @@ FOR UPDATE
 // MarkVoteErrored - Update a vote to show it has errored, designed to run on a transaction so
 // a batch number of votes can be processed.
 func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
-	var logger *zerolog.Logger
-	_, logger = ifNoLoggerMakeLogger(ctx)
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
 	logger.Debug().Msg("about to set errored to true for this vote")
-	var (
-		statement = `update vote_drain set erred=true where id=$1`
-		_, err    = tx.ExecContext(ctx, statement, vr.ID)
-	)
+
+	var statement = `update vote_drain set erred=true where id=$1`
+	_, err = tx.ExecContext(ctx, statement, vr.ID)
+
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to update vote_drain")
 		return fmt.Errorf("failed to commit vote from drain: %w", err)
@@ -481,36 +480,18 @@ func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx
 	return nil
 }
 
-func ifNoLoggerMakeLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		var output io.Writer
-		if os.Getenv("ENV") != "local" {
-			output = os.Stdout
-		} else {
-			output = zerolog.ConsoleWriter{Out: os.Stdout}
-		}
-		l := zerolog.New(output).With().Timestamp().Logger()
-		debug := os.Getenv("DEBUG")
-		if debug == "" || debug == "f" || debug == "n" || debug == "0" {
-			l = log.Level(zerolog.InfoLevel)
-		}
-		logger = &l
-		ctx = context.WithValue(ctx, appctx.LoggerCTXKey, logger)
-	}
-	return ctx, logger
-}
-
 // CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
 // a batch number of votes can be processed.
 func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
-	var logger *zerolog.Logger
-	_, logger = ifNoLoggerMakeLogger(ctx)
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
 	logger.Debug().Msg("about to set processed to true for this vote")
-	var (
-		statement = `update vote_drain set processed=true where id=$1`
-		_, err    = tx.ExecContext(ctx, statement, vr.ID)
-	)
+
+	var statement = `update vote_drain set processed=true where id=$1`
+	_, err = tx.ExecContext(ctx, statement, vr.ID)
+
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to update processed=true for vote drain job")
 		return fmt.Errorf("failed to commit vote from drain: %w", err)
