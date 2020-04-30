@@ -15,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/getsentry/sentry-go"
@@ -194,6 +195,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
+	ctx = context.WithValue(ctx, appctx.LoggerCTXKey, logger)
 	return ctx, r, promotionService, jobs
 }
 
@@ -234,6 +236,7 @@ func main() {
 		// iterate over jobs
 		for i := 0; i < job.Workers; i++ {
 			// spin up a job worker for each worker
+			logger.Info().Msg("starting job worker")
 			go jobWorker(serverCtx, job.Func, job.Cadence)
 		}
 	}

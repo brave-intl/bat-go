@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/jmoiron/sqlx"
 	"github.com/linkedin/goavro"
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -162,15 +163,19 @@ func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
 
 // RunNextVoteDrainJob - Attempt to drain the vote queue
 func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
+	var logger *zerolog.Logger
+	ctx, logger = ifNoLoggerMakeLogger(ctx)
+
 	select {
 	case <-ctx.Done():
 		// cancellation happened, kill this worker
-		log.Printf("cancellation envoked in drain vote queue!\n")
+		logger.Error().Msg("cancellation envoked in drain vote queue!\n")
 		return false, nil
 	default:
 		// pull vote from db queue
 		tx, records, err := service.datastore.GetUncommittedVotesForUpdate(ctx)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to get uncommitted votes from drain queue")
 			return true, rollbackTx(service.datastore, tx, "failed to get uncommitted votes from drain queue", err)
 		}
 		for _, record := range records {
@@ -180,8 +185,9 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 			var requestCredentials = []cbr.CredentialRedemption{}
 			err := json.Unmarshal([]byte(record.RequestCredentials), &requestCredentials)
 			if err != nil {
-				log.Printf("failed to decode credentials: %s", err)
+				logger.Error().Err(err).Msg("failed to decode credentials")
 				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
+					logger.Error().Err(err).Msg("failed to mark vote as errored")
 					return true, rollbackTx(service.datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
 				// okay if it is errored, we will update the errored column
@@ -189,6 +195,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 			// redeem the credentials
 			err = service.cbClient.RedeemCredentials(ctx, requestCredentials, record.VoteText)
 			if err != nil {
+				logger.Error().Err(err).Msg("failed to redeem credentials")
 				if err := service.datastore.MarkVoteErrored(ctx, *record, tx); err != nil {
 					return true, rollbackTx(service.datastore, tx, "failed to mark vote as errored for creds redemption", err)
 				}
@@ -200,15 +207,18 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 					Value: record.VoteEventBinary,
 				},
 			); err != nil {
+				logger.Error().Err(err).Msg("failed to write message to kafka")
 				return true, rollbackTx(service.datastore, tx, "failed to write vote to kafka", err)
 			}
 			// update the particular record to not be picked again
 			if err = service.datastore.CommitVote(ctx, *record, tx); err != nil {
+				logger.Error().Err(err).Msg("failed to commit the vote")
 				return true, rollbackTx(service.datastore, tx, "failed to commit vote to drain vote queue", err)
 			}
 		}
 		// finalize the record
 		if err := tx.Commit(); err != nil {
+			logger.Error().Err(err).Msg("failed to commit the transaction")
 			return true, fmt.Errorf("failed to commit transaction in drain vote queue: %w", err)
 		}
 		return true, nil
