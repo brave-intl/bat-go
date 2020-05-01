@@ -191,6 +191,13 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
+		// Validates the SKU is one of our previously created SKUs
+		for _, item := range req.Items {
+			if !IsValidSKU(item.SKU) {
+				return handlers.WrapError(err, "Error creating the order in the database", http.StatusBadRequest)
+			}
+		}
+
 		order, err := service.CreateOrderFromRequest(req)
 
 		if err != nil {
