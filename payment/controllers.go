@@ -191,6 +191,13 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
+		// Validates the SKU is one of our previously created SKUs
+		for _, item := range req.Items {
+			if !IsValidSKU(item.SKU) {
+				return handlers.WrapError(err, "Invalid SKU Token provided in request", http.StatusBadRequest)
+			}
+		}
+
 		order, err := service.CreateOrderFromRequest(req)
 
 		if err != nil {
