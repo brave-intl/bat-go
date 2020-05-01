@@ -69,7 +69,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.RealIP)
 
 	r.Use(chiware.Heartbeat("/"))
-	r.Use(chiware.Timeout(60 * time.Second))
+	r.Use(chiware.Timeout(10 * time.Second))
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter)
 	r.Use(middleware.RequestIDTransfer)
@@ -241,7 +241,12 @@ func main() {
 		}
 	}
 
-	srv := http.Server{Addr: ":3333", Handler: chi.ServerBaseContext(serverCtx, r)}
+	srv := http.Server{
+		Addr:         ":3333",
+		Handler:      chi.ServerBaseContext(serverCtx, r),
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
 	err := srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureException(err)
