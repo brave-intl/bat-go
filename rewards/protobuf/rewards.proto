@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+// Rewards - This is the gRPC definition of the rewards service
+service Rewards {
+    // GetParameters - This RPC call will retrieve the
+    // valid rewards parameters from the service and return
+    // a parameters response instance
+    rpc GetParameters(ParametersRequest) returns(ParametersResponse) {}
+}
+
+enum Currency {
+	AED = 0;
+	ARS = 1;
+	AUD = 2;
+	BAT = 3;
+	BCH = 4;
+	BRL = 5;
+	BTC = 6;
+	BTG = 7;
+	CAD = 8;
+	CHF = 9;
+	CNY = 10;
+	DASH = 11;
+	DKK = 12;
+	ETH = 13;
+	EUR = 14;
+	GBP = 15;
+	HKD = 16;
+	ILS = 17;
+	INR = 18;
+	JPY = 19;
+	KES = 20;
+	LBA = 21;
+	LTC = 22;
+	MXN = 23;
+	NOK = 24;
+	NZD = 25;
+	PHP = 26;
+	PLN = 27;
+	SEK = 28;
+	SGD = 29;
+	USD = 30;
+	XAG = 31;
+	XAU = 32;
+	XPD = 33;
+	XPT = 34;
+	XRP = 35;
+}
+
+// ParametersRequest - Primary type of the parameters
+// get endpoint request.
+message ParametersRequest {
+    Currency currency = 1;
+}
+
+// ParametersResponse - Primary type of the parameters
+// get endpoint response.  Contains fee, autocontribute
+// and tip settings for the rewards system
+message ParametersResponse {
+    double batRate = 1;
+    AutoContribute autocontribute = 2;
+    Tips tips = 3;
+}
+
+// AutoContribute - autocontribute settings
+message AutoContribute {
+    double defaultChoice = 1;
+    repeated double choices = 2;
+}
+
+// Tips - tip settings
+message Tips {
+    repeated double defaultTipChoices = 1;
+    repeated double defaultMonthlyChoices = 2;
+}
