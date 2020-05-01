@@ -77,7 +77,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
+		grantRoPg, err = grant.NewROPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
@@ -103,7 +103,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
+		roPg, err = promotion.NewROPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)

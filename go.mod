@@ -20,6 +20,7 @@ require (
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/gogo/protobuf v1.3.0 // indirect
+	github.com/gojuno/minimock/v3 v3.0.4 // indirect
 	github.com/golang-migrate/migrate/v4 v4.6.2
 	github.com/golang/mock v1.3.1
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
@@ -41,6 +42,7 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.3.0
 	github.com/rs/xid v1.2.1 // indirect
 	github.com/rs/zerolog v1.18.0
@@ -57,8 +59,9 @@ require (
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
 	github.com/zenazn/goji v0.9.0 // indirect
-	golang.org/x/crypto v0.0.0-20190909091759-094676da4a83
-	golang.org/x/net v0.0.0-20190909003024-a7b16738d86b
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+	golang.org/x/tools v0.0.0-20200501155019-2658dc0cadb5 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect

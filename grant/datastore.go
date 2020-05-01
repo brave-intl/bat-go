@@ -44,10 +44,23 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
-		return &Postgres{*pg}, err
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "grant_datastore",
+		}, err
+	}
+	return nil, err
+}
+
+// NewROPostgres creates a new Postgres RO Datastore
+func NewROPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+	if pg != nil {
+		return &ReadOnlyDatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "grant_ro_datastore",
+		}, err
 	}
 	return nil, err
 }

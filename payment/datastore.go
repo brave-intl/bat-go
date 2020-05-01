@@ -83,10 +83,12 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
-		return &Postgres{*pg}, err
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "payment_datastore",
+		}, err
 	}
 	return nil, err
 }
