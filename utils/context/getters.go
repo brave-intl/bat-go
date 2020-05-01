@@ -2,6 +2,7 @@ package context
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/rs/zerolog"
 )
@@ -22,14 +23,12 @@ func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 
 //GetLogger - return the logger value from the context if it exists
 func GetLogger(ctx context.Context) (*zerolog.Logger, error) {
-	v := ctx.Value(LoggerCTXKey)
-	if v == nil {
-		// value not on context
-		return nil, ErrNotInContext
+	// get the logger from the context, if the logger is disabled
+	// return an error to caller
+	var l = zerolog.Ctx(ctx)
+	if ll := *l; ll.GetLevel() == zerolog.Disabled {
+		// this is a disabled logger, send appropriate error
+		return nil, fmt.Errorf("logger not found in context: %w", ErrNotInContext)
 	}
-	if s, ok := v.(*zerolog.Logger); ok {
-		return s, nil
-	}
-	// value not a string
-	return nil, ErrValueWrongType
+	return l, nil
 }
