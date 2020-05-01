@@ -9,15 +9,25 @@ import (
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
 	// needed for magic migration
+	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
+	RawDB() *sqlx.DB
+	// NewMigrate
+	NewMigrate() (*migrate.Migrate, error)
+	// Migrate
+	Migrate() error
+	// RollbackTx
+	RollbackTx(tx *sqlx.Tx)
+
 	// UpsertWallet inserts the given wallet
 	UpsertWallet(wallet *wallet.Info) error
 	// RedeemGrantForWallet redeems a claimed grant for a wallet
@@ -32,6 +42,14 @@ type Datastore interface {
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
+	RawDB() *sqlx.DB
+	// NewMigrate
+	NewMigrate() (*migrate.Migrate, error)
+	// Migrate
+	Migrate() error
+	// RollbackTx
+	RollbackTx(tx *sqlx.Tx)
+
 	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
 	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
 	// GetPromotion by ID
@@ -72,7 +90,7 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	values ($1, $2, $3, $4)
 	on conflict do nothing
 	returning *`
-	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
+	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey)
 	if err != nil {
 		return err
 	}
@@ -88,7 +106,7 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 	where id = $1 and promotion_id = $2 and wallet_id = $3 and not redeemed and legacy_claimed
 	returning *`
 
-	res, err := pg.DB.Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID)
+	res, err := pg.RawDB().Exec(statement, grant.GrantID.String(), grant.PromotionID.String(), wallet.ID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +125,7 @@ func (pg *Postgres) RedeemGrantForWallet(grant Grant, wallet wallet.Info) error 
 
 // ClaimPromotionForWallet makes a claim to a particular promotion by a wallet
 func (pg *Postgres) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (*promotion.Claim, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +209,7 @@ order by promotions.expires_at`
 
 	var grantResults []GrantResult
 
-	err := pg.DB.Select(&grantResults, statement, wallet.ID, promotionType)
+	err := pg.RawDB().Select(&grantResults, statement, wallet.ID, promotionType)
 	if err != nil {
 		return []Grant{}, err
 	}
@@ -218,7 +236,7 @@ order by promotions.expires_at`
 func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*promotion.Promotion, error) {
 	statement := "select * from promotions where id = $1"
 	promotions := []promotion.Promotion{}
-	err := pg.DB.Select(&promotions, statement, promotionID)
+	err := pg.RawDB().Select(&promotions, statement, promotionID)
 	if err != nil {
 		return nil, err
 	}

@@ -145,7 +145,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 	returning *`
 	promotions := []Promotion{}
 	suggestionsPerGrant := value.Div(defaultVoteValue)
-	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
+	err := pg.RawDB().Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	statement := "select * from promotions where id = $1"
 	promotions := []Promotion{}
-	err := pg.DB.Select(&promotions, statement, promotionID)
+	err := pg.RawDB().Select(&promotions, statement, promotionID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 
 // InsertClobberedClaims inserts clobbered claims to the db
 func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error {
-	tx, err := pg.DB.BeginTxx(ctx, nil)
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (pg *Postgres) DeactivatePromotion(promotion *Promotion) error {
 
 // setPromotionActive marks a particular promotion's active value
 func (pg *Postgres) setPromotionActive(promotion *Promotion, active bool) error {
-	_, err := pg.DB.Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
+	_, err := pg.RawDB().Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	values ($1, $2, $3)
 	returning *`
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
+	err := pg.RawDB().Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error) {
 	statement := "select * from issuers where promotion_id = $1 and cohort = $2"
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, promotionID.String(), cohort)
+	err := pg.RawDB().Select(&issuers, statement, promotionID.String(), cohort)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, er
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	statement := "select * from issuers where public_key = $1"
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, publicKey)
+	err := pg.RawDB().Select(&issuers, statement, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 	values ($1, $2, $3, $4)
 	returning *`
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, statement, promotionID, walletID, value, bonus)
+	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +275,7 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 // GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error) {
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
+	err := pg.RawDB().Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 		return nil, errors.New("unable to claim expired promotion")
 	}
 
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
@@ -448,7 +448,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 
 	promotions := []Promotion{}
 
-	err := pg.DB.Select(&promotions, statement, wallet.ID, platform)
+	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
 	if err != nil {
 		return promotions, err
 	}
@@ -495,7 +495,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 
 	promotions := []Promotion{}
 
-	err := pg.DB.Select(&promotions, statement, platform)
+	err := pg.RawDB().Select(&promotions, statement, platform)
 	if err != nil {
 		return promotions, err
 	}
@@ -506,7 +506,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 // GetClaimCreds returns the claim credentials for a ClaimID
 func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 	claimCreds := []ClaimCreds{}
-	err := pg.DB.Select(&claimCreds, "select * from claim_creds where claim_id = $1", claimID)
+	err := pg.RawDB().Select(&claimCreds, "select * from claim_creds where claim_id = $1", claimID)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,7 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 
 // SaveClaimCreds updates the stored claim credentials
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
-	_, err := pg.DB.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
 }
 
@@ -544,7 +544,7 @@ where claims.wallet_id = $1
 	and claims.promotion_id = promos.id
 group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
-	err := pg.DB.Select(&summaries, statement, walletID, grantType)
+	err := pg.RawDB().Select(&summaries, statement, walletID, grantType)
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +571,7 @@ WHERE wallet_id = $1
 ORDER BY created_at DESC
 `
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, query, wallet.ID, promotion.ID)
+	err := pg.RawDB().Select(&claims, query, wallet.ID, promotion.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +584,7 @@ ORDER BY created_at DESC
 
 // RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
@@ -655,7 +655,7 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 	insert into suggestion_drain (credentials, suggestion_text, suggestion_event)
 	values ($1, $2, $3)
 	returning *`
-	_, err = pg.DB.Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
+	_, err = pg.RawDB().Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
@@ -736,7 +736,7 @@ limit 1`
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
-	err := pg.DB.Get(&order, statement, orderID)
+	err := pg.RawDB().Get(&order, statement, orderID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -745,7 +745,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = "SELECT * FROM order_items WHERE order_id = $1"
-	err = pg.DB.Select(&foundOrderItems, statement, orderID)
+	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
 	order.Items = foundOrderItems
 	if err != nil {
@@ -762,7 +762,7 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 		return err
 	}
 
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
 	}
@@ -792,7 +792,7 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 
 // RunNextDrainJob to process deposits if there is one waiting
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
@@ -864,7 +864,7 @@ limit 1`
 // UpdateOrder updates the orders status.
 //	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
@@ -880,7 +880,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
-	tx := pg.DB.MustBegin()
+	tx := pg.RawDB().MustBegin()
 	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
@@ -907,7 +907,7 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
 	var sum decimal.Decimal
 
-	err := pg.DB.Get(&sum, `
+	err := pg.RawDB().Get(&sum, `
 		SELECT SUM(amount) as sum
 		FROM transactions
 		WHERE order_id = $1 AND status = 'completed'
