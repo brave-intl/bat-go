@@ -145,7 +145,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 
-	suite.Require().Contains(rr.Body.String(), "Error creating the order in the database")
+	suite.Require().Contains(rr.Body.String(), "Invalid SKU Token provided in request")
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
