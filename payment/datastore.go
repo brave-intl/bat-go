@@ -16,9 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
-
-	// needed for magic migration
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 // Datastore abstracts over the underlying datastore
@@ -83,10 +80,12 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
-		return &Postgres{*pg}, err
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "payment_datastore",
+		}, err
 	}
 	return nil, err
 }
@@ -95,7 +94,7 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error) {
 	// interface and create an api key
 	var key Key
-	err := pg.DB.Get(&key, `
+	err := pg.RawDB().Get(&key, `
 			INSERT INTO api_keys (merchant_id, name, encrypted_secret_key, nonce)
 			VALUES ($1, $2, $3, $4)
 			RETURNING id, name, merchant_id, encrypted_secret_key, nonce, created_at, expiry
@@ -116,7 +115,7 @@ func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey s
 // DeleteKey updates a key with an expiration time based on the id
 func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 	var key Key
-	err := pg.DB.Get(&key, `
+	err := pg.RawDB().Get(&key, `
 			UPDATE api_keys
 			SET expiry=(current_timestamp + $2)
 			WHERE id=$1
@@ -140,7 +139,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 	}
 
 	var keys []Key
-	err := pg.DB.Select(&keys, `
+	err := pg.RawDB().Select(&keys, `
 			SELECT id, name, merchant_id, created_at, expiry FROM api_keys
 			WHERE merchant_id = $1
 		`+expiredQuery+" ORDER BY name, created_at",
@@ -155,7 +154,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
 func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
-	tx := pg.DB.MustBegin()
+	tx := pg.RawDB().MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
@@ -199,7 +198,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status
 		FROM orders WHERE id = $1`
 	order := Order{}
-	err := pg.DB.Get(&order, statement, orderID)
+	err := pg.RawDB().Get(&order, statement, orderID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -210,7 +209,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement = `
 		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description
 		FROM order_items WHERE order_id = $1`
-	err = pg.DB.Select(&foundOrderItems, statement, orderID)
+	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
 	order.Items = foundOrderItems
 	if err != nil {
@@ -226,7 +225,7 @@ func (pg *Postgres) GetTransactions(orderID uuid.UUID) (*[]Transaction, error) {
 		SELECT id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
 		FROM transactions WHERE order_id = $1`
 	transactions := []Transaction{}
-	err := pg.DB.Select(&transactions, statement, orderID)
+	err := pg.RawDB().Select(&transactions, statement, orderID)
 
 	if err != nil {
 		return nil, err
@@ -241,7 +240,7 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 		SELECT id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
 		FROM transactions WHERE external_transaction_id = $1`
 	transaction := Transaction{}
-	err := pg.DB.Get(&transaction, statement, externalTransactionID)
+	err := pg.RawDB().Get(&transaction, statement, externalTransactionID)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -255,7 +254,7 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-	result, err := pg.DB.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
 		return err
@@ -271,7 +270,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
 func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
-	tx := pg.DB.MustBegin()
+	tx := pg.RawDB().MustBegin()
 	defer pg.RollbackTx(tx)
 
 	var transaction Transaction
@@ -299,7 +298,7 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
 	var sum decimal.Decimal
 
-	err := pg.DB.Get(&sum, `
+	err := pg.RawDB().Get(&sum, `
 		SELECT SUM(amount) as sum
 		FROM transactions
 		WHERE order_id = $1 AND status = 'completed'
@@ -315,7 +314,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	VALUES ($1, $2)
 	RETURNING id, created_at, merchant_id, public_key`
 	var issuers []Issuer
-	err := pg.DB.Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
+	err := pg.RawDB().Select(&issuers, statement, issuer.MerchantID, issuer.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +330,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where merchant_id = $1"
 	var issuer Issuer
-	err := pg.DB.Get(&issuer, statement, merchantID)
+	err := pg.RawDB().Get(&issuer, statement, merchantID)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +342,7 @@ func (pg *Postgres) GetIssuer(merchantID string) (*Issuer, error) {
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	statement := "select id, created_at, merchant_id, public_key from order_cred_issuers where public_key = $1"
 	var issuer Issuer
-	err := pg.DB.Get(&issuer, statement, publicKey)
+	err := pg.RawDB().Get(&issuer, statement, publicKey)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -363,7 +362,7 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 	statement := `
 	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
 	values ($1, $2, $3, $4)`
-	_, err = pg.DB.Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
+	_, err = pg.RawDB().Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
 	return err
 }
 
@@ -379,7 +378,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 		query += " and signed_creds is not null"
 	}
 
-	err := pg.DB.Select(&orderCreds, query, orderID)
+	err := pg.RawDB().Select(&orderCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +402,7 @@ func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, i
 		query += " and signed_creds is not null"
 	}
 
-	err := pg.DB.Get(&orderCreds, query, orderID, itemID)
+	err := pg.RawDB().Get(&orderCreds, query, orderID, itemID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -418,7 +417,7 @@ func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, i
 func (pg *Postgres) GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error) {
 	var (
 		results = make([]*VoteRecord, 100)
-		tx, err = pg.DB.Beginx()
+		tx, err = pg.RawDB().Beginx()
 	)
 
 	if err != nil {
@@ -505,7 +504,7 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 		statement = `
 	insert into vote_drain (credentials, vote_text, vote_event)
 	values ($1, $2, $3)`
-		_, err = pg.DB.ExecContext(ctx, statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
+		_, err = pg.RawDB().ExecContext(ctx, statement, vr.RequestCredentials, vr.VoteText, vr.VoteEventBinary)
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert vote to drain: %w", err)
@@ -515,7 +514,7 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
