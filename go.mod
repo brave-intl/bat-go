@@ -43,7 +43,7 @@ require (
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/prometheus/client_golang v1.3.0
 	github.com/rs/xid v1.2.1 // indirect
-	github.com/rs/zerolog v1.14.0
+	github.com/rs/zerolog v1.18.0
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/segmentio/kafka-go v0.3.4
