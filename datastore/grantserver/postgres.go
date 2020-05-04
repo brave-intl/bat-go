@@ -43,9 +43,14 @@ type Postgres struct {
 	*sqlx.DB
 }
 
+// RawDB - get the raw db
+func (pg *Postgres) RawDB() *sqlx.DB {
+	return pg.DB
+}
+
 // NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
 func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
+	driver, err := postgres.WithInstance(pg.RawDB().DB, &postgres.Config{})
 	if err != nil {
 		return nil, err
 	}

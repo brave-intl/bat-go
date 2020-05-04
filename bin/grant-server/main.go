@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
@@ -33,22 +33,7 @@ var (
 )
 
 func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	var output io.Writer
-	if os.Getenv("ENV") != "local" {
-		output = os.Stdout
-	} else {
-		output = zerolog.ConsoleWriter{Out: os.Stdout}
-	}
-
-	// always print out timestamp
-	log := zerolog.New(output).With().Timestamp().Logger()
-
-	debug := os.Getenv("DEBUG")
-	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
-		log = log.Level(zerolog.InfoLevel)
-	}
-
-	return log.WithContext(ctx), &log
+	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -92,7 +77,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		grantRoPg, err = grant.NewPostgres(roDB, false, "grant_read_only_db")
+		grantRoPg, err = grant.NewROPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
@@ -118,7 +103,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
-		roPg, err = promotion.NewPostgres(roDB, false, "promotion_read_only_db")
+		roPg, err = promotion.NewROPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
@@ -162,7 +147,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
-		paymentPG, err := payment.NewPostgres("", true, "payment_db")
+		paymentPG, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
@@ -195,14 +180,18 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 	}
 
-	ctx = context.WithValue(ctx, appctx.LoggerCTXKey, logger)
 	return ctx, r, promotionService, jobs
 }
 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = setupLogger(ctx)
+	}
 	for {
 		_, err := job(ctx)
 		if err != nil {
+			logger.Error().Err(err).Msg("error encountered in job run")
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
 		}
@@ -212,7 +201,10 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 }
 
 func main() {
-	serverCtx, logger := setupLogger(context.Background())
+	var (
+		serverCtx, logger = setupLogger(context.Background())
+	)
+
 	// setup sentry
 	sentryDsn := os.Getenv("SENTRY_DSN")
 	if sentryDsn != "" {
@@ -236,7 +228,7 @@ func main() {
 		// iterate over jobs
 		for i := 0; i < job.Workers; i++ {
 			// spin up a job worker for each worker
-			logger.Info().Msg("starting job worker")
+			logger.Debug().Msg("starting job worker")
 			go jobWorker(serverCtx, job.Func, job.Cadence)
 		}
 	}

@@ -27,6 +27,16 @@ bins: clean $(BINS)
 target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
 
+instrumented:
+	go get -u github.com/hexdigest/gowrap/cmd/gowrap
+	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t prometheus -o ./grant/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t prometheus -o ./grant/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t prometheus -o ./promotion/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t prometheus -o ./promotion/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/payment -i Datastore -t prometheus -o ./payment/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/wallet/service -i Datastore -t prometheus -o ./wallet/service/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/wallet/service -i ReadOnlyDatastore -t prometheus -o ./wallet/service/instrumented_read_only_datastore.go
+
 docker:
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:latest .

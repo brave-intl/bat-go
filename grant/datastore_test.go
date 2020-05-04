@@ -42,7 +42,7 @@ func (suite *PostgresTestSuite) SetupTest() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
@@ -61,7 +61,7 @@ func (suite *PostgresTestSuite) TestGetGrantsOrderedByExpiry() {
 		suite.Require().NoError(err, "Create promotion should succeed")
 		suite.Require().NoError(pg.ActivatePromotion(promotion1), "Activate promotion should succeed")
 
-		_, err = pg.DB.Exec("update promotions set created_at = now() - interval '1 month', expires_at = now() + interval '3 months' where id = $1", promotion1.ID)
+		_, err = pg.RawDB().Exec("update promotions set created_at = now() - interval '1 month', expires_at = now() + interval '3 months' where id = $1", promotion1.ID)
 		suite.Require().NoError(err, "Changing promotion created_at / expires_at must succeed")
 
 		promotion2, err = pg.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "android")

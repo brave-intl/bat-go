@@ -266,7 +266,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	}
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM transactions;")
+	_, err = pg.RawDB().Exec("DELETE FROM transactions;")
 	suite.Require().NoError(err)
 
 	// External transaction has 12 BAT
@@ -773,7 +773,7 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
 	key := suite.SetupCreateKey()
@@ -803,7 +803,7 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
 	key := suite.SetupCreateKey()
