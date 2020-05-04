@@ -12,7 +12,7 @@ import (
 
 func TestGetParametersController(t *testing.T) {
 	var (
-		h      = GetParameters(NewService(context.Background()))
+		h      = GetParametersHandler(NewService(context.Background()))
 		params = new(Parameters)
 	)
 

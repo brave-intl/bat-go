@@ -16,6 +16,8 @@ const (
 	RatiosServerCTXKey CTXKey = "ratios_server"
 	// RatiosAccessTokenCTXKey - the context key for getting the ratios server access token
 	RatiosAccessTokenCTXKey CTXKey = "ratios_access_token"
+	// BaseCurrencyCTXKey - the context key for getting the ratios server access token
+	BaseCurrencyCTXKey CTXKey = "base_currency"
 )
 
 var (

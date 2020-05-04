@@ -1,5 +1,6 @@
 package rewards
 
+/*
 const (
 	choiceTable = [][]float64{
 		{3, 5, 7, 10, 20},
@@ -35,3 +36,4 @@ func getChoices(ratio float64) []float64 {
 	}
 	return choiceTable[index]
 }
+*/
