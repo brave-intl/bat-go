@@ -147,7 +147,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
-		paymentPG, err := payment.NewPostgres("", true, "payment_db")
+		paymentPG, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			sentry.Flush(time.Second * 2)
