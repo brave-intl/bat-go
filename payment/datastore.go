@@ -16,10 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
-
-	// needed for magic migration
-
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 // Datastore abstracts over the underlying datastore

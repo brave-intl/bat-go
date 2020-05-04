@@ -15,6 +15,7 @@ import (
 
 	// needed for magic migration
 	"github.com/golang-migrate/migrate/v4"
+	// needed magically?
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
