@@ -319,7 +319,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
-	var reputationClient *reputation.HTTPClient
+	var reputationClient reputation.Client
 	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
 		reputationClient, err = reputation.New()
 		if err != nil {
