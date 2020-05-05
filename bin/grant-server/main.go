@@ -18,7 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
@@ -224,12 +224,14 @@ func main() {
 	serverCtx, cancel := context.WithCancel(serverCtx)
 	defer cancel()
 
-	for _, job := range jobs {
-		// iterate over jobs
-		for i := 0; i < job.Workers; i++ {
-			// spin up a job worker for each worker
-			logger.Debug().Msg("starting job worker")
-			go jobWorker(serverCtx, job.Func, job.Cadence)
+	if os.Getenv("ENABLE_JOB_WORKERS") != "" {
+		for _, job := range jobs {
+			// iterate over jobs
+			for i := 0; i < job.Workers; i++ {
+				// spin up a job worker for each worker
+				logger.Debug().Msg("starting job worker")
+				go jobWorker(serverCtx, job.Func, job.Cadence)
+			}
 		}
 	}
 

@@ -20,7 +20,7 @@ type HTTPClient struct {
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
-func New() (*HTTPClient, error) {
+func New() (Client, error) {
 	serverEnvKey := "BALANCE_SERVER"
 	serverURL := os.Getenv(serverEnvKey)
 	if len(serverEnvKey) == 0 {
@@ -30,7 +30,7 @@ func New() (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{client}, err
+	return NewClientWithPrometheus(&HTTPClient{client}, "balance_client"), err
 }
 
 // InvalidateBalance invalidates the cached value on balance

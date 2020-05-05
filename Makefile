@@ -36,6 +36,27 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/payment -i Datastore -t prometheus -o ./payment/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet/service -i Datastore -t prometheus -o ./wallet/service/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet/service -i ReadOnlyDatastore -t prometheus -o ./wallet/service/instrumented_read_only_datastore.go
+	# fix everything called datastore...
+	sed -i 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' ./grant/instrumented_datastore.go
+	sed -i 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
+	sed -i 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./promotion/instrumented_datastore.go
+	sed -i 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./promotion/instrumented_read_only_datastore.go
+	sed -i 's/datastore_duration_seconds/payment_datastore_duration_seconds/g' ./payment/instrumented_datastore.go
+	sed -i 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/service/instrumented_datastore.go
+	sed -i 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/service/instrumented_read_only_datastore.go
+	# http clients
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t prometheus -o ./utils/clients/balance/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t prometheus -o ./utils/clients/cbr/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ledger -i Client -t prometheus -o ./utils/clients/ledger/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t prometheus -o ./utils/clients/ratios/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t prometheus -o ./utils/clients/reputation/instrumented_client.go
+	# fix all instrumented cause the interfaces are all called "client"
+	sed -i 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
+	sed -i 's/client_duration_seconds/balance_client_duration_seconds/g' utils/clients/balance/instrumented_client.go
+	sed -i 's/client_duration_seconds/ledger_client_duration_seconds/g' utils/clients/ledger/instrumented_client.go
+	sed -i 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
+	sed -i 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
+
 
 docker:
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \

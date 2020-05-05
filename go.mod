@@ -59,7 +59,7 @@ require (
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
-	golang.org/x/tools v0.0.0-20200504152539-33427f1b0364 // indirect
+	golang.org/x/tools v0.0.0-20200505023115-26f46d2f7ef8 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect
