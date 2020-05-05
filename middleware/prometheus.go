@@ -9,7 +9,16 @@ import (
 
 var (
 	latencyBuckets = []float64{.25, .5, 1, 2.5, 5, 10}
+
+	inFlightGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "in_flight_requests",
+		Help: "A gauge of requests currently being served by the wrapped handler.",
+	})
 )
+
+func init() {
+	prometheus.MustRegister(inFlightGauge)
+}
 
 // InstrumentRoundTripper instruments an http.RoundTripper to capture metrics like the number
 // of active requests, the total number of requests made and latency information
@@ -109,6 +118,7 @@ func InstrumentHandler(name string, h http.Handler) http.Handler {
 		},
 		[]string{"code", "method"},
 	)
+
 	if err := prometheus.Register(hRequests); err != nil {
 		if aerr, ok := err.(prometheus.AlreadyRegisteredError); ok {
 			hRequests = aerr.ExistingCollector.(*prometheus.CounterVec)
@@ -134,7 +144,9 @@ func InstrumentHandler(name string, h http.Handler) http.Handler {
 		}
 	}
 
-	return promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h))
+	return promhttp.InstrumentHandlerInFlight(inFlightGauge,
+		promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h)),
+	)
 }
 
 // Metrics returns a http.HandlerFunc for the prometheus /metrics endpoint
