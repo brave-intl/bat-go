@@ -134,7 +134,14 @@ func InstrumentHandler(name string, h http.Handler) http.Handler {
 		}
 	}
 
-	return promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h))
+	inFlightGauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "in_flight_requests",
+		Help: "A gauge of requests currently being served by the wrapped handler.",
+	})
+
+	return promhttp.InstrumentHandlerInFlight(inFlightGauge,
+		promhttp.InstrumentHandlerCounter(hRequests, promhttp.InstrumentHandlerDuration(hLatency, h)),
+	)
 }
 
 // Metrics returns a http.HandlerFunc for the prometheus /metrics endpoint
