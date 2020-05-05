@@ -14,8 +14,24 @@ import (
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
+
+var concurrentClientRequests = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "concurrent_client_requests",
+		Help: "Gauge that holds the current number of client requests",
+	},
+	[]string{
+		"host",
+		"method",
+	},
+)
+
+func init() {
+	prometheus.MustRegister(concurrentClientRequests)
+}
 
 // SimpleHTTPClient wraps http.Client for making simple token authorized requests
 type SimpleHTTPClient struct {
@@ -124,6 +140,20 @@ func (c *SimpleHTTPClient) do(
 	req *http.Request,
 	v interface{},
 ) (*http.Response, error) {
+
+	// concurrent client request instrumentation
+	concurrentClientRequests.With(
+		prometheus.Labels{
+			"host": req.URL.Host, "method": req.Method,
+		}).Inc()
+
+	defer func() {
+		concurrentClientRequests.With(
+			prometheus.Labels{
+				"host": req.URL.Host, "method": req.Method,
+			}).Dec()
+	}()
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
