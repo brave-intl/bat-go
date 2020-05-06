@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/middleware"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/getsentry/sentry-go"
@@ -145,6 +146,15 @@ func (service *Service) ClaimPromotionForWallet(
 	countGrantsClaimedBatTotal.With(labels).Add(value)
 
 	go func() {
+		defer middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "ClaimJob",
+			}).Dec()
+
+		middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "ClaimJob",
+			}).Inc()
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
 			sentry.CaptureException(err)
