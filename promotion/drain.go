@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/wallet"
 	sentry "github.com/getsentry/sentry-go"
+	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -75,6 +77,15 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}
 
 			go func() {
+				defer middleware.ConcurrentGoRoutines.With(
+					prometheus.Labels{
+						"method": "NextDrainJob",
+					}).Dec()
+
+				middleware.ConcurrentGoRoutines.With(
+					prometheus.Labels{
+						"method": "NextDrainJob",
+					}).Inc()
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
 					sentry.CaptureException(err)
