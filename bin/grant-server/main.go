@@ -73,14 +73,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	grantPg, err := grant.NewPostgres("", true, "grant_db")
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		grantRoPg, err = grant.NewROPostgres(roDB, false, "grant_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
@@ -88,7 +86,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	grantService, err := grant.InitService(grantPg, grantRoPg)
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
@@ -99,14 +96,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	pg, err := promotion.NewPostgres("", true, "promotion_db")
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	if len(roDB) > 0 {
 		roPg, err = promotion.NewROPostgres(roDB, false, "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
@@ -114,7 +109,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	promotionService, err := promotion.InitService(pg, roPg)
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
@@ -129,13 +123,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		paymentPG, err := payment.NewPostgres("", true, "payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 
@@ -150,13 +142,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		paymentPG, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(paymentPG)
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
@@ -193,7 +183,6 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 		if err != nil {
 			logger.Error().Err(err).Msg("error encountered in job run")
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 		}
 		// regardless if attempted or not, wait for the duration until retrying
 		<-time.After(duration)
@@ -212,6 +201,7 @@ func main() {
 			Dsn:     sentryDsn,
 			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
 		})
+		defer sentry.Flush(2 * time.Second)
 		if err != nil {
 			logger.Panic().Err(err).Msg("unable to setup reporting!")
 		}
@@ -244,7 +234,6 @@ func main() {
 	err := srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
 }
