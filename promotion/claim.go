@@ -132,7 +132,6 @@ func (service *Service) ClaimPromotionForWallet(
 		err = service.balanceClient.InvalidateBalance(ctx, walletID)
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 		}
 	}
 
@@ -158,7 +157,6 @@ func (service *Service) ClaimPromotionForWallet(
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
 			sentry.CaptureException(err)
-			sentry.Flush(time.Second * 2)
 		}
 	}()
 

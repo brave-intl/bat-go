@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	log "github.com/sirupsen/logrus"
@@ -18,7 +17,6 @@ func ProxyRouter(
 	proxyURL, err := url.Parse(reputationServer)
 	if err != nil {
 		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
 		log.Panic(err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(proxyURL)

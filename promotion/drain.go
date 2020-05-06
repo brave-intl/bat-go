@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -89,7 +88,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
 					sentry.CaptureException(err)
-					sentry.Flush(time.Second * 2)
 				}
 			}()
 		}

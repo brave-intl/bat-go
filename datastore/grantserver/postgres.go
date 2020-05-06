@@ -147,6 +147,5 @@ func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	err := tx.Rollback()
 	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
-		sentry.Flush(time.Second * 2)
 	}
 }
