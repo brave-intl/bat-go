@@ -18,7 +18,7 @@ var (
 	// ConcurrentGoRoutines holds the number of go outines
 	ConcurrentGoRoutines = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "suggestions_go_routine",
+			Name: "concurrent_goroutine",
 			Help: "Gauge that holds the current number of goroutines",
 		},
 		[]string{
