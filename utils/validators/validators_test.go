@@ -68,6 +68,21 @@ func TestIsPlatform(t *testing.T) {
 	}
 }
 
+func TestIsUUID(t *testing.T) {
+	if IsUUID("notauuid") {
+		t.Error("non uuids should not pass")
+	}
+	if IsUUID("") {
+		t.Error("empty strings do not pass")
+	}
+	if !IsUUID("01e42e30-a823-4a91-a114-00fd0d47f7d0") {
+		t.Error("a uuid should not fail")
+	}
+	if !IsUUID("424aab2c-3b95-5e7e-9ec3-1ca9349f5887") {
+		t.Error("a uuid should not fail")
+	}
+}
+
 func TestIsEmptyUUID(t *testing.T) {
 	type TestRequest struct {
 		ID uuid.UUID `valid:"requiredUUID"`
