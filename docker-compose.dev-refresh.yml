@@ -23,6 +23,7 @@ services:
     networks:
       - grant
     environment:
+      - PPROF_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS

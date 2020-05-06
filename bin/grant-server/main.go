@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"time"
 
@@ -163,7 +164,17 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	}
 	r.Get("/metrics", middleware.Metrics())
 
-	log.Printf("server version/buildtime = %s %s %s", version, commit, buildTime)
+	// add profiling flag to enable profiling routes
+	if os.Getenv("PPROF_ENABLED") != "" {
+		r.Mount("/debug/pprof", http.HandlerFunc(pprof.Index))
+	}
+
+	log.Info().
+		Str("version", version).
+		Str("commit", commit).
+		Str("buildTime", buildTime).
+		Msg("server starting up")
+
 	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
 
 	env := os.Getenv("ENV")
