@@ -116,7 +116,7 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 		return nil, errors.New("The wallet provider must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
-		if !govalidator.IsUUIDv4(info.ProviderID) {
+		if !validators.IsUUID(info.ProviderID) {
 			return nil, errors.New("An uphold cardId (the providerId) must be a UUIDv4")
 		}
 	} else {
@@ -483,7 +483,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	}
 
 	if !govalidator.IsEmail(transaction.Destination) {
-		if !govalidator.IsUUIDv4(transaction.Destination) {
+		if !validators.IsUUID(transaction.Destination) {
 			if !validators.IsBTCAddress(transaction.Destination) {
 				if !validators.IsETHAddressNoChecksum(transaction.Destination) {
 					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)

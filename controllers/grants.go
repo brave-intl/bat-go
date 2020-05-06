@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/wallet"
@@ -60,18 +62,24 @@ type ActiveGrantsResponse struct {
 // GetActive is the handler for returning info about active grants
 func GetActive(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		walletID := r.URL.Query().Get("paymentId")
-
-		if len(walletID) == 0 || !govalidator.IsUUIDv4(walletID) {
-			return handlers.ValidationError("Error validating request query parameter",
-				map[string]string{
-					"paymentId": "paymentId must be a uuidv4",
-				})
-		}
-		logging.AddWalletIDToContext(r.Context(), uuid.Must(uuid.FromString(walletID)))
-
 		var wallet wallet.Info
-		wallet.ID = walletID
+
+		walletIDQueryParam := r.URL.Query().Get("paymentId")
+		if len(walletIDQueryParam) > 0 {
+			var walletID = new(inputs.ID)
+			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDQueryParam); err != nil {
+				return handlers.ValidationError(
+					"Error validating request url parameter",
+					map[string]interface{}{
+						"paymentId": err.Error(),
+					},
+				)
+			}
+
+			logging.AddWalletIDToContext(r.Context(), walletID.UUID())
+			wallet.ID = walletID.String()
+		}
+
 		grants, err := service.GetGrantsOrderedByExpiry(wallet, "")
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up active grants", http.StatusBadRequest)

@@ -308,7 +308,7 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
 	var wallet uphold.Wallet
-	upholdTransaction, err := wallet.GetTransaction(req.ExternalTransactionID)
+	upholdTransaction, err := wallet.GetTransaction(req.ExternalTransactionID.String())
 
 	if err != nil {
 		return nil, err
@@ -324,7 +324,7 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 		return nil, errors.New("error recording transaction: invalid settlement address")
 	}
 
-	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID, status, currency, kind, amount)
+	transaction, err := s.datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, amount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording transaction")
 	}
