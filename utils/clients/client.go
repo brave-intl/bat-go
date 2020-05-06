@@ -181,11 +181,20 @@ func (c *SimpleHTTPClient) do(
 
 // Do the specified http request, decoding the JSON result into v
 func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
-	resp, err := c.do(ctx, req, v)
-	if err != nil {
-		return resp, NewHTTPError(err, "response", resp.StatusCode, v)
+	var (
+		code      int
+		header    http.Header
+		resp, err = c.do(ctx, req, v)
+	)
+	if resp != nil {
+		// it is possible to have a nil resp from c.do...
+		code = resp.StatusCode
+		header = resp.Header
 	}
-	logOut(ctx, "response", *req.URL, resp.StatusCode, resp.Header, v)
+	if err != nil {
+		return resp, NewHTTPError(err, "response", code, v)
+	}
+	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil
 }
 
