@@ -63,22 +63,20 @@ type ActiveGrantsResponse struct {
 func GetActive(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var wallet wallet.Info
+		var walletID = new(inputs.ID)
 
-		walletIDQueryParam := r.URL.Query().Get("paymentId")
-		if len(walletIDQueryParam) > 0 {
-			var walletID = new(inputs.ID)
-			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDQueryParam); err != nil {
-				return handlers.ValidationError(
-					"Error validating request url parameter",
-					map[string]interface{}{
-						"paymentId": err.Error(),
-					},
-				)
-			}
-
-			logging.AddWalletIDToContext(r.Context(), walletID.UUID())
-			wallet.ID = walletID.String()
+		err := inputs.DecodeAndValidateString(context.Background(), walletID, r.URL.Query().Get("paymentId"))
+		if err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"paymentId": err.Error(),
+				},
+			)
 		}
+
+		logging.AddWalletIDToContext(r.Context(), walletID.UUID())
+		wallet.ID = walletID.String()
 
 		grants, err := service.GetGrantsOrderedByExpiry(wallet, "")
 		if err != nil {
