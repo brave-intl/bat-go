@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -166,7 +166,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
-		r.Mount("/debug/pprof", http.HandlerFunc(pprof.Index))
+		// pprof attaches routes to default serve mux
+		// host:6061/debug/pprof/
+		go func() {
+			log.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+		}()
 	}
 
 	log.Info().

@@ -11,6 +11,7 @@ services:
     image: golang:1.13.4
     ports:
       - "3335:3333"
+      - "6061:6061"
     command: "go run bin/grant-server/main.go"
     volumes:
       - .:/src
