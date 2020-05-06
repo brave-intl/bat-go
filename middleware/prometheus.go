@@ -14,10 +14,21 @@ var (
 		Name: "in_flight_requests",
 		Help: "A gauge of requests currently being served by the wrapped handler.",
 	})
+
+	// ConcurrentGoRoutines holds the number of go outines
+	ConcurrentGoRoutines = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "concurrent_goroutine",
+			Help: "Gauge that holds the current number of goroutines",
+		},
+		[]string{
+			"method",
+		},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(inFlightGauge)
+	prometheus.MustRegister(inFlightGauge, ConcurrentGoRoutines)
 }
 
 // InstrumentRoundTripper instruments an http.RoundTripper to capture metrics like the number

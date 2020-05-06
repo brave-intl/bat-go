@@ -15,6 +15,7 @@ services:
           COMMIT: "${COMMIT}"
           BUILD_TIME: "${BUILD_TIME}"
     environment:
+      - PPROF_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -62,7 +63,9 @@ services:
           BUILD_TIME: "${BUILD_TIME}"
     ports:
       - "3333:3333"
+      - "6061:6061"
     environment:
+      - PPROF_ENABLED=true
       - ENV=local
       - PKG
       - RUN
