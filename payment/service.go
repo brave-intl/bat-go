@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"errors"
 
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	wallet "github.com/brave-intl/bat-go/wallet/service"
@@ -40,12 +40,14 @@ var (
 )
 
 func init() {
+	_, logger := logging.SetupLogger(context.Background())
+
 	// gracefully try to register collectors for prom, no need to panic
 	if err := prometheus.Register(kafkaCertNotBefore); err != nil {
-		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
+		logger.Warn().Err(err).Msg("already registered kafkaCertNotBefore collector")
 	}
 	if err := prometheus.Register(kafkaCertNotAfter); err != nil {
-		log.Printf("already registered kafkaCertNotBefore collector: %s\n", err)
+		logger.Warn().Err(err).Msg("already registered kafkaCertNotAfter collector")
 	}
 }
 
@@ -184,6 +186,9 @@ func (s *Service) InitCodecs() error {
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (s *Service) InitKafka() error {
+
+	_, logger := logging.SetupLogger(context.Background())
+
 	dialer, err := tlsDialer()
 	if err != nil {
 		return err
@@ -197,7 +202,7 @@ func (s *Service) InitKafka() error {
 		Topic:    voteTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
+		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	s.kafkaWriter = kafkaWriter
