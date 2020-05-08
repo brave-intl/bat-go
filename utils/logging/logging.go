@@ -2,34 +2,13 @@ package logging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
-	"time"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/diode"
 	uuid "github.com/satori/go.uuid"
 )
-
-var (
-	// we are not promising to get every log message in the log
-	// anymore, when it comes down to it, we would rather the service
-	// runs than fails on log writing contention.  This will let us
-	// see how many logs we are dropping
-	droppedLogTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "dropped_log_events_total",
-			Help: "A counter for the number of dropped log messages",
-		},
-	)
-)
-
-func init() {
-	prometheus.MustRegister(droppedLogTotal)
-}
 
 // SetupLogger - helper to setup a logger and associate with context
 func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
@@ -47,17 +26,8 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 		output = zerolog.ConsoleWriter{Out: os.Stdout}
 	}
 
-	// this log writer uses a ring buffer and drops messages that cannot be processed
-	// in a timely manner
-	wr := diode.NewWriter(output, 1000, time.Duration(10*time.Millisecond), func(missed int) {
-		// write to stderr the number of dropped log messages
-		fmt.Fprintf(os.Stderr, "logger dropped message count: %d", missed)
-		// add to our counter of lost log messages
-		droppedLogTotal.Add(float64(missed))
-	})
-
 	// always print out timestamp
-	l := zerolog.New(wr).With().Timestamp().Logger()
+	l := zerolog.New(output).With().Timestamp().Logger()
 
 	debug := os.Getenv("DEBUG")
 	if debug == "" || debug == "f" || debug == "n" || debug == "0" {

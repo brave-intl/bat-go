@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
-
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 // HealthCheckResponse - response structure for healthchecks
@@ -18,18 +15,14 @@ type HealthCheckResponse struct {
 }
 
 // RenderJSON - helper to render a HealthCheckResponse as Json to an http.ResponseWriter
-func (hcr HealthCheckResponse) RenderJSON(ctx context.Context, w http.ResponseWriter) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+func (hcr HealthCheckResponse) RenderJSON(w http.ResponseWriter) error {
 	body, err := json.Marshal(hcr)
 	if err != nil {
 		return fmt.Errorf("failed to marshal response in render json: %w", err)
 	}
 	w.WriteHeader(200)
 	if _, err := w.Write(body); err != nil {
-		logger.Error().Err(err).Msg("failed to write response to writer")
+		log.Printf("failed to write response to writer: %s", err)
 	}
 	return nil
 }
@@ -38,21 +31,15 @@ func (hcr HealthCheckResponse) RenderJSON(ctx context.Context, w http.ResponseWr
 func HealthCheckHandler(version, buildTime, commit string) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			var ctx context.Context
-			logger, err := appctx.GetLogger(r.Context())
-			if err != nil {
-				ctx, logger = logging.SetupLogger(r.Context())
-			}
-
 			hcr := HealthCheckResponse{
 				Commit:    commit,
 				BuildTime: buildTime,
 				Version:   version,
 			}
-			if err := hcr.RenderJSON(ctx, w); err != nil {
+			if err := hcr.RenderJSON(w); err != nil {
 				w.WriteHeader(500)
 				if _, err := w.Write([]byte("unhealthy")); err != nil {
-					logger.Error().Err(err).Msg("failed to write response to writer")
+					log.Printf("failed to write response to writer: %s", err)
 				}
 			}
 		})

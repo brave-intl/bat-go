@@ -45,12 +45,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
-
-	// chain should be:
-	// id / transfer -> ip -> heartbeat -> request logger / recovery -> token check -> rate limit
-	// -> instrumentation -> handler
 	r.Use(chiware.RequestID)
-	r.Use(middleware.RequestIDTransfer)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.
@@ -60,18 +55,18 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.RealIP)
 
 	r.Use(chiware.Heartbeat("/"))
-	// log and recover here
+	r.Use(chiware.Timeout(10 * time.Second))
+	r.Use(middleware.BearerToken)
+	r.Use(middleware.RateLimiter)
+	r.Use(middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(hlog.NewHandler(*logger))
 		r.Use(hlog.UserAgentHandler("user_agent"))
 		r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 		r.Use(middleware.RequestLogger(logger))
+		r.Use(chiware.Recoverer)
 	}
-	// now we have middlewares we want included in logging
-	r.Use(chiware.Timeout(10 * time.Second))
-	r.Use(middleware.BearerToken)
-	r.Use(middleware.RateLimiter(ctx))
 
 	roDB := os.Getenv("RO_DATABASE_URL")
 

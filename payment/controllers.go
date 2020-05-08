@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -491,11 +490,6 @@ func MakeVote(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		logger, err := appctx.GetLogger(r.Context())
-		if err != nil {
-			_, logger = logging.SetupLogger(r.Context())
-		}
-
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -505,10 +499,10 @@ func MakeVote(service *Service) handlers.AppHandler {
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
-				logger.Warn().Err(err).Msg("failed vote validation")
+				log.Printf("failed vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
-				logger.Warn().Err(err).Msg("failed multiple vote validation")
+				log.Printf("failed multiple vote validation: %s", err)
 				return handlers.WrapValidationError(err)
 			default:
 				// check for custom vote invalidations
@@ -522,10 +516,10 @@ func MakeVote(service *Service) handlers.AppHandler {
 						data = append(data, "invalid merchant value")
 					}
 					verr.Data = data
-					logger.Warn().Err(err).Msg("failed sku validations")
+					log.Printf("failed sku validations: %s", err)
 					return verr
 				}
-				logger.Warn().Err(err).Msg("failed to perform vote")
+				log.Printf("failed to perform vote: %s", err)
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}
