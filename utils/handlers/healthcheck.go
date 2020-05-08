@@ -38,10 +38,10 @@ func (hcr HealthCheckResponse) RenderJSON(ctx context.Context, w http.ResponseWr
 func HealthCheckHandler(version, buildTime, commit string) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			var ctx context.Context
-			logger, err := appctx.GetLogger(r.Context())
+			var ctx = r.Context()
+			logger, err := appctx.GetLogger(ctx)
 			if err != nil {
-				ctx, logger = logging.SetupLogger(r.Context())
+				ctx, logger = logging.SetupLogger(ctx)
 			}
 
 			hcr := HealthCheckResponse{
