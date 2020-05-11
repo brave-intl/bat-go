@@ -23,6 +23,7 @@ var desktopPlatforms = [...]string{"linux", "osx", "windows"}
 type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
+	Version   int       `db:"version"`
 }
 
 // Datastore abstracts over the underlying datastore
@@ -68,7 +69,7 @@ type Datastore interface {
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
-	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
+	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -170,14 +171,20 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 }
 
 // InsertClobberedClaims inserts clobbered claims to the db
-func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error {
+func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error {
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer pg.RollbackTx(tx)
+
+	if version < 2 {
+		// if no version, assume 1
+		version = 1
+	}
+
 	for _, id := range ids {
-		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
+		_, err = tx.Exec(`INSERT INTO clobbered_claims (id, version) values ($1, $2) ON CONFLICT DO NOTHING;`, id, version)
 		if err != nil {
 			return err
 		}

@@ -26,6 +26,21 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// RouterV2 for promotion endpoints
+func RouterV2(service *Service) chi.Router {
+	r := chi.NewRouter()
+	if os.Getenv("ENV") != "local" {
+		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
+	} else {
+		r.Method("POST", "/", CreatePromotion(service))
+	}
+
+	// version 2 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 2)))
+
+	return r
+}
+
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
@@ -37,7 +52,8 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
-	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
+	// version 1 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	return r
@@ -477,7 +493,7 @@ type ClobberedClaimsRequest struct {
 }
 
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
-func PostReportClobberedClaims(service *Service) handlers.AppHandler {
+func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -490,7 +506,7 @@ func PostReportClobberedClaims(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs)
+		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
 		if err != nil {
 			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
 		}
