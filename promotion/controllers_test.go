@@ -841,7 +841,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
 	}
-	handler := PostReportClobberedClaims(service)
+	handler := PostReportClobberedClaims(service, 1)
 	id0 := uuid.NewV4()
 	id1 := uuid.NewV4()
 	id2 := uuid.NewV4()
