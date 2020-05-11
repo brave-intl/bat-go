@@ -743,14 +743,14 @@ func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
 
 	pg, err := NewPostgres("", false)
 	suite.Assert().NoError(err)
-	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}, 1), "Create promotion should succeed")
 
 	var allCreds1 []ClobberedCreds
 	var allCreds2 []ClobberedCreds
 	err = pg.RawDB().Select(&allCreds1, `select * from clobbered_claims;`)
 	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
 
-	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}, 1), "Create promotion should succeed")
 	err = pg.RawDB().Select(&allCreds2, `select * from clobbered_claims;`)
 	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
 	suite.Assert().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
