@@ -312,7 +312,7 @@ func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err
 }
 
 // InsertClobberedClaims implements Datastore
-func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -322,7 +322,7 @@ func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertClobberedClaims", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertClobberedClaims(ctx, ids)
+	return _d.base.InsertClobberedClaims(ctx, ids, version)
 }
 
 // InsertIssuer implements Datastore
