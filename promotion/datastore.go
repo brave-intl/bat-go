@@ -23,6 +23,7 @@ var desktopPlatforms = [...]string{"linux", "osx", "windows"}
 type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
+	Version   int       `db:"version"`
 }
 
 // Datastore abstracts over the underlying datastore
