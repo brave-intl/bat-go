@@ -28,7 +28,6 @@ target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
 
 instrumented:
-	go get -u github.com/hexdigest/gowrap/cmd/gowrap
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_read_only_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t ./.prom-gowrap.tmpl -o ./promotion/instrumented_datastore.go
