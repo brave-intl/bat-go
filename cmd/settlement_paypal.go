@@ -96,7 +96,6 @@ func init() {
 		"the rate to compute the currency conversion")
 	must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
 	must(viper.BindEnv("rate", "RATE"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("rate"))
 }
 
 // EmailTemplate performs template replacement of date fields in emails

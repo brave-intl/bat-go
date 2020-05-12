@@ -101,7 +101,7 @@ settlement-tools:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/vault-create-wallet
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/vault-sign-settlement
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/settlement-submit
-	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/paypal-settlement
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 grant-signing-tools:
