@@ -144,7 +144,7 @@ func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.Cre
 }
 
 // GetAvailablePromotions implements Datastore
-func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string, legacy bool) (pa1 []Promotion, err error) {
+func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -154,11 +154,11 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string, legacy
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotions", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetAvailablePromotions(platform, legacy)
+	return _d.base.GetAvailablePromotions(platform)
 }
 
 // GetAvailablePromotionsForWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) (pa1 []Promotion, err error) {
+func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -168,7 +168,7 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsForWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetAvailablePromotionsForWallet(wallet, platform, legacy)
+	return _d.base.GetAvailablePromotionsForWallet(wallet, platform)
 }
 
 // GetClaimByWalletAndPromotion implements Datastore

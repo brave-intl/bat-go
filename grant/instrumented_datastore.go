@@ -9,13 +9,11 @@ package grant
 import (
 	"time"
 
-	promotion "github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	uuid "github.com/satori/go.uuid"
 )
 
 // DatastoreWithPrometheus implements Datastore interface with all methods wrapped
@@ -42,20 +40,6 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
-// ClaimPromotionForWallet implements Datastore
-func (_d DatastoreWithPrometheus) ClaimPromotionForWallet(promo *promotion.Promotion, wallet *wallet.Info) (cp1 *promotion.Claim, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ClaimPromotionForWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.ClaimPromotionForWallet(promo, wallet)
-}
-
 // GetGrantsOrderedByExpiry implements Datastore
 func (_d DatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) (ga1 []Grant, err error) {
 	_since := time.Now()
@@ -68,20 +52,6 @@ func (_d DatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet wallet.Info, p
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetGrantsOrderedByExpiry", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetGrantsOrderedByExpiry(wallet, promotionType)
-}
-
-// GetPromotion implements Datastore
-func (_d DatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (pp1 *promotion.Promotion, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotion", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetPromotion(promotionID)
 }
 
 // Migrate implements Datastore
@@ -122,20 +92,6 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 	return _d.base.RawDB()
 }
 
-// RedeemGrantForWallet implements Datastore
-func (_d DatastoreWithPrometheus) RedeemGrantForWallet(grant Grant, wallet wallet.Info) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RedeemGrantForWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.RedeemGrantForWallet(grant, wallet)
-}
-
 // RollbackTx implements Datastore
 func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	_since := time.Now()
@@ -145,18 +101,4 @@ func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	}()
 	_d.base.RollbackTx(tx)
 	return
-}
-
-// UpsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) UpsertWallet(wallet *wallet.Info) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertWallet", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UpsertWallet(wallet)
 }

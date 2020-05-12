@@ -42,11 +42,9 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
-	// GetPromotionsNoPublicKey
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -76,6 +74,8 @@ type Datastore interface {
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
+	// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
+	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -95,11 +95,9 @@ type ReadOnlyDatastore interface {
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
-	// GetPromotionsNoPublicKey
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
@@ -113,6 +111,8 @@ type ReadOnlyDatastore interface {
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
+	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -391,7 +391,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -438,25 +438,6 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			)
 		order by promos.created_at;`
 
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available
-		from promotions left join (
-			select * from claims where claims.wallet_id = $1
-		) wallet_claims on promotions.id = wallet_claims.promotion_id
-		where
-			promotions.active and wallet_claims.redeemed is distinct from true and
-			( promotions.platform = '' or promotions.platform = $2) and
-			wallet_claims.legacy_claimed is distinct from true and
-			( ( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
-				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
-			)
-		order by promotions.created_at;`
-	}
-
 	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
@@ -468,7 +449,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 }
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
-func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -488,22 +469,6 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 		group by promotions.id
 		order by promotions.created_at;`
 
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available,
-			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
-		from
-		promotions left join issuers on promotions.id = issuers.promotion_id
-		where promotions.promotion_type = 'ugp' and promotions.active and
-			promotions.remaining_grants > 0 and
-			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id
-		order by promotions.created_at;`
-	}
-
 	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, platform)
@@ -514,7 +479,7 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	return promotions, nil
 }
 
-// GetPromotionsNoPublicKey returns the list of available promotions for all wallets
+// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
 func (pg *Postgres) GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error) {
 	var (
 		resp      = []uuid.UUID{}

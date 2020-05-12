@@ -18,7 +18,7 @@ var (
 			Name: "promotion_get_count",
 			Help: "a count of the number of times the promotions were collected",
 		},
-		[]string{"filter", "migrate", "legacy"},
+		[]string{"filter", "migrate"},
 	)
 	promotionExposureCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -80,7 +80,6 @@ func (service *Service) GetAvailablePromotions(
 	ctx context.Context,
 	walletID *uuid.UUID,
 	platform string,
-	legacy bool,
 	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
@@ -94,7 +93,7 @@ func (service *Service) GetAvailablePromotions(
 			return nil, nil
 		}
 
-		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
+		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +111,7 @@ func (service *Service) GetAvailablePromotions(
 
 		return &promos, nil
 	}
-	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform, legacy)
+	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform)
 	promos = Filter(promos, publicKeyFilter)
 	return &promos, err
 }
