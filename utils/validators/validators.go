@@ -88,6 +88,12 @@ func IsRequiredUUID(i interface{}, context interface{}) bool {
 	case uuid.UUID:
 		return !uuid.Equal(v, uuid.Nil)
 	default:
-		panic("invalid type recieved in IsUUID")
+		panic("invalid type recieved in IsRequiredUUID")
 	}
+}
+
+// IsUUID checks if the string is a valid UUID
+func IsUUID(v string) bool {
+	_, err := uuid.FromString(v)
+	return err == nil
 }

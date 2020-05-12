@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	w "github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -244,6 +244,9 @@ func (s *Service) InitCodecs() error {
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (s *Service) InitKafka() error {
+
+	_, logger := logging.SetupLogger(context.Background())
+
 	dialer, err := tlsDialer()
 	if err != nil {
 		return err
@@ -257,7 +260,7 @@ func (s *Service) InitKafka() error {
 		Topic:    suggestionTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
+		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	s.kafkaWriter = kafkaWriter
@@ -319,7 +322,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
-	var reputationClient *reputation.HTTPClient
+	var reputationClient reputation.Client
 	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
 		reputationClient, err = reputation.New()
 		if err != nil {

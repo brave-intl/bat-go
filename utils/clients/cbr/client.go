@@ -23,7 +23,7 @@ type HTTPClient struct {
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
-func New() (*HTTPClient, error) {
+func New() (Client, error) {
 	serverEnvKey := "CHALLENGE_BYPASS_SERVER"
 	serverURL := os.Getenv("CHALLENGE_BYPASS_SERVER")
 	if len(serverURL) == 0 {
@@ -33,7 +33,7 @@ func New() (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{client}, err
+	return NewClientWithPrometheus(&HTTPClient{client}, "cbr_client"), err
 }
 
 // IssuerCreateRequest is a request to create a new issuer

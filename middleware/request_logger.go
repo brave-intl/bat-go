@@ -55,8 +55,9 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			t1 := time.Now().UTC()
-			entry := hlog.FromRequest(r)
-			createSubLog(r, 0).
+			// only need to get logger from context once per request
+			logger := hlog.FromRequest(r)
+			createSubLog(logger, r, 0).
 				Msg("request started")
 
 			defer func() {
@@ -64,7 +65,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
-					entry.Panic().Stack()
+					logger.Panic().Stack()
 
 					// Send panic info to Sentry
 					event := sentry.NewEvent()
@@ -79,22 +80,21 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 				status := ww.Status()
 				// Log the entry, the request is complete.
-				createSubLog(r, status).
+				createSubLog(logger, r, status).
 					Int("status", status).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1)).
 					Msg("request complete")
 			}()
 
-			r = r.WithContext(entry.WithContext(r.Context()))
+			r = r.WithContext(logger.WithContext(r.Context()))
 			next.ServeHTTP(ww, r)
 		}
 		return http.HandlerFunc(fn)
 	}
 }
 
-func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
-	logger := hlog.FromRequest(r)
+func createSubLog(logger *zerolog.Logger, r *http.Request, status int) (subLog *zerolog.Event) {
 	if status >= 400 && status <= 499 {
 		subLog = logger.Warn()
 	} else if status >= 500 {

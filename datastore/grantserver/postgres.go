@@ -18,7 +18,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-const currentMigrationVersion = 13
+const currentMigrationVersion = 14
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
@@ -43,9 +43,14 @@ type Postgres struct {
 	*sqlx.DB
 }
 
+// RawDB - get the raw db
+func (pg *Postgres) RawDB() *sqlx.DB {
+	return pg.DB
+}
+
 // NewMigrate creates a Migrate instance given a Postgres instance with an active database connection
 func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
-	driver, err := postgres.WithInstance(pg.DB.DB, &postgres.Config{})
+	driver, err := postgres.WithInstance(pg.RawDB().DB, &postgres.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +147,5 @@ func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	err := tx.Rollback()
 	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
-		sentry.Flush(time.Second * 2)
 	}
 }

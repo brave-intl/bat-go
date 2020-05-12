@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -231,6 +230,11 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 func (service *Service) Vote(
 	ctx context.Context, credentials []CredentialBinding, voteText string) error {
 
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	var vote Vote
 	// decode and validate the inputs
 	if err := inputs.DecodeAndValidate(ctx, &vote, []byte(voteText)); err != nil {
@@ -258,12 +262,12 @@ func (service *Service) Vote(
 			if merchantID != "brave.com" {
 				// validate that the merchantID is brave.com
 				// if not hard fail the request, and return an error stating the problem
-				log.Printf("merchantID is invalid in vote sku token - should be brave.com: %s\n", merchantID)
+				logger.Warn().Str("merchantID", merchantID).Msg("merchantID should be brave.com, vote invalid")
 				return fmt.Errorf("merchant id != brave.com: %w", ErrInvalidSKUTokenBadMerchant)
 			}
 
 			if sku != UserWalletVoteSKU && sku != AnonCardVoteSKU {
-				log.Printf("sku is invalid in sku token - should be either user-wallet or anonymous-card: %s\n", sku)
+				logger.Warn().Str("sku", sku).Msg("sku is invalid, should be user-wallet, or anonymous-card")
 				return fmt.Errorf("%s is an invalid sku: %w", sku, ErrInvalidSKUTokenSKU)
 			}
 
@@ -288,7 +292,7 @@ func (service *Service) Vote(
 			vote.FundingSource = "anonymous-card"
 		default:
 			// should not get here, doing validation above on each issuer name
-			log.Printf("sku is invalid in sku token - should be either user-wallet or anonymous-card: %s\n", sku)
+			logger.Warn().Str("sku", sku).Msg("sku is invalid, should be user-wallet, or anonymous-card")
 			return fmt.Errorf("%s is an invalid sku: %w", sku, ErrInvalidSKUTokenSKU)
 		}
 

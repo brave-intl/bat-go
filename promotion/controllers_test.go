@@ -78,7 +78,7 @@ func (suite *ControllersTestSuite) CleanDB() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
@@ -218,7 +218,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	statement := `
 	insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
 	values ($1, $2, $3, true)`
-	_, err = pg.DB.Exec(statement, promotionDesktop.ID, wallet.ID, promotionDesktop.ApproximateValue)
+	_, err = pg.RawDB().Exec(statement, promotionDesktop.ID, wallet.ID, promotionDesktop.ApproximateValue)
 	promotionDesktop.LegacyClaimed = true
 
 	rr = httptest.NewRecorder()
@@ -841,7 +841,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
 	}
-	handler := PostReportClobberedClaims(service)
+	handler := PostReportClobberedClaims(service, 1)
 	id0 := uuid.NewV4()
 	id1 := uuid.NewV4()
 	id2 := uuid.NewV4()
@@ -869,7 +869,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	})
 	suite.Require().Equal(http.StatusOK, code)
 	claims := []ClobberedCreds{}
-	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
 	suite.Assert().Equal(claims[0].ID, id0)
 
 	code = run([]uuid.UUID{
@@ -879,7 +879,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	})
 	suite.Require().Equal(http.StatusOK, code)
 	claims = []ClobberedCreds{}
-	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
+	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
 	suite.Assert().Equal(claims[0].ID, id0)
 	suite.Assert().Equal(claims[1].ID, id1)
 	suite.Assert().Equal(claims[2].ID, id2)
@@ -990,7 +990,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		suite.Require().NoError(err, "Insert issuer should succeed")
 
 		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
-		_, err = pg.DB.Exec("update promotions set expires_at = $2 where id = $1", promotion.ID, test.ExpiresAt)
+		_, err = pg.RawDB().Exec("update promotions set expires_at = $2 where id = $1", promotion.ID, test.ExpiresAt)
 		suite.Require().NoError(err, "setting the expires_at property shouldn't fail")
 		if !test.PromoActive {
 			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")
@@ -1000,7 +1000,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		if test.Legacy {
 			claim, err = service.datastore.CreateClaim(promotion.ID, w.ID, promotionValue, decimal.NewFromFloat(0.0))
 			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
-			_, err = pg.DB.Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
+			_, err = pg.RawDB().Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
 			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
@@ -1195,7 +1195,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
 func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 	pg, err := NewPostgres("", false)
-	tx := pg.DB.MustBegin()
+	tx := pg.RawDB().MustBegin()
 	defer pg.RollbackTx(tx)
 
 	var id string

@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -98,17 +99,15 @@ func CreateKey(service *Service) handlers.AppHandler {
 // DeleteKey deletes a key
 func DeleteKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		reqID := chi.URLParam(r, "id")
-		if reqID == "" || !govalidator.IsUUIDv4(reqID) {
+		var id = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "id")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"id": "id must be a uuidv4",
+					"id": err.Error(),
 				},
 			)
 		}
-
-		id := uuid.Must(uuid.FromString(reqID))
 
 		var req DeleteKeyRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -121,7 +120,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		key, err := service.datastore.DeleteKey(id, req.DelaySeconds)
+		key, err := service.datastore.DeleteKey(id.UUID(), req.DelaySeconds)
 		if err != nil {
 			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
 		}
@@ -211,19 +210,17 @@ func CreateOrder(service *Service) handlers.AppHandler {
 // GetOrder is the handler for getting an order
 func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
+					"orderID": err.Error(),
 				},
 			)
 		}
 
-		id := uuid.Must(uuid.FromString(orderID))
-
-		order, err := service.datastore.GetOrder(id)
+		order, err := service.datastore.GetOrder(orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -239,19 +236,17 @@ func GetOrder(service *Service) handlers.AppHandler {
 // GetTransactions is the handler for listing the transactions for an order
 func GetTransactions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
+					"orderID": err.Error(),
 				},
 			)
 		}
 
-		id := uuid.Must(uuid.FromString(orderID))
-
-		transactions, err := service.datastore.GetTransactions(id)
+		transactions, err := service.datastore.GetTransactions(orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the transactions", http.StatusInternalServerError)
 		}
@@ -262,7 +257,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	ExternalTransactionID string `json:"externalTransactionID" valid:"uuidv4"`
+	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
 }
 
 // CreateUpholdTransaction creates a transaction against an order
@@ -274,16 +269,15 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
 				map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
+					"orderID": err.Error(),
 				},
 			)
 		}
-		validOrderID := uuid.Must(uuid.FromString(orderID))
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -291,17 +285,17 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID)
+		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID.String())
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
 
 		if transaction != nil {
-			err = fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID)
+			err = fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(req, validOrderID)
+		transaction, err = service.CreateTransactionFromRequest(req, orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
@@ -325,19 +319,17 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
 				},
-			}
+			)
 		}
-		validOrderID := uuid.Must(uuid.FromString(orderID))
 
-		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, validOrderID)
+		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
@@ -366,19 +358,17 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
 				},
-			}
+			)
 		}
-		validOrderID := uuid.Must(uuid.FromString(orderID))
 
-		orderCreds, err := service.datastore.GetOrderCredsByItemID(validOrderID, req.ItemID, false)
+		orderCreds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), req.ItemID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -386,7 +376,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderCreds(r.Context(), validOrderID, req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCreds(r.Context(), orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
@@ -398,17 +388,17 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // GetOrderCreds is the handler for fetching order credentials
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		orderID := chi.URLParam(r, "orderID")
-		if orderID == "" || !govalidator.IsUUIDv4(orderID) {
-			return handlers.ValidationError("Error validating request url parameter",
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
 				map[string]interface{}{
-					"orderID": "orderID must be a uuidv4",
-				})
+					"orderID": err.Error(),
+				},
+			)
 		}
 
-		id := uuid.Must(uuid.FromString(orderID))
-
-		creds, err := service.datastore.GetOrderCreds(id, false)
+		creds, err := service.datastore.GetOrderCreds(orderID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -501,6 +491,11 @@ func MakeVote(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		logger, err := appctx.GetLogger(r.Context())
+		if err != nil {
+			_, logger = logging.SetupLogger(r.Context())
+		}
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
@@ -510,10 +505,10 @@ func MakeVote(service *Service) handlers.AppHandler {
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
-				log.Printf("failed vote validation: %s", err)
+				logger.Warn().Err(err).Msg("failed vote validation")
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
-				log.Printf("failed multiple vote validation: %s", err)
+				logger.Warn().Err(err).Msg("failed multiple vote validation")
 				return handlers.WrapValidationError(err)
 			default:
 				// check for custom vote invalidations
@@ -527,10 +522,10 @@ func MakeVote(service *Service) handlers.AppHandler {
 						data = append(data, "invalid merchant value")
 					}
 					verr.Data = data
-					log.Printf("failed sku validations: %s", err)
+					logger.Warn().Err(err).Msg("failed sku validations")
 					return verr
 				}
-				log.Printf("failed to perform vote: %s", err)
+				logger.Warn().Err(err).Msg("failed to perform vote")
 				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
 			}
 		}

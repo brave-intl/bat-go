@@ -9,13 +9,12 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
-	FetchRate(ctx context.Context, id uuid.UUID) error
+	FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the ledger server
@@ -24,7 +23,7 @@ type HTTPClient struct {
 }
 
 // NewWithContext returns a new HTTPClient, retrieving the base URL from the context
-func NewWithContext(ctx context.Context) (*HTTPClient, error) {
+func NewWithContext(ctx context.Context) (Client, error) {
 	// get the server url from context
 	serverURL, err := appctx.GetStringFromContext(ctx, appctx.RatiosServerCTXKey)
 	if err != nil {
@@ -41,11 +40,11 @@ func NewWithContext(ctx context.Context) (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{client}, err
+	return NewClientWithPrometheus(&HTTPClient{client}, "ratios_context_client"), err
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
-func New() (*HTTPClient, error) {
+func New() (Client, error) {
 	serverEnvKey := "RATIOS_SERVER"
 	serverURL := os.Getenv("RATIOS_SERVER")
 	if len(serverURL) == 0 {
@@ -55,7 +54,7 @@ func New() (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{client}, err
+	return NewClientWithPrometheus(&HTTPClient{client}, "ratios_client"), err
 }
 
 // RateResponse is the response received from ratios

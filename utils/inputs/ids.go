@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/asaskevich/govalidator"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -45,10 +44,6 @@ func (id *ID) Decode(ctx context.Context, input []byte) error {
 		return ErrIDDecodeEmpty
 	}
 	id.raw = string(input)
-
-	if !govalidator.IsUUIDv4(id.raw) {
-		return ErrIDDecodeNotUUID
-	}
 
 	if id.uuid, err = uuid.FromString(id.raw); err != nil {
 		return ErrIDDecodeNotUUID

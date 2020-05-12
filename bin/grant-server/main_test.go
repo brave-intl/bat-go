@@ -322,7 +322,7 @@ func TestRedeem(t *testing.T) {
 
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -507,7 +507,7 @@ func TestDrain(t *testing.T) {
 
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		if err != nil {
 			t.Fatal(err)
 		}
