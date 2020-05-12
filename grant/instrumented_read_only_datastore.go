@@ -2,16 +2,16 @@ package grant
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus template
+// using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus -o instrumented_read_only_datastore.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
 
 import (
 	"time"
 
 	promotion "github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/golang-migrate/migrate/v4"
+	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -116,5 +116,4 @@ func (_d ReadOnlyDatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTx", result).Observe(time.Since(_since).Seconds())
 	}()
 	_d.base.RollbackTx(tx)
-	return
 }

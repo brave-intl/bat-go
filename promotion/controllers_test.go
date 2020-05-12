@@ -130,7 +130,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"id": "` + promotion.ID.String() + `",
 			"legacyClaimed": ` + strconv.FormatBool(promotion.LegacyClaimed) + `,
 			"platform": "` + promotion.Platform + `",
-			"publicKeys" : [],
+			"publicKeys" : ["1"],
 			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
 			"type": "ugp",
 			"version": 5
@@ -191,8 +191,25 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	err = service.datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
+	// promotion needs an issuer
+	_, err = service.datastore.InsertIssuer(&Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promotionGeneric.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
+	suite.Require().NoError(err, "Failed to insert issuer promotion")
+
 	err = service.datastore.ActivatePromotion(promotionDesktop)
 	suite.Require().NoError(err, "Failed to activate promotion")
+	// promotion needs an issuer
+	_, err = service.datastore.InsertIssuer(&Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promotionDesktop.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
+	suite.Require().NoError(err, "Failed to insert issuer promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)

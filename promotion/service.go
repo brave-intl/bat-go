@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -347,6 +349,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	// setup runnable jobs
 	service.jobs = []srv.Job{
 		{
+			Func:    service.RunNextPromotionNoPublicKey,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
 			Func:    service.RunNextClaimJob,
 			Cadence: 5 * time.Second,
 			Workers: 1,
@@ -395,4 +402,27 @@ func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 // RunNextDrainJob takes the next drain job and completes it
 func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
 	return s.datastore.RunNextDrainJob(ctx, s)
+}
+
+// RunNextPromotionNoPublicKey takes the next job and completes it
+func (s *Service) RunNextPromotionNoPublicKey(ctx context.Context) (bool, error) {
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// create issuer for all of the promotions with no public key
+	uuids, err := s.roDatastore.GetPromotionsNoPublicKey(100)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get promotions from datastore")
+		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)
+	}
+
+	for _, uuid := range uuids {
+		if _, err := s.CreateIssuer(ctx, uuid, "control"); err != nil {
+			logger.Error().Err(err).Msg("failed to get promotions from datastore")
+		}
+	}
+	return true, nil
 }

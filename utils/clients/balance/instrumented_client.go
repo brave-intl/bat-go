@@ -2,9 +2,9 @@ package balance
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus template
+// using ../../../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus -o instrumented_client.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go
 
 import (
 	"context"

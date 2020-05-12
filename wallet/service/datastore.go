@@ -3,7 +3,7 @@ package service
 import (
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/golang-migrate/migrate/v4"
+	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 )
