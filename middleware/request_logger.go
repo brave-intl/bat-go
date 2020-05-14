@@ -43,7 +43,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
-var clientTimeoutRE = regexp.MustCompile(`.* read tcp .* i/o timeout`)
+var ipPortRE = regexp.MustCompile(`[0-9]+(?:\.[0-9]+){3}(:[0-9]+)?`)
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/rs/zerolog
@@ -69,14 +69,15 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
 					logger.Panic().Stack()
-					m := fmt.Sprint(rec)
-					// filter this out: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
-					if !clientTimeoutRE.Match([]byte(m)) {
-						// Send panic info to Sentry
-						event := sentry.NewEvent()
-						event.Message = m
-						sentry.CaptureEvent(event)
-					}
+					// consolodate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
+					// any panic that has an ipaddress/port in it
+					m := string(ipPortRE.ReplaceAll(
+						[]byte(fmt.Sprint(rec)), []byte("x.x.x.x:xxxx")))
+
+					// Send panic info to Sentry
+					event := sentry.NewEvent()
+					event.Message = m
+					sentry.CaptureEvent(event)
 
 					handlers.AppError{
 						Message: http.StatusText(http.StatusInternalServerError),
