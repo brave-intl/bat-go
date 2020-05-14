@@ -2,9 +2,9 @@ package promotion
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus template
+// using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus -o instrumented_datastore.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_datastore.go
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/golang-migrate/migrate/v4"
+	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -281,6 +281,20 @@ func (_d DatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (pp1 *Prom
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotion", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetPromotion(promotionID)
+}
+
+// GetPromotionsMissingIssuer implements Datastore
+func (_d DatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsMissingIssuer", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPromotionsMissingIssuer(limit)
 }
 
 // GetSumForTransactions implements Datastore

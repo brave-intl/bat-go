@@ -36,6 +36,11 @@ func init() {
 	)
 }
 
+// publicKeyFilter - filter function for dropping promotions with no public key
+func publicKeyFilter(p Promotion) bool {
+	return len(p.PublicKeys) > 0
+}
+
 // Promotion includes information about a particular promotion
 type Promotion struct {
 	ID                  uuid.UUID                 `json:"id" db:"id"`
@@ -102,8 +107,12 @@ func (service *Service) GetAvailablePromotions(
 		if !migrate {
 			promos = Filter(promos, func(p Promotion) bool { return !p.LegacyClaimed })
 		}
+
+		promos = Filter(promos, publicKeyFilter)
+
 		return &promos, nil
 	}
 	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform, legacy)
+	promos = Filter(promos, publicKeyFilter)
 	return &promos, err
 }

@@ -2,9 +2,9 @@ package promotion
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus template
+// using ../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t https://raw.githubusercontent.com/hexdigest/gowrap/1741ed8de90dd8c90b4939df7f3a500ac9922b1b/templates/prometheus -o instrumented_read_only_datastore.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
 
 import (
 	"time"
@@ -164,6 +164,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (p
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotion", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetPromotion(promotionID)
+}
+
+// GetPromotionsMissingIssuer implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsMissingIssuer", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPromotionsMissingIssuer(limit)
 }
 
 // GetWallet implements ReadOnlyDatastore

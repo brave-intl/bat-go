@@ -45,6 +45,8 @@ type Datastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -96,6 +98,8 @@ type ReadOnlyDatastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
@@ -508,6 +512,29 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	}
 
 	return promotions, nil
+}
+
+// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+func (pg *Postgres) GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error) {
+	var (
+		resp      = []uuid.UUID{}
+		statement = `
+		select
+			promotions.id
+		from
+			promotions left join issuers
+			on promotions.id = issuers.promotion_id
+		where
+			issuers.public_key is null
+		limit $1`
+	)
+
+	err := pg.RawDB().Select(&resp, statement, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 // GetClaimCreds returns the claim credentials for a ClaimID
