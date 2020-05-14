@@ -144,6 +144,7 @@ func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTx", result).Observe(time.Since(_since).Seconds())
 	}()
 	_d.base.RollbackTx(tx)
+	return
 }
 
 // UpsertWallet implements Datastore
