@@ -45,8 +45,8 @@ type Datastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
-	// GetPromotionsNoPublicKey
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -98,8 +98,8 @@ type ReadOnlyDatastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
-	// GetPromotionsNoPublicKey
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
@@ -514,8 +514,8 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	return promotions, nil
 }
 
-// GetPromotionsNoPublicKey returns the list of available promotions for all wallets
-func (pg *Postgres) GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error) {
+// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+func (pg *Postgres) GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error) {
 	var (
 		resp      = []uuid.UUID{}
 		statement = `
@@ -525,7 +525,7 @@ func (pg *Postgres) GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error) {
 			promotions left join issuers
 			on promotions.id = issuers.promotion_id
 		where
-			issuers.public_key is not null
+			issuers.public_key is null
 		limit $1`
 	)
 

@@ -116,4 +116,5 @@ func (_d ReadOnlyDatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTx", result).Observe(time.Since(_since).Seconds())
 	}()
 	_d.base.RollbackTx(tx)
+	return
 }
