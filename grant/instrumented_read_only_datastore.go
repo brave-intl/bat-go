@@ -9,13 +9,11 @@ package grant
 import (
 	"time"
 
-	promotion "github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	uuid "github.com/satori/go.uuid"
 )
 
 // ReadOnlyDatastoreWithPrometheus implements ReadOnlyDatastore interface with all methods wrapped
@@ -54,20 +52,6 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet wallet
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetGrantsOrderedByExpiry", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetGrantsOrderedByExpiry(wallet, promotionType)
-}
-
-// GetPromotion implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (pp1 *promotion.Promotion, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotion", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetPromotion(promotionID)
 }
 
 // Migrate implements ReadOnlyDatastore

@@ -42,9 +42,9 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
 	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -95,9 +95,9 @@ type ReadOnlyDatastore interface {
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
 	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -391,7 +391,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -438,25 +438,6 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			)
 		order by promos.created_at;`
 
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available
-		from promotions left join (
-			select * from claims where claims.wallet_id = $1
-		) wallet_claims on promotions.id = wallet_claims.promotion_id
-		where
-			promotions.active and wallet_claims.redeemed is distinct from true and
-			( promotions.platform = '' or promotions.platform = $2) and
-			wallet_claims.legacy_claimed is distinct from true and
-			( ( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
-				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
-			)
-		order by promotions.created_at;`
-	}
-
 	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
@@ -468,7 +449,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 }
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
-func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -487,22 +468,6 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 			promotions.active and promotions.remaining_grants > 0
 		group by promotions.id
 		order by promotions.created_at;`
-
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available,
-			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
-		from
-		promotions left join issuers on promotions.id = issuers.promotion_id
-		where promotions.promotion_type = 'ugp' and promotions.active and
-			promotions.remaining_grants > 0 and
-			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id
-		order by promotions.created_at;`
-	}
 
 	promotions := []Promotion{}
 

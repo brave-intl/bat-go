@@ -41,7 +41,7 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 }
 
 // GetAvailablePromotions implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotions(platform string, legacy bool) (pa1 []Promotion, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotions(platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -51,11 +51,11 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotions(platform string
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotions", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetAvailablePromotions(platform, legacy)
+	return _d.base.GetAvailablePromotions(platform)
 }
 
 // GetAvailablePromotionsForWallet implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) (pa1 []Promotion, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -65,7 +65,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsForWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetAvailablePromotionsForWallet(wallet, platform, legacy)
+	return _d.base.GetAvailablePromotionsForWallet(wallet, platform)
 }
 
 // GetClaimByWalletAndPromotion implements ReadOnlyDatastore
