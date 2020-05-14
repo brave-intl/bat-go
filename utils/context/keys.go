@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
+	// PaginationOrderOptionsCTXKey - this is the pagination options context key
+	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
 	// ServiceKey - the key used for service context
 	ServiceKey CTXKey = "service"
 	// EnvironmentCTXKey - the key used for service context

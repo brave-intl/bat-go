@@ -114,6 +114,7 @@ services:
       - "POSTGRES_PASSWORD=password"
     networks:
       - grant
+    command: ["postgres", "-c", "log_statement=all"]
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
     image: postgres:10.4
