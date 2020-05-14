@@ -210,6 +210,9 @@ func CompleteSettlement(inPath string, outPath string, txnID string) error {
 		if payout.WalletProvider != "paypal" {
 			return errors.New("Error, non-paypal payment included.\nThis command should be called only on the filtered paypal-settlement.json")
 		}
+		if !payout.Amount.GreaterThan(decimal.Zero) {
+			return errors.New("Error, non-zero payment included.\nThis command should be called only on the post-rate paypal-settlement.json")
+		}
 		payout.Status = "complete"
 		payout.ProviderID = txnID
 		(*payouts)[i] = payout
