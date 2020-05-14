@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -195,6 +196,20 @@ func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemI
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderCredsByItemID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetOrderCredsByItemID(orderID, itemID, isSigned)
+}
+
+// GetPagedMerchantTransactions implements Datastore
+func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (tap1 *[]Transaction, i1 int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPagedMerchantTransactions", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPagedMerchantTransactions(ctx, merchantID, pagination)
 }
 
 // GetSumForTransactions implements Datastore
