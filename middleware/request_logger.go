@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -41,6 +42,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
+
+var clientTimeoutRE = regexp.MustCompile(`.* read tcp .* i/o timeout`)
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/rs/zerolog
@@ -66,11 +69,14 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
 					logger.Panic().Stack()
-
-					// Send panic info to Sentry
-					event := sentry.NewEvent()
-					event.Message = fmt.Sprint(rec)
-					sentry.CaptureEvent(event)
+					m := fmt.Sprint(rec)
+					// filter this out: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
+					if !clientTimeoutRE.Match([]byte(m)) {
+						// Send panic info to Sentry
+						event := sentry.NewEvent()
+						event.Message = m
+						sentry.CaptureEvent(event)
+					}
 
 					handlers.AppError{
 						Message: http.StatusText(http.StatusInternalServerError),
