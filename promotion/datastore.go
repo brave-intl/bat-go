@@ -45,6 +45,8 @@ type Datastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -74,8 +76,6 @@ type Datastore interface {
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
-	// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -98,6 +98,8 @@ type ReadOnlyDatastore interface {
 	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
@@ -111,8 +113,6 @@ type ReadOnlyDatastore interface {
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
-	// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
-	GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -479,8 +479,8 @@ func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error)
 	return promotions, nil
 }
 
-// GetPromotionsNoPublicKey returns the list of promotions that don't have a public key
-func (pg *Postgres) GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error) {
+// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+func (pg *Postgres) GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error) {
 	var (
 		resp      = []uuid.UUID{}
 		statement = `
@@ -490,7 +490,7 @@ func (pg *Postgres) GetPromotionsNoPublicKey(limit int) ([]uuid.UUID, error) {
 			promotions left join issuers
 			on promotions.id = issuers.promotion_id
 		where
-			issuers.public_key is not null
+			issuers.public_key is null
 		limit $1`
 	)
 

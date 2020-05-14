@@ -166,8 +166,8 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (p
 	return _d.base.GetPromotion(promotionID)
 }
 
-// GetPromotionsNoPublicKey implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsNoPublicKey(limit int) (ua1 []uuid.UUID, err error) {
+// GetPromotionsMissingIssuer implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -175,9 +175,9 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsNoPublicKey(limit int) (u
 			result = "error"
 		}
 
-		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsNoPublicKey", result).Observe(time.Since(_since).Seconds())
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsMissingIssuer", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetPromotionsNoPublicKey(limit)
+	return _d.base.GetPromotionsMissingIssuer(limit)
 }
 
 // GetWallet implements ReadOnlyDatastore

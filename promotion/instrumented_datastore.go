@@ -283,8 +283,8 @@ func (_d DatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (pp1 *Prom
 	return _d.base.GetPromotion(promotionID)
 }
 
-// GetPromotionsNoPublicKey implements Datastore
-func (_d DatastoreWithPrometheus) GetPromotionsNoPublicKey(limit int) (ua1 []uuid.UUID, err error) {
+// GetPromotionsMissingIssuer implements Datastore
+func (_d DatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -292,9 +292,9 @@ func (_d DatastoreWithPrometheus) GetPromotionsNoPublicKey(limit int) (ua1 []uui
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsNoPublicKey", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsMissingIssuer", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetPromotionsNoPublicKey(limit)
+	return _d.base.GetPromotionsMissingIssuer(limit)
 }
 
 // GetSumForTransactions implements Datastore
