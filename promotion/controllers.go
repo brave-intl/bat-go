@@ -15,6 +15,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -24,6 +25,21 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
+
+// RouterV2 for promotion endpoints
+func RouterV2(service *Service) chi.Router {
+	r := chi.NewRouter()
+	if os.Getenv("ENV") != "local" {
+		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
+	} else {
+		r.Method("POST", "/", CreatePromotion(service))
+	}
+
+	// version 2 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 2)))
+
+	return r
+}
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
@@ -36,7 +52,8 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
-	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
+	// version 1 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	return r
@@ -86,24 +103,23 @@ type PromotionsResponse struct {
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var walletID *uuid.UUID
-		var filter string
+		var (
+			filter   string
+			walletID = new(inputs.ID)
+		)
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
-			if !govalidator.IsUUIDv4(walletIDText) {
-				return handlers.ValidationError("Error validating request query parameter",
-					map[string]string{
-						"paymentId": "paymentId must be a uuidv4",
-					})
+			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDText); err != nil {
+				return handlers.ValidationError(
+					"Error validating request url parameter",
+					map[string]interface{}{
+						"paymentId": err.Error(),
+					},
+				)
 			}
 
-			tmp, err := uuid.FromString(walletIDText)
-			if err != nil {
-				panic(err) // Should not be possible
-			}
-			walletID = &tmp
-			logging.AddWalletIDToContext(r.Context(), tmp)
+			logging.AddWalletIDToContext(r.Context(), walletID.UUID())
 			filter = "walletID"
 		}
 
@@ -126,7 +142,8 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			migrate = true
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), walletID, platform, legacy, migrate)
+		tmp := walletID.UUID()
+		promotions, err := service.GetAvailablePromotions(r.Context(), &tmp, platform, legacy, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -192,19 +209,17 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			})
 		}
 
-		promotionID := chi.URLParam(r, "promotionId")
-		if promotionID == "" || !govalidator.IsUUIDv4(promotionID) {
-			return handlers.ValidationError("Error validating request url parameter", map[string]string{
-				"promotionId": "promotionId must be a uuidv4",
-			})
+		var promotionID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), promotionID, chi.URLParam(r, "promotionId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"promotionId": err.Error(),
+				},
+			)
 		}
 
-		pID, err := uuid.FromString(promotionID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
-
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), promotionID.UUID(), req.WalletID, req.BlindedCreds)
 
 		if err != nil {
 			var target *errorutils.ErrorBundle
@@ -240,20 +255,17 @@ type GetClaimResponse struct {
 // GetClaim is the handler for checking on a particular claim's status
 func GetClaim(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		claimID := chi.URLParam(r, "claimId")
-		if claimID == "" || !govalidator.IsUUIDv4(claimID) {
-			return handlers.ValidationError("Error validating request url parameter",
-				map[string]string{
-					"claimId": "claimId must be a uuidv4",
-				})
+		var claimID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), claimID, chi.URLParam(r, "claimId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"claimId": err.Error(),
+				},
+			)
 		}
 
-		id, err := uuid.FromString(claimID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
-
-		claim, err := service.datastore.GetClaimCreds(id)
+		claim, err := service.datastore.GetClaimCreds(claimID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -481,7 +493,7 @@ type ClobberedClaimsRequest struct {
 }
 
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
-func PostReportClobberedClaims(service *Service) handlers.AppHandler {
+func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -494,7 +506,7 @@ func PostReportClobberedClaims(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs)
+		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
 		if err != nil {
 			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
 		}

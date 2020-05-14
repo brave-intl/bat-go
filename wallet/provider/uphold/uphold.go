@@ -55,10 +55,16 @@ const (
 var (
 	// SettlementDestination is the address of the settlement wallet
 	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	accessToken           = os.Getenv("UPHOLD_ACCESS_TOKEN")
-	environment           = os.Getenv("UPHOLD_ENVIRONMENT")
-	upholdProxy           = os.Getenv("UPHOLD_HTTP_PROXY")
-	upholdAPIBase         = map[string]string{
+
+	// AnonCardSettlementAddress is the address of the settlement wallet
+	AnonCardSettlementAddress = os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
+	// UpholdSettlementAddress is the address of the settlement wallet
+	UpholdSettlementAddress = os.Getenv("UPHOLD_SETTLEMENT_ADDRESS")
+
+	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
+	upholdAPIBase = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
@@ -72,6 +78,15 @@ var (
 )
 
 func init() {
+
+	// Default back to BAT_SETTLEMENT_ADDRESS
+	if AnonCardSettlementAddress == "" {
+		AnonCardSettlementAddress = SettlementDestination
+	}
+	if UpholdSettlementAddress == "" {
+		UpholdSettlementAddress = SettlementDestination
+	}
+
 	var proxy func(*http.Request) (*url.URL, error)
 	if len(upholdProxy) > 0 {
 		proxyURL, err := url.Parse(upholdProxy)
@@ -101,7 +116,7 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 		return nil, errors.New("The wallet provider must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
-		if !govalidator.IsUUIDv4(info.ProviderID) {
+		if !validators.IsUUID(info.ProviderID) {
 			return nil, errors.New("An uphold cardId (the providerId) must be a UUIDv4")
 		}
 	} else {
@@ -468,7 +483,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	}
 
 	if !govalidator.IsEmail(transaction.Destination) {
-		if !govalidator.IsUUIDv4(transaction.Destination) {
+		if !validators.IsUUID(transaction.Destination) {
 			if !validators.IsBTCAddress(transaction.Destination) {
 				if !validators.IsETHAddressNoChecksum(transaction.Destination) {
 					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)
@@ -528,7 +543,7 @@ func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.Trans
 	if txInfo.Probi.LessThan(decimal.Zero) {
 		return nil, errors.New("anon card transaction cannot be for negative BAT")
 	}
-	if txInfo.Destination != SettlementDestination {
+	if txInfo.Destination != AnonCardSettlementAddress {
 		return nil, errors.New("anon card transactions must have settlement as their destination")
 	}
 

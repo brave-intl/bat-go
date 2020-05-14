@@ -11,6 +11,7 @@ services:
     image: golang:1.13.4
     ports:
       - "3335:3333"
+      - "6061:6061"
     command: "go run bin/grant-server/main.go"
     volumes:
       - .:/src
@@ -23,6 +24,7 @@ services:
     networks:
       - grant
     environment:
+      - PPROF_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -30,7 +32,7 @@ services:
       - CHALLENGE_BYPASS_TOKEN
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
-      - ENCRYPTION_KEY=AES256Key-32Characters1234567890
+      - ENCRYPTION_KEY=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0
       - FEATURE_ORDERS=true
       - FEATURE_MERCHANT=true
       - DONOR_WALLET_CARD_ID

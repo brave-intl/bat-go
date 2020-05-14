@@ -112,7 +112,7 @@ func getPromotions(t *testing.T, server *httptest.Server, wallet wallet.Info) ([
 	type promotionsResp struct {
 		Promotions []promotion.Promotion
 	}
-	promotionsURL := fmt.Sprintf("%s/v1/promotions?legacy=true&paymentId=%s&platform=%s", server.URL, wallet.ID, "osx")
+	promotionsURL := fmt.Sprintf("%s/v1/promotions?paymentId=%s&platform=%s", server.URL, wallet.ID, "osx")
 	promotions := []promotion.Promotion{}
 
 	req, err := http.NewRequest("GET", promotionsURL, nil)
@@ -322,7 +322,7 @@ func TestRedeem(t *testing.T) {
 
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,29 +332,51 @@ func TestRedeem(t *testing.T) {
 
 	value := decimal.NewFromFloat(10.0)
 	numGrants := 1
-	promotion, err := pg.CreatePromotion("ugp", numGrants, value, "")
+	promo, err := pg.CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	// promotion needs an issuer public key is required to be returned
+	_, err = pg.InsertIssuer(&promotion.Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promo.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	err = pg.ActivatePromotion(promo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = claim(t, server, promo.ID, userWallet.Info)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	value = decimal.NewFromFloat(10.0)
 	numGrants = 1
-	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	promo, err = pg.CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	// promotion needs an issuer public key is required to be returned
+	_, err = pg.InsertIssuer(&promotion.Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promo.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pg.ActivatePromotion(promo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,14 +385,15 @@ func TestRedeem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(promotions) != 1 {
 		t.Fatal("with two active promotions and one claimed, exactly one promo should be advertised")
 	}
-	if promotions[0].ID != promotion.ID {
+	if promotions[0].ID != promo.ID {
 		t.Fatal("promotion id did not match!")
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	err = claim(t, server, promo.ID, userWallet.Info)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,17 +463,17 @@ func TestRedeem(t *testing.T) {
 
 	value = decimal.NewFromFloat(10.0)
 	numGrants = 1
-	promotion, err = pg.CreatePromotion("ugp", numGrants, value, "")
+	promo, err = pg.CreatePromotion("ugp", numGrants, value, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = pg.ActivatePromotion(promotion)
+	err = pg.ActivatePromotion(promo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = claim(t, server, promotion.ID, userWallet.Info)
+	err = claim(t, server, promo.ID, userWallet.Info)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +530,7 @@ func TestDrain(t *testing.T) {
 
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		if err != nil {
 			t.Fatal(err)
 		}

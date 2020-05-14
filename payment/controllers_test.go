@@ -57,7 +57,8 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
 	}
 
-	AESKey = "AES256Key-32Characters1234567890"
+	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
+	InitEncryptionKeys()
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
@@ -77,7 +78,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxY2xvY2F0aW9uIGxvY2FsaG9zdDo4MDgwCjAwMWVpZGVudGlmaWVyIEJyYXZlIFNLVSB2MS4wCjAwMWFjaWQgc2t1ID0gQlJBVkUtMTIzNDUKMDAxNWNpZCBwcmljZSA9IDAuMjUKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDJhY2lkIGRlc2NyaXB0aW9uID0gMTIgb3VuY2VzIG9mIENvZmZlZQowMDFjY2lkIGV4cGlyeSA9IDE1ODU2MDg4ODAKMDAyZnNpZ25hdHVyZSDO_XaGw_Z9ygbI8VyB0ssPja4RCiYmBdl4UYUGfu8KSgo",
+				SKU:      "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
 				Quantity: quantity,
 			},
 		},
@@ -114,7 +115,37 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	suite.Assert().Equal(40, order.Items[0].Quantity)
 	suite.Assert().Equal(decimal.New(10, 0), order.Items[0].Subtotal)
 	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
-	suite.Assert().Equal("BRAVE-12345", order.Items[0].SKU)
+	suite.Assert().Equal("user-wallet-vote", order.Items[0].SKU)
+}
+
+func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		datastore: pg,
+	}
+	handler := CreateOrder(service)
+
+	createRequest := &CreateOrderRequest{
+		Items: []OrderItemRequest{
+			{
+				SKU:      "MDAxY2xvY2F0aW9uIGxvY2FsaG9zdDo4MDgwCjAwMWVpZGVudGlmaWVyIEJyYXZlIFNLVSB2MS4wCjAwMWFjaWQgc2t1ID0gQlJBVkUtMTIzNDUKMDAxMmNpZCBwcmljZSA9IDgKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDJhY2lkIGRlc2NyaXB0aW9uID0gMTIgb3VuY2VzIG9mIENvZmZlZQowMDFjY2lkIGV4cGlyeSA9IDE1ODU2MDczNTkKMDAyZnNpZ25hdHVyZSB60s2IxrUuE0SYqFM3mD2p85nogryrOkkaNUkrHgjEPQo",
+				Quantity: 1,
+			},
+		},
+	}
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+
+	suite.Require().Contains(rr.Body.String(), "Invalid SKU Token provided in request")
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
@@ -173,7 +204,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: "150d7a21-c203-4ba4-8fdf-c5fc36aca004",
+		ExternalTransactionID: uuid.Must(uuid.FromString("150d7a21-c203-4ba4-8fdf-c5fc36aca004")),
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -235,7 +266,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	}
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM transactions;")
+	_, err = pg.RawDB().Exec("DELETE FROM transactions;")
 	suite.Require().NoError(err)
 
 	// External transaction has 12 BAT
@@ -244,11 +275,18 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	handler := CreateUpholdTransaction(service)
 
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: "9d5b6a7d-795b-4f02-a91e-25eee2852ebf",
+		ExternalTransactionID: uuid.Must(uuid.FromString("9d5b6a7d-795b-4f02-a91e-25eee2852ebf")),
 	}
 
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
+
+	oldUpholdSettlementAddress := uphold.UpholdSettlementAddress
+	uphold.UpholdSettlementAddress = "6654ecb0-6079-4f6c-ba58-791cc890a561"
+
+	defer func() {
+		uphold.UpholdSettlementAddress = oldUpholdSettlementAddress
+	}()
 
 	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
 	rctx := chi.NewRouteContext()
@@ -271,7 +309,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID)
 
 	// Check the order was updated to paid
@@ -305,7 +343,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal("uphold", transactions[0].Kind)
 	suite.Assert().Equal("completed", transactions[0].Status)
 	suite.Assert().Equal("BAT", transactions[0].Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID, transactions[0].ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transactions[0].ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
@@ -431,7 +469,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "AgEJYnJhdmUuY29tAgpwdWJsaWMga2V5AAInaWQ9NWM4NDZkYTEtODNjZC00ZTE1LTk4ZGQtOGUxNDdhNTZiNmZhAAISc2t1PWFub24tY2FyZC12b3RlAAIMY3VycmVuY3k9QkFUAAIKcHJpY2U9MC4yNQAABiCBp8pJJYFZwJC7w2HjT-Sb6ogHOw-BnhLORRtGH36bhQ",
+				SKU:      "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
 				Quantity: numVotes,
 			},
 		},
@@ -735,7 +773,7 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
 	key := suite.SetupCreateKey()
@@ -765,7 +803,7 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
-	_, err = pg.DB.Exec("DELETE FROM api_keys;")
+	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
 	key := suite.SetupCreateKey()

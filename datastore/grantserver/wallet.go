@@ -13,7 +13,7 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	values ($1, $2, $3, $4, $5)
 	on conflict (id) do update set payout_address = $5
 	returning *`
-	_, err := pg.DB.Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.PayoutAddress)
+	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.PayoutAddress)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	statement := "select * from wallets where id = $1"
 	wallets := []wallet.Info{}
-	err := pg.DB.Select(&wallets, statement, ID)
+	err := pg.RawDB().Select(&wallets, statement, ID)
 	if err != nil {
 		return nil, err
 	}

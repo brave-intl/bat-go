@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -256,6 +257,15 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 		ctx = contextutil.Wrap(ctx, asyncCtx)
 		go func() {
 			defer asyncCancel()
+			defer middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "SuggestionJob",
+				}).Dec()
+
+			middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "SuggestionJob",
+				}).Inc()
 			_, err := service.datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				log.Ctx(ctx).

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -18,8 +18,10 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	w "github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
@@ -244,6 +246,9 @@ func (s *Service) InitCodecs() error {
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (s *Service) InitKafka() error {
+
+	_, logger := logging.SetupLogger(context.Background())
+
 	dialer, err := tlsDialer()
 	if err != nil {
 		return err
@@ -257,7 +262,7 @@ func (s *Service) InitKafka() error {
 		Topic:    suggestionTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
+		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	s.kafkaWriter = kafkaWriter
@@ -319,7 +324,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
-	var reputationClient *reputation.HTTPClient
+	var reputationClient reputation.Client
 	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
 		reputationClient, err = reputation.New()
 		if err != nil {
@@ -343,6 +348,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 	// setup runnable jobs
 	service.jobs = []srv.Job{
+		{
+			Func:    service.RunNextPromotionMissingIssuer,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
 		{
 			Func:    service.RunNextClaimJob,
 			Cadence: 5 * time.Second,
@@ -392,4 +402,27 @@ func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 // RunNextDrainJob takes the next drain job and completes it
 func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
 	return s.datastore.RunNextDrainJob(ctx, s)
+}
+
+// RunNextPromotionMissingIssuer takes the next job and completes it
+func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// create issuer for all of the promotions without an issuer
+	uuids, err := s.roDatastore.GetPromotionsMissingIssuer(100)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get promotions from datastore")
+		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)
+	}
+
+	for _, uuid := range uuids {
+		if _, err := s.CreateIssuer(ctx, uuid, "control"); err != nil {
+			logger.Error().Err(err).Msg("failed to create issuer")
+		}
+	}
+	return true, nil
 }

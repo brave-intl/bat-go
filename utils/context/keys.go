@@ -12,6 +12,8 @@ const (
 	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
 	// ServiceKey - the key used for service context
 	ServiceKey CTXKey = "service"
+	// EnvironmentCTXKey - the key used for service context
+	EnvironmentCTXKey CTXKey = "environment"
 	// RatiosServerCTXKey - the context key for getting the ratios server
 	RatiosServerCTXKey CTXKey = "ratios_server"
 	// RatiosAccessTokenCTXKey - the context key for getting the ratios server access token

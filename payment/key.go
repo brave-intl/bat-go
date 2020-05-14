@@ -1,18 +1,21 @@
 package payment
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"time"
+
+	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 )
 
-// AESKey for encrypting secrets
-var AESKey = os.Getenv("ENCRYPTION_KEY")
+// EncryptionKey for encrypting secrets
+var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
+var byteEncryptionKey [32]byte
+
+// What the merchant key length should be
 var keyLength = 24
 
 // Key represents a merchant's keys to validate skus
@@ -27,75 +30,30 @@ type Key struct {
 	Expiry             *time.Time `json:"expiry" db:"expiry"`
 }
 
+// InitEncryptionKeys copies the specified encryption key into memory once
+func InitEncryptionKeys() {
+	copy(byteEncryptionKey[:], []byte(EncryptionKey))
+}
+
 // SetSecretKey decrypts the secret key from the database
 func (key *Key) SetSecretKey() error {
-	secretKey, err := decryptSecretKey(key.EncryptedSecretKey, key.Nonce)
+	encrypted, err := hex.DecodeString(key.EncryptedSecretKey)
+	if err != nil {
+		return err
+	}
+
+	nonce, err := hex.DecodeString(key.Nonce)
+	if err != nil {
+		return err
+	}
+
+	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
 		return err
 	}
 
 	key.SecretKey = secretKey
 	return nil
-}
-
-// Taken from https://gist.github.com/kkirsche/e28da6754c39d5e7ea10
-func encryptSecretKey(secretKey string) (secretText string, nonceString string, err error) {
-	// The key argument should be the AES key, either 16 or 32 bytes
-	// to select AES-128 or AES-256.
-	key := []byte(AESKey)
-	plaintext := []byte(secretKey)
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Never use more than 2^32 random nonces with a given key because of the risk of a repeat.
-	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
-		return "", "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", "", err
-	}
-
-	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
-
-	return fmt.Sprintf("%x", ciphertext), fmt.Sprintf("%x", nonce), nil
-}
-
-func decryptSecretKey(encryptedSecretKey string, nonceKey string) (string, error) {
-	// The key argument should be the AES key, either 16 or 32 bytes
-	// to select AES-128 or AES-256.
-	key := []byte(AESKey)
-	ciphertext, err := hex.DecodeString(encryptedSecretKey)
-	if err != nil {
-		return "", nil
-	}
-
-	nonce, err := hex.DecodeString(nonceKey)
-	if err != nil {
-		return "", nil
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return string(plaintext), nil
 }
 
 func randomString(n int) (string, error) {
@@ -109,12 +67,13 @@ func randomString(n int) (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// GenerateSecret creates a random public and secret key
+// GenerateSecret creates a random key for merchants
 func GenerateSecret() (secret string, nonce string, err error) {
-	unencryptedsecret, err := randomString(keyLength)
+	unencryptedSecret, err := randomString(keyLength)
 	if err != nil {
 		return "", "", err
 	}
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
-	return encryptSecretKey(unencryptedsecret)
+	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }

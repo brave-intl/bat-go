@@ -51,7 +51,7 @@ func (suite *PostgresTestSuite) CleanDB() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
@@ -497,6 +497,16 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	w2 := &wallet.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(pg.UpsertWallet(w2), "Save wallet should succeed")
 
+	// create an ancient promotion to make sure no new claims can be made on it
+	ancient_promotion, err := pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "")
+	suite.Require().NoError(err, "Create Promotion should succeed")
+	changed, err := pg.RawDB().Exec(`
+		update promotions set created_at= NOW() - INTERVAL '4 months' where id=$1`, ancient_promotion.ID)
+	suite.Require().NoError(err, "should be able to set the promotion created_at to 4 months ago")
+	changed_rows, _ := changed.RowsAffected()
+	suite.Assert().Equal(int64(1), changed_rows)
+
+	// at this point the promotion should no longer show up for the wallet, making the list empty below:
 	promotions, err := pg.GetAvailablePromotionsForWallet(w, "", true)
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions))
@@ -519,9 +529,9 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	// Simulate legacy claim
 	claim, err := pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(25.0), decimal.NewFromFloat(0))
 	suite.Require().NoError(err, "Creating claim should succeed")
-	_, err = pg.DB.Exec("update claims set legacy_claimed = true where claims.id = $1", claim.ID)
+	_, err = pg.RawDB().Exec("update claims set legacy_claimed = true where claims.id = $1", claim.ID)
 	suite.Require().NoError(err, "Setting legacy_claimed should succeed")
-	_, err = pg.DB.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+	_, err = pg.RawDB().Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
 	suite.Require().NoError(err, "Setting remaining grants should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", true)
@@ -556,9 +566,9 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	suite.Assert().True(promotions[0].Available)
 
 	// Simulate legacy claim
-	_, err = pg.DB.Exec("update claims set legacy_claimed = true where claims.id = $1", claim.ID)
+	_, err = pg.RawDB().Exec("update claims set legacy_claimed = true where claims.id = $1", claim.ID)
 	suite.Require().NoError(err, "Setting legacy_claimed should succeed")
-	_, err = pg.DB.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+	_, err = pg.RawDB().Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
 	suite.Require().NoError(err, "Setting remaining grants should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", true)
@@ -570,6 +580,13 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	suite.Assert().Equal(2, len(promotions), "Legacy claimed promotions should appear in non-legacy list")
 	suite.Assert().True(promotions[0].Available)
 	suite.Assert().True(promotions[1].Available)
+
+	// Deactivate a promotion
+	suite.Require().NoError(pg.DeactivatePromotion(&promotions[0]))
+
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "", false)
+	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(2, len(promotions), "Deactivated legacy claimed promotions should appear in the non-legacy list")
 }
 
 func (suite *PostgresTestSuite) TestGetClaimCreds() {
@@ -726,15 +743,15 @@ func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
 
 	pg, err := NewPostgres("", false)
 	suite.Assert().NoError(err)
-	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}, 1), "Create promotion should succeed")
 
 	var allCreds1 []ClobberedCreds
 	var allCreds2 []ClobberedCreds
-	err = pg.DB.Select(&allCreds1, `select * from clobbered_claims;`)
+	err = pg.RawDB().Select(&allCreds1, `select * from clobbered_claims;`)
 	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
 
-	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}), "Create promotion should succeed")
-	err = pg.DB.Select(&allCreds2, `select * from clobbered_claims;`)
+	suite.Require().NoError(pg.InsertClobberedClaims(ctx, []uuid.UUID{id1, id2}, 1), "Create promotion should succeed")
+	err = pg.RawDB().Select(&allCreds2, `select * from clobbered_claims;`)
 	suite.Require().NoError(err, "selecting the clobbered creds ids should not result in an error")
 	suite.Assert().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
 }

@@ -22,7 +22,7 @@ type HTTPClient struct {
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
-func New() (*HTTPClient, error) {
+func New() (Client, error) {
 	serverEnvKey := "LEDGER_SERVER"
 	serverURL := os.Getenv("LEDGER_SERVER")
 	if len(serverURL) == 0 {
@@ -32,7 +32,7 @@ func New() (*HTTPClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{client}, err
+	return NewClientWithPrometheus(&HTTPClient{client}, "ledger_client"), err
 }
 
 // WalletAddresses contains the wallet addresses

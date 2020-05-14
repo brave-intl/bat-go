@@ -21,7 +21,7 @@ type HTTPClient struct {
 
 // New returns a new HTTPClient, retrieving the base URL from the
 // environment
-func New() (*HTTPClient, error) {
+func New() (Client, error) {
 	serverEnvKey := "REPUTATION_SERVER"
 	serverURL := os.Getenv(serverEnvKey)
 
@@ -37,7 +37,7 @@ func New() (*HTTPClient, error) {
 		return nil, err
 	}
 
-	return &HTTPClient{client}, nil
+	return NewClientWithPrometheus(&HTTPClient{client}, "reputation_client"), nil
 }
 
 // IsWalletReputableResponse is what the reputation server
