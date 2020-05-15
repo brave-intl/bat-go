@@ -81,7 +81,7 @@ func blindCredsEq(a, b []string) bool {
 	return true
 }
 
-var ErrClaimedDifferentBlindCreds = errors.New("blinded credentials do not match what was already claimed")
+var errClaimedDifferentBlindCreds = errors.New("blinded credentials do not match what was already claimed")
 
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
@@ -123,7 +123,7 @@ func (service *Service) ClaimPromotionForWallet(
 
 	// if blinded creds do not match prior attempt, return error
 	if claim != nil && claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
-		return nil, ErrClaimedDifferentBlindCreds
+		return nil, errClaimedDifferentBlindCreds
 	}
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
 	if claim == nil || !claim.LegacyClaimed {

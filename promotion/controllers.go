@@ -220,7 +220,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 				status = http.StatusBadRequest
 			)
 
-			if errors.Is(err, ErrClaimedDifferentBlindCreds) {
+			if errors.Is(err, errClaimedDifferentBlindCreds) {
 				status = http.StatusConflict
 			}
 
