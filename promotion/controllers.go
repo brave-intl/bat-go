@@ -215,8 +215,15 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), promotionID.UUID(), req.WalletID, req.BlindedCreds)
 
 		if err != nil {
-			var target *errorutils.ErrorBundle
-			status := http.StatusBadRequest
+			var (
+				target *errorutils.ErrorBundle
+				status = http.StatusBadRequest
+			)
+
+			if errors.Is(err, ErrClaimedDifferentBlindCreds) {
+				status = http.StatusConflict
+			}
+
 			if errors.As(err, &target) {
 				err = target
 				response, ok := target.Data().(clients.HTTPState)
