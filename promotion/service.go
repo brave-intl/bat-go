@@ -96,14 +96,37 @@ func SetSuggestionTopic(newTopic string) {
 }
 
 func init() {
-	prometheus.MustRegister(
-		countContributionsTotal,
-		countContributionsBatTotal,
-		countGrantsClaimedTotal,
-		countGrantsClaimedBatTotal,
-		kafkaCertNotBefore,
-		kafkaCertNotAfter,
-	)
+
+	// register metrics with prometheus
+	err := prometheus.Register(countGrantsClaimedBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countGrantsClaimedTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(kafkaCertNotAfter)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotAfter = ae.ExistingCollector.(prometheus.Gauge)
+	}
+
+	err = prometheus.Register(kafkaCertNotBefore)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotBefore = ae.ExistingCollector.(prometheus.Gauge)
+	}
 }
 
 // Service contains datastore and challenge bypass / ledger client connections

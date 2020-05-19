@@ -30,10 +30,16 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(
-		promotionGetCount,
-		promotionExposureCount,
-	)
+	// register our metrics with prometheus
+	err := prometheus.Register(promotionGetCount)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		promotionGetCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(promotionExposureCount)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		promotionExposureCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
 }
 
 // publicKeyFilter - filter function for dropping promotions with no public key
