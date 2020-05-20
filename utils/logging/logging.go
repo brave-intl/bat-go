@@ -2,7 +2,6 @@ package logging
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -49,9 +48,7 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 
 	// this log writer uses a ring buffer and drops messages that cannot be processed
 	// in a timely manner
-	wr := diode.NewWriter(output, 1000, time.Duration(10*time.Millisecond), func(missed int) {
-		// write to stderr the number of dropped log messages
-		fmt.Fprintf(os.Stderr, "logger dropped message count: %d", missed)
+	wr := diode.NewWriter(output, 1000, time.Duration(20*time.Millisecond), func(missed int) {
 		// add to our counter of lost log messages
 		droppedLogTotal.Add(float64(missed))
 	})
