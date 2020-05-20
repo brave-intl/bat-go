@@ -1,5 +1,6 @@
 # pass "go" and collect 200 BAT
 
+
 [![Build
 Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://travis-ci.org/brave-intl/bat-go)
 
@@ -9,9 +10,11 @@ Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://trav
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
-3. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+3. `go get -u github.com/hexdigest/gowrap/cmd/gowrap`
 
-4. Build via `make`
+4. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+
+5. Build via `make`
 
 **Consider adding a pre-commit hook**
 

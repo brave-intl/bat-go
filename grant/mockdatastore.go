@@ -7,12 +7,10 @@ package grant
 import (
 	reflect "reflect"
 
-	promotion "github.com/brave-intl/bat-go/promotion"
 	wallet "github.com/brave-intl/bat-go/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
 )
 
 // MockDatastore is a mock of Datastore interface
@@ -38,21 +36,6 @@ func (m *MockDatastore) EXPECT() *MockDatastoreMockRecorder {
 	return m.recorder
 }
 
-// ClaimPromotionForWallet mocks base method
-func (m *MockDatastore) ClaimPromotionForWallet(arg0 *promotion.Promotion, arg1 *wallet.Info) (*promotion.Claim, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClaimPromotionForWallet", arg0, arg1)
-	ret0, _ := ret[0].(*promotion.Claim)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ClaimPromotionForWallet indicates an expected call of ClaimPromotionForWallet
-func (mr *MockDatastoreMockRecorder) ClaimPromotionForWallet(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimPromotionForWallet", reflect.TypeOf((*MockDatastore)(nil).ClaimPromotionForWallet), arg0, arg1)
-}
-
 // GetGrantsOrderedByExpiry mocks base method
 func (m *MockDatastore) GetGrantsOrderedByExpiry(arg0 wallet.Info, arg1 string) ([]Grant, error) {
 	m.ctrl.T.Helper()
@@ -66,21 +49,6 @@ func (m *MockDatastore) GetGrantsOrderedByExpiry(arg0 wallet.Info, arg1 string) 
 func (mr *MockDatastoreMockRecorder) GetGrantsOrderedByExpiry(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantsOrderedByExpiry", reflect.TypeOf((*MockDatastore)(nil).GetGrantsOrderedByExpiry), arg0, arg1)
-}
-
-// GetPromotion mocks base method
-func (m *MockDatastore) GetPromotion(arg0 uuid.UUID) (*promotion.Promotion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPromotion", arg0)
-	ret0, _ := ret[0].(*promotion.Promotion)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPromotion indicates an expected call of GetPromotion
-func (mr *MockDatastoreMockRecorder) GetPromotion(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockDatastore)(nil).GetPromotion), arg0)
 }
 
 // Migrate mocks base method
@@ -126,20 +94,6 @@ func (mr *MockDatastoreMockRecorder) RawDB() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RawDB", reflect.TypeOf((*MockDatastore)(nil).RawDB))
 }
 
-// RedeemGrantForWallet mocks base method
-func (m *MockDatastore) RedeemGrantForWallet(arg0 Grant, arg1 wallet.Info) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RedeemGrantForWallet", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RedeemGrantForWallet indicates an expected call of RedeemGrantForWallet
-func (mr *MockDatastoreMockRecorder) RedeemGrantForWallet(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemGrantForWallet", reflect.TypeOf((*MockDatastore)(nil).RedeemGrantForWallet), arg0, arg1)
-}
-
 // RollbackTx mocks base method
 func (m *MockDatastore) RollbackTx(arg0 *sqlx.Tx) {
 	m.ctrl.T.Helper()
@@ -150,18 +104,4 @@ func (m *MockDatastore) RollbackTx(arg0 *sqlx.Tx) {
 func (mr *MockDatastoreMockRecorder) RollbackTx(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), arg0)
-}
-
-// UpsertWallet mocks base method
-func (m *MockDatastore) UpsertWallet(arg0 *wallet.Info) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertWallet", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpsertWallet indicates an expected call of UpsertWallet
-func (mr *MockDatastoreMockRecorder) UpsertWallet(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWallet", reflect.TypeOf((*MockDatastore)(nil).UpsertWallet), arg0)
 }

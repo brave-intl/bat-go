@@ -18,8 +18,6 @@ require (
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/gogo/protobuf v1.3.0 // indirect
-	github.com/gojuno/minimock/v3 v3.0.4 // indirect
-	github.com/golang-migrate/migrate v3.5.4+incompatible
 	github.com/golang-migrate/migrate/v4 v4.6.2
 	github.com/golang/mock v1.4.3
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
@@ -58,7 +56,6 @@ require (
 	github.com/tyler-smith/go-bip39 v0.0.0-20180716170310-95c66720ed7a
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 	golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
-	golang.org/x/tools v0.0.0-20200511182540-da4261a3d099 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.23.0 // indirect

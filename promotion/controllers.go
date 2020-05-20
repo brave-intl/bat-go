@@ -130,12 +130,6 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			})
 		}
 
-		legacy := false
-		legacyParam := r.URL.Query().Get("legacy")
-		if legacyParam == "true" {
-			legacy = true
-		}
-
 		migrate := false
 		migrateParam := r.URL.Query().Get("migrate")
 		if migrateParam == "true" {
@@ -143,7 +137,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		}
 
 		tmp := walletID.UUID()
-		promotions, err := service.GetAvailablePromotions(r.Context(), &tmp, platform, legacy, migrate)
+		promotions, err := service.GetAvailablePromotions(r.Context(), &tmp, platform, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -160,7 +154,6 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		}
 		promotionGetCount.With(prometheus.Labels{
 			"filter":  filter,
-			"legacy":  fmt.Sprint(legacy),
 			"migrate": fmt.Sprint(migrate),
 		}).Inc()
 		for _, promotion := range *promotions {

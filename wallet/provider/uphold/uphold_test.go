@@ -16,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"golang.org/x/crypto/ed25519"
 	"gotest.tools/assert"
 )
 
@@ -121,6 +120,8 @@ func TestVerifyTransaction(t *testing.T) {
 	// FIXME test malicious signature cases
 }
 
+// FIXME && TODO: uncomment when uphold whitelist is in place
+/*
 func TestTransactions(t *testing.T) {
 	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
@@ -279,6 +280,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Transaction should have identifier")
 	}
 }
+*/
 
 func TestFingerprintCheck(t *testing.T) {
 	var proxy func(*http.Request) (*url.URL, error)

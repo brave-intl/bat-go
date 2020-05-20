@@ -1,6 +1,7 @@
 package grant
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -11,42 +12,17 @@ import (
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/crypto/ed25519"
 )
 
-const (
-	lowerTxLimit = 0.25
-	upperTxLimit = 120.0
-	localEnv     = "local"
-)
+const localEnv = "local"
 
 var (
-	// GrantSignatorPublicKeyHex is the hex encoded public key of the keypair used to sign grants
-	GrantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
-	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
-	grantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
-	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
-	grantWallet                  *uphold.Wallet
-	refreshBalance               = true  // for testing we can disable balance refresh
-	testSubmit                   = true  // for testing we can disable testing tx submit
-	registerGrantInstrumentation = true  // for testing we can disable grant claim / redeem instrumentation registration
-	safeMode                     = false // if set true disables grant redemption
-	claimedGrantsCounter         = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "claimed_grants_total",
-			Help: "Number of grants claimed since start.",
-		},
-		[]string{},
-	)
-	redeemedGrantsCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "redeemed_grants_total",
-			Help: "Number of grants redeemed since start.",
-		},
-		[]string{"promotionId"},
-	)
+	grantWalletPublicKeyHex  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletCardID        = os.Getenv("GRANT_WALLET_CARD_ID")
+	grantWallet              *uphold.Wallet
 )
 
 // Service contains datastore as well as prometheus metrics
@@ -78,13 +54,6 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	// setup runnable jobs
 	gs.jobs = []srv.Job{}
 
-	if os.Getenv("ENV") != localEnv && !refreshBalance {
-		return nil, errors.New("refreshBalance must be true in production")
-	}
-	if os.Getenv("ENV") != localEnv && !testSubmit {
-		return nil, errors.New("testSubmit must be true in production")
-	}
-
 	if len(grantWalletCardID) > 0 {
 		var info wallet.Info
 		info.Provider = "uphold"
@@ -115,13 +84,8 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 
-	if registerGrantInstrumentation {
-		if datastore != nil {
-			prometheus.MustRegister(gs)
-		}
-
-		prometheus.MustRegister(claimedGrantsCounter)
-		prometheus.MustRegister(redeemedGrantsCounter)
+	if datastore != nil {
+		prometheus.MustRegister(gs)
 	}
 
 	return gs, nil
