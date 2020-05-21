@@ -123,21 +123,6 @@ type CredentialRedemption struct {
 	Signature     string `json:"signature"`
 }
 
-// DeduplicateCredentialRedemptions - given a list of tokens return a deduplicated list
-func DeduplicateCredentialRedemptions(tokens ...CredentialRedemption) []CredentialRedemption {
-	var (
-		seen   = map[string]bool{}
-		result = []CredentialRedemption{}
-	)
-	for _, t := range tokens {
-		if !seen[t.TokenPreimage] {
-			seen[t.TokenPreimage] = true
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
 // CredentialsRedeemRequest is a request to redeem one or more tokens toward some payload
 type CredentialsRedeemRequest struct {
 	Credentials []CredentialRedemption `json:"tokens"`
