@@ -30,6 +30,21 @@ type CredentialBinding struct {
 	Signature     string `json:"signature" valid:"base64"`
 }
 
+// DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
+func DeduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
+	var (
+		seen   = map[string]bool{}
+		result = []CredentialBinding{}
+	)
+	for _, t := range tokens {
+		if !seen[t.TokenPreimage] {
+			seen[t.TokenPreimage] = true
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
 // Suggestion encapsulates information from the user about where /how they want to contribute
 type Suggestion struct {
 	Type    string     `json:"type" valid:"in(auto-contribute|oneoff-tip|recurring-tip|payment)"`
@@ -124,6 +139,10 @@ type SuggestionWorker interface {
 
 // GetCredentialRedemptions as well as total and funding sources from a list of credential bindings
 func (service *Service) GetCredentialRedemptions(ctx context.Context, credentials []CredentialBinding) (total decimal.Decimal, requestCredentials []cbr.CredentialRedemption, fundingSources map[string]FundingSource, promotions map[string]*Promotion, err error) {
+
+	// deduplicate the bindings before anything
+	credentials = DeduplicateCredentialBindings(credentials...)
+
 	total = decimal.Zero
 	requestCredentials = make([]cbr.CredentialRedemption, len(credentials))
 	fundingSources = make(map[string]FundingSource)
