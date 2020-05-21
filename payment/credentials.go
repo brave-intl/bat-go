@@ -55,6 +55,21 @@ type CredentialBinding struct {
 	Signature     string `json:"signature" valid:"base64"`
 }
 
+// DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
+func DeduplicateCredentialBinding(tokens ...CredentialBinding) []CredentialBinding {
+	var (
+		seen   = map[string]bool{}
+		result = []CredentialBinding{}
+	)
+	for _, t := range tokens {
+		if !seen[t.TokenPreimage] {
+			seen[t.TokenPreimage] = true
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
 	ID         uuid.UUID `json:"id" db:"id"`
@@ -177,6 +192,9 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
 var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
+	// deduplicate credential bindings
+	cb = DeduplicateCredentialBinding(cb...)
+
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
 		issuers            = make(map[string]*Issuer)
