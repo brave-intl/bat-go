@@ -56,7 +56,7 @@ type CredentialBinding struct {
 }
 
 // DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
-func DeduplicateCredentialBinding(tokens ...CredentialBinding) []CredentialBinding {
+func DeduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
 	var (
 		seen   = map[string]bool{}
 		result = []CredentialBinding{}
@@ -193,7 +193,7 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
 var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	// deduplicate credential bindings
-	cb = DeduplicateCredentialBinding(cb...)
+	cb = DeduplicateCredentialBindings(cb...)
 
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))

@@ -31,7 +31,7 @@ type CredentialBinding struct {
 }
 
 // DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
-func DeduplicateCredentialBinding(tokens ...CredentialBinding) []CredentialBinding {
+func DeduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
 	var (
 		seen   = map[string]bool{}
 		result = []CredentialBinding{}
@@ -141,7 +141,7 @@ type SuggestionWorker interface {
 func (service *Service) GetCredentialRedemptions(ctx context.Context, credentials []CredentialBinding) (total decimal.Decimal, requestCredentials []cbr.CredentialRedemption, fundingSources map[string]FundingSource, promotions map[string]*Promotion, err error) {
 
 	// deduplicate the bindings before anything
-	credentials = DeduplicateCredentialBinding(credentials...)
+	credentials = DeduplicateCredentialBindings(credentials...)
 
 	total = decimal.Zero
 	requestCredentials = make([]cbr.CredentialRedemption, len(credentials))
