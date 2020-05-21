@@ -3,10 +3,14 @@ package ledger
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/wallet"
 	uuid "github.com/satori/go.uuid"
 )
@@ -50,13 +54,35 @@ type WalletResponse struct {
 
 // GetWallet retrieves wallet information
 func (c *HTTPClient) GetWallet(ctx context.Context, id uuid.UUID) (*wallet.Info, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	req, err := c.client.NewRequest(ctx, "GET", "v2/wallet/"+id.String()+"/info", nil)
 	if err != nil {
 		return nil, err
 	}
 
+	// This is here to log in the event the request takes more than 5 seconds to complete
+	var done = make(chan struct{})
+	go func() {
+		select {
+		case <-time.After(5 * time.Second):
+			logger.Error().
+				Str("uri", fmt.Sprintf("/v2/wallet/%s/info", id.String())).
+				Msg("ledger wallet info client call over 5s")
+			return
+		case <-done:
+			return
+		}
+	}()
+
 	var walletResponse WalletResponse
 	resp, err := c.client.Do(ctx, req, &walletResponse)
+
+	// end the goroutine
+	done <- struct{}{}
 
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
