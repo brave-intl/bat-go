@@ -3,7 +3,6 @@ package rewards
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -43,7 +42,6 @@ func TestGetParametersController(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, r)
 	if rr.Code != http.StatusOK {
-		fmt.Println(string(rr.Body.Bytes()))
 		t.Error("was expecting an ok response: ", rr.Code)
 	}
 
