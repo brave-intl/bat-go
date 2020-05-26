@@ -9,6 +9,15 @@ import (
 )
 
 var (
+	// the default choices are derived by the formula using
+	// the two tables below.
+
+	// example:
+	// if BAT to USD ratio is 0.2
+	// lookup the index of the price increments that matches
+	// use that index number as the choice list from
+	// the choice table as the "default" autocontribute choices
+	// returned in the rewards parameters
 	choiceTable = [][]float64{
 		{3, 5, 7, 10, 20},
 		{4, 6, 9, 12, 25},
@@ -21,6 +30,12 @@ var (
 	}
 	priceIncrements = []float64{
 		1, 0.8, 0.6, 0.5, 0.35, 0.2, 0.15, 0.1,
+	}
+	defaultTipChoices = []float64{
+		1, 10, 100,
+	}
+	defaultMonthlyChoices = []float64{
+		1, 10, 100,
 	}
 )
 
@@ -50,7 +65,7 @@ func getChoices(ctx context.Context, ratio decimal.Decimal) []float64 {
 			break
 		}
 	}
-	if index < 0 || index > len(priceIncrements)-1 {
+	if index < 0 || index >= len(priceIncrements) {
 		// use the last index if no matches
 		index = len(priceIncrements) - 1
 	}
@@ -72,12 +87,3 @@ func getMonthlyChoices(ctx context.Context) []float64 {
 	}
 	return c
 }
-
-var (
-	defaultTipChoices = []float64{
-		1, 10, 100,
-	}
-	defaultMonthlyChoices = []float64{
-		1, 10, 100,
-	}
-)

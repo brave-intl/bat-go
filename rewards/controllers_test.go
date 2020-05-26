@@ -50,5 +50,10 @@ func TestGetParametersController(t *testing.T) {
 		t.Error("should be no error with unmarshalling response: ", err)
 	}
 
-	// TODO: make some assertions
+	if !params.BATRate.IsZero() {
+		t.Error("was expecting 0 for the bat rate")
+	}
+	if len(params.AutoContribute.Choices) == 0 {
+		t.Error("was expecting more than one ac choices")
+	}
 }
