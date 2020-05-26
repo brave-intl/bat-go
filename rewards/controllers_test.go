@@ -42,6 +42,7 @@ func TestGetParametersController(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, r)
 	if rr.Code != http.StatusOK {
+		t.Log("result: ", rr.Body.String())
 		t.Error("was expecting an ok response: ", rr.Code)
 	}
 
