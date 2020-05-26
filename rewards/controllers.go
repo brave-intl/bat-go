@@ -45,11 +45,10 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 						"currency": "invalid currency",
 					},
 				)
-			} else {
-				// degraded, unknown error when validating/decoding
-				logger.Error().Err(err).Msg("unforseen error in decode and validation")
-				return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 			}
+			// degraded, unknown error when validating/decoding
+			logger.Error().Err(err).Msg("unforseen error in decode and validation")
+			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 		}
 
 		parameters, err = service.GetParameters(r.Context(), currency)
