@@ -23,7 +23,7 @@ services:
     networks:
       - rewards
     environment:
-      - PPROF_ENABLED=true
+      - PPROF_ENABLED
       - ENV=local
       - ADDR=:3343
       - RATIOS_SERVICE=https://bat-ratios-dev.herokuapp.com/

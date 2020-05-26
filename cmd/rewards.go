@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/rewards"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -106,6 +108,15 @@ var (
 			if err != nil {
 				// no logger, setup
 				ctx, logger = logging.SetupLogger(ctx)
+			}
+
+			// add profiling flag to enable profiling routes
+			if viper.GetString("pprof-enabled") != "" {
+				// pprof attaches routes to default serve mux
+				// host:6061/debug/pprof/
+				go func() {
+					logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+				}()
 			}
 
 			// add our command line params to context

@@ -24,6 +24,7 @@ var (
 	buildTime string
 
 	// top level config items
+	pprofEnabled      string
 	env               string
 	ratiosAccessToken string
 	ratiosService     string
@@ -51,6 +52,13 @@ func Execute() {
 }
 
 func init() {
+
+	// pprof-enabled - defaults to ""
+	rootCmd.PersistentFlags().StringVarP(&pprofEnabled, "pprof-enabled", "", "",
+		"pprof enablement")
+	must(viper.BindPFlag("pprof-enabled", rootCmd.PersistentFlags().Lookup("pprof-enabled")))
+	must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
+
 	// env - defaults to development
 	rootCmd.PersistentFlags().StringVarP(&env, "environment", "e", "development",
 		"the default environment")
