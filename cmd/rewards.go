@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"context"
-	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
@@ -21,7 +19,9 @@ import (
 )
 
 var (
-	baseCurrency string
+	defaultCurrency       string
+	defaultTipChoices     string
+	defaultMonthlyChoices string
 )
 
 func init() {
@@ -34,14 +34,32 @@ func init() {
 
 	// setup the flags
 
-	// baseCurrency - defaults to USD
-	rewardsCmd.PersistentFlags().StringVarP(&baseCurrency, "base-currency", "c", "USD",
+	// defaultCurrency - defaults to USD
+	rewardsCmd.PersistentFlags().StringVarP(&defaultCurrency, "default-currency", "c", "USD",
 		"the default base currency for the rewards system")
-	must(viper.BindPFlag("base-currency", rewardsCmd.PersistentFlags().Lookup("base-currency")))
-	must(viper.BindEnv("base-currency", "BASE_CURRENCY"))
+	must(viper.BindPFlag("default-currency", rewardsCmd.PersistentFlags().Lookup("default-currency")))
+	must(viper.BindEnv("default-currency", "DEFAULT_CURRENCY"))
+
+	// defaultTipChoices - defaults to USD
+	rewardsCmd.PersistentFlags().StringVarP(&defaultTipChoices, "default-tip-choices", "", `1,10,100`,
+		"the default tip choices for the rewards system")
+	must(viper.BindPFlag("default-tip-choices", rewardsCmd.PersistentFlags().Lookup("default-tip-choices")))
+	must(viper.BindEnv("default-tip-choices", "DEFAULT_TIP_CHOICES"))
+
+	// defaultMonthlyChoices - defaults to USD
+	rewardsCmd.PersistentFlags().StringVarP(&defaultMonthlyChoices, "default-monthly-choices", "", `1,10,100`,
+		"the default monthly choices for the rewards system")
+	must(viper.BindPFlag("default-monthly-choices", rewardsCmd.PersistentFlags().Lookup("default-monthly-choices")))
+	must(viper.BindEnv("default-monthly-choices", "DEFAULT_MONTHLY_CHOICES"))
 }
 
 func setupRouter(ctx context.Context) *chi.Mux {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger on context, make a new one
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	r := chi.NewRouter()
 	r.Use(
 		chiware.RequestID,
@@ -49,22 +67,17 @@ func setupRouter(ctx context.Context) *chi.Mux {
 		chiware.Heartbeat("/"),
 		chiware.Timeout(10*time.Second),
 		middleware.BearerToken,
-		middleware.RateLimiter,
+		middleware.RateLimiter(ctx),
 		middleware.RequestIDTransfer)
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger on context, make a new one
-		_, logger = logging.SetupLogger(ctx)
-	}
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(
 			hlog.NewHandler(*logger),
 			hlog.UserAgentHandler("user_agent"),
 			hlog.RequestIDHandler("req_id", "Request-Id"),
-			middleware.RequestLogger(logger),
-			chiware.Recoverer)
-		log.Printf("server version/buildtime = %s %s %s", version, commit, buildTime)
+			middleware.RequestLogger(logger))
+
+		logger.Info().Str("version", version).Str("build_time", buildTime).Msg("server starting")
 	}
 	// we will always have metrics and health-check
 	r.Get("/metrics", middleware.Metrics())
@@ -94,11 +107,24 @@ var (
 			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 			ctx = context.WithValue(ctx, appctx.BaseCurrencyCTXKey, viper.Get("base-currency"))
 
+			// parse default-monthly-choices and default-tip-choices
+
+			var monthlyChoices = []float64{}
+			if err := viper.UnmarshalKey("default-monthly-choices", &monthlyChoices); err != nil {
+				logger.Fatal().Err(err).Msg("failed to parse default-monthly-choices")
+			}
+			ctx = context.WithValue(ctx, appctx.DefaultMonthlyChoicesCTXKey, monthlyChoices)
+
+			var tipChoices = []float64{}
+			if err := viper.UnmarshalKey("default-tip-choices", &tipChoices); err != nil {
+				logger.Fatal().Err(err).Msg("failed to parse default-tip-choices")
+			}
+			ctx = context.WithValue(ctx, appctx.DefaultTipChoicesCTXKey, tipChoices)
+
 			// setup the service now
 			s, err := rewards.InitService(ctx)
 			if err != nil {
-				logger.Error().Err(err).Msg("failed to initalize rewards service")
-				os.Exit(1)
+				logger.Fatal().Err(err).Msg("failed to initalize rewards service")
 			}
 
 			// do rest endpoints
@@ -110,15 +136,17 @@ var (
 			srv := http.Server{
 				Addr:         address,
 				Handler:      chi.ServerBaseContext(ctx, r),
-				ReadTimeout:  3 * time.Second,
-				WriteTimeout: 15 * time.Second,
-			}
-			if err = srv.ListenAndServe(); err != nil {
-				sentry.CaptureException(err)
-				sentry.Flush(time.Second * 2)
-				logger.Panic().Err(err).Msg("HTTP server start failed!")
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 20 * time.Second,
 			}
 
+			// make sure exceptions go to sentry
+			defer sentry.Flush(time.Second * 2)
+
+			if err = srv.ListenAndServe(); err != nil {
+				sentry.CaptureException(err)
+				logger.Fatal().Err(err).Msg("HTTP server start failed!")
+			}
 		},
 	}
 
@@ -126,7 +154,13 @@ var (
 		Use:   "grpc",
 		Short: "provides gRPC api services",
 		Run: func(cmd *cobra.Command, args []string) {
-			// do gRPC
+			logger, err := appctx.GetLogger(ctx)
+			if err != nil {
+				// no logger, setup
+				ctx, logger = logging.SetupLogger(ctx)
+			}
+			// TODO: implement gRPC service
+			logger.Fatal().Msg("gRPC server is not implemented")
 		},
 	}
 )
