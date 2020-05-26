@@ -77,7 +77,14 @@ func setupRouter(ctx context.Context) *chi.Mux {
 			hlog.RequestIDHandler("req_id", "Request-Id"),
 			middleware.RequestLogger(logger))
 
-		logger.Info().Str("version", version).Str("build_time", buildTime).Msg("server starting")
+		logger.Info().
+			Str("version", version).
+			Str("commit", commit).
+			Str("build_time", buildTime).
+			Str("ratios_service", viper.GetString("ratios-service")).
+			Str("address", viper.GetString("address")).
+			Str("environment", viper.GetString("environment")).
+			Msg("server starting")
 	}
 	// we will always have metrics and health-check
 	r.Get("/metrics", middleware.Metrics())
@@ -134,7 +141,7 @@ var (
 
 			// setup server, and run
 			srv := http.Server{
-				Addr:         address,
+				Addr:         viper.GetString("address"),
 				Handler:      chi.ServerBaseContext(ctx, r),
 				ReadTimeout:  5 * time.Second,
 				WriteTimeout: 20 * time.Second,

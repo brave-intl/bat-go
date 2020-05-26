@@ -56,19 +56,19 @@ func init() {
 		"the default environment")
 	must(viper.BindPFlag("environment", rootCmd.PersistentFlags().Lookup("environment")))
 	must(viper.BindEnv("environment", "ENV"))
-	must(rootCmd.MarkPersistentFlagRequired("environment"))
+	// must(rootCmd.MarkPersistentFlagRequired("environment"))
 
 	// ratiosAccessToken (required by all)
 	rootCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-token", "t", "",
 		"the ratios service token for this service")
 	must(viper.BindPFlag("ratios-token", rootCmd.PersistentFlags().Lookup("ratios-token")))
 	must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
-	must(rootCmd.MarkPersistentFlagRequired("ratios-token"))
+	// must(rootCmd.MarkPersistentFlagRequired("ratios-token"))
 
 	// ratiosService (required by all)
 	rootCmd.PersistentFlags().StringVarP(&ratiosService, "ratios-service", "r", "",
 		"the ratios service address")
 	must(viper.BindPFlag("ratios-service", rootCmd.PersistentFlags().Lookup("ratios-service")))
 	must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
-	must(rootCmd.MarkPersistentFlagRequired("ratios-service"))
+	// must(rootCmd.MarkPersistentFlagRequired("ratios-service"))
 }
