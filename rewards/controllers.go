@@ -16,8 +16,16 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 		// get context from request
 		ctx := r.Context()
 
-		// response structure
-		var parameters *Parameters
+		var (
+			currencyInput = r.URL.Query().Get("currency")
+
+			// response structure
+			parameters *Parameters
+		)
+
+		if currencyInput == "" {
+			currencyInput = "USD"
+		}
 
 		// get logger from context
 		logger, err := appctx.GetLogger(ctx)
@@ -27,10 +35,8 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 
 		// in here we need to validate our currency
 		var currency = new(BaseCurrency)
-		if err = inputs.DecodeAndValidate(ctx, currency, []byte(r.URL.Query().Get("currency"))); err != nil {
-			if errors.Is(err, ErrBaseCurrencyEmpty) {
-				*currency = BaseCurrency("USD")
-			} else if errors.Is(err, ErrBaseCurrencyInvalid) {
+		if err = inputs.DecodeAndValidate(ctx, currency, []byte(currencyInput)); err != nil {
+			if errors.Is(err, ErrBaseCurrencyInvalid) {
 				logger.Error().Err(err).Msg("invalid currency input from caller")
 				return handlers.ValidationError(
 					"Error validating currency url parameter",
