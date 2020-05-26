@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // BaseCurrency - type for base currency input
@@ -238,7 +239,7 @@ func (rbc *BaseCurrency) Decode(ctx context.Context, v []byte) error {
 	if s == "" {
 		return ErrBaseCurrencyEmpty
 	}
-	*rbc = BaseCurrency(s)
+	*rbc = BaseCurrency(strings.ToUpper(s))
 	return nil
 }
 
