@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	// pprof imports
 	_ "net/http/pprof"
 
 	"github.com/brave-intl/bat-go/middleware"

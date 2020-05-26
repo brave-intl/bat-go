@@ -34,11 +34,11 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 		}
 
 		// in here we need to validate our currency
-		var currency = new(RewardsBaseCurrency)
+		var currency = new(BaseCurrency)
 		if err = inputs.DecodeAndValidate(ctx, currency, []byte(r.URL.Query().Get("currency"))); err != nil {
-			if errors.Is(err, ErrRewardsBaseCurrencyEmpty) {
-				*currency = RewardsBaseCurrency("USD")
-			} else if errors.Is(err, ErrRewardsBaseCurrencyInvalid) {
+			if errors.Is(err, ErrBaseCurrencyEmpty) {
+				*currency = BaseCurrency("USD")
+			} else if errors.Is(err, ErrBaseCurrencyInvalid) {
 				logger.Error().Err(err).Msg("invalid currency input from caller")
 				return handlers.ValidationError(
 					"Error validating currency url parameter",

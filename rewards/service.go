@@ -40,7 +40,7 @@ func InitService(ctx context.Context) (*Service, error) {
 }
 
 // GetParameters - respond to caller with the rewards parameters
-func (s *Service) GetParameters(ctx context.Context, currency *RewardsBaseCurrency) (*Parameters, error) {
+func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*Parameters, error) {
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {

@@ -58,19 +58,19 @@ func getChoices(ctx context.Context, ratio decimal.Decimal) []float64 {
 }
 
 func getTipChoices(ctx context.Context) []float64 {
-	return getDefaultChoices(ctx, appctx.DefaultTipChoicesCTXKey)
+	c, ok := ctx.Value(appctx.DefaultTipChoicesCTXKey).([]float64)
+	if !ok {
+		return defaultTipChoices
+	}
+	return c
 }
 
 func getMonthlyChoices(ctx context.Context) []float64 {
-	return getDefaultChoices(ctx, appctx.DefaultMonthlyChoicesCTXKey)
-}
-
-func getDefaultChoices(ctx context.Context, key appctx.CTXKey) []float64 {
-	tipChoices, ok := ctx.Value(key).([]float64)
-	if ok {
-		return tipChoices
+	c, ok := ctx.Value(appctx.DefaultMonthlyChoicesCTXKey).([]float64)
+	if !ok {
+		return defaultMonthlyChoices
 	}
-	return defaultTipChoices
+	return c
 }
 
 var (

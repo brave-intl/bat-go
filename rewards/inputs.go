@@ -6,11 +6,11 @@ import (
 	"fmt"
 )
 
-// RewardsBaseCurrency - type for base currency input
-type RewardsBaseCurrency string
+// BaseCurrency - type for base currency input
+type BaseCurrency string
 
 // String - stringer implmentation
-func (rbc *RewardsBaseCurrency) String() string {
+func (rbc *BaseCurrency) String() string {
 	return string(*rbc)
 }
 
@@ -226,24 +226,26 @@ var (
 )
 
 var (
-	ErrRewardsBaseCurrencyEmpty   = errors.New("currency cannot be empty")
-	ErrRewardsBaseCurrencyInvalid = errors.New("invalid currency")
+	// ErrBaseCurrencyEmpty - empty base currency
+	ErrBaseCurrencyEmpty = errors.New("currency cannot be empty")
+	// ErrBaseCurrencyInvalid - indicates there is a validation issue with the currency
+	ErrBaseCurrencyInvalid = errors.New("invalid currency")
 )
 
 // Decode - implement decodable
-func (rbc *RewardsBaseCurrency) Decode(ctx context.Context, v []byte) error {
+func (rbc *BaseCurrency) Decode(ctx context.Context, v []byte) error {
 	s := string(v)
 	if s == "" {
-		return ErrRewardsBaseCurrencyEmpty
+		return ErrBaseCurrencyEmpty
 	}
-	*rbc = RewardsBaseCurrency(s)
+	*rbc = BaseCurrency(s)
 	return nil
 }
 
 // Validate - implement validatable
-func (rbc *RewardsBaseCurrency) Validate(ctx context.Context) error {
+func (rbc *BaseCurrency) Validate(ctx context.Context) error {
 	if validCurrencies[rbc.String()] {
 		return nil
 	}
-	return fmt.Errorf("%w: %s is not valid", ErrRewardsBaseCurrencyInvalid, rbc.String())
+	return fmt.Errorf("%w: %s is not valid", ErrBaseCurrencyInvalid, rbc.String())
 }
