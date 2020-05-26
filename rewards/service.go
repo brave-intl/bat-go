@@ -18,15 +18,18 @@ func init() {
 }
 
 // NewService - create a new rewards service structure
-func NewService(ctx context.Context) *Service {
+func NewService(ctx context.Context, ratio ratios.Client) *Service {
 	return &Service{
-		jobs: []srv.Job{},
+		jobs:   []srv.Job{},
+		ratios: ratio,
 	}
 }
 
 // Service contains datastore
 type Service struct {
 	jobs []srv.Job
+	// ratios client
+	ratios ratios.Client
 }
 
 // Jobs - Implement srv.JobService interface
@@ -36,11 +39,6 @@ func (s *Service) Jobs() []srv.Job {
 
 // InitService creates a service using the passed context
 func InitService(ctx context.Context) (*Service, error) {
-	return NewService(ctx), nil
-}
-
-// GetParameters - respond to caller with the rewards parameters
-func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*Parameters, error) {
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -54,11 +52,24 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		return nil, fmt.Errorf("failed to initialize ratios client: %w", err)
 	}
 
-	rateData, err := client.FetchRate(ctx, "BAT", currency.String())
+	return NewService(ctx, client), nil
+}
+
+// GetParameters - respond to caller with the rewards parameters
+func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*Parameters, error) {
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	rateData, err := s.ratios.FetchRate(ctx, "BAT", currency.String())
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to fetch rate from ratios")
 		return nil, fmt.Errorf("failed to fetch rate from ratios: %w", err)
 	}
 	if rateData == nil {
+		logger.Error().Msg("empty response from ratios")
 		return nil, errors.New("empty response from ratios")
 	}
 

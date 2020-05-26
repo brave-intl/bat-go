@@ -25,14 +25,6 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 			ctx, logger = logging.SetupLogger(ctx)
 		}
 
-		// ratios-service url
-		rs, err := appctx.GetStringFromContext(ctx, appctx.RatiosServerCTXKey)
-		if err != nil {
-			// we are in a degraded state, as we do not have a ratios url
-			logger.Error().Err(err).Msg("failed to get ratios server url from context")
-			return handlers.WrapError(err, "degraded: no access to ratios", http.StatusInternalServerError)
-		}
-
 		// in here we need to validate our currency
 		var currency = new(BaseCurrency)
 		if err = inputs.DecodeAndValidate(ctx, currency, []byte(r.URL.Query().Get("currency"))); err != nil {
@@ -53,11 +45,6 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 			}
 		}
-
-		logger.Debug().
-			Str("ratios-service", rs).
-			Str("currency", currency.String()).
-			Msg("in GetParametersHandler")
 
 		parameters, err = service.GetParameters(r.Context(), currency)
 		if err != nil {
