@@ -33,7 +33,7 @@ require (
 	github.com/hashicorp/go-rootcerts v1.0.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/go-uuid v1.0.1 // indirect
-	github.com/hashicorp/golang-lru v0.5.3 // indirect
+	github.com/hashicorp/golang-lru v0.5.3
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lib/pq v1.2.0
@@ -41,6 +41,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.3.0

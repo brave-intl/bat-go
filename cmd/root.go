@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
@@ -24,10 +25,12 @@ var (
 	buildTime string
 
 	// top level config items
-	pprofEnabled      string
-	env               string
-	ratiosAccessToken string
-	ratiosService     string
+	pprofEnabled       string
+	env                string
+	ratiosAccessToken  string
+	ratiosService      string
+	ratiosClientPurge  time.Duration
+	ratiosClientExpiry time.Duration
 )
 
 // helper to make sure there is no errors
@@ -79,4 +82,16 @@ func init() {
 	must(viper.BindPFlag("ratios-service", rootCmd.PersistentFlags().Lookup("ratios-service")))
 	must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
 	// must(rootCmd.MarkPersistentFlagRequired("ratios-service"))
+
+	// ratiosClientExpiry
+	rootCmd.PersistentFlags().DurationVarP(&ratiosClientExpiry, "ratios-client-cache-expiry", "", 5*time.Second,
+		"the ratios client cache default eviction duration")
+	must(viper.BindPFlag("ratios-client-cache-expiry", rootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
+	must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
+
+	// ratiosClientPurge
+	rootCmd.PersistentFlags().DurationVarP(&ratiosClientPurge, "ratios-client-cache-purge", "", 1*time.Minute,
+		"the ratios client cache default purge duration")
+	must(viper.BindPFlag("ratios-client-cache-purge", rootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
+	must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 }

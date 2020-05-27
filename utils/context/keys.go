@@ -22,6 +22,10 @@ const (
 	DefaultMonthlyChoicesCTXKey CTXKey = "default_monthly_choices"
 	// DefaultTipChoicesCTXKey - the context key for getting the ratios server access token
 	DefaultTipChoicesCTXKey CTXKey = "default_tip_choices"
+	// RatiosCacheExpiryDurationCTXKey - context key for ratios client cache expiry
+	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
+	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
+	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
 )
 
 var (

@@ -42,6 +42,8 @@ func RewardsRestRun(cmd *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 	ctx = context.WithValue(ctx, appctx.BaseCurrencyCTXKey, viper.Get("base-currency"))
+	ctx = context.WithValue(ctx, appctx.RatiosCacheExpiryDurationCTXKey, viper.GetDuration("ratios-client-cache-expiry"))
+	ctx = context.WithValue(ctx, appctx.RatiosCachePurgeDurationCTXKey, viper.GetDuration("ratios-client-cache-purge"))
 
 	// parse default-monthly-choices and default-tip-choices
 
