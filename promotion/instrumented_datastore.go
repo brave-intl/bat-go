@@ -325,6 +325,20 @@ func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymen
 	return _d.base.InsertBATLossEvent(ctx, paymentID, reportID, amount, platform)
 }
 
+// InsertClaimDrainOverflow implements Datastore
+func (_d DatastoreWithPrometheus) InsertClaimDrainOverflow(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertClaimDrainOverflow", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertClaimDrainOverflow(claim, credentials, wallet, total)
+}
+
 // InsertClobberedClaims implements Datastore
 func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) (err error) {
 	_since := time.Now()

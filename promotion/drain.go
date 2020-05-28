@@ -69,6 +69,11 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
 		}
 
+		if suggestionsExpected < 1 {
+			return fmt.Errorf("suggestions not expected for this claim")
+		}
+
+		clampedSuggestions := v.Credentials[:suggestionsExpected]
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
 			return errors.New("Cannot claim more funds than were earned")
@@ -77,7 +82,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
+			err := service.datastore.DrainClaim(claim, clampedSuggestions, wallet, v.Amount)
 			if err != nil {
 				return fmt.Errorf("error draining claim: %w", err)
 			}
@@ -86,6 +91,14 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// this will setup a new context with the same values and a minute timeout
 			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
 			ctx = contextutil.Wrap(ctx, asyncCtx)
+			if len(v.Credentials) != len(clampedSuggestions) {
+				// put extra suggestions into table
+				extraSuggestions := v.Credentials[suggestionsExpected:]
+				err := service.datastore.InsertClaimDrainOverflow(claim, extraSuggestions, wallet, v.Amount)
+				if err != nil {
+					return fmt.Errorf("error adding extra drain claim: %w", err)
+				}
+			}
 
 			go func() {
 				defer asyncCancel()

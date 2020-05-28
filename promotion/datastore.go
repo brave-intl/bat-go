@@ -16,6 +16,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
@@ -92,6 +93,8 @@ type Datastore interface {
 	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
+	// InsertClaimDrainOverflow inserts claim_drain objects that were provided in excess
+	InsertClaimDrainOverflow(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
@@ -880,8 +883,7 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 
 	statement := `
 	insert into claim_drain (credentials, wallet_id, total)
-	values ($1, $2, $3)
-	returning *`
+	values ($1, $2, $3)`
 	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
 	if err != nil {
 		return err
@@ -893,6 +895,21 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	}
 
 	return nil
+}
+
+// InsertClaimDrainOverflow adds a list of overflowing credentials when claiming a wallet
+func (pg *Postgres) InsertClaimDrainOverflow(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	statement := `
+	insert into claim_drain_overflow (credentials, wallet_id, total)
+	values ($1, $2, $3)`
+
+	_, err = pg.RawDB().Exec(statement, credentialsJSON, wallet.ID, total)
+	return err
 }
 
 // errToDrainCode - given a drain related processing error, generate a code and retriable flag
