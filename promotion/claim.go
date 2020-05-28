@@ -56,26 +56,12 @@ func blindCredsEq(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
+	// a and b must have same values in same order
 	for _, v := range a {
-		var found bool
 		for _, vv := range b {
-			if v == vv {
-				found = true
+			if v != vv {
+				return false
 			}
-		}
-		if !found {
-			return false
-		}
-	}
-	for _, v := range b {
-		var found bool
-		for _, vv := range b {
-			if v == vv {
-				found = true
-			}
-		}
-		if !found {
-			return false
 		}
 	}
 	return true

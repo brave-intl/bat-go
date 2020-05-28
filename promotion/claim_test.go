@@ -50,8 +50,8 @@ func TestBlindCredsEq(t *testing.T) {
 		b = []string{"b", "a", "c"}
 		c = []string{"d", "b", "c", "a"}
 	)
-	if !blindCredsEq(a, b) {
-		t.Error("two creds should have been equal..")
+	if blindCredsEq(a, b) {
+		t.Error("two creds must retain the same ordering..")
 	}
 	if blindCredsEq(a, c) {
 		t.Error("two creds should have not been equal..")
