@@ -46,19 +46,13 @@ func (service *Service) ReadableDatastore() ReadOnlyDatastore {
 func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.ReadableDatastore().GetWallet(walletID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "error looking up wallet")
+		return nil, errorutils.Wrap(err, "error looking up wallet in db")
 	}
 
-	if wallet == nil {
-		wallet, err = service.LedgerClient.GetWallet(ctx, walletID)
+	if wallet == nil || wallet.PayoutAddress == nil {
+		wallet, err = service.UpsertWallet(ctx, walletID)
 		if err != nil {
-			return nil, errorutils.Wrap(err, "error looking up wallet")
-		}
-		if wallet != nil {
-			err = service.Datastore.UpsertWallet(wallet)
-			if err != nil {
-				return nil, errorutils.Wrap(err, "error saving wallet")
-			}
+			return nil, err
 		}
 	}
 	return wallet, nil
@@ -68,7 +62,7 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 func (service *Service) UpsertWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.LedgerClient.GetWallet(ctx, walletID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "error looking up wallet")
+		return nil, errorutils.Wrap(err, "error looking up wallet from ledger")
 	}
 	if wallet != nil {
 		err = service.Datastore.UpsertWallet(wallet)
