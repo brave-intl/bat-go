@@ -44,6 +44,20 @@ func TestSuggestionsNeeded(t *testing.T) {
 	}
 }
 
+func TestBlindCredsEq(t *testing.T) {
+	var (
+		a = []string{"a", "b", "c"}
+		b = []string{"b", "a", "c"}
+		c = []string{"d", "b", "c", "a"}
+	)
+	if blindCredsEq(a, b) {
+		t.Error("two creds must retain the same ordering..")
+	}
+	if blindCredsEq(a, c) {
+		t.Error("two creds should have not been equal..")
+	}
+}
+
 func TestClaimPromotion(t *testing.T) {
 	// t.Fatal("not implemented")
 }
