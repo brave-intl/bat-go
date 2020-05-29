@@ -126,24 +126,23 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 
-	if os.Getenv("FEATURE_ORDERS") != "" {
-		paymentPG, err := payment.NewPostgres("", true, "payment_db")
-		if err != nil {
-			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-		}
-		paymentService, err := payment.InitService(paymentPG)
-		if err != nil {
-			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Payment service initialization failed")
-		}
-
-		// add runnable jobs:
-		jobs = append(jobs, paymentService.Jobs()...)
-
-		r.Mount("/v1/orders", payment.Router(paymentService))
-		r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+	paymentPG, err := payment.NewPostgres("", true, "payment_db")
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
+	paymentService, err := payment.InitService(paymentPG)
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Payment service initialization failed")
+	}
+
+	// add runnable jobs:
+	jobs = append(jobs, paymentService.Jobs()...)
+
+	r.Mount("/v1/orders", payment.Router(paymentService))
+	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
 		paymentPG, err := payment.NewPostgres("", true, "merch_payment_db")
