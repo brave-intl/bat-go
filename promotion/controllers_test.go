@@ -39,6 +39,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+var payoutAddress = "anything"
+
 type ControllersTestSuite struct {
 	suite.Suite
 }
@@ -96,12 +98,13 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	walletID := uuid.NewV4()
 	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: nil,
-		PublicKey:   "-",
-		LastBalance: nil,
+		ID:            walletID.String(),
+		Provider:      "uphold",
+		ProviderID:    "-",
+		AltCurrency:   nil,
+		PublicKey:     "-",
+		LastBalance:   nil,
+		PayoutAddress: &payoutAddress,
 	}
 
 	mockLedger := mockledger.NewMockClient(mockCtrl)
@@ -371,12 +374,13 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
 	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
+		ID:            walletID.String(),
+		Provider:      "uphold",
+		ProviderID:    "-",
+		AltCurrency:   &bat,
+		PublicKey:     hex.EncodeToString(publicKey),
+		LastBalance:   nil,
+		PayoutAddress: &payoutAddress,
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -531,12 +535,13 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
 	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
+		ID:            walletID.String(),
+		Provider:      "uphold",
+		ProviderID:    "-",
+		AltCurrency:   &bat,
+		PublicKey:     hex.EncodeToString(publicKey),
+		LastBalance:   nil,
+		PayoutAddress: &payoutAddress,
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -697,10 +702,11 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	blindedCreds := jsonutils.JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
 	w := &wallet.Info{
-		ID:         walletID,
-		Provider:   "uphold",
-		ProviderID: uuid.NewV4().String(),
-		PublicKey:  publicKey,
+		ID:            walletID,
+		Provider:      "uphold",
+		ProviderID:    uuid.NewV4().String(),
+		PublicKey:     publicKey,
+		PayoutAddress: &payoutAddress,
 	}
 	err = pg.UpsertWallet(w)
 	suite.Require().NoError(err, "the wallet failed to be inserted")
@@ -985,12 +991,13 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		bat := altcurrency.BAT
 		hexPublicKey := hex.EncodeToString(publicKey)
 		w := &wallet.Info{
-			ID:          walletID.String(),
-			Provider:    "uphold",
-			ProviderID:  "-",
-			AltCurrency: &bat,
-			PublicKey:   hexPublicKey,
-			LastBalance: nil,
+			ID:            walletID.String(),
+			Provider:      "uphold",
+			ProviderID:    "-",
+			AltCurrency:   &bat,
+			PublicKey:     hexPublicKey,
+			LastBalance:   nil,
+			PayoutAddress: &payoutAddress,
 		}
 		suite.Require().NoError(pg.UpsertWallet(w), "could not insert wallet")
 
@@ -1072,12 +1079,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
 	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
+		ID:            walletID.String(),
+		Provider:      "uphold",
+		ProviderID:    "-",
+		AltCurrency:   &bat,
+		PublicKey:     hex.EncodeToString(publicKey),
+		LastBalance:   nil,
+		PayoutAddress: &payoutAddress,
 	}
 	wal := uphold.Wallet{
 		Info:    wallet,
@@ -1260,12 +1268,13 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
 	wallet := wallet.Info{
-		ID:          walletID.String(),
-		Provider:    "uphold",
-		ProviderID:  "-",
-		AltCurrency: &bat,
-		PublicKey:   hex.EncodeToString(publicKey),
-		LastBalance: nil,
+		ID:            walletID.String(),
+		Provider:      "uphold",
+		ProviderID:    "-",
+		AltCurrency:   &bat,
+		PublicKey:     hex.EncodeToString(publicKey),
+		LastBalance:   nil,
+		PayoutAddress: &payoutAddress,
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)

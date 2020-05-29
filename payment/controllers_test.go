@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
+
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
@@ -438,11 +440,15 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	offset, err := conn.ReadLastOffset()
 	suite.Require().NoError(err)
 
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Any()).Return(nil, nil)
+
 	service := &Service{
 		datastore: pg,
 		cbClient:  mockCB,
 		wallet: walletservice.Service{
-			Datastore: pg,
+			Datastore:    pg,
+			LedgerClient: mockLedger,
 		},
 	}
 
