@@ -275,6 +275,7 @@ func (suite *ControllersTestSuite) ClaimGrant(
 	blindedCreds []string,
 	claimFails bool,
 ) *uuid.UUID {
+	wallet.PayoutAddress = &payoutAddress
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
 	walletID, err := uuid.FromString(wallet.ID)
@@ -1079,13 +1080,12 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
 	wallet := wallet.Info{
-		ID:            walletID.String(),
-		Provider:      "uphold",
-		ProviderID:    "-",
-		AltCurrency:   &bat,
-		PublicKey:     hex.EncodeToString(publicKey),
-		LastBalance:   nil,
-		PayoutAddress: &payoutAddress,
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
 	}
 	wal := uphold.Wallet{
 		Info:    wallet,
@@ -1152,6 +1152,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
@@ -1160,6 +1161,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		TokenPreimage: preimage,
 		Signature:     sig,
 	}}), gomock.Eq(walletID.String())).Return(nil)
+
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	handler := middleware.HTTPSignedOnly(service)(DrainSuggestion(service))
 
