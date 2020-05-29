@@ -441,7 +441,6 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 	service := &Service{
 		datastore: pg,
@@ -496,6 +495,9 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	userWallet := generateWallet(suite.T())
+
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Any()).Return(userWallet, nil)
+
 	err = pg.UpsertWallet(&userWallet.Info)
 	suite.Require().NoError(err)
 
