@@ -810,6 +810,72 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	// FIXME add test for successful drain job
 }
 
+func (suite *PostgresTestSuite) TestInsertClaimDrainOverflow() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	blindedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	walletID := uuid.NewV4()
+	w := &wallet.Info{
+		ID:         walletID.String(),
+		Provider:   "uphold",
+		ProviderID: uuid.NewV4().String(),
+		PublicKey:  publicKey,
+	}
+	err = pg.UpsertWallet(w)
+	suite.Require().NoError(err, "Upsert wallet must succeed")
+
+	{
+		tmp := uuid.NewV4().String()
+		w.PayoutAddress = &tmp
+	}
+	err = pg.UpsertWallet(w)
+	suite.Require().NoError(err, "Upsert wallet should succeed")
+
+	wallet, err := pg.GetWallet(walletID)
+	suite.Require().NoError(err, "Get wallet should succeed")
+	suite.Require().Equal(w.PayoutAddress, wallet.PayoutAddress)
+
+	total := decimal.NewFromFloat(50.0)
+	// Create promotion
+	promotion, err := pg.CreatePromotion(
+		"ugp",
+		2,
+		total,
+		"",
+	)
+	suite.Require().NoError(err, "Create promotion should succeed")
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
+
+	claim, err := pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
+	suite.Require().NoError(err, "Claim creation should succeed")
+
+	suite.Assert().Equal(false, claim.Drained)
+
+	issuerName := promotion.ID.String() + ":control"
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+	credentials := []cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}
+
+	err = pg.InsertClaimDrainOverflow(claim, credentials, wallet, total)
+	suite.Require().NoError(err)
+	claimDrainOverflowDrainJobs := []DrainJob{}
+	err = pg.RawDB().Select(&claimDrainOverflowDrainJobs, `
+	select * from claim_drain_overflow`)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(1, len(claimDrainOverflowDrainJobs))
+}
+
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
 }
