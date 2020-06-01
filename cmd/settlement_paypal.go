@@ -68,9 +68,6 @@ func init() {
 	must(viper.BindEnv("txn-id", "TXN_ID"))
 	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
-	//must(rootCmd.MarkPersistentFlagRequired("ratios-service"))
-	//must(rootCmd.MarkPersistentFlagRequired("ratios-token"))
-
 	// rate
 	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
 		"the rate to compute the currency conversion")

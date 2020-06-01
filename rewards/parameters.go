@@ -1,11 +1,9 @@
 package rewards
 
-import "github.com/shopspring/decimal"
-
 // AutoContribute - reward parameters about ac (votes)
 type AutoContribute struct {
-	Choices []float64 `json:"choices,omitempty"`
-	Range   []float64 `json:"range,omitempty"`
+	Choices       []float64 `json:"choices,omitempty"`
+	DefaultChoice float64   `json:"defaultChoice,omitempty"`
 }
 
 // Tips - reward parameters about tips (suggestions)
@@ -16,7 +14,7 @@ type Tips struct {
 
 // Parameters - structure of reward parameters
 type Parameters struct {
-	BATRate        decimal.Decimal `json:"batRate,omitempty"`
-	AutoContribute AutoContribute  `json:"autocontribute,omitempty"`
-	Tips           Tips            `json:"tips,omitempty"`
+	BATRate        float64        `json:"batRate,omitempty"`
+	AutoContribute AutoContribute `json:"autocontribute,omitempty"`
+	Tips           Tips           `json:"tips,omitempty"`
 }

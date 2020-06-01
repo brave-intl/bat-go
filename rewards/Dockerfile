@@ -16,5 +16,5 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.6 as artifact
 RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/bat-go /bin/
-EXPOSE 3343
-CMD ["/bin/bat-go"]
+EXPOSE 3333
+CMD ["/bin/bat-go", "serve", "rewards", "rest"]

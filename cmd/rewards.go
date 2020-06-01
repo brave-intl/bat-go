@@ -25,11 +25,11 @@ var (
 )
 
 func init() {
-	// add complete and transform subcommand
+	// add grpc and rest commands
 	rewardsCmd.AddCommand(grpcCmd)
 	rewardsCmd.AddCommand(restCmd)
 
-	// add this command as a settlement subcommand
+	// add this command as a serve subcommand
 	serveCmd.AddCommand(rewardsCmd)
 
 	// setup the flags
@@ -40,13 +40,13 @@ func init() {
 	must(viper.BindPFlag("default-currency", rewardsCmd.PersistentFlags().Lookup("default-currency")))
 	must(viper.BindEnv("default-currency", "DEFAULT_CURRENCY"))
 
-	// defaultTipChoices - defaults to USD
+	// defaultTipChoices - defaults to 1,10,100
 	rewardsCmd.PersistentFlags().StringVarP(&defaultTipChoices, "default-tip-choices", "", `1,10,100`,
 		"the default tip choices for the rewards system")
 	must(viper.BindPFlag("default-tip-choices", rewardsCmd.PersistentFlags().Lookup("default-tip-choices")))
 	must(viper.BindEnv("default-tip-choices", "DEFAULT_TIP_CHOICES"))
 
-	// defaultMonthlyChoices - defaults to USD
+	// defaultMonthlyChoices - defaults to 1,10,100
 	rewardsCmd.PersistentFlags().StringVarP(&defaultMonthlyChoices, "default-monthly-choices", "", `1,10,100`,
 		"the default monthly choices for the rewards system")
 	must(viper.BindPFlag("default-monthly-choices", rewardsCmd.PersistentFlags().Lookup("default-monthly-choices")))

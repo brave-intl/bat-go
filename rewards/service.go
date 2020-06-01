@@ -73,10 +73,21 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		return nil, errors.New("empty response from ratios")
 	}
 
+	var choices = getChoices(ctx, rateData.Payload[currency.String()])
+	var defaultChoice float64
+	if len(choices) > 1 {
+		defaultChoice = choices[len(choices)/2]
+	} else if len(choices) > 0 {
+		defaultChoice = choices[0]
+	}
+
+	var rate, _ = rateData.Payload[currency.String()].Float64()
+
 	return &Parameters{
-		BATRate: rateData.Payload[currency.String()],
+		BATRate: rate,
 		AutoContribute: AutoContribute{
-			Choices: getChoices(ctx, rateData.Payload[currency.String()]),
+			DefaultChoice: defaultChoice,
+			Choices:       choices,
 		},
 		Tips: Tips{
 			DefaultTipChoices:     getTipChoices(ctx),
