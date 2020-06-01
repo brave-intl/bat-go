@@ -9,13 +9,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
-	"github.com/shopspring/decimal"
 )
-
-func init() {
-	// remove the quotes in json marshaling
-	decimal.MarshalJSONWithoutQuotes = true
-}
 
 // NewService - create a new rewards service structure
 func NewService(ctx context.Context, ratio ratios.Client) *Service {
