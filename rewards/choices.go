@@ -46,6 +46,11 @@ func getChoices(ctx context.Context, ratio decimal.Decimal) []float64 {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
+	// if we have DefaultACChoices in the context, just return that.
+	if acChoices, ok := ctx.Value(appctx.DefaultACChoicesCTXKey).([]float64); ok {
+		return acChoices
+	}
+
 	// find the price increment given our ratio
 	var (
 		index int = -1
