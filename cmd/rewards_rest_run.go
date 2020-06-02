@@ -59,6 +59,14 @@ func RewardsRestRun(cmd *cobra.Command, args []string) {
 	}
 	ctx = context.WithValue(ctx, appctx.DefaultTipChoicesCTXKey, tipChoices)
 
+	var acChoices = []float64{}
+	if err := viper.UnmarshalKey("default-ac-choices", &acChoices); err != nil {
+		logger.Fatal().Err(err).Msg("failed to parse default-ac-choices")
+	}
+	if len(acChoices) > 0 {
+		ctx = context.WithValue(ctx, appctx.DefaultACChoicesCTXKey, acChoices)
+	}
+
 	// setup the service now
 	s, err := rewards.InitService(ctx)
 	if err != nil {

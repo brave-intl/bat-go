@@ -28,6 +28,7 @@ services:
       - RATIOS_TOKEN
       - DEFAULT_TIP_CHOICES=1,10,100
       - DEFAULT_MONTHLY_CHOICES=1,10,100
+      - DEFAULT_AC_CHOICES
       - DEFAULT_CURRENCY=USD
       - RATIOS_CACHE_EXPIRY=1m
       - RATIOS_CACHE_PURGE=2m
@@ -50,6 +51,7 @@ services:
       - ADDR=:3343
       - RATIOS_SERVICE=https://bat-ratios-dev.herokuapp.com/
       - RATIOS_TOKEN
+      - DEFAULT_AC_CHOICES
       - DEFAULT_TIP_CHOICES=1,10,100
       - DEFAULT_MONTHLY_CHOICES=1,10,100
       - DEFAULT_CURRENCY=USD
