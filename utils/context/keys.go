@@ -18,6 +18,16 @@ const (
 	RatiosServerCTXKey CTXKey = "ratios_server"
 	// RatiosAccessTokenCTXKey - the context key for getting the ratios server access token
 	RatiosAccessTokenCTXKey CTXKey = "ratios_access_token"
+	// BaseCurrencyCTXKey - the context key for getting the ratios server access token
+	BaseCurrencyCTXKey CTXKey = "base_currency"
+	// DefaultMonthlyChoicesCTXKey - the context key for getting the ratios server access token
+	DefaultMonthlyChoicesCTXKey CTXKey = "default_monthly_choices"
+	// DefaultTipChoicesCTXKey - the context key for getting the ratios server access token
+	DefaultTipChoicesCTXKey CTXKey = "default_tip_choices"
+	// RatiosCacheExpiryDurationCTXKey - context key for ratios client cache expiry
+	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
+	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
+	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
 )
 
 var (

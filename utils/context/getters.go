@@ -3,6 +3,7 @@ package context
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -19,6 +20,20 @@ func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 	}
 	// value not a string
 	return "", ErrValueWrongType
+}
+
+//GetDurationFromContext - given a CTXKey return the duration value from the context if it exists
+func GetDurationFromContext(ctx context.Context, key CTXKey) (time.Duration, error) {
+	v := ctx.Value(key)
+	if v == nil {
+		// value not on context
+		return time.Duration(0), ErrNotInContext
+	}
+	if s, ok := v.(time.Duration); ok {
+		return s, nil
+	}
+	// value not a duration
+	return time.Duration(0), ErrValueWrongType
 }
 
 //GetLogger - return the logger value from the context if it exists

@@ -23,21 +23,12 @@ import (
 )
 
 var (
-	input             string
-	currency          string
-	txnID             string
-	rate              float64
-	out               string
-	ratiosAccessToken string
-	ratiosServer      string
+	input    string
+	currency string
+	txnID    string
+	rate     float64
+	out      string
 )
-
-func must(err error) {
-	if err != nil {
-		log.Printf("failed to initialize: %s\n", err.Error())
-		os.Exit(1)
-	}
-}
 
 func init() {
 	// add complete and transform subcommand
@@ -76,20 +67,6 @@ func init() {
 	must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	must(viper.BindEnv("txn-id", "TXN_ID"))
 	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
-
-	// ratios-server
-	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&ratiosServer, "ratios-server", "s", "",
-		"the ratios server url")
-	must(viper.BindPFlag("ratios-server", paypalSettlementCmd.PersistentFlags().Lookup("ratios-server")))
-	must(viper.BindEnv("ratios-server", "RATIOS_SERVER"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("ratios-server"))
-
-	// ratios-access-token
-	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-access-token", "a", "",
-		"the ratios server url")
-	must(viper.BindPFlag("ratios-access-token", paypalSettlementCmd.PersistentFlags().Lookup("ratios-access-token")))
-	must(viper.BindEnv("ratios-access-token", "RATIOS_ACCESS_TOKEN"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("ratios-access-token"))
 
 	// rate
 	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
@@ -172,8 +149,8 @@ var (
 		Short: "provides transform of paypal settlement for mass pay",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// add flag values to our base context that need to be there
-			ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, ratiosServer)
-			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, ratiosAccessToken)
+			ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
+			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := TransformForMassPay(TransformArgs{
