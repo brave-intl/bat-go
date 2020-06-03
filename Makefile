@@ -56,6 +56,10 @@ instrumented:
 	sed -i 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 
+rewards-docker:
+	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t rewards-api:latest -f ./rewards/Dockerfile .
+	docker tag rewards-api:latest rewards-api:$(GIT_VERSION)
 
 docker:
 	docker rmi -f bat-go:latest

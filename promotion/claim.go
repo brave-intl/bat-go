@@ -52,6 +52,23 @@ type ClaimCreds struct {
 	PublicKey    *string                    `db:"public_key"`
 }
 
+func blindCredsEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	// a and b must have same values in same order
+	for _, v := range a {
+		for _, vv := range b {
+			if v != vv {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var errClaimedDifferentBlindCreds = errors.New("blinded credentials do not match what was already claimed")
+
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
 func (service *Service) ClaimPromotionForWallet(
@@ -78,10 +95,25 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
-	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
-	if claim != nil && claim.Redeemed {
-		return &claim.ID, nil
+	if claim != nil {
+		// get the claim credentials to check if these blinded creds were used before
+		claimCreds, err := service.datastore.GetClaimCreds(claim.ID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
+		}
+
+		// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
+		// and the claim blinded tokens are the same
+		if claim.Redeemed && blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			return &claim.ID, nil
+		}
+
+		// if blinded creds do not match prior attempt, return error
+		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			return nil, errClaimedDifferentBlindCreds
+		}
 	}
+
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
 	if claim == nil || !claim.LegacyClaimed {
 		walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
