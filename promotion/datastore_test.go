@@ -855,7 +855,7 @@ func (suite *PostgresTestSuite) TestInsertClaimDrainOverflow() {
 	claim, err := pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
 	suite.Require().NoError(err, "Claim creation should succeed")
 
-	suite.Assert().Equal(false, claim.Drained)
+	suite.Require().Equal(false, claim.Drained)
 
 	issuerName := promotion.ID.String() + ":control"
 	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="

@@ -1359,6 +1359,156 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	suite.Require().NoError(err)
 }
 
+func (suite *ControllersTestSuite) TestSuggestionDrainOverflow() {
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	ch := make(chan *wallet.TransactionInfo)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	wallet := wallet.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+	wal := uphold.Wallet{
+		Info:    wallet,
+		PrivKey: privKey,
+		PubKey:  publicKey,
+	}
+	err = wal.Register("drain-card-test")
+	suite.Require().NoError(err, "Failed to register wallet")
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore: pg,
+		cbClient:  mockCB,
+		wallet: walletservice.Service{
+			Datastore:    pg,
+			LedgerClient: mockLedger,
+		},
+		reputationClient: mockReputation,
+		drainChannel:     ch,
+	}
+
+	err = service.InitHotWallet()
+	suite.Require().NoError(err, "Failed to init hot wallet")
+
+	promotion, err := service.datastore.CreatePromotion("ads", 1, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	err = pg.UpsertWallet(&wallet)
+	suite.Require().NoError(err, "the wallet failed to be inserted")
+
+	grantAmount := decimal.NewFromFloat(0.25)
+	_, err = service.datastore.CreateClaim(promotion.ID, wallet.ID, grantAmount, decimal.NewFromFloat(0))
+	suite.Require().NoError(err, "create a claim for a promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU=", "NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	claimID := suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds, false)
+	suite.WaitForClaimToPropagate(service, &Promotion{
+		ID:                  promotion.ID,
+		SuggestionsPerGrant: 2, // to bypass validation
+	}, claimID)
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{
+		{
+			Issuer:        issuerName,
+			TokenPreimage: preimage,
+			Signature:     sig,
+		},
+	}), gomock.Eq(walletID.String())).Return(nil)
+
+	drainReq := DrainSuggestionRequest{
+		WalletID: walletID,
+		Credentials: []CredentialBinding{
+			{
+				PublicKey:     issuerPublicKey,
+				Signature:     sig,
+				TokenPreimage: preimage,
+			},
+			{
+				PublicKey:     issuerPublicKey,
+				Signature:     "sig" + sig,
+				TokenPreimage: "image" + preimage,
+			},
+		},
+	}
+
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	err = service.Drain(
+		context.Background(),
+		drainReq.Credentials,
+		drainReq.WalletID,
+	)
+	suite.Require().Error(err)
+
+	payoutAddress := wal.ProviderID
+	wallet.PayoutAddress = &payoutAddress
+	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+
+	err = service.Drain(
+		context.Background(),
+		drainReq.Credentials,
+		drainReq.WalletID,
+	)
+	suite.Require().NoError(err)
+
+	tx := <-ch
+	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+
+	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	_, err = wal.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	suite.Require().NoError(err)
+
+	claimDrainOverflowDrainJobs := []DrainJob{}
+	err = pg.RawDB().Select(&claimDrainOverflowDrainJobs, `
+	select * from claim_drain_overflow`)
+	suite.Require().NoError(err)
+	suite.Require().Equal(1, len(claimDrainOverflowDrainJobs))
+}
+
 // THIS CODE IS A QUICK AND DIRTY HACK
 // WE SHOULD DELETE ALL OF THIS AND MOVE OVER TO THE PAYMENT SERVICE ONCE DEMO IS DONE.
 
