@@ -94,12 +94,12 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 		return rate.(*RateResponse), nil
 	}
 
-	req, err := c.client.NewRequest(ctx, "GET", "/v1/relative/"+base, map[string]string{
-		"currency": currency,
-	})
+	url := fmt.Sprintf("/v1/relative/%s", base)
+	req, err := c.client.NewRequest(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.URL.RawQuery = fmt.Sprintf("currency=%s", currency)
 
 	var body RateResponse
 	_, err = c.client.Do(ctx, req, &body)
