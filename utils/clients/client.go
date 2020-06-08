@@ -83,10 +83,11 @@ func (c *SimpleHTTPClient) newRequest(
 	ctx context.Context,
 	method,
 	path string,
+	query string,
 	body interface{},
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
-	resolvedURL := c.BaseURL.ResolveReference(&url.URL{Path: path})
+	resolvedURL := c.BaseURL.ResolveReference(&url.URL{Path: path, RawQuery: query})
 
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -124,9 +125,10 @@ func (c *SimpleHTTPClient) NewRequest(
 	ctx context.Context,
 	method,
 	path string,
+	query string,
 	body interface{},
 ) (*http.Request, error) {
-	req, status, err := c.newRequest(ctx, method, path, body)
+	req, status, err := c.newRequest(ctx, method, path, query, body)
 	if err != nil {
 		return nil, NewHTTPError(err, "request", status, body)
 	}

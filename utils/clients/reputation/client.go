@@ -58,6 +58,7 @@ func (c *HTTPClient) IsWalletReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String(),
+		"",
 		nil,
 	)
 	if err != nil {

@@ -50,7 +50,7 @@ type IssuerResponse struct {
 
 // CreateIssuer with the provided name and token cap
 func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens int) error {
-	req, err := c.client.NewRequest(ctx, "POST", "v1/issuer/", &IssuerCreateRequest{Name: issuer, MaxTokens: maxTokens})
+	req, err := c.client.NewRequest(ctx, "POST", "v1/issuer/", "", &IssuerCreateRequest{Name: issuer, MaxTokens: maxTokens})
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 
 // GetIssuer by name
 func (c *HTTPClient) GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error) {
-	req, err := c.client.NewRequest(ctx, "GET", "v1/issuer/"+issuer, nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/issuer/"+issuer, "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ type CredentialsIssueResponse struct {
 
 // SignCredentials using a particular issuer
 func (c *HTTPClient) SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/"+issuer, &CredentialsIssueRequest{BlindedTokens: creds})
+	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/"+issuer, "", &CredentialsIssueRequest{BlindedTokens: creds})
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ type CredentialRedeemRequest struct {
 
 // RedeemCredential that was issued by the specified issuer
 func (c *HTTPClient) RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
-	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/"+issuer+"/redemption/", &CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload})
+	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/"+issuer+"/redemption/", "", &CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload})
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ type CredentialsRedeemRequest struct {
 
 // RedeemCredentials that were issued by the specified issuer
 func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error {
-	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/bulk/redemption/", &CredentialsRedeemRequest{Credentials: credentials, Payload: payload})
+	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/bulk/redemption/", "", &CredentialsRedeemRequest{Credentials: credentials, Payload: payload})
 	if err != nil {
 		return err
 	}

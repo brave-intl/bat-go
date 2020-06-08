@@ -35,7 +35,7 @@ func New() (Client, error) {
 
 // InvalidateBalance invalidates the cached value on balance
 func (c *HTTPClient) InvalidateBalance(ctx context.Context, id uuid.UUID) error {
-	req, err := c.client.NewRequest(ctx, "DELETE", "v2/wallet/"+id.String()+"/balance", nil)
+	req, err := c.client.NewRequest(ctx, "DELETE", "v2/wallet/"+id.String()+"/balance", "", nil)
 	if err != nil {
 		return err
 	}
