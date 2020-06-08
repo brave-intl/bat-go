@@ -21,6 +21,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.6.2
 	github.com/golang/mock v1.4.3
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/google/go-querystring v1.0.0
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
