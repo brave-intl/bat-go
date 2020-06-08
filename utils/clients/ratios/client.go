@@ -86,6 +86,11 @@ type RateResponse struct {
 	Payload     map[string]decimal.Decimal `json:"payload"`
 }
 
+// FetchOptions options for fetching rates from ratios
+type FetchOptions struct {
+	Currency string `url:"currency,omitempty"`
+}
+
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
 	var cacheKey = fmt.Sprintf("%s_%s", base, currency)
@@ -94,8 +99,9 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 		return rate.(*RateResponse), nil
 	}
 
-	req, err := c.client.NewRequest(ctx, "GET", "/v1/relative/"+base, map[string]string{
-		"currency": currency,
+	url := fmt.Sprintf("/v1/relative/%s", base)
+	req, err := c.client.NewRequest(ctx, "GET", url, &FetchOptions{
+		Currency: currency,
 	})
 	if err != nil {
 		return nil, err

@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
+	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
@@ -86,9 +87,20 @@ func (c *SimpleHTTPClient) newRequest(
 	body interface{},
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
-	resolvedURL := c.BaseURL.ResolveReference(&url.URL{Path: path})
+	qs := ""
+	if method == "GET" && body != nil {
+		v, err := query.Values(body)
+		if err != nil {
+			return nil, 0, err
+		}
+		qs = v.Encode()
+	}
+	resolvedURL := c.BaseURL.ResolveReference(&url.URL{
+		Path:     path,
+		RawQuery: qs,
+	})
 
-	if body != nil {
+	if body != nil && method != "GET" {
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
 		if err != nil {
