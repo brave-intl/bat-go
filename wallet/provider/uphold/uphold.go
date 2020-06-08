@@ -16,6 +16,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,9 @@ const (
 )
 
 var (
+	// filter out authorization tokens from logs
+	authLogFilter = regexp.MustCompile(`Authorization: .+\n`)
+
 	// SettlementDestination is the address of the settlement wallet
 	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
 
@@ -112,8 +116,6 @@ func init() {
 	}
 }
 
-// TODO add context?
-
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
 func New(ctx context.Context, info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
@@ -166,6 +168,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	if err != nil {
 		panic(err)
 	}
+	dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
 
 	if logger != nil {
 		logger.Debug().

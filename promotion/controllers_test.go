@@ -1110,7 +1110,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet()
+	err = service.InitHotWallet(context.Background())
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
