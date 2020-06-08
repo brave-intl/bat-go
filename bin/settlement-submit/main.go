@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -55,7 +56,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	settlementWallet, err := uphold.FromWalletInfo(settlementState.WalletInfo)
+	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -85,7 +85,7 @@ func (service *Service) SubmitAnonCardTransaction(ctx context.Context, walletID 
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
-	providerWallet, err := provider.GetWallet(*walletInfo)
+	providerWallet, err := provider.GetWallet(ctx, *walletInfo)
 	if err != nil {
 		return nil, err
 	}

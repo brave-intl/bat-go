@@ -1,6 +1,7 @@
 package grant
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
@@ -39,7 +40,7 @@ func (s *Service) Jobs() []srv.Job {
 }
 
 // InitService initializes the grant service
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	gs := &Service{
 		datastore:   datastore,
 		roDatastore: roDatastore,
@@ -76,7 +77,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 			return nil, errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
-		grantWallet, err = uphold.New(info, privKey, pubKey)
+		grantWallet, err = uphold.New(ctx, info, privKey, pubKey)
 		if err != nil {
 			return nil, err
 		}
