@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"flag"
 	"fmt"
@@ -62,7 +63,7 @@ func main() {
 		ProviderID:  flag.Args()[0],
 		AltCurrency: &walletc,
 	}
-	w, err := provider.GetWallet(info)
+	w, err := provider.GetWallet(context.Background(), info)
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -1,6 +1,7 @@
 package uphold
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -33,7 +34,7 @@ func TestGetCardDetails(t *testing.T) {
 		info.AltCurrency = &tmp
 	}
 
-	wallet, err := FromWalletInfo(info)
+	wallet, err := FromWalletInfo(context.Background(), info)
 	if err != nil {
 		t.Error(err)
 	}
@@ -77,7 +78,7 @@ func TestDecodeTransaction(t *testing.T) {
 		info.AltCurrency = &tmp
 	}
 
-	wallet, err := FromWalletInfo(info)
+	wallet, err := FromWalletInfo(context.Background(), info)
 	if err != nil {
 		t.Error(err)
 	}

@@ -89,7 +89,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 	}
 
-	grantService, err := grant.InitService(grantPg, grantRoPg)
+	grantService, err := grant.InitService(ctx, grantPg, grantRoPg)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
@@ -112,7 +112,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 	}
 
-	promotionService, err := promotion.InitService(pg, roPg)
+	promotionService, err := promotion.InitService(ctx, pg, roPg)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Promotion service initialization failed")

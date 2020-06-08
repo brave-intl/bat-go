@@ -2,6 +2,7 @@ package uphold
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"encoding/base64"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -21,15 +23,17 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/digest"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -37,6 +41,7 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	wallet.Info
+	logger  *zerolog.Logger
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
 }
@@ -111,7 +116,12 @@ func init() {
 
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
-func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
+func New(ctx context.Context, info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	if info.Provider != "uphold" {
 		return nil, errors.New("The wallet provider must be uphold")
 	}
@@ -125,11 +135,11 @@ func New(info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier)
 	if !info.AltCurrency.IsValid() {
 		return nil, errors.New("A wallet must have a valid altcurrency")
 	}
-	return &Wallet{Info: info, PrivKey: privKey, PubKey: pubKey}, nil
+	return &Wallet{logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
-func FromWalletInfo(info wallet.Info) (*Wallet, error) {
+func FromWalletInfo(ctx context.Context, info wallet.Info) (*Wallet, error) {
 	var publicKey httpsignature.Ed25519PubKey
 	if len(info.PublicKey) > 0 {
 		var err error
@@ -138,7 +148,7 @@ func FromWalletInfo(info wallet.Info) (*Wallet, error) {
 			return nil, err
 		}
 	}
-	return New(info, ed25519.PrivateKey{}, publicKey)
+	return New(ctx, info, ed25519.PrivateKey{}, publicKey)
 }
 
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
@@ -149,27 +159,25 @@ func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	return req, err
 }
 
-func submit(req *http.Request) ([]byte, *http.Response, error) {
+func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, error) {
 	req.Header.Add("content-type", "application/json")
 
 	dump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
 		panic(err)
 	}
-	log.WithFields(log.Fields{
-		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Request",
-	}).Debug(string(dump))
+
+	if logger != nil {
+		logger.Debug().
+			Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
+			Str("type", "http.Request").
+			Msg(string(dump))
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, resp, err
 	}
-
-	log.WithFields(log.Fields{
-		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Response.StatusCode",
-	}).Debug(resp.StatusCode)
 
 	headers := map[string][]string(resp.Header)
 	jsonHeaders, err := json.MarshalIndent(headers, "", "    ")
@@ -177,19 +185,19 @@ func submit(req *http.Request) ([]byte, *http.Response, error) {
 		return nil, resp, err
 	}
 
-	log.WithFields(log.Fields{
-		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Response.Header",
-	}).Debug(string(jsonHeaders))
-
 	body, err := requestutils.Read(resp.Body)
 	if err != nil {
 		return nil, resp, err
 	}
-	log.WithFields(log.Fields{
-		"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-		"type": "http.Response.Body",
-	}).Debug(string(body))
+
+	if logger != nil {
+		logger.Debug().
+			Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
+			Str("type", "http.Response").
+			Int("status", resp.StatusCode).
+			Str("headers", string(jsonHeaders)).
+			Msg(string(dump))
+	}
 
 	if resp.StatusCode/100 != 2 {
 		var uhErr upholdError
@@ -236,7 +244,7 @@ func (w *Wallet) Register(label string) error {
 		return err
 	}
 
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return err
 	}
@@ -273,7 +281,7 @@ func (w *Wallet) SubmitRegistration(registrationB64 string) error {
 		return err
 	}
 
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return err
 	}
@@ -327,7 +335,7 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +414,7 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 		return nil, err
 	}
 
-	respBody, _, err := submit(req)
+	respBody, _, err := submit(w.logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +660,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	respBody, _, err := submit(req)
+	respBody, _, err := submit(w.logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -672,7 +680,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -696,7 +704,7 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -737,12 +745,14 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]wallet.Tran
 		var body []byte
 		var resp *http.Response
 		for i := 0; i < listTransactionsRetries; i++ {
-			body, resp, err = submit(req)
+			body, resp, err = submit(w.logger, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-				log.WithFields(log.Fields{
-					"path": "github.com/brave-intl/bat-go/wallet/provider/uphold",
-					"type": "net.Error",
-				}).Debug("Temporary error occurred, retrying")
+				if w.logger != nil {
+					w.logger.Debug().
+						Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
+						Str("type", "net.Error").
+						Msg("Temporary error occurred, retrying")
+				}
 				continue
 			}
 			break
@@ -834,7 +844,7 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 		return "", err
 	}
 
-	body, _, err := submit(req)
+	body, _, err := submit(w.logger, req)
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/wallet"
@@ -8,10 +9,10 @@ import (
 )
 
 // GetWallet returns the wallet corresponding to the passed wallet info
-func GetWallet(info wallet.Info) (wallet.Wallet, error) {
+func GetWallet(ctx context.Context, info wallet.Info) (wallet.Wallet, error) {
 	switch info.Provider {
 	case "uphold":
-		uW, err := uphold.FromWalletInfo(info)
+		uW, err := uphold.FromWalletInfo(ctx, info)
 		if err != nil {
 			return uW, err
 		}
