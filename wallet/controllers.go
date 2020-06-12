@@ -2,9 +2,11 @@ package wallet
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -26,7 +28,7 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/{paymentId}/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("LinkWalletCompat", LinkWalletCompat(service))))
 	r.Method("GET", "/{paymentId}", middleware.InstrumentHandler("GetWallet", GetWallet(service)))
-	r.Method("POST", "/", middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service)))
+	r.Method("POST", "/", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service))))
 	return r
 }
 
@@ -120,9 +122,50 @@ type PostCreateWalletRequest struct {
 	SignedTx string `json:"signedTx" valid:"-"`
 }
 
+func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) error {
+	// validate that the signature in the header is valid based on public key provided
+	var s httpsignature.Signature
+	err := s.UnmarshalText([]byte(signature))
+	if err != nil {
+		return errors.New("invalid signature")
+	}
+
+	// Override algorithm and headers to those we want to enforce
+	s.Algorithm = httpsignature.ED25519
+	s.Headers = []string{"digest", "(request-target)"}
+	var publicKey httpsignature.Ed25519PubKey
+	if len(s.KeyID) > 0 {
+		var err error
+		publicKey, err = hex.DecodeString(s.KeyID)
+		if err != nil {
+			return fmt.Errorf("failed to hex decode public key: %w", err)
+		}
+	}
+	pubKey := httpsignature.Verifier(publicKey)
+	if err != nil {
+		return err
+	}
+	if pubKey == nil {
+		return errors.New("invalid public key")
+	}
+
+	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
+
+	if err != nil {
+		return errors.New("failed to verify signature")
+	}
+	if !valid {
+		return errors.New("invalid signature")
+	}
+	return nil
+}
+
 // PostCreateWallet creates a wallet
 func PostCreateWallet(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		if err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature")); err != nil {
+			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
+		}
 		var req PostCreateWalletRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
