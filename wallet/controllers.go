@@ -105,12 +105,6 @@ func LinkWalletCompat(service *Service) handlers.AppHandler {
 	})
 }
 
-// PostCreateWalletResponse includes a ClaimID which can later be used to check the status of the claim
-type PostCreateWalletResponse struct {
-	Wallet     *walletutils.Info `json:"wallet"`
-	PrivateKey *string           `json:"privateKey"`
-}
-
 // GetWalletResponse gets wallet info tied to a wallet id
 type GetWalletResponse struct {
 	Wallet *walletutils.Info `json:"wallet"`
