@@ -26,17 +26,33 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/{paymentId}/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("LinkWalletCompat", LinkWalletCompat(service))))
 	r.Method("GET", "/{paymentId}", middleware.InstrumentHandler("GetWallet", GetWallet(service)))
-	r.Method("POST", "/", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service))))
+	r.Method("POST", "/", middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service)))
 	return r
 }
 
 // LookupPublicKey based on the HTTP signing keyID, which in our case is the walletID
 func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
-	var publicKey httpsignature.Ed25519PubKey
-	// hex encoded public key
-	publicKey, err := hex.DecodeString(keyID)
+	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, err
+		return nil, errorutils.Wrap(err, "KeyID format is invalid")
+	}
+
+	wallet, err := service.GetOrCreateWallet(ctx, walletID)
+	if err != nil {
+		return nil, errorutils.Wrap(err, "error getting wallet")
+	}
+
+	if wallet == nil {
+		return nil, nil
+	}
+
+	var publicKey httpsignature.Ed25519PubKey
+	if len(wallet.PublicKey) > 0 {
+		var err error
+		publicKey, err = hex.DecodeString(wallet.PublicKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 	tmp := httpsignature.Verifier(publicKey)
 	return &tmp, nil
