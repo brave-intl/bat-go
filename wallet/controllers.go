@@ -13,9 +13,11 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -249,4 +251,88 @@ func CreateWallet(req PostCreateWalletRequest, publicKey string) (walletutils.In
 		}
 	}
 	return info, nil
+}
+
+// ------------------ V3 below ---------------
+
+// CreateUpholdWalletV3 - produces an http handler for the service s which handles creation of uphold wallets
+func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	var (
+		ucReq = new(UpholdCreationRequest)
+	)
+	if err := inputs.DecodeAndValidateReader(r.Context(), ucReq, r.Body); err != nil {
+		return ucReq.HandleErrors(err)
+	}
+
+	// no more uphold wallets in the wild please
+	if env, ok := r.Context().Value(appctx.EnvironmentCTXKey).(string); ok && env == "local" {
+		return handlers.WrapError(
+			errors.New("uphold wallet creation needs to be in an environment not local"),
+			"failed to create wallet", http.StatusBadRequest)
+	}
+
+	publicKey, err := middleware.GetKeyID(r.Context())
+	if err != nil {
+		return handlers.WrapError(err, "unable to look up http signature info", http.StatusBadRequest)
+	}
+
+	// TODO: implement logic
+
+	var (
+		ucResp = &UpholdCreationResponse{
+			PaymentID: uuid.NewV4(),
+			Provider: ProviderDetails{
+				Name:      "uphold",
+				ID:        "",
+				LinkingID: "",
+			},
+			AltCurrency: BATCurrency,
+			PublicKey:   publicKey,
+		}
+	)
+
+	return handlers.RenderContent(r.Context(), ucResp, w, http.StatusOK)
+}
+
+// CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
+func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	var (
+		bcr = new(BraveCreationRequest)
+	)
+	if err := inputs.DecodeAndValidateReader(r.Context(), bcr, r.Body); err != nil {
+		return bcr.HandleErrors(err)
+	}
+
+	// TODO: implement
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// ClaimUpholdWalletV3 - produces an http handler for the service s which handles claiming of uphold wallets
+func ClaimUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// ClaimBraveWalletV3 - produces an http handler for the service s which handles claiming of brave wallets
+func ClaimBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// GetWalletV3 - produces an http handler for the service s which handles getting of brave wallets
+func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// RecoverWalletV3 - produces an http handler for the service s which handles recovering of brave wallets
+func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// GetUpholdWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of uphold wallets
+func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
+}
+
+// GetBraveWalletBalance - produces an http handler for the service s which handles balance inquiries of brave wallets
+func GetBraveWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }
