@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -116,6 +117,11 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 			),
 		),
 	)
+}
+
+// InstrumentHandlerFunc - helper to wrap up a handler func
+func InstrumentHandlerFunc(name string, f handlers.AppHandler) http.HandlerFunc {
+	return InstrumentHandler(name, f).ServeHTTP
 }
 
 // InstrumentHandler instruments an http.Handler to capture metrics like the number

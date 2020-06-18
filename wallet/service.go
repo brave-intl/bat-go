@@ -26,7 +26,7 @@ type Service struct {
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
-	ledgerClient, err := ledger.New()
+	ledgerClient, err := ledger.NewFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -89,6 +89,7 @@ func setupRouter(ctx context.Context) *chi.Mux {
 			Str("commit", commit).
 			Str("build_time", buildTime).
 			Str("ratios_service", viper.GetString("ratios-service")).
+			Str("ledger_service", viper.GetString("ledger-service")).
 			Str("address", viper.GetString("address")).
 			Str("environment", viper.GetString("environment")).
 			Msg("server starting")

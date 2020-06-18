@@ -3,6 +3,8 @@ package inputs
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
@@ -16,6 +18,15 @@ type DecodeValidate interface {
 // DecodeAndValidateString - perform decode and validate of input in one swipe of a string input
 func DecodeAndValidateString(ctx context.Context, v DecodeValidate, input string) error {
 	return DecodeAndValidate(ctx, v, []byte(input))
+}
+
+// DecodeAndValidateReader - perform decode and validate of input in one swipe
+func DecodeAndValidateReader(ctx context.Context, v DecodeValidate, input io.Reader) error {
+	b, err := ioutil.ReadAll(input)
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	return DecodeAndValidate(ctx, v, b)
 }
 
 // DecodeAndValidate - perform decode and validate of input in one swipe

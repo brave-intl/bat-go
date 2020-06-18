@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
+	// RODatastoreCTXKey - the context key for getting the datastore
+	RODatastoreCTXKey CTXKey = "ro_datastore"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key
 	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
 	// ServiceKey - the key used for service context
@@ -30,6 +32,10 @@ const (
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
 	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
+	// LedgerServerCTXKey - the context key for getting the ledger server
+	LedgerServiceCTXKey CTXKey = "ledger_service"
+	// LedgerAccessTokenCTXKey - the context key for getting the ratios server access token
+	LedgerAccessTokenCTXKey CTXKey = "ledger_access_token"
 )
 
 var (
