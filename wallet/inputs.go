@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/asaskevich/govalidator"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -77,6 +78,53 @@ func (bcr *BraveCreationRequest) Decode(ctx context.Context, v []byte) error {
 
 // HandleErrors - handle any errors from this request
 func (bcr *BraveCreationRequest) HandleErrors(err error) *handlers.AppError {
+	issues := map[string]string{}
+	if errors.Is(err, ErrInvalidJSON) {
+		issues["invalidJSON"] = err.Error()
+	}
+
+	var merr *errorutils.MultiError
+	if errors.As(err, &merr) {
+		for _, e := range merr.Errs {
+			if strings.Contains(e.Error(), "failed decoding") {
+				issues["decoding"] = e.Error()
+			}
+			if strings.Contains(e.Error(), "failed validation") {
+				issues["validation"] = e.Error()
+			}
+		}
+	}
+	return handlers.ValidationError("brave create wallet request validation errors", issues)
+}
+
+// ClaimUpholdWalletRequest - the structure for a brave provider wallet creation request
+type ClaimUpholdWalletRequest struct {
+	SignedCreationRequest string `json:"signedCreationRequest"`
+	AnonymousAddress      string `json:"anonymousAddress"`
+}
+
+// Validate - implementation of validatable interface
+func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
+	var merr = new(errorutils.MultiError)
+	if cuw.SignedCreationRequest == "" {
+		merr.Append(errors.New("failed to validate 'signedCreationRequest': must not be empty"))
+	}
+	if !govalidator.IsUUID(cuw.AnonymousAddress) {
+		merr.Append(errors.New("failed to validate 'anonymousAddress': must be uuid"))
+	}
+	if merr.Count() > 0 {
+		return merr
+	}
+	return nil
+}
+
+// Decode - implementation of  decodable interface
+func (cuw *ClaimUpholdWalletRequest) Decode(ctx context.Context, v []byte) error {
+	return nil
+}
+
+// HandleErrors - handle any errors from this request
+func (cuw *ClaimUpholdWalletRequest) HandleErrors(err error) *handlers.AppError {
 	issues := map[string]string{}
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()

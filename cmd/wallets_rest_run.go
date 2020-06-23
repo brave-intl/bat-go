@@ -38,24 +38,26 @@ func WalletRestRun(cmd *cobra.Command, args []string) {
 		}()
 	}
 
+	// setup the service now
+	db, err := wallet.NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
+	if err != nil {
+		fmt.Println(err)
+		logger.Panic().Err(err).Msg("unable connect to wallet db")
+	}
+	roDB, err := wallet.NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "wallet_ro_db")
+	if err != nil {
+		fmt.Println(err)
+		logger.Panic().Err(err).Msg("unable connect to wallet db")
+	}
+
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDB)
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
+
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, viper.Get("datastore"))
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, viper.Get("ro-datastore"))
 	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, viper.Get("ledger-service"))
 	ctx = context.WithValue(ctx, appctx.LedgerAccessTokenCTXKey, viper.Get("ledger-token"))
-
-	// setup the service now
-	db, err := wallet.NewWritablePostgres(viper.GetString("database_url"), false, "wallet_db")
-	if err != nil {
-		fmt.Println(err)
-		logger.Panic().Err(err).Msg("unable connect to wallet db")
-	}
-	roDB, err := wallet.NewReadOnlyPostgres(viper.GetString("ro_database_url"), false, "wallet_ro_db")
-	if err != nil {
-		fmt.Println(err)
-		logger.Panic().Err(err).Msg("unable connect to wallet db")
-	}
 
 	s, err := wallet.InitService(ctx, db, roDB)
 	if err != nil {
@@ -74,9 +76,9 @@ func WalletRestRun(cmd *cobra.Command, args []string) {
 
 		// create wallet claim routes for our wallet providers
 		r.Post("/uphold/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3)).ServeHTTP)
+			"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s))).ServeHTTP)
 		r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"ClaimBraveWallet", wallet.ClaimBraveWalletV3)).ServeHTTP)
+			"ClaimBraveWallet", wallet.ClaimBraveWalletV3(s))).ServeHTTP)
 
 		// get wallet routes
 		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(

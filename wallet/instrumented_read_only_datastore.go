@@ -69,6 +69,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletut
 	return _d.base.GetWallet(ID)
 }
 
+// GetWalletByPublicKey implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *walletutils.Info, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWalletByPublicKey", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetWalletByPublicKey(s1)
+}
+
 // Migrate implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) Migrate() (err error) {
 	_since := time.Now()
