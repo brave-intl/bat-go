@@ -57,4 +57,5 @@ func init() {
 		"the ledger service address")
 	must(viper.BindPFlag("ledger-service", walletsCmd.PersistentFlags().Lookup("ledger-service")))
 	must(viper.BindEnv("ledger-service", "LEDGER_SERVICE"))
+	must(viper.BindEnv("ledger-service", "LEDGER_SERVER"))
 }

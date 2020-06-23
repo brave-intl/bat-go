@@ -19,25 +19,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-// WalletRestRun - Main entrypoint of the REST subcommand
-// This function takes a cobra command and starts up the
-// wallets rest microservice.
-func WalletRestRun(cmd *cobra.Command, args []string) {
+// SetupWalletService - setup the wallet microservice
+func SetupWalletService(r *chi.Mux, ctx context.Context) (*chi.Mux, context.Context, *wallet.Service) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		// no logger, setup
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	// add profiling flag to enable profiling routes
-	if viper.GetString("pprof-enabled") != "" {
-		// pprof attaches routes to default serve mux
-		// host:6061/debug/pprof/
-		go func() {
-			logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
-		}()
-	}
-
+	fmt.Println("!!! before postgres")
 	// setup the service now
 	db, err := wallet.NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
 	if err != nil {
@@ -64,8 +54,7 @@ func WalletRestRun(cmd *cobra.Command, args []string) {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	// setup generic middlewares and routes for health-check and metrics
-	r := setupRouter(ctx)
+	fmt.Println("!!! after init service")
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// create wallet routes for our wallet providers
@@ -92,6 +81,31 @@ func WalletRestRun(cmd *cobra.Command, args []string) {
 		r.Get("/brave/{providerID}", middleware.InstrumentHandlerFunc(
 			"GetBraveWalletBalance", wallet.GetBraveWalletBalanceV3))
 	})
+	return r, ctx, s
+}
+
+// WalletRestRun - Main entrypoint of the REST subcommand
+// This function takes a cobra command and starts up the
+// wallets rest microservice.
+func WalletRestRun(cmd *cobra.Command, args []string) {
+	// setup generic middlewares and routes for health-check and metrics
+	r := setupRouter(ctx)
+	r, ctx, _ = SetupWalletService(r, ctx)
+
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// add profiling flag to enable profiling routes
+	if viper.GetString("pprof-enabled") != "" {
+		// pprof attaches routes to default serve mux
+		// host:6061/debug/pprof/
+		go func() {
+			logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
+		}()
+	}
 
 	// setup server, and run
 	srv := http.Server{

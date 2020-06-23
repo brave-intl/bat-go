@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
@@ -74,16 +75,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter(ctx))
 
-	walletDB, walletRODB, err := wallet.NewPostgres()
-	if err != nil {
-		log.Panic().Err(err).Msg("unable connect to promotion db")
-	}
-	walletService, err := wallet.InitService(ctx, walletDB, walletRODB)
-	if err != nil {
-		sentry.CaptureException(err)
-		sentry.Flush(time.Second * 2)
-		log.Panic().Err(err).Msg("Wallet service initialization failed")
-	}
+	fmt.Println("!!!!! before wallet setup")
+	var walletService *wallet.Service
+	// use cobra configurations for setting up wallet service
+	r, ctx, walletService = cmd.SetupWalletService(r, ctx)
+
+	fmt.Println("!!!!! past wallet setup")
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
