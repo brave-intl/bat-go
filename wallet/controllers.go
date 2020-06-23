@@ -120,12 +120,12 @@ type PostCreateWalletRequest struct {
 	SignedTx string `json:"signedTx" valid:"-"`
 }
 
-func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) error {
+func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) (string, error) {
 	// validate that the signature in the header is valid based on public key provided
 	var s httpsignature.Signature
 	err := s.UnmarshalText([]byte(signature))
 	if err != nil {
-		return errors.New("invalid signature")
+		return "", errors.New("invalid signature")
 	}
 
 	// Override algorithm and headers to those we want to enforce
@@ -136,36 +136,37 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 		var err error
 		publicKey, err = hex.DecodeString(s.KeyID)
 		if err != nil {
-			return fmt.Errorf("failed to hex decode public key: %w", err)
+			return "", fmt.Errorf("failed to hex decode public key: %w", err)
 		}
 	}
 	pubKey := httpsignature.Verifier(publicKey)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if pubKey == nil {
-		return errors.New("invalid public key")
+		return "", errors.New("invalid public key")
 	}
 
 	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
 
 	if err != nil {
-		return errors.New("failed to verify signature")
+		return "", errors.New("failed to verify signature")
 	}
 	if !valid {
-		return errors.New("invalid signature")
+		return "", errors.New("invalid signature")
 	}
-	return nil
+	return s.KeyID, nil
 }
 
 // PostCreateWallet creates a wallet
 func PostCreateWallet(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		if err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature")); err != nil {
+		publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
+		if err != nil {
 			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 		}
 		var req PostCreateWalletRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
 		}
@@ -177,11 +178,6 @@ func PostCreateWallet(service *Service) handlers.AppHandler {
 		// no more uphold wallets in the wild please
 		if req.Provider == "uphold" && os.Getenv("ENV") != "local" {
 			return handlers.WrapError(errors.New("unable to create uphold wallet"), "failed to create wallet", http.StatusBadRequest)
-		}
-
-		publicKey, err := middleware.GetKeyID(r.Context())
-		if err != nil {
-			return handlers.WrapError(err, "unable to look up http signature info", http.StatusBadRequest)
 		}
 
 		info, err := CreateWallet(req, publicKey)
@@ -259,26 +255,23 @@ func CreateWallet(req PostCreateWalletRequest, publicKey string) (walletutils.In
 
 // CreateUpholdWalletV3 - produces an http handler for the service s which handles creation of uphold wallets
 func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
+	if err != nil {
+		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
+	}
+
 	var (
 		ucReq       = new(UpholdCreationRequest)
 		ctx         = r.Context()
 		altCurrency = altcurrency.BAT
 	)
 
+	// no logger, setup
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		// no logger, setup
 		ctx, logger = logging.SetupLogger(ctx)
-	}
-
-	// validate the user can sign something with their private key
-	if err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature")); err != nil {
-		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
-	}
-	publicKey, err := middleware.GetKeyID(r.Context())
-	if err != nil {
-		return handlers.WrapError(err, "unable to look up http signature info", http.StatusBadRequest)
 	}
 
 	// decode and validate the request body
@@ -337,6 +330,12 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 
 // CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
 func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	// perform validation based on public key that the user submits
+	publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
+	if err != nil {
+		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
+	}
+
 	var (
 		ctx = r.Context()
 		bcr = new(BraveCreationRequest)
@@ -351,11 +350,6 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 
 	if err := inputs.DecodeAndValidateReader(r.Context(), bcr, r.Body); err != nil {
 		return bcr.HandleErrors(err)
-	}
-
-	publicKey, err := middleware.GetKeyID(r.Context())
-	if err != nil {
-		return handlers.WrapError(err, "unable to look up http signature info", http.StatusBadRequest)
 	}
 
 	var (
