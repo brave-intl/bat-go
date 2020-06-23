@@ -33,6 +33,8 @@ type Datastore interface {
 	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
 	GetWallet(ID uuid.UUID) (*walletutils.Info, error)
+	// GetWalletByPublicKey by ID
+	GetWalletByPublicKey(string) (*walletutils.Info, error)
 	// InsertWallet inserts the given wallet
 	InsertWallet(wallet *walletutils.Info) error
 	// UpsertWallets inserts a wallet if it does not already exist
@@ -46,6 +48,8 @@ type ReadOnlyDatastore interface {
 	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
 	GetWallet(ID uuid.UUID) (*walletutils.Info, error)
+	// GetWalletByPublicKey
+	GetWalletByPublicKey(string) (*walletutils.Info, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -150,6 +154,18 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	}
 
 	return nil, nil
+}
+
+// GetWalletByPublicKey gets a wallet by a public key
+func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
+	statement := `
+	SELECT *
+	FROM wallets
+	WHERE public_key = $1
+	`
+	var wallet walletutils.Info
+	err := pg.RawDB().Get(&wallet, statement, pk)
+	return &wallet, err
 }
 
 // GetByProviderLinkingID gets a wallet by a provider address

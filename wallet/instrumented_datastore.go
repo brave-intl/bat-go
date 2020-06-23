@@ -69,6 +69,20 @@ func (_d DatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletutils.Info
 	return _d.base.GetWallet(ID)
 }
 
+// GetWalletByPublicKey implements Datastore
+func (_d DatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *walletutils.Info, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWalletByPublicKey", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetWalletByPublicKey(s1)
+}
+
 // InsertWallet implements Datastore
 func (_d DatastoreWithPrometheus) InsertWallet(wallet *walletutils.Info) (err error) {
 	_since := time.Now()
