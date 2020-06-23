@@ -161,10 +161,12 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 // PostCreateWallet creates a wallet
 func PostCreateWallet(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
 		if err != nil {
 			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 		}
+
 		var req PostCreateWalletRequest
 		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {

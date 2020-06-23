@@ -15,9 +15,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uphold "github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -94,6 +94,71 @@ func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect d
 	suite.Require().True(expect.Equal(totalProbi), errMessage)
 }
 
+func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockLedger := mockledger.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore:    pg,
+		LedgerClient: mockLedger,
+	}
+
+	w1 := suite.NewWallet(service, "uphold")
+	w2 := suite.NewWallet(service, "uphold")
+	w3 := suite.NewWallet(service, "uphold")
+	w4 := suite.NewWallet(service, "uphold")
+	bat1 := decimal.NewFromFloat(1)
+
+	suite.FundWallet(w1, bat1)
+	suite.FundWallet(w2, bat1)
+	suite.FundWallet(w3, bat1)
+	suite.FundWallet(w4, bat1)
+	settlement := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+
+	anonCard1ID, err := w1.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
+
+	anonCard2ID, err := w2.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
+
+	w1ProviderID := w1.GetWalletInfo().ProviderID
+	w2ProviderID := w2.GetWalletInfo().ProviderID
+	w3ProviderID := w3.GetWalletInfo().ProviderID
+
+	zero := decimal.NewFromFloat(0)
+
+	suite.CheckBalance(w1, bat1)
+	suite.claimCardV3(service, mockLedger, w1, settlement, http.StatusOK, bat1, noUUID())
+	suite.CheckBalance(w1, zero)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, mockLedger, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.CheckBalance(w2, bat1)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, mockLedger, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
+	suite.CheckBalance(w2, zero)
+
+	suite.CheckBalance(w3, bat1)
+	suite.claimCardV3(service, mockLedger, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
+	suite.CheckBalance(w3, zero)
+
+	suite.CheckBalance(w4, bat1)
+	suite.claimCardV3(service, mockLedger, w4, w3ProviderID, http.StatusConflict, bat1, noUUID())
+	suite.CheckBalance(w4, bat1)
+
+	suite.CheckBalance(w3, zero)
+	suite.claimCardV3(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
+	suite.CheckBalance(w3, zero)
+}
+
 func (suite *WalletControllersTestSuite) TestLinkWallet() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
@@ -157,6 +222,49 @@ func (suite *WalletControllersTestSuite) TestLinkWallet() {
 	suite.CheckBalance(w3, zero)
 	suite.claimCard(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, zero)
+}
+
+func (suite *WalletControllersTestSuite) claimCardV3(
+	service *Service,
+	mockLedgerClient *mockledger.MockClient,
+	w *uphold.Wallet,
+	destination string,
+	status int,
+	amount decimal.Decimal,
+	anonymousAddress *uuid.UUID,
+) (*walletutils.Info, string) {
+	signedCreationRequest, err := w.PrepareTransaction(*w.AltCurrency, altcurrency.BAT.ToProbi(amount), destination, "")
+	suite.Require().NoError(err, "transaction must be signed client side")
+
+	// V3 Payload
+	reqBody := ClaimUpholdWalletRequest{
+		SignedCreationRequest: signedCreationRequest,
+		AnonymousAddress:      anonymousAddress.String(),
+	}
+
+	body, err := json.Marshal(&reqBody)
+	suite.Require().NoError(err, "unable to marshal claim body")
+
+	info := w.GetWalletInfo()
+	mockLedgerClient.EXPECT().GetMemberWallets(gomock.Any(), gomock.Eq(uuid.Must(uuid.FromString(info.ID)))).Return(&[]walletutils.Info{info}, nil)
+
+	// V3 Handler
+
+	handler := ClaimUpholdWalletV3(service)
+
+	req, err := http.NewRequest("POST", "/v3/wallet/{paymentID}/claim", bytes.NewBuffer(body))
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", info.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
+	linked, err := service.Datastore.GetWallet(uuid.Must(uuid.FromString(w.ID)))
+	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
+	return linked, rr.Body.String()
 }
 
 func (suite *WalletControllersTestSuite) claimCard(
@@ -347,7 +455,7 @@ func (suite *WalletControllersTestSuite) createWallet(
 	privateKey ed25519.PrivateKey,
 	shouldSign bool,
 ) string {
-	handler := middleware.HTTPSignedOnly(service)(PostCreateWallet(service))
+	handler := PostCreateWallet(service)
 
 	bodyBuffer := bytes.NewBuffer([]byte(body))
 	req, err := http.NewRequest("POST", "/v1/wallet", bodyBuffer)
