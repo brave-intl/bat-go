@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -27,16 +26,13 @@ func SetupWalletService(r *chi.Mux, ctx context.Context) (*chi.Mux, context.Cont
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	fmt.Println("!!! before postgres")
 	// setup the service now
 	db, err := wallet.NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
 	if err != nil {
-		fmt.Println(err)
 		logger.Panic().Err(err).Msg("unable connect to wallet db")
 	}
 	roDB, err := wallet.NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "wallet_ro_db")
 	if err != nil {
-		fmt.Println(err)
 		logger.Panic().Err(err).Msg("unable connect to wallet db")
 	}
 
@@ -54,14 +50,13 @@ func SetupWalletService(r *chi.Mux, ctx context.Context) (*chi.Mux, context.Cont
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	fmt.Println("!!! after init service")
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// create wallet routes for our wallet providers
-		r.Post("/uphold", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"CreateUpholdWallet", wallet.CreateUpholdWalletV3)).ServeHTTP)
-		r.Post("/brave", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"CreateBraveWallet", wallet.CreateBraveWalletV3)).ServeHTTP)
+		r.Post("/uphold", middleware.InstrumentHandlerFunc(
+			"CreateUpholdWallet", wallet.CreateUpholdWalletV3))
+		r.Post("/brave", middleware.InstrumentHandlerFunc(
+			"CreateBraveWallet", wallet.CreateBraveWalletV3))
 
 		// create wallet claim routes for our wallet providers
 		r.Post("/uphold/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
