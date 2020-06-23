@@ -18,12 +18,16 @@ services:
       - "6061:6061"
     command: "go run main.go serve wallet rest"
     volumes:
-      - ../:/src
+      - ./:/src
     working_dir: /src
     networks:
       - wallet
+      - grant
+    depends_on:
+      - postgres
     environment:
       - PPROF_ENABLED
+      - MIGRATE=true
       - ENV=local
       - ADDR=:3353
       - DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable
