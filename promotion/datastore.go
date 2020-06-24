@@ -219,12 +219,12 @@ func (pg *Postgres) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID,
 
 	selectStatement := `
 SELECT *
-FROM funding_events
+FROM bat_loss_events
 WHERE wallet_id = $1
 	AND report_id = $2`
 
 	insertBATLossEventStatement := `
-INSERT INTO funding_events (wallet_id, report_id, amount)
+INSERT INTO bat_loss_events (wallet_id, report_id, amount)
 VALUES ($1, $2, $3)`
 
 	err = tx.Select(

@@ -567,6 +567,7 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			if err == errorutils.ErrConflictBATLossEvent {
 				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
 			}
+			fmt.Println("err", err)
 			return handlers.WrapError(err, "Error inserting bat loss event", http.StatusInternalServerError)
 		}
 		status := http.StatusOK
