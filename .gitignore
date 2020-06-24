@@ -27,4 +27,4 @@ grantTokens.json
 /paypal-settlement.json
 /paypal-settlement-complete.json
 .vscode/
-*.gobak
+**/*.gobak
