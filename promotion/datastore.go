@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
@@ -24,6 +25,13 @@ type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
 	Version   int       `db:"version"`
+}
+
+// FundingEvent holds info about funding events
+type FundingEvent struct {
+	WalletID uuid.UUID       `db:"wallet_id"`
+	ReportID int             `db:"report_id"`
+	Amount   decimal.Decimal `db:"amount"`
 }
 
 // Datastore abstracts over the underlying datastore
@@ -72,6 +80,8 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
+	// InsertClobberedClaims inserts claims of lost bat
+	InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) error
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -191,6 +201,51 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 		_, err = tx.Exec(`INSERT INTO clobbered_claims (id, version) values ($1, $2) ON CONFLICT DO NOTHING;`, id, version)
 		if err != nil {
 			return err
+		}
+	}
+	err = tx.Commit()
+	return err
+}
+
+// InsertFundingEvent inserts clobbered claims to the db
+func (pg *Postgres) InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) error {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+	fundingEvents := []FundingEvent{}
+	selectStatement := `
+SELECT *
+FROM funding_events
+WHERE wallet_id = $1
+	AND report_id = $2`
+	insertFundingEventStatement := `
+INSERT INTO funding_events (wallet_id, report_id, amount)
+VALUES ($1, $2, $3)`
+	err = tx.Select(
+		&fundingEvents,
+		selectStatement,
+		paymentID.String(),
+		reportID,
+		amount,
+	)
+	if err != nil {
+		return err
+	}
+	if len(fundingEvents) == 0 {
+		_, err = tx.Exec(
+			insertFundingEventStatement,
+			paymentID.String(),
+			reportID,
+			amount,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		if !amount.Equal(fundingEvents[0].Amount) {
+			return errorutils.ErrConflictFundingEvent
 		}
 	}
 	err = tx.Commit()

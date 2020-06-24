@@ -1,6 +1,14 @@
 package errors
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrConflictFundingEvent is an error created when trying to update a funding event with a different amount
+	ErrConflictFundingEvent = errors.New("unable to update funding events")
+)
 
 // ErrorBundle creates a new response error
 type ErrorBundle struct {

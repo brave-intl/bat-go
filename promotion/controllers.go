@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -64,6 +65,13 @@ func SuggestionsRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
 	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
+	return r
+}
+
+// FundingEventRouter for reporting bat loss events
+func FundingEventRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/{walletId}/events/funding/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportFundingEvent", PostReportFundingEvent(service))))
 	return r
 }
 
@@ -513,5 +521,54 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 
 		w.WriteHeader(http.StatusOK)
 		return nil
+	})
+}
+
+// BatLossEvent holds the data needed to report that bat has been lost by client bug
+type BatLossEvent struct {
+	Amount decimal.Decimal `json:"amount"`
+}
+
+// PostReportFundingEvent is the handler for reporting bat was lost by client bug
+func PostReportFundingEvent(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req BatLossEvent
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
+		if err != nil {
+			return handlers.ValidationError("query parameter", map[string]string{
+				"paymentId": "must be a uuidv4",
+			})
+		}
+		reportID, err := strconv.Atoi(chi.URLParam(r, "reportId"))
+		if err != nil {
+			return handlers.ValidationError("report id is not an int", map[string]string{
+				"reportId": "report id must be an integer",
+			})
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.datastore.InsertFundingEvent(
+			r.Context(),
+			walletID,
+			int(reportID),
+			req.Amount,
+		)
+		if err != nil {
+			if err == errorutils.ErrConflictFundingEvent {
+				return handlers.WrapError(err, "Error inserting funding event", http.StatusConflict)
+			}
+			return handlers.WrapError(err, "Error inserting funding event", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusCreated)
 	})
 }
