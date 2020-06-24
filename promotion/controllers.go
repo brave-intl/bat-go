@@ -559,7 +559,7 @@ func PostReportFundingEvent(service *Service) handlers.AppHandler {
 		err = service.datastore.InsertFundingEvent(
 			r.Context(),
 			walletID,
-			int(reportID),
+			reportID,
 			req.Amount,
 		)
 		if err != nil {
