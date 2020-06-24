@@ -30,7 +30,7 @@ type DatastoreWithPrometheus struct {
 
 var datastoreDurationSummaryVec = promauto.NewSummaryVec(
 	prometheus.SummaryOpts{
-		Name:       "promotion_datastore_duration_seconds",
+		Name:       "datastore_duration_seconds",
 		Help:       "datastore runtime duration and result",
 		MaxAge:     time.Minute,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
@@ -337,6 +337,20 @@ func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertClobberedClaims", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertClobberedClaims(ctx, ids, version)
+}
+
+// InsertFundingEvent implements Datastore
+func (_d DatastoreWithPrometheus) InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFundingEvent", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertFundingEvent(ctx, paymentID, reportID, amount)
 }
 
 // InsertIssuer implements Datastore
