@@ -927,7 +927,7 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 		}
 		payload, err := json.Marshal(&requestPayload)
 		suite.Require().NoError(err)
-		req, err := http.NewRequest("POST", "/v1/wallets/"+walletID.String()+"/events/funding/1", bytes.NewBuffer([]byte(payload)))
+		req, err := http.NewRequest("POST", "/v1/wallets/"+walletID.String()+"/events/batloss/1", bytes.NewBuffer([]byte(payload)))
 		suite.Require().NoError(err)
 
 		rctx := chi.NewRouteContext()
@@ -944,7 +944,7 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	suite.Require().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(11)).Code)
 
 	walletEvents := []BATLossEvent{}
-	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from funding_events;`))
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
 	serializedActual1, err := json.Marshal(&walletEvents)
 	// fmt.Println("serialized", string(serialized))
 	serializedExpected1, err := json.Marshal([]BATLossEvent{{
@@ -959,7 +959,7 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	suite.Require().Equal(http.StatusCreated, run(walletID2, decimal.NewFromFloat(29.4902814)).Code)
 
 	walletEvents = []BATLossEvent{}
-	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from funding_events;`))
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
 	serializedActual2, err := json.Marshal(&walletEvents)
 	serializedExpected2, err := json.Marshal([]BATLossEvent{{
 		ID:       walletEvents[0].ID,

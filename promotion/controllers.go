@@ -71,7 +71,7 @@ func SuggestionsRouter(service *Service) chi.Router {
 // WalletEventRouter for reporting bat loss events
 func WalletEventRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/{walletId}/events/funding/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportWalletEvent", PostReportWalletEvent(service))))
+	r.Method("POST", "/{walletId}/events/batloss/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportWalletEvent", PostReportWalletEvent(service))))
 	return r
 }
 
@@ -565,9 +565,9 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 		)
 		if err != nil {
 			if err == errorutils.ErrConflictBATLossEvent {
-				return handlers.WrapError(err, "Error inserting funding event", http.StatusConflict)
+				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
 			}
-			return handlers.WrapError(err, "Error inserting funding event", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error inserting bat loss event", http.StatusInternalServerError)
 		}
 		status := http.StatusOK
 		if created {

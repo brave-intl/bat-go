@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS funding_events;
+DROP TABLE IF EXISTS bat_loss_events;

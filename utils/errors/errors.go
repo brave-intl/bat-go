@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	// ErrConflictBATLossEvent is an error created when trying to update a funding event with a different amount
-	ErrConflictBATLossEvent = errors.New("unable to update funding events")
+	// ErrConflictBATLossEvent is an error created when trying to update a bat loss event with a different amount
+	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
 )
 
 // ErrorBundle creates a new response error
