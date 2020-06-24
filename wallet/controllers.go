@@ -327,7 +327,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
 	}
 
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, info, w, http.StatusOK)
 }
 
 // CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
@@ -381,7 +381,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
 	}
 
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, info, w, http.StatusOK)
 }
 
 // ClaimUpholdWalletV3 - produces an http handler for the service s which handles claiming of uphold wallets
@@ -439,7 +439,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, infoToResponseV3(wallet), w, http.StatusOK)
+		return handlers.RenderContent(ctx, wallet, w, http.StatusOK)
 	}
 }
 
@@ -497,7 +497,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	}
 
 	// render the wallet
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, info, w, http.StatusOK)
 }
 
 // RecoverWalletV3 - produces an http handler for the service s which handles recovering of brave wallets
@@ -547,7 +547,7 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 	}
 
 	// render the wallet
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, info, w, http.StatusOK)
 }
 
 // GetUpholdWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of uphold wallets
