@@ -526,7 +526,7 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 
 // BatLossPayload holds the data needed to report that bat has been lost by client bug
 type BatLossPayload struct {
-	Amount decimal.Decimal `json:"amount"`
+	Amount decimal.Decimal `json:"amount" valid:"required"`
 }
 
 // PostReportWalletEvent is the handler for reporting bat was lost by client bug
