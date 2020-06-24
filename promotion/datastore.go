@@ -27,11 +27,12 @@ type ClobberedCreds struct {
 	Version   int       `db:"version"`
 }
 
-// FundingEvent holds info about funding events
-type FundingEvent struct {
-	WalletID uuid.UUID       `db:"wallet_id"`
-	ReportID int             `db:"report_id"`
-	Amount   decimal.Decimal `db:"amount"`
+// BATLossEvent holds info about wallet events
+type BATLossEvent struct {
+	ID       uuid.UUID       `db:"id" json:"id"`
+	WalletID uuid.UUID       `db:"wallet_id" json:"walletId"`
+	ReportID int             `db:"report_id" json:"reportId"`
+	Amount   decimal.Decimal `db:"amount" json:"amount"`
 }
 
 // Datastore abstracts over the underlying datastore
@@ -80,8 +81,8 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
-	// InsertFundingEvent inserts claims of lost bat
-	InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) error
+	// InsertBATLossEvent inserts claims of lost bat
+	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -207,49 +208,52 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 	return err
 }
 
-// InsertFundingEvent inserts clobbered claims to the db
-func (pg *Postgres) InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) error {
+// InsertBATLossEvent inserts claims of lost bat to db
+func (pg *Postgres) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error) {
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer pg.RollbackTx(tx)
-	fundingEvents := []FundingEvent{}
+	BATLossEvents := []BATLossEvent{}
+
 	selectStatement := `
 SELECT *
 FROM funding_events
 WHERE wallet_id = $1
 	AND report_id = $2`
-	insertFundingEventStatement := `
+
+	insertBATLossEventStatement := `
 INSERT INTO funding_events (wallet_id, report_id, amount)
 VALUES ($1, $2, $3)`
+
 	err = tx.Select(
-		&fundingEvents,
+		&BATLossEvents,
 		selectStatement,
 		paymentID.String(),
 		reportID,
-		amount,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if len(fundingEvents) == 0 {
+	if len(BATLossEvents) == 0 {
 		_, err = tx.Exec(
-			insertFundingEventStatement,
+			insertBATLossEventStatement,
 			paymentID.String(),
 			reportID,
 			amount,
 		)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
-		if !amount.Equal(fundingEvents[0].Amount) {
-			return errorutils.ErrConflictFundingEvent
+		if !amount.Equal(BATLossEvents[0].Amount) {
+			return false, errorutils.ErrConflictBATLossEvent
 		}
+		return false, nil
 	}
 	err = tx.Commit()
-	return err
+	return true, err
 }
 
 // ActivatePromotion marks a particular promotion as active

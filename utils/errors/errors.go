@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	// ErrConflictFundingEvent is an error created when trying to update a funding event with a different amount
-	ErrConflictFundingEvent = errors.New("unable to update funding events")
+	// ErrConflictBATLossEvent is an error created when trying to update a funding event with a different amount
+	ErrConflictBATLossEvent = errors.New("unable to update funding events")
 )
 
 // ErrorBundle creates a new response error

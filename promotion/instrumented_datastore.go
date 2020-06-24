@@ -325,6 +325,20 @@ func (_d DatastoreWithPrometheus) GetWallet(id uuid.UUID) (ip1 *wallet.Info, err
 	return _d.base.GetWallet(id)
 }
 
+// InsertBATLossEvent implements Datastore
+func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBATLossEvent", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertBATLossEvent(ctx, paymentID, reportID, amount)
+}
+
 // InsertClobberedClaims implements Datastore
 func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) (err error) {
 	_since := time.Now()
@@ -337,20 +351,6 @@ func (_d DatastoreWithPrometheus) InsertClobberedClaims(ctx context.Context, ids
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertClobberedClaims", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertClobberedClaims(ctx, ids, version)
-}
-
-// InsertFundingEvent implements Datastore
-func (_d DatastoreWithPrometheus) InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFundingEvent", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.InsertFundingEvent(ctx, paymentID, reportID, amount)
 }
 
 // InsertIssuer implements Datastore

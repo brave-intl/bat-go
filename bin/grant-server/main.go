@@ -126,7 +126,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
 	// temporarily house funding events in promotion to avoid widespread conflicts later
-	r.Mount("/v1/wallets", promotion.FundingEventRouter(promotionService))
+	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
 	paymentPG, err := payment.NewPostgres("", true, "payment_db")
 	if err != nil {

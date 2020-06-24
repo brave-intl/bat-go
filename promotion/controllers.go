@@ -68,10 +68,10 @@ func SuggestionsRouter(service *Service) chi.Router {
 	return r
 }
 
-// FundingEventRouter for reporting bat loss events
-func FundingEventRouter(service *Service) chi.Router {
+// WalletEventRouter for reporting bat loss events
+func WalletEventRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/{walletId}/events/funding/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportFundingEvent", PostReportFundingEvent(service))))
+	r.Method("POST", "/{walletId}/events/funding/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportWalletEvent", PostReportWalletEvent(service))))
 	return r
 }
 
@@ -524,15 +524,15 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 	})
 }
 
-// BatLossEvent holds the data needed to report that bat has been lost by client bug
-type BatLossEvent struct {
+// BatLossPayload holds the data needed to report that bat has been lost by client bug
+type BatLossPayload struct {
 	Amount decimal.Decimal `json:"amount"`
 }
 
-// PostReportFundingEvent is the handler for reporting bat was lost by client bug
-func PostReportFundingEvent(service *Service) handlers.AppHandler {
+// PostReportWalletEvent is the handler for reporting bat was lost by client bug
+func PostReportWalletEvent(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req BatLossEvent
+		var req BatLossPayload
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
@@ -544,10 +544,11 @@ func PostReportFundingEvent(service *Service) handlers.AppHandler {
 				"paymentId": "must be a uuidv4",
 			})
 		}
-		reportID, err := strconv.Atoi(chi.URLParam(r, "reportId"))
+		reportIDParam := chi.URLParam(r, "reportId")
+		reportID, err := strconv.Atoi(reportIDParam)
 		if err != nil {
 			return handlers.ValidationError("report id is not an int", map[string]string{
-				"reportId": "report id must be an integer",
+				"reportId": "report id (" + reportIDParam + ") must be an integer",
 			})
 		}
 
@@ -556,19 +557,22 @@ func PostReportFundingEvent(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.datastore.InsertFundingEvent(
+		created, err := service.datastore.InsertBATLossEvent(
 			r.Context(),
 			walletID,
 			reportID,
 			req.Amount,
 		)
 		if err != nil {
-			if err == errorutils.ErrConflictFundingEvent {
+			if err == errorutils.ErrConflictBATLossEvent {
 				return handlers.WrapError(err, "Error inserting funding event", http.StatusConflict)
 			}
 			return handlers.WrapError(err, "Error inserting funding event", http.StatusInternalServerError)
 		}
-
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusCreated)
+		status := http.StatusOK
+		if created {
+			status = http.StatusCreated
+		}
+		return handlers.RenderContent(r.Context(), nil, w, status)
 	})
 }
