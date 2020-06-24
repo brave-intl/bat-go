@@ -80,7 +80,7 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
-	// InsertClobberedClaims inserts claims of lost bat
+	// InsertFundingEvent inserts claims of lost bat
 	InsertFundingEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) error
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
