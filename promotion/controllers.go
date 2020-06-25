@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -20,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
 	"github.com/prometheus/client_golang/prometheus"
@@ -551,6 +553,7 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 				"reportId": "report id (" + reportIDParam + ") must be an integer",
 			})
 		}
+		platform := useragent.ParsePlatform(r.UserAgent())
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -562,12 +565,12 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			walletID,
 			reportID,
 			req.Amount,
+			platform,
 		)
 		if err != nil {
-			if err == errorutils.ErrConflictBATLossEvent {
+			if strings.Contains(err.Error(), errorutils.ErrConflictBATLossEvent) {
 				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
 			}
-			fmt.Println("err", err)
 			return handlers.WrapError(err, "Error inserting bat loss event", http.StatusInternalServerError)
 		}
 		status := http.StatusOK
