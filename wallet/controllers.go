@@ -439,7 +439,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, infoToResponseV3(wallet), w, http.StatusOK)
+		return handlers.RenderContent(ctx, nil, w, http.StatusCreated)
 	}
 }
 

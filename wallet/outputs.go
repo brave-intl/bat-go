@@ -79,13 +79,13 @@ func infoToResponseV3(info *walletutils.Info) WalletResponseV3 {
 		PaymentID:   info.ID,
 		AltCurrency: altCurrency,
 		PublicKey:   info.PublicKey,
-		WalletProvider: BraveProviderDetailsV3{
-			Name: "brave",
-			ID:   info.ProviderID,
-		},
 	}
 	// if this is linked to uphold, add the default account provider
 	if info.Provider == "uphold" {
+		resp.WalletProvider = BraveProviderDetailsV3{
+			Name: "brave",
+			ID:   info.ProviderID,
+		}
 		resp.DepositAccountProvider = UpholdProviderDetailsV3{
 			Name:             info.Provider,
 			LinkingID:        linkingID,
