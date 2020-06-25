@@ -920,6 +920,7 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	handler := PostReportWalletEvent(service)
 	walletID1 := uuid.NewV4()
 	walletID2 := uuid.NewV4()
+	walletID3 := uuid.NewV4()
 
 	run := func(walletID uuid.UUID, amount decimal.Decimal, ua string) *httptest.ResponseRecorder {
 		requestPayload := BATLossEvent{
@@ -960,6 +961,8 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	wallet2Loss := decimal.NewFromFloat(29.4902814)
 	macUA := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
 	suite.Require().Equal(http.StatusCreated, run(walletID2, decimal.NewFromFloat(29.4902814), macUA).Code)
+	androidUA := "Mozilla/5.0 (Linux; Android 10; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Mobile Safari/537.36"
+	suite.Require().Equal(http.StatusCreated, run(walletID3, decimal.NewFromFloat(30), androidUA).Code)
 
 	walletEvents = []BATLossEvent{}
 	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
@@ -976,6 +979,12 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 		ReportID: 1,
 		Amount:   wallet2Loss,
 		Platform: "osx",
+	}, {
+		ID:       walletEvents[2].ID,
+		WalletID: walletID3,
+		ReportID: 1,
+		Amount:   decimal.NewFromFloat(30),
+		Platform: "android",
 	}})
 	suite.Require().JSONEq(string(serializedExpected2), string(serializedActual2))
 }
