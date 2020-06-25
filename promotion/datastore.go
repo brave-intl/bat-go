@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/wallet"
 	walletservice "github.com/brave-intl/bat-go/wallet/service"
@@ -24,6 +25,14 @@ type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
 	Version   int       `db:"version"`
+}
+
+// BATLossEvent holds info about wallet events
+type BATLossEvent struct {
+	ID       uuid.UUID       `db:"id" json:"id"`
+	WalletID uuid.UUID       `db:"wallet_id" json:"walletId"`
+	ReportID int             `db:"report_id" json:"reportId"`
+	Amount   decimal.Decimal `db:"amount" json:"amount"`
 }
 
 // Datastore abstracts over the underlying datastore
@@ -72,6 +81,8 @@ type Datastore interface {
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
+	// InsertBATLossEvent inserts claims of lost bat
+	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *wallet.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -195,6 +206,54 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 	}
 	err = tx.Commit()
 	return err
+}
+
+// InsertBATLossEvent inserts claims of lost bat to db
+func (pg *Postgres) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error) {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer pg.RollbackTx(tx)
+	BATLossEvents := []BATLossEvent{}
+
+	selectStatement := `
+SELECT *
+FROM bat_loss_events
+WHERE wallet_id = $1
+	AND report_id = $2`
+
+	insertBATLossEventStatement := `
+INSERT INTO bat_loss_events (wallet_id, report_id, amount)
+VALUES ($1, $2, $3)`
+
+	err = tx.Select(
+		&BATLossEvents,
+		selectStatement,
+		paymentID.String(),
+		reportID,
+	)
+	if err != nil {
+		return false, err
+	}
+	if len(BATLossEvents) == 0 {
+		_, err = tx.Exec(
+			insertBATLossEventStatement,
+			paymentID.String(),
+			reportID,
+			amount,
+		)
+		if err != nil {
+			return false, err
+		}
+	} else {
+		if !amount.Equal(BATLossEvents[0].Amount) {
+			return false, errorutils.ErrConflictBATLossEvent
+		}
+		return false, nil
+	}
+	err = tx.Commit()
+	return true, err
 }
 
 // ActivatePromotion marks a particular promotion as active
