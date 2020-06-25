@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"os"
 
@@ -67,7 +68,7 @@ func main() {
 		ProviderID:  *from,
 		AltCurrency: &walletc,
 	}
-	w, err := provider.GetWallet(info)
+	w, err := provider.GetWallet(context.Background(), info)
 	if err != nil {
 		log.Fatalln(err)
 	}

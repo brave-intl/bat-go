@@ -902,6 +902,79 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	suite.Assert().Equal(claims[2].ID, id2)
 }
 
+func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+	mockBalance := mockbalance.NewMockClient(mockCtrl)
+
+	service := &Service{
+		datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+		balanceClient:    mockBalance,
+	}
+	handler := PostReportWalletEvent(service)
+	walletID1 := uuid.NewV4()
+	walletID2 := uuid.NewV4()
+
+	run := func(walletID uuid.UUID, amount decimal.Decimal) *httptest.ResponseRecorder {
+		requestPayload := BATLossEvent{
+			Amount: amount,
+		}
+		payload, err := json.Marshal(&requestPayload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v1/wallets/"+walletID.String()+"/events/batloss/1", bytes.NewBuffer([]byte(payload)))
+		suite.Require().NoError(err)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("walletId", walletID.String())
+		rctx.URLParams.Add("reportId", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr
+	}
+	suite.Require().Equal(http.StatusCreated, run(walletID1, decimal.NewFromFloat(10)).Code)
+	suite.Require().Equal(http.StatusOK, run(walletID1, decimal.NewFromFloat(10)).Code)
+	suite.Require().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(11)).Code)
+
+	walletEvents := []BATLossEvent{}
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
+	serializedActual1, err := json.Marshal(&walletEvents)
+	// fmt.Println("serialized", string(serialized))
+	serializedExpected1, err := json.Marshal([]BATLossEvent{{
+		ID:       walletEvents[0].ID,
+		WalletID: walletID1,
+		ReportID: 1,
+		Amount:   decimal.NewFromFloat(10),
+	}})
+	suite.Require().JSONEq(string(serializedExpected1), string(serializedActual1))
+
+	wallet2Loss := decimal.NewFromFloat(29.4902814)
+	suite.Require().Equal(http.StatusCreated, run(walletID2, decimal.NewFromFloat(29.4902814)).Code)
+
+	walletEvents = []BATLossEvent{}
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
+	serializedActual2, err := json.Marshal(&walletEvents)
+	serializedExpected2, err := json.Marshal([]BATLossEvent{{
+		ID:       walletEvents[0].ID,
+		WalletID: walletID1,
+		ReportID: 1,
+		Amount:   decimal.NewFromFloat(10),
+	}, {
+		ID:       walletEvents[1].ID,
+		WalletID: walletID2,
+		ReportID: 1,
+		Amount:   wallet2Loss,
+	}})
+	suite.Require().JSONEq(string(serializedExpected2), string(serializedActual2))
+}
+
 func (suite *ControllersTestSuite) TestClaimCompatability() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
@@ -1110,7 +1183,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet()
+	err = service.InitHotWallet(context.Background())
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")

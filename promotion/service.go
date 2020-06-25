@@ -298,7 +298,7 @@ func (s *Service) InitKafka() error {
 }
 
 // InitHotWallet by reading the keypair and card id from the environment
-func (s *Service) InitHotWallet() error {
+func (s *Service) InitHotWallet(ctx context.Context) error {
 	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
@@ -325,7 +325,7 @@ func (s *Service) InitHotWallet() error {
 			return errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
-		s.hotWallet, err = uphold.New(info, privKey, pubKey)
+		s.hotWallet, err = uphold.New(ctx, info, privKey, pubKey)
 		if err != nil {
 			return err
 		}
@@ -336,7 +336,7 @@ func (s *Service) InitHotWallet() error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -397,7 +397,7 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 	if err != nil {
 		return nil, err
 	}
-	err = service.InitHotWallet()
+	err = service.InitHotWallet(ctx)
 	if err != nil {
 		return nil, err
 	}
