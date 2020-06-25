@@ -8,11 +8,11 @@ import (
 
 var (
 	checks = [][]string{
-		[]string{"iphone", "ios"},
-		[]string{"android", "android"},
-		[]string{"windows", "windows"},
-		[]string{"mac os x", "osx"},
-		[]string{"linux", "linux"},
+		{"iphone", "ios"},
+		{"android", "android"},
+		{"windows", "windows"},
+		{"mac os x", "osx"},
+		{"linux", "linux"},
 	}
 )
 
