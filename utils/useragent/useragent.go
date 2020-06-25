@@ -1,7 +1,19 @@
 package useragent
 
 import (
-	"github.com/varstr/uaparser"
+	"strings"
+
+	"github.com/mssola/user_agent"
+)
+
+var (
+	checks = [][]string{
+		[]string{"iphone", "ios"},
+		[]string{"android", "android"},
+		[]string{"windows", "windows"},
+		[]string{"mac os x", "osx"},
+		[]string{"linux", "linux"},
+	}
 )
 
 // ParsePlatform parses a platform known to grants from ua
@@ -9,22 +21,15 @@ func ParsePlatform(ua string) string {
 	if ua == "" {
 		return ""
 	}
-	parsed := uaparser.Parse(ua)
+	parsed := user_agent.New(ua)
 	if parsed == nil {
 		return ""
 	}
-	// {"ios", "android", "osx", "windows", "linux", "desktop"}
-	switch parsed.OS.Name {
-	case "iOS":
-		return "ios"
-	case "Android":
-		return "android"
-	case "Windows":
-		return "windows"
-	case "Linux":
-		return "linux"
-	case "Mac OS":
-		return "osx"
+	os := strings.ToLower(parsed.OS())
+	for _, check := range checks {
+		if strings.Contains(os, check[0]) {
+			return check[1]
+		}
 	}
-	return "desktop"
+	return ""
 }
