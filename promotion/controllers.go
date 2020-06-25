@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -568,7 +567,7 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			platform,
 		)
 		if err != nil {
-			if strings.Contains(err.Error(), errorutils.ErrConflictBATLossEvent) {
+			if errors.Is(err, errorutils.ErrConflictBATLossEvent) {
 				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
 			}
 			return handlers.WrapError(err, "Error inserting bat loss event", http.StatusInternalServerError)

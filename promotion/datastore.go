@@ -256,7 +256,7 @@ VALUES ($1, $2, $3, $4)`
 		}
 	} else {
 		if !amount.Equal(BATLossEvents[0].Amount) {
-			return false, errorutils.Wrap(err, errorutils.ErrConflictBATLossEvent)
+			return false, fmt.Errorf("%w: %w", errorutils.ErrConflictBATLossEvent, err)
 		}
 		return false, nil
 	}
