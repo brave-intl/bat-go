@@ -37,7 +37,6 @@ var (
 func must(err error) {
 	if err != nil {
 		log.Printf("failed to initialize: %s\n", err.Error())
-		os.Exit(1)
 	}
 }
 

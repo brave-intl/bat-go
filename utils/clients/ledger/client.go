@@ -7,6 +7,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 )
@@ -20,6 +21,25 @@ type Client interface {
 // HTTPClient wraps http.Client for interacting with the ledger server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
+}
+
+// NewFromContext returns a new HTTPClient, retrieving the base URL from the environment
+func NewFromContext(ctx context.Context) (Client, error) {
+	serverURL, ok := ctx.Value(appctx.LedgerServiceCTXKey).(string)
+	if !ok || serverURL == "" {
+		return nil, errors.New("ledger service url was empty")
+	}
+
+	serverToken, ok := ctx.Value(appctx.LedgerAccessTokenCTXKey).(string)
+	if !ok {
+		return nil, errors.New("ledger service token was empty")
+	}
+
+	client, err := clients.New(serverURL, serverToken)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithPrometheus(&HTTPClient{client}, "ledger_client"), err
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
