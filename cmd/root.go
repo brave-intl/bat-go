@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -37,7 +36,6 @@ var (
 // helper to make sure there is no errors
 func must(err error) {
 	if err != nil {
-		fmt.Println(err)
 		log.Printf("failed to initialize: %s\n", err.Error())
 	}
 }

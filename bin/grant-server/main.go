@@ -75,12 +75,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter(ctx))
 
-	fmt.Println("!!!!! before wallet setup")
 	var walletService *wallet.Service
 	// use cobra configurations for setting up wallet service
 	r, ctx, walletService = cmd.SetupWalletService(r, ctx)
-
-	fmt.Println("!!!!! past wallet setup")
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
