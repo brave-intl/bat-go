@@ -312,7 +312,7 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 }
 
 // InsertBATLossEvent implements Datastore
-func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (b1 bool, err error) {
+func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -322,7 +322,7 @@ func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymen
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBATLossEvent", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertBATLossEvent(ctx, paymentID, reportID, amount)
+	return _d.base.InsertBATLossEvent(ctx, paymentID, reportID, amount, platform)
 }
 
 // InsertClobberedClaims implements Datastore

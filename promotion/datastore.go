@@ -35,6 +35,7 @@ type BATLossEvent struct {
 	WalletID uuid.UUID       `db:"wallet_id" json:"walletId"`
 	ReportID int             `db:"report_id" json:"reportId"`
 	Amount   decimal.Decimal `db:"amount" json:"amount"`
+	Platform string          `db:"platform" json:"platform"`
 }
 
 // Datastore abstracts over the underlying datastore
@@ -84,7 +85,7 @@ type Datastore interface {
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
 	// InsertBATLossEvent inserts claims of lost bat
-	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error)
+	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -231,7 +232,13 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 }
 
 // InsertBATLossEvent inserts claims of lost bat to db
-func (pg *Postgres) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal) (bool, error) {
+func (pg *Postgres) InsertBATLossEvent(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	reportID int,
+	amount decimal.Decimal,
+	platform string,
+) (bool, error) {
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -246,8 +253,8 @@ WHERE wallet_id = $1
 	AND report_id = $2`
 
 	insertBATLossEventStatement := `
-INSERT INTO bat_loss_events (wallet_id, report_id, amount)
-VALUES ($1, $2, $3)`
+INSERT INTO bat_loss_events (wallet_id, report_id, amount, platform)
+VALUES ($1, $2, $3, $4)`
 
 	err = tx.Select(
 		&BATLossEvents,
@@ -264,6 +271,7 @@ VALUES ($1, $2, $3)`
 			paymentID.String(),
 			reportID,
 			amount,
+			platform,
 		)
 		if err != nil {
 			return false, err
