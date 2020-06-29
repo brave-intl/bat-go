@@ -176,6 +176,8 @@ func TestCreateWalletV3_FailureSignature(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 
+	r = r.WithContext(ctx)
+
 	for _, handler := range []handlers.AppHandler{
 		wallet.CreateBraveWalletV3, wallet.CreateUpholdWalletV3,
 	} {

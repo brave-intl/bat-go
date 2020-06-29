@@ -555,7 +555,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }
 
-// GetBraveWalletBalance - produces an http handler for the service s which handles balance inquiries of brave wallets
+// GetBraveWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of brave wallets
 func GetBraveWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }

@@ -79,7 +79,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// use cobra configurations for setting up wallet service
 	// this way we can have the wallet service completely seperated from
 	// grants service and easily deployable.
-	r, ctx, walletService = cmd.SetupWalletService(r, ctx)
+	r, ctx, walletService = cmd.SetupWalletService(ctx, r)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {

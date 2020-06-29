@@ -557,7 +557,7 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		created, err := service.datastore.InsertBATLossEvent(
+		created, err := service.Datastore.InsertBATLossEvent(
 			r.Context(),
 			walletID,
 			reportID,

@@ -6,11 +6,16 @@ import (
 )
 
 const (
+	// InvalidCurrency - wallet currency is invalid
 	InvalidCurrency = "invalid"
-	BATCurrency     = "BAT"
-	BTCCurrency     = "BTC"
-	ETHCurrency     = "ETH"
-	LTCCurrency     = "LTC"
+	// BATCurrency - wallet currency is BAT
+	BATCurrency = "BAT"
+	// BTCCurrency - wallet currency is BTC
+	BTCCurrency = "BTC"
+	// ETHCurrency - wallet currency is ETH
+	ETHCurrency = "ETH"
+	// LTCCurrency - wallet currency is LTC
+	LTCCurrency = "LTC"
 )
 
 // BraveProviderDetailsV3 - details about the provider
@@ -26,8 +31,8 @@ type UpholdProviderDetailsV3 struct {
 	AnonymousAddress string `json:"anonymousAddress"`
 }
 
-// WalletResponseV3 - wallet creation response
-type WalletResponseV3 struct {
+// ResponseV3 - wallet creation response
+type ResponseV3 struct {
 	PaymentID              string      `json:"paymentId"`
 	DepositAccountProvider interface{} `json:"depositAccountProvider,omitempty"`
 	WalletProvider         interface{} `json:"walletProvider,omitempty"`
@@ -53,14 +58,14 @@ func convertAltCurrency(a *altcurrency.AltCurrency) string {
 	}
 }
 
-func infoToResponseV3(info *walletutils.Info) WalletResponseV3 {
+func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
 		linkingID        string
 		anonymousAddress string
 		altCurrency      string = convertAltCurrency(info.AltCurrency)
 	)
 	if info == nil {
-		return WalletResponseV3{}
+		return ResponseV3{}
 	}
 
 	if info.ProviderLinkingID == nil {
@@ -75,7 +80,7 @@ func infoToResponseV3(info *walletutils.Info) WalletResponseV3 {
 		anonymousAddress = info.AnonymousAddress.String()
 	}
 
-	resp := WalletResponseV3{
+	resp := ResponseV3{
 		PaymentID:   info.ID,
 		AltCurrency: altCurrency,
 		PublicKey:   info.PublicKey,

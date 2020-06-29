@@ -13,8 +13,10 @@ import (
 )
 
 var (
+	// ErrMissingSignedCreationRequest - required parameter missing from request
 	ErrMissingSignedCreationRequest = errors.New("missing signed creation request")
-	ErrInvalidJSON                  = errors.New("invalid json")
+	// ErrInvalidJSON - the input json is invalid
+	ErrInvalidJSON = errors.New("invalid json")
 )
 
 // UpholdCreationRequest - the structure for a brave provider wallet creation request

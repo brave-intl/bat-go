@@ -19,7 +19,7 @@ import (
 )
 
 // SetupWalletService - setup the wallet microservice
-func SetupWalletService(r *chi.Mux, ctx context.Context) (*chi.Mux, context.Context, *wallet.Service) {
+func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *wallet.Service) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		// no logger, setup
@@ -85,7 +85,7 @@ func SetupWalletService(r *chi.Mux, ctx context.Context) (*chi.Mux, context.Cont
 func WalletRestRun(cmd *cobra.Command, args []string) {
 	// setup generic middlewares and routes for health-check and metrics
 	r := setupRouter(ctx)
-	r, ctx, _ = SetupWalletService(r, ctx)
+	r, ctx, _ = SetupWalletService(ctx, r)
 
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
