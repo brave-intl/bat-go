@@ -225,7 +225,7 @@ func TestGetWalletV3(t *testing.T) {
 	router.Get("/v3/wallet/{paymentID}", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
-	if resp := w.Result(); resp.StatusCode != http.StatusCreated {
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
