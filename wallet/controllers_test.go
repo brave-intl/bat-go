@@ -239,7 +239,10 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	// V3 Payload
 	reqBody := ClaimUpholdWalletRequest{
 		SignedCreationRequest: signedCreationRequest,
-		AnonymousAddress:      anonymousAddress.String(),
+	}
+
+	if anonymousAddress != nil {
+		reqBody.AnonymousAddress = anonymousAddress.String()
 	}
 
 	body, err := json.Marshal(&reqBody)

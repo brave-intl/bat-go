@@ -125,7 +125,7 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 	var s httpsignature.Signature
 	err := s.UnmarshalText([]byte(signature))
 	if err != nil {
-		return "", errors.New("invalid signature")
+		return "", fmt.Errorf("invalid signature: %w", err)
 	}
 
 	// Override algorithm and headers to those we want to enforce
@@ -150,7 +150,7 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
 
 	if err != nil {
-		return "", errors.New("failed to verify signature")
+		return "", fmt.Errorf("failed to verify signature: %w", err)
 	}
 	if !valid {
 		return "", errors.New("invalid signature")
