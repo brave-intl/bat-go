@@ -50,32 +50,35 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
 
-	// setup our wallet routes
-	r.Route("/v3/wallet", func(r chi.Router) {
-		// create wallet routes for our wallet providers
-		r.Post("/uphold", middleware.InstrumentHandlerFunc(
-			"CreateUpholdWallet", wallet.CreateUpholdWalletV3))
-		r.Post("/brave", middleware.InstrumentHandlerFunc(
-			"CreateBraveWallet", wallet.CreateBraveWalletV3))
+	// if feature is enabled, setup the routes
+	if viper.GetBool("wallets-feature-flag") {
+		// setup our wallet routes
+		r.Route("/v3/wallet", func(r chi.Router) {
+			// create wallet routes for our wallet providers
+			r.Post("/uphold", middleware.InstrumentHandlerFunc(
+				"CreateUpholdWallet", wallet.CreateUpholdWalletV3))
+			r.Post("/brave", middleware.InstrumentHandlerFunc(
+				"CreateBraveWallet", wallet.CreateBraveWalletV3))
 
-		// create wallet claim routes for our wallet providers
-		r.Post("/uphold/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s))).ServeHTTP)
-		r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-			"ClaimBraveWallet", wallet.ClaimBraveWalletV3(s))).ServeHTTP)
+			// create wallet claim routes for our wallet providers
+			r.Post("/uphold/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s))).ServeHTTP)
+			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"ClaimBraveWallet", wallet.ClaimBraveWalletV3(s))).ServeHTTP)
 
-		// get wallet routes
-		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
-			"GetWallet", wallet.GetWalletV3))
-		r.Get("/recover/{publicKey}", middleware.InstrumentHandlerFunc(
-			"RecoverWallet", wallet.RecoverWalletV3))
+			// get wallet routes
+			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
+				"GetWallet", wallet.GetWalletV3))
+			r.Get("/recover/{publicKey}", middleware.InstrumentHandlerFunc(
+				"RecoverWallet", wallet.RecoverWalletV3))
 
-		// get wallet balance routes
-		r.Get("/uphold/{providerID}", middleware.InstrumentHandlerFunc(
-			"GetUpholdWalletBalance", wallet.GetUpholdWalletBalanceV3))
-		r.Get("/brave/{providerID}", middleware.InstrumentHandlerFunc(
-			"GetBraveWalletBalance", wallet.GetBraveWalletBalanceV3))
-	})
+			// get wallet balance routes
+			r.Get("/uphold/{providerID}", middleware.InstrumentHandlerFunc(
+				"GetUpholdWalletBalance", wallet.GetUpholdWalletBalanceV3))
+			r.Get("/brave/{providerID}", middleware.InstrumentHandlerFunc(
+				"GetBraveWalletBalance", wallet.GetBraveWalletBalanceV3))
+		})
+	}
 	return r, ctx, s
 }
 

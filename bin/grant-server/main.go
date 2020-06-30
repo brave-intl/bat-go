@@ -77,7 +77,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	var walletService *wallet.Service
 	// use cobra configurations for setting up wallet service
-	// this way we can have the wallet service completely seperated from
+	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	r, ctx, walletService = cmd.SetupWalletService(ctx, r)
 
@@ -123,8 +123,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
 	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
-	// temporarily house batloss events in promotion to avoid widespread conflicts later
-	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
+
+	if os.Getenv("FEATURE_WALLET") != "" {
+		// temporarily house batloss events in promotion to avoid widespread conflicts later
+		r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
+	}
 
 	paymentPG, err := payment.NewPostgres("", true, "payment_db")
 	if err != nil {
@@ -158,7 +161,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 
-	r.Mount("/v1/wallet", wallet.Router(walletService))
+	if os.Getenv("FEATURE_WALLET") != "" {
+		r.Mount("/v1/wallet", wallet.Router(walletService))
+	}
+
 	r.Get("/metrics", middleware.Metrics())
 
 	// add profiling flag to enable profiling routes

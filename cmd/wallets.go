@@ -20,10 +20,11 @@ var (
 		Short: "provides REST api services",
 		Run:   WalletRestRun,
 	}
-	db                string
-	roDB              string
-	ledgerService     string
-	ledgerAccessToken string
+	db                 string
+	walletsFeatureFlag bool
+	roDB               string
+	ledgerService      string
+	ledgerAccessToken  string
 )
 
 func init() {
@@ -39,6 +40,12 @@ func init() {
 		"the datastore for the wallet system")
 	must(viper.BindPFlag("datastore", walletsCmd.PersistentFlags().Lookup("datastore")))
 	must(viper.BindEnv("datastore", "DATABASE_URL"))
+
+	// walletsFeatureFlag - the writable datastore
+	walletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", false,
+		"the feature flag enabling the wallets feature")
+	must(viper.BindPFlag("wallets-feature-flag", walletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
+	must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
 
 	// ro-datastore - the writable datastore
 	walletsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
