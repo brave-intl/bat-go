@@ -102,16 +102,6 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	return walletDB, walletRODB, nil
 }
 
-// // GetWallet by ID
-// func (pg *Postgres) GetWallet(ID uuid.UUID) (*walletutils.Info, error) {
-// 	return pg.Postgres.GetWallet(ID)
-// }
-
-// // UpsertWallet inserts a wallet if one does not already exist
-// func (pg *Postgres) UpsertWallet(wallet *walletutils.Info) error {
-// 	return pg.Postgres.UpsertWallet(wallet)
-// }
-
 var (
 	// ErrTooManyCardsLinked denotes when more than 3 cards have been linked to a single wallet
 	ErrTooManyCardsLinked = errors.New("unable to add too many wallets to a single user")
