@@ -90,7 +90,7 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	var w = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(w, r)
-	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+	if resp := w.Result(); resp.StatusCode != http.StatusCreated {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
