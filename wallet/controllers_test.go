@@ -235,6 +235,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	anonymousAddress *uuid.UUID,
 ) (*walletutils.Info, string) {
 	signedCreationRequest, err := w.PrepareTransaction(*w.AltCurrency, altcurrency.BAT.ToProbi(amount), destination, "")
+
 	suite.Require().NoError(err, "transaction must be signed client side")
 
 	// V3 Payload

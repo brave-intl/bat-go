@@ -111,7 +111,7 @@ func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
 	if cuw.SignedCreationRequest == "" {
 		merr.Append(errors.New("failed to validate 'signedCreationRequest': must not be empty"))
 	}
-	if !govalidator.IsUUID(cuw.AnonymousAddress) {
+	if cuw.AnonymousAddress != "" && !govalidator.IsUUID(cuw.AnonymousAddress) {
 		merr.Append(errors.New("failed to validate 'anonymousAddress': must be uuid"))
 	}
 	if merr.Count() > 0 {
@@ -122,6 +122,9 @@ func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
 
 // Decode - implementation of  decodable interface
 func (cuw *ClaimUpholdWalletRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, cuw); err != nil {
+		return fmt.Errorf("failed to decode json: %w", err)
+	}
 	return nil
 }
 

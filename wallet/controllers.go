@@ -423,14 +423,19 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 			return handlers.WrapError(err, "unable to backfill wallets", http.StatusServiceUnavailable)
 		}
-		aa, err := uuid.FromString(cuw.AnonymousAddress)
-		if err != nil {
-			return handlers.ValidationError(
-				"error validating anonymousAddress",
-				map[string]interface{}{
-					"anonymousAddress": err.Error(),
-				},
-			)
+
+		var aa uuid.UUID
+
+		if cuw.AnonymousAddress != "" {
+			aa, err = uuid.FromString(cuw.AnonymousAddress)
+			if err != nil {
+				return handlers.ValidationError(
+					"error validating anonymousAddress",
+					map[string]interface{}{
+						"anonymousAddress": err.Error(),
+					},
+				)
+			}
 		}
 
 		err = s.LinkWallet(r.Context(), wallet, cuw.SignedCreationRequest, &aa)
@@ -439,7 +444,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 		}
 
 		// render the wallet
-		return handlers.RenderContent(ctx, nil, w, http.StatusCreated)
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }
 

@@ -926,7 +926,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	pg, _, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
