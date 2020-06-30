@@ -17,6 +17,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -350,6 +351,120 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	return wallet
 }
 
+func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+
+	// assume 403 is already covered
+	// fail because of lacking signature presence
+	notSignedResponse := suite.createWallet(
+		service,
+		`{}`,
+		http.StatusForbidden,
+		publicKey,
+		privKey,
+		false,
+	)
+
+	suite.Assert().JSONEq(`{
+		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
+		"code":403
+	}`, notSignedResponse, "field is not valid")
+
+	createResp := suite.createBraveWalletV3(
+		service,
+		``,
+		http.StatusCreated,
+		publicKey,
+		privKey,
+		true,
+	)
+
+	var created ResponseV3
+	err = json.Unmarshal([]byte(createResp), &created)
+	suite.Require().NoError(err, "unable to unmarshal response")
+
+	getResp := suite.getWallet(service, uuid.Must(uuid.FromString(created.PaymentID)), http.StatusOK)
+
+	var gotten walletutils.Info
+	err = json.Unmarshal([]byte(getResp), &gotten)
+	suite.Require().NoError(err, "unable to unmarshal response")
+	suite.Require().Equal(created, infoToResponseV3(&gotten), "the get and create return the same structure")
+}
+
+func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+
+	badJSONBodyParse := suite.createUpholdWalletV3(
+		service,
+		``,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
+		true,
+	)
+	suite.Assert().JSONEq(`{
+	"code":400,
+	"data": {
+		"validationErrors":{
+			"decoding":"failed decoding: failed to decode json: EOF", 
+			"signedCreationRequest":"value is required", 
+			"validation":"failed validation: missing signed creation request"
+		}
+	},
+	"message":"Error validating uphold create wallet request validation errors"
+	}`, badJSONBodyParse, "should fail when parsing json")
+
+	badFieldResponse := suite.createUpholdWalletV3(
+		service,
+		`{"signedCreationRequest":""}`,
+		http.StatusBadRequest,
+		publicKey,
+		privKey,
+		true,
+	)
+
+	suite.Assert().JSONEq(`{
+		"code":400, 
+		"data": {
+			"validationErrors": {
+				"signedCreationRequest":"value is required", 
+				"validation":"failed validation: missing signed creation request"
+			}
+		},
+		"message":"Error validating uphold create wallet request validation errors"
+	}`, badFieldResponse, "field is not valid")
+
+	// assume 403 is already covered
+	// fail because of lacking signature presence
+	notSignedResponse := suite.createWallet(
+		service,
+		`{}`,
+		http.StatusForbidden,
+		publicKey,
+		privKey,
+		false,
+	)
+
+	suite.Assert().JSONEq(`{
+		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
+		"code":403
+	}`, notSignedResponse, "field is not valid")
+}
+
 func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
@@ -398,13 +513,17 @@ func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
 	notSignedResponse := suite.createWallet(
 		service,
 		createBody("brave"),
-		http.StatusBadRequest,
+		http.StatusForbidden,
 		publicKey,
 		privKey,
 		false,
 	)
-	suite.Assert().Equal(`Bad Request
-`, notSignedResponse, "not signed creation requests should fail")
+
+	suite.Assert().JSONEq(`{
+		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
+		"code":403
+	}`, notSignedResponse, "should not allow unsigned")
+
 	createResp := suite.createWallet(
 		service,
 		createBody("brave"),
@@ -446,6 +565,80 @@ func (suite *WalletControllersTestSuite) getWallet(
 	handler.ServeHTTP(rr, req)
 
 	suite.Require().Equal(code, rr.Code, "known status code should be sent")
+
+	return rr.Body.String()
+}
+
+func (suite *WalletControllersTestSuite) createBraveWalletV3(
+	service *Service,
+	body string,
+	code int,
+	publicKey httpsignature.Ed25519PubKey,
+	privateKey ed25519.PrivateKey,
+	shouldSign bool,
+) string {
+
+	handler := handlers.AppHandler(CreateBraveWalletV3)
+
+	bodyBuffer := bytes.NewBuffer([]byte(body))
+	req, err := http.NewRequest("POST", "/v3/wallet/brave", bodyBuffer)
+	suite.Require().NoError(err, "a request should be created")
+
+	// setup context
+	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+
+	if shouldSign {
+		suite.SignRequest(
+			req,
+			publicKey,
+			privateKey,
+		)
+	}
+
+	rctx := chi.NewRouteContext()
+	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	req = req.WithContext(joined)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
+
+	return rr.Body.String()
+}
+
+func (suite *WalletControllersTestSuite) createUpholdWalletV3(
+	service *Service,
+	body string,
+	code int,
+	publicKey httpsignature.Ed25519PubKey,
+	privateKey ed25519.PrivateKey,
+	shouldSign bool,
+) string {
+
+	handler := handlers.AppHandler(CreateUpholdWalletV3)
+
+	bodyBuffer := bytes.NewBuffer([]byte(body))
+	req, err := http.NewRequest("POST", "/v3/wallet", bodyBuffer)
+	suite.Require().NoError(err, "a request should be created")
+
+	// setup context
+	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+
+	if shouldSign {
+		suite.SignRequest(
+			req,
+			publicKey,
+			privateKey,
+		)
+	}
+
+	rctx := chi.NewRouteContext()
+	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	req = req.WithContext(joined)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
 
 	return rr.Body.String()
 }

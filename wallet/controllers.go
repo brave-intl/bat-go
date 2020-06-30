@@ -381,7 +381,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
 	}
 
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
 }
 
 // ClaimUpholdWalletV3 - produces an http handler for the service s which handles claiming of uphold wallets
