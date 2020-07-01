@@ -406,6 +406,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	service := &Service{
 		Datastore: pg,
 	}
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
 	badJSONBodyParse := suite.createUpholdWalletV3(
 		service,

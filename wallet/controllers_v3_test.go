@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"testing"
 
 	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
@@ -134,7 +135,16 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, mockLedger)
 
+	// setup keypair
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	must(t, "failed to generate keypair", err)
+	err = signRequest(r, publicKey, privKey)
+	must(t, "failed to sign request", err)
+
 	r = r.WithContext(ctx)
+
+	b, _ := httputil.DumpRequest(r, true)
+	fmt.Printf("\n\n%s\n\n", b)
 
 	var w = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(w, r)
