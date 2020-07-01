@@ -160,71 +160,6 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w3, zero)
 }
 
-func (suite *WalletControllersTestSuite) TestLinkWallet() {
-	pg, _, err := NewPostgres()
-	suite.Require().NoError(err, "Failed to get postgres connection")
-
-	mockCtrl := gomock.NewController(suite.T())
-	defer mockCtrl.Finish()
-
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-
-	service := &Service{
-		Datastore:    pg,
-		LedgerClient: mockLedger,
-	}
-
-	w1 := suite.NewWallet(service, "uphold")
-	w2 := suite.NewWallet(service, "uphold")
-	w3 := suite.NewWallet(service, "uphold")
-	w4 := suite.NewWallet(service, "uphold")
-	bat1 := decimal.NewFromFloat(1)
-
-	suite.FundWallet(w1, bat1)
-	suite.FundWallet(w2, bat1)
-	suite.FundWallet(w3, bat1)
-	suite.FundWallet(w4, bat1)
-	settlement := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-
-	anonCard1ID, err := w1.CreateCardAddress("anonymous")
-	suite.Require().NoError(err, "create anon card must not fail")
-	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
-
-	anonCard2ID, err := w2.CreateCardAddress("anonymous")
-	suite.Require().NoError(err, "create anon card must not fail")
-	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
-
-	w1ProviderID := w1.GetWalletInfo().ProviderID
-	w2ProviderID := w2.GetWalletInfo().ProviderID
-	w3ProviderID := w3.GetWalletInfo().ProviderID
-
-	zero := decimal.NewFromFloat(0)
-
-	suite.CheckBalance(w1, bat1)
-	suite.claimCard(service, mockLedger, w1, settlement, http.StatusOK, bat1, noUUID())
-	suite.CheckBalance(w1, zero)
-
-	suite.CheckBalance(w2, bat1)
-	suite.claimCard(service, mockLedger, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
-	suite.CheckBalance(w2, bat1)
-
-	suite.CheckBalance(w2, bat1)
-	suite.claimCard(service, mockLedger, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
-	suite.CheckBalance(w2, zero)
-
-	suite.CheckBalance(w3, bat1)
-	suite.claimCard(service, mockLedger, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
-	suite.CheckBalance(w3, zero)
-
-	suite.CheckBalance(w4, bat1)
-	suite.claimCard(service, mockLedger, w4, w3ProviderID, http.StatusConflict, bat1, noUUID())
-	suite.CheckBalance(w4, bat1)
-
-	suite.CheckBalance(w3, zero)
-	suite.claimCard(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
-	suite.CheckBalance(w3, zero)
-}
-
 func (suite *WalletControllersTestSuite) claimCardV3(
 	service *Service,
 	mockLedgerClient *mockledger.MockClient,
@@ -309,11 +244,12 @@ func (suite *WalletControllersTestSuite) claimCard(
 }
 
 func (suite *WalletControllersTestSuite) createBody(
-	provider string,
-	publicKey string,
 	tx string,
 ) string {
-	return `{"provider":"` + provider + `","signedTx":"` + tx + `"}`
+	reqBody, _ := json.Marshal(UpholdCreationRequest{
+		SignedCreationRequest: tx,
+	})
+	return string(reqBody)
 }
 
 func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider string) *uphold.Wallet {
@@ -336,9 +272,9 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	reg, err := wallet.PrepareRegistration("Brave Browser Test Link")
 	suite.Require().NoError(err, "unable to prepare transaction")
 
-	createResp := suite.createWallet(
+	createResp := suite.createUpholdWalletV3(
 		service,
-		suite.createBody(provider, publicKeyString, reg),
+		suite.createBody(reg),
 		http.StatusCreated,
 		publicKey,
 		privKey,
@@ -364,7 +300,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 
 	// assume 403 is already covered
 	// fail because of lacking signature presence
-	notSignedResponse := suite.createWallet(
+	notSignedResponse := suite.createUpholdWalletV3(
 		service,
 		`{}`,
 		http.StatusForbidden,
@@ -406,6 +342,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	service := &Service{
 		Datastore: pg,
 	}
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
 	badJSONBodyParse := suite.createUpholdWalletV3(
 		service,
@@ -419,8 +356,8 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	"code":400,
 	"data": {
 		"validationErrors":{
-			"decoding":"failed decoding: failed to decode json: EOF", 
-			"signedCreationRequest":"value is required", 
+			"decoding":"failed decoding: failed to decode json: EOF",
+			"signedCreationRequest":"value is required",
 			"validation":"failed validation: missing signed creation request"
 		}
 	},
@@ -437,65 +374,21 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	)
 
 	suite.Assert().JSONEq(`{
-		"code":400, 
+		"code":400,
 		"data": {
 			"validationErrors": {
-				"signedCreationRequest":"value is required", 
+				"signedCreationRequest":"value is required",
 				"validation":"failed validation: missing signed creation request"
 			}
 		},
 		"message":"Error validating uphold create wallet request validation errors"
 	}`, badFieldResponse, "field is not valid")
-}
-
-func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
-	pg, _, err := NewPostgres()
-	suite.Require().NoError(err, "Failed to get postgres connection")
-
-	service := &Service{
-		Datastore: pg,
-	}
-
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	createBody := func(provider string) string {
-		return `{"provider":"` + provider + `"}`
-	}
-	badJSONBodyParse := suite.createWallet(
-		service,
-		``,
-		http.StatusBadRequest,
-		publicKey,
-		privKey,
-		true,
-	)
-	suite.Assert().JSONEq(`{
-		"message": "Error unmarshalling body: error unmarshalling body",
-		"code": 400
-	}`, badJSONBodyParse, "should fail when parsing json")
-
-	badFieldResponse := suite.createWallet(
-		service,
-		createBody("notaprovider"),
-		http.StatusBadRequest,
-		publicKey,
-		privKey,
-		true,
-	)
-	suite.Assert().JSONEq(`{
-		"code": 400,
-		"message": "Error validating request body",
-		"data": {
-			"validationErrors": {
-				"provider": "notaprovider does not validate as in(brave|uphold)"
-			}
-		}
-	}`, badFieldResponse, "field is not valid")
 
 	// assume 403 is already covered
 	// fail because of lacking signature presence
-	notSignedResponse := suite.createWallet(
+	notSignedResponse := suite.createUpholdWalletV3(
 		service,
-		createBody("brave"),
+		`{}`,
 		http.StatusForbidden,
 		publicKey,
 		privKey,
@@ -505,28 +398,7 @@ func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
 	suite.Assert().JSONEq(`{
 		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
 		"code":403
-	}`, notSignedResponse, "should not allow unsigned")
-
-	createResp := suite.createWallet(
-		service,
-		createBody("brave"),
-		http.StatusCreated,
-		publicKey,
-		privKey,
-		true,
-	)
-
-	var created walletutils.Info
-	err = json.Unmarshal([]byte(createResp), &created)
-	suite.Require().NoError(err, "unable to unmarshal response")
-
-	getResp := suite.getWallet(service, uuid.Must(uuid.FromString(created.ID)), http.StatusOK)
-
-	var gotten walletutils.Info
-	err = json.Unmarshal([]byte(getResp), &gotten)
-	suite.Require().NoError(err, "unable to unmarshal response")
-	// gotten.PrivateKey = created.PrivateKey
-	suite.Require().Equal(created, gotten, "the get and create return the same structure")
+	}`, notSignedResponse, "field is not valid")
 }
 
 func (suite *WalletControllersTestSuite) getWallet(
@@ -606,39 +478,6 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
-
-	if shouldSign {
-		suite.SignRequest(
-			req,
-			publicKey,
-			privateKey,
-		)
-	}
-
-	rctx := chi.NewRouteContext()
-	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	req = req.WithContext(joined)
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
-
-	return rr.Body.String()
-}
-
-func (suite *WalletControllersTestSuite) createWallet(
-	service *Service,
-	body string,
-	code int,
-	publicKey httpsignature.Ed25519PubKey,
-	privateKey ed25519.PrivateKey,
-	shouldSign bool,
-) string {
-	handler := PostCreateWallet(service)
-
-	bodyBuffer := bytes.NewBuffer([]byte(body))
-	req, err := http.NewRequest("POST", "/v1/wallet", bodyBuffer)
-	suite.Require().NoError(err, "a request should be created")
 
 	if shouldSign {
 		suite.SignRequest(

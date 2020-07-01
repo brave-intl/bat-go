@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -32,7 +31,6 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/{paymentId}/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("LinkWalletCompat", LinkWalletCompat(service))))
 	r.Method("GET", "/{paymentId}", middleware.InstrumentHandler("GetWallet", GetWallet(service)))
-	r.Method("POST", "/", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostCreateWallet", PostCreateWallet(service))))
 	return r
 }
 
@@ -114,12 +112,6 @@ type GetWalletResponse struct {
 	Wallet *walletutils.Info `json:"wallet"`
 }
 
-// PostCreateWalletRequest has possible inputs for the new wallet
-type PostCreateWalletRequest struct {
-	Provider string `json:"provider" valid:"in(brave|uphold)"`
-	SignedTx string `json:"signedTx" valid:"-"`
-}
-
 func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) (string, error) {
 	// validate that the signature in the header is valid based on public key provided
 	var s httpsignature.Signature
@@ -158,43 +150,6 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 	return s.KeyID, nil
 }
 
-// PostCreateWallet creates a wallet
-func PostCreateWallet(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
-		if err != nil {
-			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
-		}
-
-		var req PostCreateWalletRequest
-		err = requestutils.ReadJSON(r.Body, &req)
-		if err != nil {
-			return handlers.WrapError(err, "Error unmarshalling body", http.StatusBadRequest)
-		}
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		// no more uphold wallets in the wild please
-		if req.Provider == "uphold" && os.Getenv("ENV") != "local" {
-			return handlers.WrapError(errors.New("unable to create uphold wallet"), "failed to create wallet", http.StatusBadRequest)
-		}
-
-		info, err := CreateWallet(req, publicKey)
-		if err != nil {
-			return handlers.WrapError(err, "unable to save wallet", http.StatusServiceUnavailable)
-		}
-		err = service.Datastore.InsertWallet(&info)
-		if err != nil {
-			return handlers.WrapError(err, "unable to save wallet", http.StatusServiceUnavailable)
-		}
-
-		return handlers.RenderContent(r.Context(), info, w, http.StatusCreated)
-	})
-}
-
 // GetWallet retrieves wallet information
 func GetWallet(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -220,37 +175,6 @@ func GetWallet(service *Service) handlers.AppHandler {
 
 		return handlers.RenderContent(r.Context(), info, w, http.StatusOK)
 	})
-}
-
-// CreateWallet creates a new set of wallet info
-func CreateWallet(req PostCreateWalletRequest, publicKey string) (walletutils.Info, error) {
-	provider := req.Provider // client
-
-	var info walletutils.Info
-	info.ID = uuid.NewV4().String()
-	info.Provider = provider
-	{
-		tmp := altcurrency.BAT
-		info.AltCurrency = &tmp
-	}
-
-	info.PublicKey = publicKey
-
-	if req.Provider == "uphold" {
-		if req.SignedTx != "" {
-			wallet := uphold.Wallet{
-				Info:    info,
-				PrivKey: ed25519.PrivateKey{},
-				PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
-			}
-			err := wallet.SubmitRegistration(req.SignedTx)
-			if err != nil {
-				return info, err
-			}
-			info.ProviderID = wallet.GetWalletInfo().ProviderID
-		}
-	}
-	return info, nil
 }
 
 // ------------------ V3 below ---------------
