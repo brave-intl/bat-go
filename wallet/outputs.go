@@ -3,6 +3,7 @@ package wallet
 import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -57,6 +58,59 @@ func convertAltCurrency(a *altcurrency.AltCurrency) string {
 		return InvalidCurrency
 	}
 }
+
+func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
+	alt, _ := altcurrency.FromString(resp.AltCurrency)
+	info := walletutils.Info{
+		ID:          resp.PaymentID,
+		AltCurrency: &alt,
+		PublicKey:   resp.PublicKey,
+	}
+	if up, ok := resp.WalletProvider.(UpholdProviderDetailsV3); ok {
+		info.ProviderID = resp.PaymentID
+		info.Provider = up.Name
+		if up.LinkingID != "" {
+			info.ProviderID = up.LinkingID
+		}
+		if up.AnonymousAddress != "" {
+			anonymousAddress := uuid.Must(uuid.FromString(up.AnonymousAddress))
+			info.AnonymousAddress = &anonymousAddress
+		}
+	}
+	if bp, ok := resp.WalletProvider.(BraveProviderDetailsV3); ok {
+		info.Provider = bp.Name
+		if bp.Name == "uphold" {
+			info.ProviderID = bp.ID
+		}
+	}
+	return &info
+}
+
+// func responseV3ToInfo(response ResponseV3) walletutils.Info {
+// 	alt, _ := altcurrency.FromString(response.AltCurrency)
+// 	info := walletutils.Info{
+// 		ID:          response.PaymentID,
+// 		AltCurrency: &alt,
+// 	}
+// 	if response.WalletProvider != nil {
+// 		switch wp := response.WalletProvider.(type) {
+// 		case UpholdProviderDetailsV3:
+// 			anonymousAddress := uuid.Must(uuid.FromString(wp.AnonymousAddress))
+// 			info.AnonymousAddress = &anonymousAddress
+// 			if wp.LinkingID != "" {
+// 				providerLinkingID := uuid.Must(uuid.FromString(wp.LinkingID))
+// 				info.ProviderLinkingID = &providerLinkingID
+// 			}
+// 			info.ProviderID = "not"
+// 		case BraveProviderDetailsV3:
+// 			info.Provider = wp.Name
+// 			if wp.Name == "uphold" {
+// 				info.ProviderID = wp.ID
+// 			}
+// 		}
+// 	}
+// 	return info
+// }
 
 func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
