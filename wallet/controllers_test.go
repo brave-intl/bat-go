@@ -298,20 +298,20 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 
-	// assume 403 is already covered
+	// assume 400 is already covered
 	// fail because of lacking signature presence
 	notSignedResponse := suite.createUpholdWalletV3(
 		service,
 		`{}`,
-		http.StatusForbidden,
+		http.StatusBadRequest,
 		publicKey,
 		privKey,
 		false,
 	)
 
 	suite.Assert().JSONEq(`{
-		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
-		"code":403
+		"message":"missing signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
+		"code":400
 	}`, notSignedResponse, "field is not valid")
 
 	createResp := suite.createBraveWalletV3(
@@ -329,10 +329,11 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 
 	getResp := suite.getWallet(service, uuid.Must(uuid.FromString(created.PaymentID)), http.StatusOK)
 
-	var gotten walletutils.Info
+	var gotten ResponseV3
 	err = json.Unmarshal([]byte(getResp), &gotten)
 	suite.Require().NoError(err, "unable to unmarshal response")
-	suite.Require().Equal(created, infoToResponseV3(&gotten), "the get and create return the same structure")
+	// does not return wallet provider
+	suite.Require().Equal(created, gotten, "the get and create return the same structure")
 }
 
 func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
@@ -389,15 +390,15 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	notSignedResponse := suite.createUpholdWalletV3(
 		service,
 		`{}`,
-		http.StatusForbidden,
+		http.StatusBadRequest,
 		publicKey,
 		privKey,
 		false,
 	)
 
 	suite.Assert().JSONEq(`{
-		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
-		"code":403
+		"message":"missing signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
+		"code":400
 	}`, notSignedResponse, "field is not valid")
 }
 
@@ -406,20 +407,21 @@ func (suite *WalletControllersTestSuite) getWallet(
 	paymentId uuid.UUID,
 	code int,
 ) string {
-	handler := GetWallet(service)
+	handler := handlers.AppHandler(GetWalletV3)
 
-	req, err := http.NewRequest("GET", "/v1/wallet/"+paymentId.String(), nil)
+	req, err := http.NewRequest("GET", "/v3/wallet/"+paymentId.String(), nil)
 	suite.Require().NoError(err, "a request should be created")
 
+	req = req.WithContext(context.WithValue(req.Context(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, service.Datastore))
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentId", paymentId.String())
-	joined := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	req = req.WithContext(joined)
+	rctx.URLParams.Add("paymentID", paymentId.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	suite.Require().Equal(code, rr.Code, "known status code should be sent")
+	suite.Require().Equal(code, rr.Code, "known status code should be sent: "+rr.Body.String())
 
 	return rr.Body.String()
 }
