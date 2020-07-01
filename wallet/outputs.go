@@ -85,16 +85,38 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		AltCurrency: altCurrency,
 		PublicKey:   info.PublicKey,
 	}
+
 	// if this is linked to uphold, add the default account provider
 	if info.Provider == "uphold" {
+		if anonymousAddress == "" {
+			// no linked anon card
+			resp.WalletProvider = BraveProviderDetailsV3{
+				Name: "brave",
+				ID:   info.ID,
+			}
+		} else {
+			resp.WalletProvider = BraveProviderDetailsV3{
+				Name: "uphold",
+				ID:   info.ProviderID,
+			}
+		}
+		if linkingID != "" {
+			resp.DepositAccountProvider = UpholdProviderDetailsV3{
+				Name:             info.Provider,
+				LinkingID:        linkingID,
+				AnonymousAddress: anonymousAddress,
+			}
+		}
+	} else if info.Provider == "brave" {
+		// no linked anon card
 		resp.WalletProvider = BraveProviderDetailsV3{
 			Name: "brave",
-			ID:   info.ProviderID,
+			ID:   info.ID,
 		}
-		resp.DepositAccountProvider = UpholdProviderDetailsV3{
-			Name:             info.Provider,
-			LinkingID:        linkingID,
-			AnonymousAddress: anonymousAddress,
+	} else {
+		resp.WalletProvider = BraveProviderDetailsV3{
+			Name: info.Provider,
+			ID:   info.ProviderID,
 		}
 	}
 	return resp

@@ -257,11 +257,6 @@ func CreateWallet(req PostCreateWalletRequest, publicKey string) (walletutils.In
 
 // CreateUpholdWalletV3 - produces an http handler for the service s which handles creation of uphold wallets
 func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
-	if err != nil {
-		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
-	}
-
 	var (
 		ucReq       = new(UpholdCreationRequest)
 		ctx         = r.Context()
@@ -275,6 +270,14 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		// no logger, setup
 		ctx, logger = logging.SetupLogger(ctx)
 	}
+
+	var s httpsignature.Signature
+	err = s.UnmarshalText([]byte(r.Header.Get("Signature")))
+	if err != nil {
+		return handlers.WrapError(fmt.Errorf("invalid signature: %w", err), "missing signature", http.StatusBadRequest)
+	}
+
+	var publicKey = s.KeyID
 
 	// decode and validate the request body
 	if err := inputs.DecodeAndValidateReader(ctx, ucReq, r.Body); err != nil {
@@ -327,7 +330,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
 	}
 
-	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusOK)
+	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
 }
 
 // CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
