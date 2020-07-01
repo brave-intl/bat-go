@@ -115,6 +115,7 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	w4 := suite.NewWallet(service, "uphold")
 	bat1 := decimal.NewFromFloat(1)
 
+	fmt.Printf("%#v\n", w1)
 	suite.FundWallet(w1, bat1)
 	suite.FundWallet(w2, bat1)
 	suite.FundWallet(w3, bat1)
@@ -281,10 +282,19 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 		true,
 	)
 
-	var returnedInfo walletutils.Info
+	var returnedInfo ResponseV3
 	err = json.Unmarshal([]byte(createResp), &returnedInfo)
 	suite.Require().NoError(err, "unable to create wallet")
-	wallet.Info = returnedInfo
+	// returnedInfo := walletutils.Info{
+	// 	ID:          uuid.NewV4().String(),
+	// 	PublicKey:   publicKeyString,
+	// 	Provider:    "uphold",
+	// 	AltCurrency: &bat,
+	// }
+	wallet.Info = *responseV3ToInfo(returnedInfo)
+	fmt.Println("returned info")
+	fmt.Printf("%#v\n", returnedInfo)
+	fmt.Printf("%#v\n", wallet.Info)
 	return wallet
 }
 
