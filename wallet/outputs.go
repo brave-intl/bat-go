@@ -1,8 +1,6 @@
 package wallet
 
 import (
-	"fmt"
-
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
@@ -36,11 +34,11 @@ type UpholdProviderDetailsV3 struct {
 
 // ResponseV3 - wallet creation response
 type ResponseV3 struct {
-	PaymentID              string      `json:"paymentId"`
-	DepositAccountProvider interface{} `json:"depositAccountProvider,omitempty"`
-	WalletProvider         interface{} `json:"walletProvider,omitempty"`
-	AltCurrency            string      `json:"altcurrency"`
-	PublicKey              string      `json:"publicKey"`
+	PaymentID              string                   `json:"paymentId"`
+	DepositAccountProvider *UpholdProviderDetailsV3 `json:"depositAccountProvider,omitempty"`
+	WalletProvider         *BraveProviderDetailsV3  `json:"walletProvider,omitempty"`
+	AltCurrency            string                   `json:"altcurrency"`
+	PublicKey              string                   `json:"publicKey"`
 }
 
 func convertAltCurrency(a *altcurrency.AltCurrency) string {
@@ -68,56 +66,21 @@ func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
 		AltCurrency: &alt,
 		PublicKey:   resp.PublicKey,
 	}
-	if up, ok := resp.DepositAccountProvider.(UpholdProviderDetailsV3); ok {
-		info.ProviderID = resp.PaymentID
-		info.Provider = up.Name
-		if up.LinkingID != "" {
-			info.ProviderID = string(up.LinkingID)
+	if resp.WalletProvider != nil {
+		info.Provider = resp.WalletProvider.Name
+		if info.Provider == "uphold" {
+			info.ProviderID = resp.WalletProvider.ID
+			info.Provider = "uphold"
+			if resp.DepositAccountProvider != nil {
+				providerLinkingID := uuid.Must(uuid.FromString(resp.DepositAccountProvider.LinkingID))
+				info.ProviderLinkingID = &providerLinkingID
+				anonymousAddress := uuid.Must(uuid.FromString(resp.DepositAccountProvider.AnonymousAddress))
+				info.AnonymousAddress = &anonymousAddress
+			}
 		}
-		if up.AnonymousAddress != "" {
-			anonymousAddress := uuid.Must(uuid.FromString(up.AnonymousAddress))
-			info.AnonymousAddress = &anonymousAddress
-		}
-	}
-	// bp, ok := resp.WalletProvider.(BraveProviderDetailsV3)
-	// fmt.Println(bp)
-	if resp.WalletProvider["id"] != "" {
-		info.Provider = bp.Name
-		if bp.Name == "uphold" {
-			info.ProviderID = string(bp.ID)
-		} else if bp.Name == "brave" {
-			info.ProviderID = string(bp.ID)
-		}
-		fmt.Println(bp)
 	}
 	return &info
 }
-
-// func responseV3ToInfo(response ResponseV3) walletutils.Info {
-// 	alt, _ := altcurrency.FromString(response.AltCurrency)
-// 	info := walletutils.Info{
-// 		ID:          response.PaymentID,
-// 		AltCurrency: &alt,
-// 	}
-// 	if response.WalletProvider != nil {
-// 		switch wp := response.WalletProvider.(type) {
-// 		case UpholdProviderDetailsV3:
-// 			anonymousAddress := uuid.Must(uuid.FromString(wp.AnonymousAddress))
-// 			info.AnonymousAddress = &anonymousAddress
-// 			if wp.LinkingID != "" {
-// 				providerLinkingID := uuid.Must(uuid.FromString(wp.LinkingID))
-// 				info.ProviderLinkingID = &providerLinkingID
-// 			}
-// 			info.ProviderID = "not"
-// 		case BraveProviderDetailsV3:
-// 			info.Provider = wp.Name
-// 			if wp.Name == "uphold" {
-// 				info.ProviderID = wp.ID
-// 			}
-// 		}
-// 	}
-// 	return info
-// }
 
 func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
@@ -151,18 +114,18 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	if info.Provider == "uphold" {
 		if anonymousAddress == "" {
 			// no linked anon card
-			resp.WalletProvider = BraveProviderDetailsV3{
+			resp.WalletProvider = &BraveProviderDetailsV3{
 				Name: "brave",
 				ID:   info.ID,
 			}
 		} else {
-			resp.WalletProvider = BraveProviderDetailsV3{
+			resp.WalletProvider = &BraveProviderDetailsV3{
 				Name: "uphold",
 				ID:   info.ProviderID,
 			}
 		}
 		if linkingID != "" {
-			resp.DepositAccountProvider = UpholdProviderDetailsV3{
+			resp.DepositAccountProvider = &UpholdProviderDetailsV3{
 				Name:             info.Provider,
 				LinkingID:        linkingID,
 				AnonymousAddress: anonymousAddress,
@@ -170,12 +133,12 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		}
 	} else if info.Provider == "brave" {
 		// no linked anon card
-		resp.WalletProvider = BraveProviderDetailsV3{
+		resp.WalletProvider = &BraveProviderDetailsV3{
 			Name: "brave",
 			ID:   info.ID,
 		}
 	} else {
-		resp.WalletProvider = BraveProviderDetailsV3{
+		resp.WalletProvider = &BraveProviderDetailsV3{
 			Name: info.Provider,
 			ID:   info.ProviderID,
 		}
