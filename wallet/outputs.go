@@ -1,6 +1,8 @@
 package wallet
 
 import (
+	"fmt"
+
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
@@ -70,18 +72,23 @@ func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
 		info.ProviderID = resp.PaymentID
 		info.Provider = up.Name
 		if up.LinkingID != "" {
-			info.ProviderID = up.LinkingID
+			info.ProviderID = string(up.LinkingID)
 		}
 		if up.AnonymousAddress != "" {
 			anonymousAddress := uuid.Must(uuid.FromString(up.AnonymousAddress))
 			info.AnonymousAddress = &anonymousAddress
 		}
 	}
-	if bp, ok := resp.WalletProvider.(BraveProviderDetailsV3); ok {
+	// bp, ok := resp.WalletProvider.(BraveProviderDetailsV3)
+	// fmt.Println(bp)
+	if resp.WalletProvider["id"] != "" {
 		info.Provider = bp.Name
 		if bp.Name == "uphold" {
-			info.ProviderID = bp.ID
+			info.ProviderID = string(bp.ID)
+		} else if bp.Name == "brave" {
+			info.ProviderID = string(bp.ID)
 		}
+		fmt.Println(bp)
 	}
 	return &info
 }

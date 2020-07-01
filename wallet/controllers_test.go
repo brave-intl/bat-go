@@ -264,13 +264,13 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 		Provider:    "uphold",
 		AltCurrency: &bat,
 	}
-	wallet := &uphold.Wallet{
+	w := &uphold.Wallet{
 		Info:    info,
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
 
-	reg, err := wallet.PrepareRegistration("Brave Browser Test Link")
+	reg, err := w.PrepareRegistration("Brave Browser Test Link")
 	suite.Require().NoError(err, "unable to prepare transaction")
 
 	createResp := suite.createUpholdWalletV3(
@@ -291,11 +291,13 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	// 	Provider:    "uphold",
 	// 	AltCurrency: &bat,
 	// }
-	wallet.Info = *responseV3ToInfo(returnedInfo)
+	convertedInfo := responseV3ToInfo(returnedInfo)
+	w.Info = *convertedInfo
 	fmt.Println("returned info")
 	fmt.Printf("%#v\n", returnedInfo)
-	fmt.Printf("%#v\n", wallet.Info)
-	return wallet
+	fmt.Printf("%#v\n", convertedInfo)
+	fmt.Printf("%#v\n", w.Info)
+	return w
 }
 
 func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
