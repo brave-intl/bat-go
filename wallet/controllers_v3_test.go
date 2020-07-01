@@ -134,13 +134,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, mockLedger)
 
-	// setup keypair
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	must(t, "failed to generate keypair", err)
-
-	err = signRequest(r, publicKey, privKey)
-	must(t, "failed to sign request", err)
-
 	r = r.WithContext(ctx)
 
 	var w = httptest.NewRecorder()
@@ -150,42 +143,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected 503, got %d", resp.StatusCode))
-	}
-}
-
-func TestCreateWalletV3_FailureSignature(t *testing.T) {
-	var (
-		db, _, _  = sqlmock.New()
-		datastore = wallet.Datastore(
-			&wallet.Postgres{
-				grantserver.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		roDatastore = wallet.ReadOnlyDatastore(
-			&wallet.Postgres{
-				grantserver.Postgres{
-					DB: sqlx.NewDb(db, "postgres"),
-				},
-			})
-		// add the datastore to the context
-		ctx = context.Background()
-		r   = httptest.NewRequest("POST", "/v3/wallet/brave", nil)
-	)
-
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
-
-	r = r.WithContext(ctx)
-
-	for _, handler := range []handlers.AppHandler{
-		wallet.CreateBraveWalletV3, wallet.CreateUpholdWalletV3,
-	} {
-		var w = httptest.NewRecorder()
-		handlers.AppHandler(handler).ServeHTTP(w, r)
-		if resp := w.Result(); resp.StatusCode != http.StatusForbidden {
-			must(t, "invalid response", fmt.Errorf("expected 403, got %d", resp.StatusCode))
-		}
 	}
 }
 

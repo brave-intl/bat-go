@@ -407,8 +407,6 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 		Datastore: pg,
 	}
 
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-
 	badJSONBodyParse := suite.createUpholdWalletV3(
 		service,
 		``,
@@ -448,22 +446,6 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 		},
 		"message":"Error validating uphold create wallet request validation errors"
 	}`, badFieldResponse, "field is not valid")
-
-	// assume 403 is already covered
-	// fail because of lacking signature presence
-	notSignedResponse := suite.createWallet(
-		service,
-		`{}`,
-		http.StatusForbidden,
-		publicKey,
-		privKey,
-		false,
-	)
-
-	suite.Assert().JSONEq(`{
-		"message":"invalid http signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
-		"code":403
-	}`, notSignedResponse, "field is not valid")
 }
 
 func (suite *WalletControllersTestSuite) TestPostCreateWallet() {
