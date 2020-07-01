@@ -66,7 +66,7 @@ func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
 		AltCurrency: &alt,
 		PublicKey:   resp.PublicKey,
 	}
-	if up, ok := resp.WalletProvider.(UpholdProviderDetailsV3); ok {
+	if up, ok := resp.DepositAccountProvider.(UpholdProviderDetailsV3); ok {
 		info.ProviderID = resp.PaymentID
 		info.Provider = up.Name
 		if up.LinkingID != "" {
