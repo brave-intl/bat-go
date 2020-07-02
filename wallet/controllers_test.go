@@ -284,7 +284,7 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	var returnedInfo ResponseV3
 	err = json.Unmarshal([]byte(createResp), &returnedInfo)
 	suite.Require().NoError(err, "unable to create wallet")
-	convertedInfo := responseV3ToInfo(returnedInfo)
+	convertedInfo := ResponseV3ToInfo(returnedInfo)
 	w.Info = *convertedInfo
 	return w
 }

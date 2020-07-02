@@ -59,7 +59,8 @@ func convertAltCurrency(a *altcurrency.AltCurrency) string {
 	}
 }
 
-func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
+// ResponseV3ToInfo converts a response v3 to wallet info
+func ResponseV3ToInfo(resp ResponseV3) *walletutils.Info {
 	alt, _ := altcurrency.FromString(resp.AltCurrency)
 	info := walletutils.Info{
 		ID:          resp.PaymentID,
