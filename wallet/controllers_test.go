@@ -115,7 +115,6 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	w4 := suite.NewWallet(service, "uphold")
 	bat1 := decimal.NewFromFloat(1)
 
-	fmt.Printf("%#v\n", w1)
 	suite.FundWallet(w1, bat1)
 	suite.FundWallet(w2, bat1)
 	suite.FundWallet(w3, bat1)
