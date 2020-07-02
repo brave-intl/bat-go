@@ -70,12 +70,19 @@ func responseV3ToInfo(resp ResponseV3) *walletutils.Info {
 		info.Provider = resp.WalletProvider.Name
 		if info.Provider == "uphold" {
 			info.ProviderID = resp.WalletProvider.ID
-			info.Provider = "uphold"
-			if resp.DepositAccountProvider != nil {
-				providerLinkingID := uuid.Must(uuid.FromString(resp.DepositAccountProvider.LinkingID))
-				info.ProviderLinkingID = &providerLinkingID
-				anonymousAddress := uuid.Must(uuid.FromString(resp.DepositAccountProvider.AnonymousAddress))
+			depositAccountProvider := resp.DepositAccountProvider
+			if depositAccountProvider != nil {
+				if depositAccountProvider.LinkingID != "" {
+					providerLinkingID := uuid.Must(uuid.FromString(depositAccountProvider.LinkingID))
+					info.ProviderLinkingID = &providerLinkingID
+				}
+				anonymousAddress := uuid.Must(uuid.FromString(depositAccountProvider.AnonymousAddress))
 				info.AnonymousAddress = &anonymousAddress
+			}
+		} else if info.Provider == "brave" {
+			info.ProviderID = resp.WalletProvider.ID
+			if info.ProviderID != "" {
+				info.Provider = "uphold"
 			}
 		}
 	}
@@ -110,18 +117,19 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		PublicKey:   info.PublicKey,
 	}
 
+	providerID := info.ProviderID
 	// if this is linked to uphold, add the default account provider
 	if info.Provider == "uphold" {
 		if anonymousAddress == "" {
 			// no linked anon card
 			resp.WalletProvider = &BraveProviderDetailsV3{
 				Name: "brave",
-				ID:   info.ID,
+				ID:   providerID,
 			}
 		} else {
 			resp.WalletProvider = &BraveProviderDetailsV3{
 				Name: "uphold",
-				ID:   info.ProviderID,
+				ID:   providerID,
 			}
 		}
 		if linkingID != "" {
@@ -135,12 +143,12 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		// no linked anon card
 		resp.WalletProvider = &BraveProviderDetailsV3{
 			Name: "brave",
-			ID:   info.ID,
+			ID:   providerID,
 		}
 	} else {
 		resp.WalletProvider = &BraveProviderDetailsV3{
 			Name: info.Provider,
-			ID:   info.ProviderID,
+			ID:   providerID,
 		}
 	}
 	return resp
