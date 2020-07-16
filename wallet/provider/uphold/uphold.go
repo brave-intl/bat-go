@@ -338,6 +338,7 @@ type CardDetails struct {
 	Balance          decimal.Decimal         `json:"balance"`
 	Currency         altcurrency.AltCurrency `json:"currency"`
 	ID               uuid.UUID               `json:"id"`
+	Label            string                  `json:"label"`
 	Settings         CardSettings            `json:"settings"`
 }
 
