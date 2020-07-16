@@ -13,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/formatters"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/wallet/provider"
+	"github.com/brave-intl/bat-go/wallet/provider/uphold"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -55,6 +56,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("%s is not a valid ISO 8601 datetime\n", *startDateStr)
 		}
+	}
+
+	if *walletProvider == "uphold" {
+		// 100MB limit
+		uphold.ResponsePayloadLimit = int64(1024 * 1024 * 100)
 	}
 
 	walletc := altcurrency.BAT

@@ -13,8 +13,9 @@ import (
 
 type requestID string
 
-var (
-	payloadLimit10MB = int64(1024 * 1024 * 10)
+const (
+	// PayloadLimit10MB is for limiting a read to 10MB max
+	PayloadLimit10MB = int64(1024 * 1024 * 10)
 	// RequestIDHeaderKey is the request header key
 	RequestIDHeaderKey = "x-request-id"
 	// RequestID holds the type for request ids
@@ -29,7 +30,7 @@ func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
 
 // Read an io reader
 func Read(body io.Reader) ([]byte, error) {
-	jsonString, err := ReadWithLimit(body, payloadLimit10MB)
+	jsonString, err := ReadWithLimit(body, PayloadLimit10MB)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error reading body")
 	}

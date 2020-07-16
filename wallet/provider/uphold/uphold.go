@@ -62,9 +62,10 @@ var (
 	// filter out authorization tokens from logs
 	authLogFilter = regexp.MustCompile(`Authorization: .+\n`)
 
+	// ResponsePayloadLimit contains the limit enforced on response payload length returned from Uphold
+	ResponsePayloadLimit = requestutils.PayloadLimit10MB
 	// SettlementDestination is the address of the settlement wallet
 	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
-
 	// AnonCardSettlementAddress is the address of the settlement wallet
 	AnonCardSettlementAddress = os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
 	// UpholdSettlementAddress is the address of the settlement wallet
@@ -197,7 +198,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 		return nil, resp, err
 	}
 
-	body, err := requestutils.Read(resp.Body)
+	body, err := requestutils.ReadWithLimit(resp.Body, ResponsePayloadLimit)
 	if err != nil {
 		return nil, resp, err
 	}
