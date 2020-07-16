@@ -71,6 +71,7 @@ var (
 	UpholdSettlementAddress = os.Getenv("UPHOLD_SETTLEMENT_ADDRESS")
 
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	useBearerAuth = os.Getenv("UPHOLD_USE_BEARER_AUTH")
 	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
 	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
 	upholdAPIBase = map[string]string{
@@ -156,7 +157,11 @@ func FromWalletInfo(ctx context.Context, info wallet.Info) (*Wallet, error) {
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
+		if useBearerAuth == "" || useBearerAuth == "f" || useBearerAuth == "n" || useBearerAuth == "0" {
+			req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
+		} else {
+			req.Header.Add("Authorization", "Bearer "+accessToken)
+		}
 	}
 	return req, err
 }
@@ -168,7 +173,11 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	if err != nil {
 		panic(err)
 	}
-	dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
+	if useBearerAuth == "" || useBearerAuth == "f" || useBearerAuth == "n" || useBearerAuth == "0" {
+		dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
+	} else {
+		dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Bearer <token>\n"))
+	}
 
 	if logger != nil {
 		logger.Debug().
