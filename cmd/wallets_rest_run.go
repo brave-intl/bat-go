@@ -60,10 +60,8 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 				"CreateBraveWallet", wallet.CreateBraveWalletV3))
 
 			// create wallet claim routes for our wallet providers
-			r.Post("/uphold/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s))).ServeHTTP)
-			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-				"ClaimBraveWallet", wallet.ClaimBraveWalletV3(s))).ServeHTTP)
+			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
+				"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s)))
 
 			// get wallet routes
 			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
