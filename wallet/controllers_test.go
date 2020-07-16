@@ -186,7 +186,6 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	suite.Require().NoError(err, "unable to marshal claim body")
 
 	info := w.GetWalletInfo()
-	mockLedgerClient.EXPECT().GetMemberWallets(gomock.Any(), gomock.Eq(uuid.Must(uuid.FromString(info.ID)))).Return(&[]walletutils.Info{info}, nil)
 
 	// V3 Handler
 
