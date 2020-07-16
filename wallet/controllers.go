@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -342,13 +343,13 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			return cuw.HandleErrors(err)
 		}
 
-		// remove this check and merge when ledger endpoint is depricated
-		wallet, err := s.GetAndCreateMemberWallets(ctx, id.UUID())
+		// get the wallet
+		wallet, err := s.GetOrCreateWallet(ctx, id.UUID())
 		if err != nil {
-			if err == errorutils.ErrWalletNotFound {
+			if strings.Contains(err.Error(), "looking up wallet") {
 				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
 			}
-			return handlers.WrapError(err, "unable to backfill wallets", http.StatusServiceUnavailable)
+			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
 		}
 
 		var aa uuid.UUID
