@@ -71,6 +71,10 @@ var (
 	// UpholdSettlementAddress is the address of the settlement wallet
 	UpholdSettlementAddress = os.Getenv("UPHOLD_SETTLEMENT_ADDRESS")
 
+	grantWalletCardID     = os.Getenv("GRANT_WALLET_CARD_ID")
+	grantWalletPrivateKey = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletPublicKey  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
 	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
 	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
@@ -125,7 +129,7 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	if info.Provider != "uphold" {
+	if info.Provider != "uphold" && info.Provider != "brave" {
 		return nil, errors.New("The wallet provider must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
@@ -217,6 +221,55 @@ type createCardRequest struct {
 	Label       string                   `json:"label"`
 	AltCurrency *altcurrency.AltCurrency `json:"currency"`
 	PublicKey   string                   `json:"publicKey"`
+}
+
+// IsUserKYC - is this user a "member"
+func (w *Wallet) IsUserKYC(ctx context.Context) bool {
+	// get logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+
+	// in order to get the isMember status of the wallet, we need to start
+	// a transaction of 0 BAT to the wallet "w" from "grant_wallet" but never commit
+
+	gwPublicKey, err := hex.DecodeString(grantWalletPublicKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid system public key")
+		return false
+	}
+	gwPrivateKey, err := hex.DecodeString(grantWalletPrivateKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid system private key")
+		return false
+	}
+
+	grantWallet := Wallet{
+		Info: walletutils.Info{
+			ProviderID: grantWalletCardID,
+			Provider:   "uphold",
+			PublicKey:  grantWalletPublicKey,
+		},
+		PrivKey: ed25519.PrivateKey([]byte(gwPrivateKey)),
+		PubKey:  httpsignature.Ed25519PubKey([]byte(gwPublicKey)),
+	}
+
+	// create a transaction
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), w.Info.ProviderID, "")
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to prepare transaction")
+		return false
+	}
+
+	uhResp, err := grantWallet.SubmitTransaction(transactionB64, false)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to submit transaction")
+		return false
+	}
+
+	return uhResp.KYC
 }
 
 // sign registration for this wallet with Uphold with label
@@ -580,6 +633,7 @@ type upholdTransactionResponseDestination struct {
 	Amount      decimal.Decimal                          `json:"amount"`
 	ExchangeFee decimal.Decimal                          `json:"commission"`
 	TransferFee decimal.Decimal                          `json:"fee"`
+	IsMember    bool                                     `json:"isMember"`
 }
 
 type upholdTransactionResponseParams struct {
@@ -635,6 +689,7 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	}
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message
+	txInfo.KYC = destination.IsMember
 
 	return &txInfo
 }

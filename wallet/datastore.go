@@ -114,6 +114,8 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	values ($1, $2, $3, $4, $5, $6)
 	on conflict (id) do
 	update set
+		provider = $2,
+		provider_id = $3,
 		provider_linking_id = $5,
 		anonymous_address = $6
 	returning *`

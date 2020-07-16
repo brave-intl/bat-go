@@ -11,7 +11,7 @@ import (
 // GetWallet returns the wallet corresponding to the passed wallet info
 func GetWallet(ctx context.Context, info wallet.Info) (wallet.Wallet, error) {
 	switch info.Provider {
-	case "uphold":
+	case "uphold", "brave":
 		uW, err := uphold.FromWalletInfo(ctx, info)
 		if err != nil {
 			return uW, err

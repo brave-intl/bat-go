@@ -40,6 +40,7 @@ type TransactionInfo struct {
 	Time         time.Time                `json:"-"`
 	Note         string                   `json:"-"`
 	UserID       string                   `json:"-"`
+	KYC          bool                     `json:"-"`
 }
 
 // String returns the transaction info as an easily readable string

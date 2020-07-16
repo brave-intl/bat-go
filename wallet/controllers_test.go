@@ -131,7 +131,6 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 
 	w1ProviderID := w1.GetWalletInfo().ProviderID
 	w2ProviderID := w2.GetWalletInfo().ProviderID
-	w3ProviderID := w3.GetWalletInfo().ProviderID
 
 	zero := decimal.NewFromFloat(0)
 
@@ -150,10 +149,6 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w3, bat1)
 	suite.claimCardV3(service, mockLedger, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w3, zero)
-
-	suite.CheckBalance(w4, bat1)
-	suite.claimCardV3(service, mockLedger, w4, w3ProviderID, http.StatusConflict, bat1, noUUID())
-	suite.CheckBalance(w4, bat1)
 
 	suite.CheckBalance(w3, zero)
 	suite.claimCardV3(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)

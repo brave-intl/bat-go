@@ -25,6 +25,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // Router for suggestions endpoints
@@ -366,9 +367,66 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		err = s.LinkWallet(r.Context(), wallet, cuw.SignedCreationRequest, &aa)
-		if err != nil {
-			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+		var amount decimal.Decimal
+
+		if wallet.ProviderID == "" && cuw.SignedCreationRequest != "" {
+			publicKey, err := hex.DecodeString(wallet.PublicKey)
+			if err != nil {
+				logger.Warn().Err(err).Msg("unable to decode wallet public key")
+				return handlers.WrapError(errors.New("unable to decode wallet public key"),
+					"unable to decode wallet public key for creation request validation",
+					http.StatusInternalServerError)
+			}
+			uwallet := uphold.Wallet{
+				Info:    *wallet,
+				PrivKey: ed25519.PrivateKey{},
+				PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
+			}
+			// parse the signedcreationrequest to get the provider id
+			txInfo, err := uwallet.VerifyTransaction(cuw.SignedCreationRequest)
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to transaction validation for uphold")
+				return handlers.WrapError(
+					errors.New("unable to create uphold wallet"),
+					"failed transaction validation for uphold", http.StatusBadRequest)
+			}
+			logger.Debug().Msg("able to verify transaction")
+			// get the card id from the submitted destination
+			wallet.ProviderID = txInfo.Destination
+			wallet.Provider = "uphold"
+			wallet.AnonymousAddress = &aa
+
+			// updated wallet info for uphold wallet
+			uwallet.Info = *wallet
+
+			amount = txInfo.DestAmount
+			logger.Debug().Str("amount", amount.String()).Msg("amount on the signed request")
+
+			// if this is a 0 BAT Transaction, it is not anoncard,
+			// verify that the user is kyc from uphold.
+			if amount.IsZero() {
+				logger.Debug().Str("amount", amount.String()).Msg("amount is zero, performing kyc check")
+				if !uwallet.IsUserKYC(r.Context()) {
+					// fail
+					logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
+					return handlers.WrapError(errors.New("failed to link wallet"),
+						"wallet is not kyc", http.StatusForbidden)
+				}
+			}
+			// update the wallet in the datastore only if we are successful in linking
+			// uphold will validate the signature
+			if err := s.Datastore.UpsertWallet(wallet); err != nil {
+				logger.Warn().Err(err).Msg("failed to upsert wallet")
+				return handlers.WrapError(
+					errors.New("unable to update wallet to uphold provider"),
+					"failed to register wallet with uphold", http.StatusServiceUnavailable)
+			}
+		} else {
+			err = s.LinkWallet(r.Context(), wallet, cuw.SignedCreationRequest, &aa)
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to link the wallet")
+				return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+			}
 		}
 
 		// render the wallet
