@@ -41,12 +41,14 @@ var (
 
 func init() {
 	_, logger := logging.SetupLogger(context.Background())
-
+	var err error
 	// gracefully try to register collectors for prom, no need to panic
-	if err := prometheus.Register(kafkaCertNotBefore); err != nil {
+	err = prometheus.Register(kafkaCertNotBefore)
+	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
 		logger.Warn().Err(err).Msg("already registered kafkaCertNotBefore collector")
 	}
-	if err := prometheus.Register(kafkaCertNotAfter); err != nil {
+	err = prometheus.Register(kafkaCertNotAfter)
+	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
 		logger.Warn().Err(err).Msg("already registered kafkaCertNotAfter collector")
 	}
 }
