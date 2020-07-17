@@ -13,7 +13,6 @@ import (
 	"net/http/httputil"
 	"testing"
 
-	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
@@ -64,7 +63,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		mockLedger = mockledger.NewMockClient(mockCtrl)
 		// add the datastore to the context
 		ctx     = context.Background()
 		handler = wallet.CreateBraveWalletV3
@@ -78,7 +76,6 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
-	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, mockLedger)
 
 	// setup keypair
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
@@ -116,7 +113,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
-		mockLedger = mockledger.NewMockClient(mockCtrl)
 		// add the datastore to the context
 		ctx     = context.Background()
 		handler = wallet.CreateUpholdWalletV3
@@ -133,7 +129,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
-	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, mockLedger)
 
 	// setup keypair
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)

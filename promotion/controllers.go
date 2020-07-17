@@ -83,7 +83,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		return nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
-	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
+	wallet, err := service.wallet.GetWallet(walletID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}

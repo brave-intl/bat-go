@@ -189,7 +189,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 		}
 
 		// get the wallet
-		wallet, err := s.GetOrCreateWallet(ctx, id.UUID())
+		wallet, err := s.GetWallet(id.UUID())
 		if err != nil {
 			if strings.Contains(err.Error(), "looking up wallet") {
 				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
