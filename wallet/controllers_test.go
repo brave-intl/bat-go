@@ -201,42 +201,6 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	return linked, rr.Body.String()
 }
 
-func (suite *WalletControllersTestSuite) claimCard(
-	service *Service,
-	mockLedgerClient *mockledger.MockClient,
-	w *uphold.Wallet,
-	destination string,
-	status int,
-	amount decimal.Decimal,
-	anonymousAddress *uuid.UUID,
-) (*walletutils.Info, string) {
-	signedTx, err := w.PrepareTransaction(*w.AltCurrency, altcurrency.BAT.ToProbi(amount), destination, "")
-	suite.Require().NoError(err, "transaction must be signed client side")
-	reqBody := LinkWalletRequest{
-		SignedTx:         signedTx,
-		AnonymousAddress: anonymousAddress,
-	}
-	body, err := json.Marshal(&reqBody)
-	suite.Require().NoError(err, "unable to marshal claim body")
-
-	info := w.GetWalletInfo()
-	mockLedgerClient.EXPECT().GetMemberWallets(gomock.Any(), gomock.Eq(uuid.Must(uuid.FromString(info.ID)))).Return(&[]walletutils.Info{info}, nil)
-	handler := LinkWalletCompat(service)
-	req, err := http.NewRequest("POST", "/v1/wallet/{paymentID}/claim", bytes.NewBuffer(body))
-	suite.Require().NoError(err, "wallet claim request could not be created")
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("paymentID", info.ID)
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
-	linked, err := service.Datastore.GetWallet(uuid.Must(uuid.FromString(w.ID)))
-	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
-	return linked, rr.Body.String()
-}
-
 func (suite *WalletControllersTestSuite) createBody(
 	tx string,
 ) string {

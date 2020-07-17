@@ -15,6 +15,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	timeout = 10 * time.Second
+)
+
 func init() {
 	rootCmd.AddCommand(serveCmd)
 
@@ -44,7 +48,7 @@ func setupRouter(ctx context.Context) *chi.Mux {
 		chiware.RequestID,
 		chiware.RealIP,
 		chiware.Heartbeat("/"),
-		chiware.Timeout(10*time.Second),
+		chiware.Timeout(timeout),
 		middleware.BearerToken,
 		middleware.RateLimiter(ctx),
 		middleware.RequestIDTransfer)

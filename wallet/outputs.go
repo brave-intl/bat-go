@@ -17,6 +17,11 @@ const (
 	ETHCurrency = "ETH"
 	// LTCCurrency - wallet currency is LTC
 	LTCCurrency = "LTC"
+
+	//UpholdProvider - provider label for uphold wallets
+	UpholdProvider = "uphold"
+	//BraveProvider - provider label for brave wallets
+	BraveProvider = "brave"
 )
 
 // BraveProviderDetailsV3 - details about the provider
@@ -69,7 +74,7 @@ func ResponseV3ToInfo(resp ResponseV3) *walletutils.Info {
 	}
 	if resp.WalletProvider != nil {
 		info.Provider = resp.WalletProvider.Name
-		if info.Provider == "uphold" {
+		if info.Provider == UpholdProvider {
 			info.ProviderID = resp.WalletProvider.ID
 			depositAccountProvider := resp.DepositAccountProvider
 			if depositAccountProvider != nil {
@@ -80,10 +85,10 @@ func ResponseV3ToInfo(resp ResponseV3) *walletutils.Info {
 				anonymousAddress := uuid.Must(uuid.FromString(depositAccountProvider.AnonymousAddress))
 				info.AnonymousAddress = &anonymousAddress
 			}
-		} else if info.Provider == "brave" {
+		} else if info.Provider == BraveProvider {
 			info.ProviderID = resp.WalletProvider.ID
 			if info.ProviderID != "" {
-				info.Provider = "uphold"
+				info.Provider = UpholdProvider
 			}
 		}
 	}
@@ -120,16 +125,16 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 
 	providerID := info.ProviderID
 	// if this is linked to uphold, add the default account provider
-	if info.Provider == "uphold" {
+	if info.Provider == UpholdProvider {
 		if anonymousAddress == "" {
 			// no linked anon card
 			resp.WalletProvider = &BraveProviderDetailsV3{
-				Name: "brave",
+				Name: BraveProvider,
 				ID:   providerID,
 			}
 		} else {
 			resp.WalletProvider = &BraveProviderDetailsV3{
-				Name: "uphold",
+				Name: UpholdProvider,
 				ID:   providerID,
 			}
 		}
@@ -140,10 +145,10 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 				AnonymousAddress: anonymousAddress,
 			}
 		}
-	} else if info.Provider == "brave" {
+	} else if info.Provider == BraveProvider {
 		// no linked anon card
 		resp.WalletProvider = &BraveProviderDetailsV3{
-			Name: "brave",
+			Name: BraveProvider,
 			ID:   providerID,
 		}
 	} else {

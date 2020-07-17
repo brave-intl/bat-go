@@ -2,7 +2,9 @@ package inputs
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
+	"fmt"
 )
 
 var (
@@ -13,18 +15,21 @@ var (
 // PublicKey - a generic ID type that can be used for common id based things
 type PublicKey string
 
-// String - return the String representation of the ID
+// String - return the String representation of the public key
 func (pk *PublicKey) String() string {
 	return string(*pk)
 }
 
-// Validate - take raw []byte input and populate id with the ID
+// Validate - take raw []byte input and populate public key with the value
 func (pk *PublicKey) Validate(ctx context.Context) error {
-	// this should be overloaded to validate ids are real...
+	_, err := hex.DecodeString(string(*pk))
+	if err != nil {
+		return fmt.Errorf("invalid public key, not hex encoded: %w", err)
+	}
 	return nil
 }
 
-// Decode - take raw []byte input and populate id with the ID
+// Decode - take raw []byte input and populate id with the public key
 func (pk *PublicKey) Decode(ctx context.Context, input []byte) error {
 	if len(input) == 0 {
 		return ErrPublicKeyDecodeEmpty

@@ -3,14 +3,17 @@ package wallet
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/clients/ledger"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -69,29 +72,6 @@ func (service *Service) GetOrCreateWallet(ctx context.Context, walletID uuid.UUI
 	return wallet, nil
 }
 
-// GetAndCreateMemberWallets all wallets associated with the wallet id provided are accounted for
-func (service *Service) GetAndCreateMemberWallets(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
-	// may be unnecessary to fetch
-	wallets, err := service.LedgerClient.GetMemberWallets(ctx, walletID)
-	if err != nil {
-		return nil, err
-	}
-	if len(*wallets) == 0 {
-		return nil, errorutils.ErrWalletNotFound
-	}
-	var info wallet.Info
-	for _, w := range *wallets {
-		err := service.Datastore.UpsertWallet(&w)
-		if err != nil {
-			return nil, err
-		}
-		if uuid.Equal(walletID, uuid.Must(uuid.FromString(w.ID))) {
-			info = w
-		}
-	}
-	return &info, nil
-}
-
 // UpsertWallet retrieves the latest wallet info from the ledger service, upserting the local database copy
 func (service *Service) UpsertWallet(ctx context.Context, walletID uuid.UUID) (*wallet.Info, error) {
 	wallet, err := service.LedgerClient.GetWallet(ctx, walletID)
@@ -146,4 +126,58 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 
 	// Submit and confirm since we are requiring the idempotency key
 	return anonCard.SubmitTransaction(transaction, confirm)
+}
+
+// LinkWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkWallet(
+	ctx context.Context,
+	info *walletutils.Info,
+	transaction string,
+	anonymousAddress *uuid.UUID,
+) error {
+	// do not confirm this transaction yet
+	tx, err := service.SubmitCommitableAnonCardTransaction(
+		ctx,
+		info,
+		transaction,
+		"",
+		false,
+	)
+	if err != nil {
+		return handlers.WrapError(err, "unable to verify transaction", http.StatusBadRequest)
+	}
+	if tx.UserID == "" {
+		err := errors.New("user id not provided")
+		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
+	}
+	providerLinkingID := uuid.NewV5(walletClaimNamespace, tx.UserID)
+	if info.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+		if anonymousAddress != nil && info.AnonymousAddress != nil && !uuid.Equal(*anonymousAddress, *info.AnonymousAddress) {
+			err := service.Datastore.SetAnonymousAddress(info.ID, anonymousAddress)
+			if err != nil {
+				return handlers.WrapError(err, "unable to set anonymous address", http.StatusInternalServerError)
+			}
+		}
+	} else {
+		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == ErrTooManyCardsLinked {
+				status = http.StatusConflict
+			}
+			return handlers.WrapError(err, "unable to link wallets", status)
+		}
+	}
+
+	if decimal.NewFromFloat(0).LessThan(tx.Probi) {
+		_, err := service.SubmitCommitableAnonCardTransaction(ctx, info, transaction, "", true)
+		if err != nil {
+			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
+		}
+	}
+	return nil
 }
