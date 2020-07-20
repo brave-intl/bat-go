@@ -24,26 +24,28 @@ const (
 	BraveProvider = "brave"
 )
 
-// BraveProviderDetailsV3 - details about the provider
-type BraveProviderDetailsV3 struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+// ProviderDetailsV3 - details about the provider
+type ProviderDetailsV3 struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	LinkingID        string `json:"linkingId,omitempty"`
+	AnonymousAddress string `json:"anonymousAddress,omitempty"`
 }
 
-// UpholdProviderDetailsV3 - details about the provider
-type UpholdProviderDetailsV3 struct {
+// DepositAccountProviderDetailsV3 - details about the provider
+type DepositAccountProviderDetailsV3 struct {
 	Name             string `json:"name"`
-	LinkingID        string `json:"linkingId"`
-	AnonymousAddress string `json:"anonymousAddress"`
+	ID               string `json:"id"`
+	AnonymousAddress string `json:"anonymousAddress,omitempty"`
 }
 
 // ResponseV3 - wallet creation response
 type ResponseV3 struct {
-	PaymentID              string                   `json:"paymentId"`
-	DepositAccountProvider *UpholdProviderDetailsV3 `json:"depositAccountProvider,omitempty"`
-	WalletProvider         *BraveProviderDetailsV3  `json:"walletProvider,omitempty"`
-	AltCurrency            string                   `json:"altcurrency"`
-	PublicKey              string                   `json:"publicKey"`
+	PaymentID              string                           `json:"paymentId"`
+	DepositAccountProvider *DepositAccountProviderDetailsV3 `json:"depositAccountProvider,omitempty"`
+	WalletProvider         *ProviderDetailsV3               `json:"walletProvider,omitempty"`
+	AltCurrency            string                           `json:"altcurrency"`
+	PublicKey              string                           `json:"publicKey"`
 }
 
 func convertAltCurrency(a *altcurrency.AltCurrency) string {
@@ -67,39 +69,49 @@ func convertAltCurrency(a *altcurrency.AltCurrency) string {
 // ResponseV3ToInfo converts a response v3 to wallet info
 func ResponseV3ToInfo(resp ResponseV3) *walletutils.Info {
 	alt, _ := altcurrency.FromString(resp.AltCurrency)
+
+	// common to all wallet providers
 	info := walletutils.Info{
 		ID:          resp.PaymentID,
 		AltCurrency: &alt,
 		PublicKey:   resp.PublicKey,
 	}
+
 	if resp.WalletProvider != nil {
 		info.Provider = resp.WalletProvider.Name
 		if info.Provider == UpholdProvider {
+			// setup the anon card wallet information
 			info.ProviderID = resp.WalletProvider.ID
-			depositAccountProvider := resp.DepositAccountProvider
-			if depositAccountProvider != nil {
-				if depositAccountProvider.LinkingID != "" {
-					providerLinkingID := uuid.Must(uuid.FromString(depositAccountProvider.LinkingID))
-					info.ProviderLinkingID = &providerLinkingID
-				}
-				anonymousAddress := uuid.Must(uuid.FromString(depositAccountProvider.AnonymousAddress))
-				info.AnonymousAddress = &anonymousAddress
+			var providerLinkingID uuid.UUID
+			if resp.WalletProvider.LinkingID != "" {
+				providerLinkingID = uuid.Must(uuid.FromString(resp.WalletProvider.LinkingID))
 			}
-		} else if info.Provider == BraveProvider {
-			info.ProviderID = resp.WalletProvider.ID
-			if info.ProviderID != "" {
-				info.Provider = UpholdProvider
+			info.ProviderLinkingID = &providerLinkingID
+
+			var anonymousAddress uuid.UUID
+			if resp.WalletProvider.AnonymousAddress != "" {
+				anonymousAddress = uuid.Must(uuid.FromString(resp.WalletProvider.AnonymousAddress))
 			}
+			info.AnonymousAddress = &anonymousAddress
 		}
+	}
+	// setup the user deposit account info
+	depositAccountProvider := resp.DepositAccountProvider
+	if depositAccountProvider != nil {
+		info.UserDepositAccountProvider = depositAccountProvider.Name
+		info.UserDepositAccountProviderID = depositAccountProvider.ID
+		anonymousAddress := uuid.Must(uuid.FromString(depositAccountProvider.AnonymousAddress))
+		info.UserDepositAccountAnonymousAddress = &anonymousAddress
 	}
 	return &info
 }
 
 func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
-		linkingID        string
-		anonymousAddress string
-		altCurrency      string = convertAltCurrency(info.AltCurrency)
+		linkingID                   string
+		anonymousAddress            string
+		userDepositAnonymousAddress string
+		altCurrency                 string = convertAltCurrency(info.AltCurrency)
 	)
 	if info == nil {
 		return ResponseV3{}
@@ -117,45 +129,44 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		anonymousAddress = info.AnonymousAddress.String()
 	}
 
+	if info.UserDepositAccountAnonymousAddress == nil {
+		userDepositAnonymousAddress = ""
+	} else {
+		userDepositAnonymousAddress = info.UserDepositAccountAnonymousAddress.String()
+	}
+
+	// common to all wallets
 	resp := ResponseV3{
 		PaymentID:   info.ID,
 		AltCurrency: altCurrency,
 		PublicKey:   info.PublicKey,
 	}
 
-	providerID := info.ProviderID
-	// if this is linked to uphold, add the default account provider
-	if info.Provider == UpholdProvider {
-		if anonymousAddress == "" {
-			// no linked anon card
-			resp.WalletProvider = &BraveProviderDetailsV3{
-				Name: BraveProvider,
-				ID:   providerID,
-			}
-		} else {
-			resp.WalletProvider = &BraveProviderDetailsV3{
-				Name: UpholdProvider,
-				ID:   providerID,
-			}
-		}
-		if linkingID != "" {
-			resp.DepositAccountProvider = &UpholdProviderDetailsV3{
-				Name:             info.Provider,
-				LinkingID:        linkingID,
-				AnonymousAddress: anonymousAddress,
-			}
-		}
-	} else if info.Provider == BraveProvider {
-		// no linked anon card
-		resp.WalletProvider = &BraveProviderDetailsV3{
-			Name: BraveProvider,
-			ID:   providerID,
-		}
-	} else {
-		resp.WalletProvider = &BraveProviderDetailsV3{
+	// setup the wallet provider:
+	if info.Provider == "brave" {
+		// this is a brave provided wallet
+		resp.WalletProvider = &ProviderDetailsV3{
 			Name: info.Provider,
-			ID:   providerID,
+		}
+	} else if info.Provider == "uphold" {
+		// this is a uphold provided wallet (anon card based)
+		resp.WalletProvider = &ProviderDetailsV3{
+			Name:             info.Provider,
+			ID:               info.ProviderID,
+			AnonymousAddress: anonymousAddress,
+			LinkingID:        linkingID,
 		}
 	}
+
+	// now setup user deposit account
+	if info.UserDepositAccountProvider != "" {
+		// this brave wallet has a linked deposit account
+		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
+			Name:             info.UserDepositAccountProvider,
+			ID:               info.UserDepositAccountProviderID,
+			AnonymousAddress: userDepositAnonymousAddress,
+		}
+	}
+
 	return resp
 }

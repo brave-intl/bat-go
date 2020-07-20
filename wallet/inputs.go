@@ -2,6 +2,8 @@ package wallet
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 )
 
 var (
@@ -22,6 +25,7 @@ var (
 // UpholdCreationRequest - the structure for a brave provider wallet creation request
 type UpholdCreationRequest struct {
 	SignedCreationRequest string `json:"signedCreationRequest"`
+	PublicKey             string `json:"-"`
 }
 
 // Validate - implementation of validatable interface
@@ -38,6 +42,43 @@ func (ucr *UpholdCreationRequest) Decode(ctx context.Context, v []byte) error {
 	if err := inputs.DecodeJSON(ctx, v, ucr); err != nil {
 		return fmt.Errorf("failed to decode json: %w", err)
 	}
+	// extract public key from the base64 encoded signing request headers
+
+	b, err := base64.StdEncoding.DecodeString(ucr.SignedCreationRequest)
+	if err != nil {
+		return fmt.Errorf("failed to decode signed creation request: %w", err)
+	}
+
+	var signedTx uphold.HTTPSignedRequest
+	err = json.Unmarshal(b, &signedTx)
+	if err != nil {
+		return fmt.Errorf("failed to decode signed creation request: %w", err)
+	}
+
+	_, err = govalidator.ValidateStruct(signedTx)
+	if err != nil {
+		return fmt.Errorf("failed to decode signed creation request: %w", err)
+	}
+
+	var body map[string]interface{}
+	err = json.Unmarshal([]byte(signedTx.Body), &body)
+	if err != nil {
+		return fmt.Errorf("failed to decode signed creation request: %w", err)
+	}
+
+	pk, exists := body["publicKey"]
+	if !exists {
+		return errors.New("failed to decode signed creation request: no publicKey in body")
+	}
+
+	publicKey, ok := pk.(string)
+	if !ok {
+		return errors.New("failed to decode signed creation request: bad publicKey in body")
+	}
+
+	// put public key from request in ucr.PublicKey
+	ucr.PublicKey = publicKey
+
 	return nil
 }
 

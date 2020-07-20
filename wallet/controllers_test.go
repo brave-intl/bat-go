@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -102,11 +101,8 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-
 	service := &Service{
-		Datastore:    pg,
-		LedgerClient: mockLedger,
+		Datastore: pg,
 	}
 
 	w1 := suite.NewWallet(service, "uphold")
@@ -135,29 +131,28 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCardV3(service, mockLedger, w1, settlement, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w1, settlement, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, mockLedger, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
 	suite.CheckBalance(w2, bat1)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, mockLedger, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w2, zero)
 
 	suite.CheckBalance(w3, bat1)
-	suite.claimCardV3(service, mockLedger, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
 	suite.CheckBalance(w3, zero)
 
 	suite.CheckBalance(w3, zero)
-	suite.claimCardV3(service, mockLedger, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
+	suite.claimCardV3(service, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, zero)
 }
 
 func (suite *WalletControllersTestSuite) claimCardV3(
 	service *Service,
-	mockLedgerClient *mockledger.MockClient,
 	w *uphold.Wallet,
 	destination string,
 	status int,
@@ -268,10 +263,7 @@ func (suite *WalletControllersTestSuite) TestCreateBraveWalletV3() {
 		false,
 	)
 
-	suite.Assert().JSONEq(`{
-		"message":"missing signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
-		"code":400
-	}`, notSignedResponse, "field is not valid")
+	suite.Assert().JSONEq(`{"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"}`, notSignedResponse, "field is not valid")
 
 	createResp := suite.createBraveWalletV3(
 		service,
@@ -334,15 +326,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	)
 
 	suite.Assert().JSONEq(`{
-		"code":400,
-		"data": {
-			"validationErrors": {
-				"signedCreationRequest":"value is required",
-				"validation":"failed validation: missing signed creation request"
-			}
-		},
-		"message":"Error validating uphold create wallet request validation errors"
-	}`, badFieldResponse, "field is not valid")
+	"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"}`, badFieldResponse, "field is not valid")
 
 	// assume 403 is already covered
 	// fail because of lacking signature presence
@@ -356,8 +340,7 @@ func (suite *WalletControllersTestSuite) TestCreateUpholdWalletV3() {
 	)
 
 	suite.Assert().JSONEq(`{
-		"message":"missing signature: invalid signature: A valid signature MUST have algorithm, keyId, and signature keys",
-		"code":400
+"code":400, "data":{"validationErrors":{"decoding":"failed decoding: failed to decode signed creation request: unexpected end of JSON input", "signedCreationRequest":"value is required", "validation":"failed validation: missing signed creation request"}}, "message":"Error validating uphold create wallet request validation errors"
 	}`, notSignedResponse, "field is not valid")
 }
 

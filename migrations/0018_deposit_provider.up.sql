@@ -1,0 +1,6 @@
+ALTER TABLE wallets ADD COLUMN user_deposit_account_anonymous_address uuid;
+ALTER TABLE wallets ADD COLUMN user_deposit_account_provider text;
+ALTER TABLE wallets ADD COLUMN user_deposit_account_provider_id text;
+
+CREATE INDEX wallets_deposit_account_provider_id ON wallets(user_deposit_account_provider_id);
+CREATE INDEX wallets_deposit_account_anonymous_address ON wallets(user_deposit_account_anonymous_address);

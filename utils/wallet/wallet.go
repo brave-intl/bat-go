@@ -13,14 +13,17 @@ import (
 // Info contains information about a wallet like associated identifiers, the denomination,
 // the last known balance and provider
 type Info struct {
-	ID                string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
-	Provider          string                   `json:"provider" valid:"in(uphold)" db:"provider"`
-	ProviderID        string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
-	AltCurrency       *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
-	PublicKey         string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
-	LastBalance       *Balance                 `json:"balances,omitempty" valid:"-"`
-	ProviderLinkingID *uuid.UUID               `json:"providerLinkingId" valid:"-" db:"provider_linking_id"`
-	AnonymousAddress  *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
+	ID                                 string                   `json:"paymentId" valid:"uuidv4,optional" db:"id"`
+	Provider                           string                   `json:"provider" valid:"in(uphold,brave)" db:"provider"`
+	ProviderID                         string                   `json:"providerId" valid:"uuidv4" db:"provider_id"`
+	AltCurrency                        *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
+	PublicKey                          string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
+	LastBalance                        *Balance                 `json:"balances,omitempty" valid:"-"`
+	ProviderLinkingID                  *uuid.UUID               `json:"providerLinkingId" valid:"-" db:"provider_linking_id"`
+	AnonymousAddress                   *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
+	UserDepositAccountProvider         string                   `json:"userDepositAccountProvider" valid:"in(uphold)" db:"user_deposit_account_provider"`
+	UserDepositAccountProviderID       string                   `json:"userDepositAccountProviderId" valid:"uuidv4" db:"user_deposit_account_provider_id"`
+	UserDepositAccountAnonymousAddress *uuid.UUID               `json:"userDepositAccountProviderAnonymousAddress" valid:"-" db:"user_deposit_account_anonymous_address"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,

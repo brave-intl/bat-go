@@ -41,8 +41,6 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
-	ctx = context.WithValue(ctx, appctx.LedgerServiceCTXKey, viper.Get("ledger-service"))
-	ctx = context.WithValue(ctx, appctx.LedgerAccessTokenCTXKey, viper.Get("ledger-token"))
 
 	s, err := wallet.InitService(ctx, db, roDB)
 	if err != nil {

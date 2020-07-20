@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -41,18 +40,13 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	var s httpsignature.Signature
-	err = s.UnmarshalText([]byte(r.Header.Get("Signature")))
-	if err != nil {
-		return handlers.WrapError(fmt.Errorf("invalid signature: %w", err), "missing signature", http.StatusBadRequest)
-	}
-
-	var publicKey = s.KeyID
-
 	// decode and validate the request body
 	if err := inputs.DecodeAndValidateReader(ctx, ucReq, r.Body); err != nil {
 		return ucReq.HandleErrors(err)
 	}
+
+	// get public key from the input signed Creation Request
+	var publicKey = ucReq.PublicKey
 
 	// no more uphold wallets in the wild please
 	if env, ok := r.Context().Value(appctx.EnvironmentCTXKey).(string); ok && env == "local" {
@@ -237,9 +231,9 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 			logger.Debug().Msg("able to verify transaction")
 			// get the card id from the submitted destination
-			wallet.ProviderID = txInfo.Destination
-			wallet.Provider = "uphold"
-			wallet.AnonymousAddress = &aa
+			wallet.UserDepositAccountProviderID = txInfo.Destination
+			wallet.UserDepositAccountProvider = "uphold"
+			wallet.UserDepositAccountAnonymousAddress = &aa
 
 			// updated wallet info for uphold wallet
 			uwallet.Info = *wallet

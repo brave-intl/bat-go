@@ -48,7 +48,6 @@ services:
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
-      - "LEDGER_SERVER=https://ledger-staging.mercury.basicattentiontoken.org"
       - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN

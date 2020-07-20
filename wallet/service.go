@@ -19,7 +19,7 @@ var (
 	walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
 )
 
-// Service contains datastore and ledger client connections
+// Service contains datastore connections
 type Service struct {
 	Datastore   Datastore
 	RoDatastore ReadOnlyDatastore

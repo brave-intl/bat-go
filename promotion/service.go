@@ -129,7 +129,7 @@ func init() {
 	}
 }
 
-// Service contains datastore and challenge bypass / ledger client connections
+// Service contains datastore and challenge bypass client connections
 type Service struct {
 	wallet           *wallet.Service
 	Datastore        Datastore

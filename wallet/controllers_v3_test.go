@@ -117,9 +117,7 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 		ctx     = context.Background()
 		handler = wallet.CreateUpholdWalletV3
 		r       = httptest.NewRequest("POST", "/v3/wallet/uphold", bytes.NewBufferString(`{
-				"signedCreationRequest": "123",
-				"anonymousAccount": "650e1323-c2c2-444c-8eeb-c920b230c95c"
-			}`))
+				"signedCreationRequest": "eyJib2R5Ijp7ImRlbm9taW5hdGlvbiI6eyJhbW91bnQiOiIwIiwiY3VycmVuY3kiOiJCQVQifSwiZGVzdGluYXRpb24iOiJhNmRmZjJiYS1kMGQxLTQxYzQtOGU1Ni1hMjYwNWJjYWY0YWYifSwiaGVhZGVycyI6eyJkaWdlc3QiOiJTSEEtMjU2PWR2RTAzVHdpRmFSR0c0MUxLSkR4aUk2a3c5M0h0cTNsclB3VllldE5VY1E9Iiwic2lnbmF0dXJlIjoia2V5SWQ9XCJwcmltYXJ5XCIsYWxnb3JpdGhtPVwiZWQyNTUxOVwiLGhlYWRlcnM9XCJkaWdlc3RcIixzaWduYXR1cmU9XCJkcXBQdERESXE0djNiS1V5eHB6Q3Vyd01nSzRmTWk1MUJjakRLc2pTak90K1h1MElZZlBTMWxEZ01aRkhiaWJqcGh0MVd3V3l5enFad3lVNW0yN1FDUT09XCIifSwib2N0ZXRzIjoie1wiZGVub21pbmF0aW9uXCI6e1wiYW1vdW50XCI6XCIwXCIsXCJjdXJyZW5jeVwiOlwiQkFUXCJ9LFwiZGVzdGluYXRpb25cIjpcImE2ZGZmMmJhLWQwZDEtNDFjNC04ZTU2LWEyNjA1YmNhZjRhZlwifSJ9"}`))
 	)
 	// no logger, setup
 	ctx, _ = logging.SetupLogger(ctx)
@@ -130,12 +128,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 
-	// setup keypair
-	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
-	must(t, "failed to generate keypair", err)
-	err = signRequest(r, publicKey, privKey)
-	must(t, "failed to sign request", err)
-
 	r = r.WithContext(ctx)
 
 	b, _ := httputil.DumpRequest(r, true)
@@ -143,11 +135,11 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 
 	var w = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(w, r)
-	if resp := w.Result(); resp.StatusCode != http.StatusServiceUnavailable {
+	if resp := w.Result(); resp.StatusCode != http.StatusBadRequest {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 503, got %d", resp.StatusCode))
+		must(t, "invalid response", fmt.Errorf("expected 400, got %d", resp.StatusCode))
 	}
 }
 

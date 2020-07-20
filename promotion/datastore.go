@@ -161,7 +161,6 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var roPg ReadOnlyDatastore
 	pg, err := NewDB("", true, "promotion_db")
 	if err != nil {
-		fmt.Println(err)
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}

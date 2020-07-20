@@ -32,10 +32,6 @@ const (
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
 	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
-	// LedgerServiceCTXKey - the context key for getting the ledger server
-	LedgerServiceCTXKey CTXKey = "ledger_service"
-	// LedgerAccessTokenCTXKey - the context key for getting the ratios server access token
-	LedgerAccessTokenCTXKey CTXKey = "ledger_access_token"
 )
 
 var (

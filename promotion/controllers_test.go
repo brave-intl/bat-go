@@ -23,7 +23,6 @@ import (
 	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
-	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -111,15 +110,11 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		LastBalance: nil,
 	}
 
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&w, nil)
-
 	service := &Service{
 		Datastore: pg,
 		cbClient:  cbClient,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 	}
 	handler := GetAvailablePromotions(service)
@@ -398,15 +393,12 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
 
 	service := &Service{
 		Datastore: pg,
 		cbClient:  cbClient,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 	}
@@ -561,8 +553,6 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
@@ -570,8 +560,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		Datastore: pg,
 		cbClient:  mockCB,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 	}
@@ -816,16 +805,13 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
 		Datastore: pg,
 		cbClient:  mockCB,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 	}
 	var issuerName string
@@ -1200,15 +1186,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
 		Datastore: pg,
 		cbClient:  mockCB,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 		drainChannel:     ch,
@@ -1282,8 +1266,6 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
-
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
@@ -1296,7 +1278,6 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	anonymousAddress := uuid.Must(uuid.FromString(w.ProviderID))
 	info.AnonymousAddress = &anonymousAddress
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -1383,8 +1364,6 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&info, nil)
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
@@ -1392,8 +1371,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		Datastore: pg,
 		cbClient:  mockCB,
 		wallet: &wallet.Service{
-			Datastore:    walletDB,
-			LedgerClient: mockLedger,
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 	}

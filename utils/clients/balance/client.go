@@ -14,7 +14,7 @@ type Client interface {
 	InvalidateBalance(ctx context.Context, id uuid.UUID) error
 }
 
-// HTTPClient wraps http.Client for interacting with the ledger server
+// HTTPClient wraps http.Client for interacting with the balance server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 }
