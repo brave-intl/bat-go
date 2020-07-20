@@ -147,7 +147,9 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
-		user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+		coalesce(user_deposit_account_provider, '') as user_deposit_account_provider,
+		coalesce(user_deposit_account_provider_id,'') as user_deposit_account_provider_id,
+		user_deposit_account_anonymous_address
 	from
 		wallets
 	where

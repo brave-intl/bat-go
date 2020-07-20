@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -129,9 +128,6 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 
 	r = r.WithContext(ctx)
-
-	b, _ := httputil.DumpRequest(r, true)
-	fmt.Printf("\n\n%s\n\n", b)
 
 	var w = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(w, r)

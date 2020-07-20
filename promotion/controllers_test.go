@@ -168,6 +168,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
+
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
 
@@ -398,9 +399,6 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		nil,
 	)
 
-	err = walletDB.InsertWallet(&info)
-	suite.Require().NoError(err, "Failed to insert wallet")
-
 	service := &Service{
 		Datastore: pg,
 		cbClient:  cbClient,
@@ -419,6 +417,9 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	for i := range blindedCreds {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
+
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
@@ -560,7 +561,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		true,
 		nil,
 	)
-	err = walletDB.InsertWallet(&info)
+	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
@@ -599,6 +600,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		BatchProof:   proof,
 		SignedTokens: signedCreds,
 	}, nil)
+
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
@@ -1420,6 +1424,9 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		BatchProof:   proof,
 		SignedTokens: signedCreds,
 	}, nil)
+
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
