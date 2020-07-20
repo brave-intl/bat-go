@@ -110,6 +110,9 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		LastBalance: nil,
 	}
 
+	err = walletDB.InsertWallet(&w)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
 	service := &Service{
 		Datastore: pg,
 		cbClient:  cbClient,
@@ -394,6 +397,9 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		nil,
 	)
 
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
 	service := &Service{
 		Datastore: pg,
 		cbClient:  cbClient,
@@ -553,6 +559,8 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		true,
 		nil,
 	)
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
@@ -954,7 +962,6 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	walletEvents := []BATLossEvent{}
 	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events`))
 	serializedActual1, err := json.Marshal(&walletEvents)
-	// fmt.Println("serialized", string(serialized))
 	serializedExpected1, err := json.Marshal([]BATLossEvent{{
 		ID:       walletEvents[0].ID,
 		WalletID: walletID1,
@@ -1266,6 +1273,9 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
@@ -1278,6 +1288,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	anonymousAddress := uuid.Must(uuid.FromString(w.ProviderID))
 	info.AnonymousAddress = &anonymousAddress
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -1364,6 +1376,8 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		true,
 		nil,
 	)
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
