@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"os"
 	"strconv"
 	"strings"
@@ -1176,6 +1177,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		PublicKey:   hex.EncodeToString(publicKey),
 		LastBalance: nil,
 	}
+
 	w := uphold.Wallet{
 		Info:    info,
 		PrivKey: privKey,
@@ -1273,7 +1275,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	err = walletDB.InsertWallet(&info)
+	err = walletDB.InsertWallet(&w.Info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	rr := httptest.NewRecorder()
@@ -1288,11 +1290,14 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	anonymousAddress := uuid.Must(uuid.FromString(w.ProviderID))
 	info.AnonymousAddress = &anonymousAddress
-	err = walletDB.InsertWallet(&info)
+
+	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+	b, _ := httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	tx := <-ch

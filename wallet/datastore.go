@@ -117,16 +117,24 @@ var (
 // UpsertWallet upserts the given wallet
 func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 	statement := `
-	insert into wallets (id, provider, provider_id, public_key, provider_linking_id, anonymous_address)
-	values ($1, $2, $3, $4, $5, $6)
+	insert into wallets
+		(
+			id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
+			user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+		)
+	values
+		($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	on conflict (id) do
 	update set
 		provider = $2,
 		provider_id = $3,
 		provider_linking_id = $5,
-		anonymous_address = $6
+		anonymous_address = $6,
+		user_deposit_account_provider = $7,
+		user_deposit_account_provider_id = $8,
+		user_deposit_account_anonymous_address = $9
 	returning *`
-	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress)
+	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress, wallet.UserDepositAccountProvider, wallet.UserDepositAccountProviderID, wallet.UserDepositAccountAnonymousAddress)
 	if err != nil {
 		return err
 	}
@@ -136,7 +144,14 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 
 // GetWallet by ID
 func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
-	statement := "select id, provider, provider_id, public_key, provider_linking_id, anonymous_address from wallets where id = $1"
+	statement := `
+	select
+		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
+		user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+	from
+		wallets
+	where
+		id = $1`
 	wallets := []wallet.Info{}
 	err := pg.RawDB().Select(&wallets, statement, ID)
 	if err != nil {
@@ -158,8 +173,11 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 // GetWalletByPublicKey gets a wallet by a public key
 func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
 	statement := `
-	SELECT id, provider, provider_id, public_key, provider_linking_id, anonymous_address
-	FROM wallets
+	select
+		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
+		user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+	from
+		wallets
 	WHERE public_key = $1
 	`
 	var wallet walletutils.Info
@@ -170,8 +188,11 @@ func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
 // GetByProviderLinkingID gets a wallet by a provider address
 func (pg *Postgres) GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
-	SELECT id, provider, provider_id, public_key, provider_linking_id, anonymous_address
-	FROM wallets
+	select
+		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
+		user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+	from
+		wallets
 	WHERE provider_linking_id = $1
 	`
 	var wallets []walletutils.Info
@@ -239,8 +260,11 @@ func (pg *Postgres) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID u
 
 func txGetByProviderLinkingID(tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
-	SELECT id, provider, provider_id, public_key, provider_linking_id, anonymous_address
-	FROM wallets
+	select
+		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
+		user_deposit_account_provider, user_deposit_account_provider_id, user_deposit_account_anonymous_address
+	from
+		wallets
 	WHERE provider_linking_id = $1
 	`
 	var wallets []walletutils.Info
