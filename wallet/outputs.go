@@ -34,9 +34,9 @@ type ProviderDetailsV3 struct {
 
 // DepositAccountProviderDetailsV3 - details about the provider
 type DepositAccountProviderDetailsV3 struct {
-	Name             string `json:"name"`
-	ID               string `json:"id"`
-	AnonymousAddress string `json:"anonymousAddress,omitempty"`
+	Name             *string `json:"name"`
+	ID               *string `json:"id"`
+	AnonymousAddress string  `json:"anonymousAddress,omitempty"`
 }
 
 // ResponseV3 - wallet creation response
@@ -159,7 +159,7 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	}
 
 	// now setup user deposit account
-	if info.UserDepositAccountProvider != "" {
+	if info.UserDepositAccountProvider != nil {
 		// this brave wallet has a linked deposit account
 		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
 			Name:             info.UserDepositAccountProvider,

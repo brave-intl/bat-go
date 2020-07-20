@@ -21,8 +21,8 @@ type Info struct {
 	LastBalance                        *Balance                 `json:"balances,omitempty" valid:"-"`
 	ProviderLinkingID                  *uuid.UUID               `json:"providerLinkingId" valid:"-" db:"provider_linking_id"`
 	AnonymousAddress                   *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
-	UserDepositAccountProvider         string                   `json:"userDepositAccountProvider" valid:"in(uphold)" db:"user_deposit_account_provider"`
-	UserDepositAccountProviderID       string                   `json:"userDepositAccountProviderId" valid:"uuidv4" db:"user_deposit_account_provider_id"`
+	UserDepositAccountProvider         *string                  `json:"userDepositAccountProvider" valid:"in(uphold)" db:"user_deposit_account_provider"`
+	UserDepositAccountProviderID       *string                  `json:"userDepositAccountProviderId" valid:"uuidv4" db:"user_deposit_account_provider_id"`
 	UserDepositAccountAnonymousAddress *uuid.UUID               `json:"userDepositAccountProviderAnonymousAddress" valid:"-" db:"user_deposit_account_anonymous_address"`
 }
 

@@ -231,8 +231,9 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 			logger.Debug().Msg("able to verify transaction")
 			// get the card id from the submitted destination
-			wallet.UserDepositAccountProviderID = txInfo.Destination
-			wallet.UserDepositAccountProvider = "uphold"
+			wallet.UserDepositAccountProviderID = &txInfo.Destination
+			upholdProvider := "uphold"
+			wallet.UserDepositAccountProvider = &upholdProvider
 			wallet.UserDepositAccountAnonymousAddress = &aa
 
 			// updated wallet info for uphold wallet
