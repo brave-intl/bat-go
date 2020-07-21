@@ -569,7 +569,6 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("remarshalled body", string(remarshalledBody), signedTx.Body)
 	if string(remarshalledBody) != signedTx.Body {
 		return nil, errors.New("The remarshalled body must be identical")
 	}
