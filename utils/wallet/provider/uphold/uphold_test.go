@@ -99,7 +99,7 @@ func TestDecodeTransaction(t *testing.T) {
 
 	var expected transactionRequest
 	expected.Destination = "foo@bar.com"
-	expected.Denomination.Amount = "25.0"
+	expected.Denomination.Amount = "25"
 	if err != nil {
 		t.Error(err)
 	}
