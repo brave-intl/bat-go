@@ -241,7 +241,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			logger.Debug().Str("amount", amount.String()).Msg("amount on the signed request")
 
 			// verify that the user is kyc from uphold.
-			logger.Debug().Str("amount", amount.String()).Msg("amount is zero, performing kyc check")
+			logger.Debug().Msg("performing kyc check")
 			if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
 				// there was an error
 				logger.Warn().Err(err).Msg("failed to link the wallet")
@@ -442,6 +442,4 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 
 	// format the response and render
 	return handlers.RenderContent(ctx, balanceToResponseV3(*result), w, http.StatusOK)
-
-	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }
