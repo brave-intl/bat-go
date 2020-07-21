@@ -109,15 +109,15 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	anonymousString := ""
 	if wallet.AnonymousAddress != nil {
 		anonymousString = wallet.AnonymousAddress.String()
-	}
-	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), anonymousString)
-	if err != nil {
-		return nil, err
-	}
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), anonymousString)
+		if err != nil {
+			return nil, err
+		}
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
 
-	if service.drainChannel != nil {
-		service.drainChannel <- tx
+		return tx, err
 	}
-
-	return tx, err
+	return nil, errors.New("no anonymous address for wallet for transfer")
 }

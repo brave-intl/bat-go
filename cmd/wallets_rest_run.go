@@ -70,8 +70,6 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 			// get wallet balance routes
 			r.Get("/uphold/{providerID}", middleware.InstrumentHandlerFunc(
 				"GetUpholdWalletBalance", wallet.GetUpholdWalletBalanceV3))
-			r.Get("/brave/{providerID}", middleware.InstrumentHandlerFunc(
-				"GetBraveWalletBalance", wallet.GetBraveWalletBalanceV3))
 		})
 	}
 	return r, ctx, s

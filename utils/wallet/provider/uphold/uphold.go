@@ -129,7 +129,7 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	if info.Provider != "uphold" && info.Provider != "brave" {
+	if info.Provider != "uphold" {
 		return nil, errors.New("The wallet provider must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
@@ -925,7 +925,7 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 	return details.ID, nil
 }
 
-// FundWallet should fund a given wallet from the donor card
+// FundWallet should fund a given wallet from the donor card (only used in wallet testing)
 func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, error) {
 	var donorInfo walletutils.Info
 	donorInfo.Provider = "uphold"

@@ -99,19 +99,19 @@ func ResponseV3ToInfo(resp ResponseV3) *walletutils.Info {
 	depositAccountProvider := resp.DepositAccountProvider
 	if depositAccountProvider != nil {
 		info.UserDepositAccountProvider = depositAccountProvider.Name
-		info.UserDepositAccountProviderID = depositAccountProvider.ID
+		providerLinkingID := uuid.Must(uuid.FromString(*depositAccountProvider.ID))
+		info.ProviderLinkingID = &providerLinkingID
 		anonymousAddress := uuid.Must(uuid.FromString(depositAccountProvider.AnonymousAddress))
-		info.UserDepositAccountAnonymousAddress = &anonymousAddress
+		info.AnonymousAddress = &anonymousAddress
 	}
 	return &info
 }
 
 func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
-		linkingID                   string
-		anonymousAddress            string
-		userDepositAnonymousAddress string
-		altCurrency                 string = convertAltCurrency(info.AltCurrency)
+		linkingID        string
+		anonymousAddress string
+		altCurrency      string = convertAltCurrency(info.AltCurrency)
 	)
 	if info == nil {
 		return ResponseV3{}
@@ -129,33 +129,22 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		anonymousAddress = info.AnonymousAddress.String()
 	}
 
-	if info.UserDepositAccountAnonymousAddress == nil {
-		userDepositAnonymousAddress = ""
-	} else {
-		userDepositAnonymousAddress = info.UserDepositAccountAnonymousAddress.String()
-	}
-
 	// common to all wallets
 	resp := ResponseV3{
 		PaymentID:   info.ID,
 		AltCurrency: altCurrency,
 		PublicKey:   info.PublicKey,
+		WalletProvider: &ProviderDetailsV3{
+			Name: info.Provider,
+		},
 	}
 
-	// setup the wallet provider:
-	if info.Provider == "brave" {
-		// this is a brave provided wallet
-		resp.WalletProvider = &ProviderDetailsV3{
-			Name: info.Provider,
-		}
-	} else if info.Provider == "uphold" {
+	// setup the wallet provider (anon card uphold)
+	if info.Provider == "uphold" {
 		// this is a uphold provided wallet (anon card based)
-		resp.WalletProvider = &ProviderDetailsV3{
-			Name:             info.Provider,
-			ID:               info.ProviderID,
-			AnonymousAddress: anonymousAddress,
-			LinkingID:        linkingID,
-		}
+		resp.WalletProvider.ID = info.ProviderID
+		resp.WalletProvider.AnonymousAddress = anonymousAddress
+		resp.WalletProvider.LinkingID = linkingID
 	}
 
 	// now setup user deposit account
@@ -163,8 +152,8 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		// this brave wallet has a linked deposit account
 		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
 			Name:             info.UserDepositAccountProvider,
-			ID:               info.UserDepositAccountProviderID,
-			AnonymousAddress: userDepositAnonymousAddress,
+			ID:               &linkingID,
+			AnonymousAddress: anonymousAddress,
 		}
 	}
 

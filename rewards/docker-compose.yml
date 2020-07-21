@@ -12,7 +12,7 @@ services:
   # every time a file changes.
   rewards-dev:
     container_name: rewards-dev
-    image: 045014719567.dkr.ecr.us-west-2.amazonaws.com/rewards:v0.2.0-226-gdd572124-dirty_1
+    image: 045014719567.dkr.ecr.us-west-2.amazonaws.com/rewards:latest
     ports:
       - "3333:3333"
     volumes:

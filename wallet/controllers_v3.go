@@ -73,19 +73,17 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		AltCurrency: &altCurrency,
 	}
 
-	if ucReq.SignedCreationRequest != "" {
-		uwallet := uphold.Wallet{
-			Info:    *info,
-			PrivKey: ed25519.PrivateKey{},
-			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
-		}
-		if err := uwallet.SubmitRegistration(ucReq.SignedCreationRequest); err != nil {
-			return handlers.WrapError(
-				errors.New("unable to create uphold wallet"),
-				"failed to register wallet with uphold", http.StatusServiceUnavailable)
-		}
-		info.ProviderID = uwallet.GetWalletInfo().ProviderID
+	uwallet := uphold.Wallet{
+		Info:    *info,
+		PrivKey: ed25519.PrivateKey{},
+		PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 	}
+	if err := uwallet.SubmitRegistration(ucReq.SignedCreationRequest); err != nil {
+		return handlers.WrapError(
+			errors.New("unable to create uphold wallet"),
+			"failed to register wallet with uphold", http.StatusServiceUnavailable)
+	}
+	info.ProviderID = uwallet.GetWalletInfo().ProviderID
 
 	// get wallet from datastore
 	err = db.InsertWallet(info)
@@ -207,7 +205,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 
 		var amount decimal.Decimal
 
-		if wallet.ProviderID == "" && cuw.SignedCreationRequest != "" {
+		if wallet.ProviderID == "" && cuw.SignedLinkingRequest != "" {
 
 			publicKey, err := hex.DecodeString(wallet.PublicKey)
 			if err != nil {
@@ -221,8 +219,8 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 				PrivKey: ed25519.PrivateKey{},
 				PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 			}
-			// parse the signedcreationrequest to get the provider id
-			txInfo, err := uwallet.VerifyTransaction(cuw.SignedCreationRequest)
+			// parse the signedlinkingreationrequest to get the provider id
+			txInfo, err := uwallet.VerifyTransaction(cuw.SignedLinkingRequest)
 			if err != nil {
 				logger.Warn().Err(err).Msg("failed to transaction validation for uphold")
 				return handlers.WrapError(
@@ -231,10 +229,10 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 			logger.Debug().Msg("able to verify transaction")
 			// get the card id from the submitted destination
-			wallet.UserDepositAccountProviderID = &txInfo.Destination
+			*wallet.ProviderLinkingID = uuid.Must(uuid.FromString(txInfo.Destination))
 			upholdProvider := "uphold"
 			wallet.UserDepositAccountProvider = &upholdProvider
-			wallet.UserDepositAccountAnonymousAddress = &aa
+			wallet.AnonymousAddress = &aa
 
 			// updated wallet info for uphold wallet
 			uwallet.Info = *wallet
@@ -242,22 +240,20 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			amount = txInfo.DestAmount
 			logger.Debug().Str("amount", amount.String()).Msg("amount on the signed request")
 
-			// if this is a 0 BAT Transaction, it is not anoncard,
 			// verify that the user is kyc from uphold.
-			if amount.IsZero() {
-				logger.Debug().Str("amount", amount.String()).Msg("amount is zero, performing kyc check")
-				if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
-					// there was an error
-					logger.Warn().Err(err).Msg("failed to link the wallet")
-					return handlers.WrapError(errors.New("failed to link wallet"),
-						"wallet could not be kyc checked", http.StatusInternalServerError)
-				} else if !ok {
-					// fail
-					logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
-					return handlers.WrapError(errors.New("failed to link wallet"),
-						"wallet is not kyc", http.StatusForbidden)
-				}
+			logger.Debug().Str("amount", amount.String()).Msg("amount is zero, performing kyc check")
+			if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
+				// there was an error
+				logger.Warn().Err(err).Msg("failed to link the wallet")
+				return handlers.WrapError(errors.New("failed to link wallet"),
+					"wallet could not be kyc checked", http.StatusInternalServerError)
+			} else if !ok {
+				// fail
+				logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
+				return handlers.WrapError(errors.New("failed to link wallet"),
+					"wallet is not kyc", http.StatusForbidden)
 			}
+
 			// update the wallet in the datastore only if we are successful in linking
 			// uphold will validate the signature
 			if err := s.Datastore.UpsertWallet(wallet); err != nil {
@@ -267,7 +263,8 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 					"failed to register wallet with uphold", http.StatusServiceUnavailable)
 			}
 		} else {
-			err = s.LinkWallet(r.Context(), wallet, cuw.SignedCreationRequest, &aa)
+			// AnonCard Linking
+			err = s.LinkWallet(r.Context(), wallet, cuw.SignedLinkingRequest, &aa)
 			if err != nil {
 				logger.Warn().Err(err).Msg("failed to link the wallet")
 				return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
@@ -276,13 +273,6 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 
 		// render the wallet
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-	}
-}
-
-// ClaimBraveWalletV3 - produces an http handler for the service s which handles claiming of brave wallets
-func ClaimBraveWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 	}
 }
 
@@ -388,10 +378,5 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 
 // GetUpholdWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of uphold wallets
 func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
-}
-
-// GetBraveWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of brave wallets
-func GetBraveWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }

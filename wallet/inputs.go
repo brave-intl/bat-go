@@ -18,6 +18,8 @@ import (
 var (
 	// ErrMissingSignedCreationRequest - required parameter missing from request
 	ErrMissingSignedCreationRequest = errors.New("missing signed creation request")
+	// ErrMissingSignedLinkingRequest - required parameter missing from request
+	ErrMissingSignedLinkingRequest = errors.New("missing signed linking request")
 	// ErrInvalidJSON - the input json is invalid
 	ErrInvalidJSON = errors.New("invalid json")
 )
@@ -142,15 +144,15 @@ func (bcr *BraveCreationRequest) HandleErrors(err error) *handlers.AppError {
 
 // ClaimUpholdWalletRequest - the structure for a brave provider wallet creation request
 type ClaimUpholdWalletRequest struct {
-	SignedCreationRequest string `json:"signedCreationRequest"`
-	AnonymousAddress      string `json:"anonymousAddress"`
+	SignedLinkingRequest string `json:"signedLinkingRequest"`
+	AnonymousAddress     string `json:"anonymousAddress"`
 }
 
 // Validate - implementation of validatable interface
 func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
 	var merr = new(errorutils.MultiError)
-	if cuw.SignedCreationRequest == "" {
-		merr.Append(errors.New("failed to validate 'signedCreationRequest': must not be empty"))
+	if cuw.SignedLinkingRequest == "" {
+		merr.Append(errors.New("failed to validate 'signedLinkingRequest': must not be empty"))
 	}
 	if cuw.AnonymousAddress != "" && !govalidator.IsUUID(cuw.AnonymousAddress) {
 		merr.Append(errors.New("failed to validate 'anonymousAddress': must be uuid"))

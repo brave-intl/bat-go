@@ -11,7 +11,8 @@ import (
 // GetWallet returns the wallet corresponding to the passed wallet info
 func GetWallet(ctx context.Context, info wallet.Info) (wallet.Wallet, error) {
 	switch info.Provider {
-	case "uphold", "brave":
+	case "uphold":
+		// anon card case
 		uW, err := uphold.FromWalletInfo(ctx, info)
 		if err != nil {
 			return uW, err
@@ -19,7 +20,16 @@ func GetWallet(ctx context.Context, info wallet.Info) (wallet.Wallet, error) {
 		// TODO once we can retrieve public key info from uphold
 		// err = uW.UpdatePublicKey()
 		return uW, err
-	default:
-		return nil, fmt.Errorf("No such supported wallet provider %s", info.Provider)
+	case "brave":
+		switch *info.UserDepositAccountProvider {
+		case "uphold":
+			// linked account case
+			uW, err := uphold.FromWalletInfo(ctx, info)
+			if err != nil {
+				return uW, err
+			}
+			return uW, err
+		}
 	}
+	return nil, fmt.Errorf("No such supported wallet provider %s", info.Provider)
 }

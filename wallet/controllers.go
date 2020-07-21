@@ -85,6 +85,11 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 		if err != nil {
 			return "", fmt.Errorf("failed to hex decode public key: %w", err)
 		}
+	} else {
+		// there was no KeyId in the Signature
+		if err != nil {
+			return "", errors.New("no KeyId found in the HTTP Signature")
+		}
 	}
 	pubKey := httpsignature.Verifier(publicKey)
 	if err != nil {

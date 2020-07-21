@@ -165,7 +165,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 
 	// V3 Payload
 	reqBody := ClaimUpholdWalletRequest{
-		SignedCreationRequest: signedCreationRequest,
+		SignedLinkingRequest: signedCreationRequest,
 	}
 
 	if anonymousAddress != nil {
