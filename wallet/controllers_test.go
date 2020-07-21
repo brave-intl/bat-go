@@ -94,6 +94,48 @@ func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect d
 	suite.Require().True(expect.Equal(totalProbi), errMessage)
 }
 
+func (suite *WalletControllersTestSuite) TestBalanceV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	w1 := suite.NewWallet(service, "uphold")
+
+	bat1 := decimal.NewFromFloat(1)
+
+	suite.FundWallet(w1, bat1)
+
+	// check there is 1 bat in w1
+	suite.CheckBalance(w1, bat1)
+
+	// call the balance endpoint and check that you get back a total of 1
+	handler := GetUpholdWalletBalanceV3
+
+	req, err := http.NewRequest("GET", "/v3/wallet/{paymentID}", nil)
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", w1.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("status is expected to match %d: %s", http.StatusOK, rr.Body.String()))
+
+	var balance BalanceResponseV3
+	err = json.Unmarshal(rr.Body.Bytes(), &balance)
+	suite.Require().NoError(err, "failed to unmarshal balance result")
+
+	suite.Require().Equal(balance.Total, float64(1), fmt.Sprintf("balance is expected to match %f: %f", balance.Total, float64(1)))
+}
+
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")

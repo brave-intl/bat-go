@@ -170,10 +170,10 @@ type BalanceResponseV3 struct {
 
 func balanceToResponseV3(b walletutils.Balance) BalanceResponseV3 {
 	// convert to double, don't care about rounding
-	total, _ := b.TotalProbi.Float64()
-	spendable, _ := b.SpendableProbi.Float64()
-	confirmed, _ := b.ConfirmedProbi.Float64()
-	unconfirmed, _ := b.UnconfirmedProbi.Float64()
+	total, _ := altcurrency.BAT.FromProbi(b.TotalProbi).Float64()
+	spendable, _ := altcurrency.BAT.FromProbi(b.SpendableProbi).Float64()
+	confirmed, _ := altcurrency.BAT.FromProbi(b.ConfirmedProbi).Float64()
+	unconfirmed, _ := altcurrency.BAT.FromProbi(b.UnconfirmedProbi).Float64()
 
 	return BalanceResponseV3{
 		Total:       total,
