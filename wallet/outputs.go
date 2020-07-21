@@ -162,10 +162,10 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 
 // BalanceResponseV3 - wallet creation response
 type BalanceResponseV3 struct {
-	Total       float64 `json:"total,omitempty"`
-	Spendable   float64 `json:"spendable,omitempty"`
-	Confirmed   float64 `json:"confirmed,omitempty"`
-	Unconfirmed float64 `json:"unconfirmed,omitempty"`
+	Total       float64 `json:"total"`
+	Spendable   float64 `json:"spendable"`
+	Confirmed   float64 `json:"confirmed"`
+	Unconfirmed float64 `json:"unconfirmed"`
 }
 
 func balanceToResponseV3(b walletutils.Balance) BalanceResponseV3 {
