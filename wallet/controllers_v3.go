@@ -378,5 +378,70 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 
 // GetUpholdWalletBalanceV3 - produces an http handler for the service s which handles balance inquiries of uphold wallets
 func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	var ctx = r.Context()
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+	// get the payment id from the URL request
+	var id = new(inputs.ID)
+	if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+		logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate payment id from url")
+		return handlers.ValidationError(
+			"Error validating paymentID url parameter",
+			map[string]interface{}{
+				"paymentID": err.Error(),
+			},
+		)
+	}
+
+	var (
+		roDB ReadOnlyDatastore
+		ok   bool
+	)
+
+	// get datastore from context
+	if roDB, ok = ctx.Value(appctx.RODatastoreCTXKey).(ReadOnlyDatastore); !ok {
+		logger.Error().Msg("unable to get read only datastore from context")
+	}
+
+	// get wallet from datastore
+	info, err := roDB.GetWallet(id.UUID())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
+			return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
+		}
+		logger.Warn().Err(err).Str("id", id.String()).Msg("unable to get wallet")
+		return handlers.WrapError(err, "error getting wallet from storage", http.StatusInternalServerError)
+	}
+	if info == nil {
+		logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
+		return handlers.WrapError(err, "no such wallet", http.StatusNotFound)
+	}
+
+	if info.Provider != "uphold" {
+		// not anoncard wallet, invalid
+		logger.Warn().Str("id", id.String()).Msg("wallet not capable of balance inquiry")
+		return handlers.WrapError(err, "wallet not capable of balance inquiry", http.StatusBadRequest)
+	}
+
+	// convert this wallet to an uphold wallet
+	uwallet := uphold.Wallet{
+		Info: *info,
+	}
+
+	// get the wallet balance
+	result, err := uwallet.GetBalance(true)
+	if err != nil {
+		logger.Info().Err(err).Str("id", id.String()).Msg("error getting balance from uphold")
+		return handlers.WrapError(err, "failed to get balance from uphold", http.StatusInternalServerError)
+	}
+
+	// format the response and render
+	return handlers.RenderContent(ctx, balanceToResponseV3(*result), w, http.StatusOK)
+
 	return handlers.RenderContent(r.Context(), "not implemented", w, http.StatusNotImplemented)
 }

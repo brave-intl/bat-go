@@ -159,3 +159,26 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 
 	return resp
 }
+
+// BalanceResponseV3 - wallet creation response
+type BalanceResponseV3 struct {
+	Total       float64 `json:"total,omitempty"`
+	Spendable   float64 `json:"spendable,omitempty"`
+	Confirmed   float64 `json:"confirmed,omitempty"`
+	Unconfirmed float64 `json:"unconfirmed,omitempty"`
+}
+
+func balanceToResponseV3(b walletutils.Balance) BalanceResponseV3 {
+	// convert to double, don't care about rounding
+	total, _ := b.TotalProbi.Float64()
+	spendable, _ := b.SpendableProbi.Float64()
+	confirmed, _ := b.ConfirmedProbi.Float64()
+	unconfirmed, _ := b.UnconfirmedProbi.Float64()
+
+	return BalanceResponseV3{
+		Total:       total,
+		Spendable:   spendable,
+		Confirmed:   confirmed,
+		Unconfirmed: unconfirmed,
+	}
+}

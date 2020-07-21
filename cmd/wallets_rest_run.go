@@ -68,7 +68,7 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 				"RecoverWallet", wallet.RecoverWalletV3))
 
 			// get wallet balance routes
-			r.Get("/uphold/{providerID}", middleware.InstrumentHandlerFunc(
+			r.Get("/uphold/{paymentID}", middleware.InstrumentHandlerFunc(
 				"GetUpholdWalletBalance", wallet.GetUpholdWalletBalanceV3))
 		})
 	}
