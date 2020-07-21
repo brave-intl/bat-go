@@ -1308,7 +1308,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(altcurrency.BAT, grantAmount.String(), settlementAddr)
 	suite.Require().NoError(err)
 }
 

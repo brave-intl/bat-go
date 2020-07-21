@@ -109,7 +109,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	anonymousString := ""
 	if wallet.AnonymousAddress != nil {
 		anonymousString = wallet.AnonymousAddress.String()
-		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), anonymousString)
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, total.String(), anonymousString)
 		if err != nil {
 			return nil, err
 		}

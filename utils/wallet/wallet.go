@@ -71,7 +71,7 @@ type Balance struct {
 type Wallet interface {
 	GetWalletInfo() Info
 	// Transfer moves funds out of the associated wallet and to the specific destination
-	Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*TransactionInfo, error)
+	Transfer(altcurrency altcurrency.AltCurrency, probi string, destination string) (*TransactionInfo, error)
 	// VerifyTransaction verifies that the base64 encoded transaction is valid
 	// NOTE VerifyTransaction must guard against transactions that seek to exploit parser differences
 	// such as including additional fields that are not understood by local implementation but may

@@ -257,7 +257,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context) (bool, error) {
 	}
 
 	// prepare a transaction by creating a payload
-	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), w.Info.ProviderID, "")
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1).String(), w.Info.ProviderID, "")
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
 		return false, fmt.Errorf("failed to prepare transaction: %w", err)
@@ -414,7 +414,7 @@ func (w *Wallet) GetWalletInfo() walletutils.Info {
 }
 
 type denomination struct {
-	Amount   decimal.Decimal          `json:"amount"`
+	Amount   string                   `json:"amount"`
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
@@ -424,8 +424,8 @@ type transactionRequest struct {
 	Message      string       `json:"message,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
+func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, amount string, destination string, message string) (*http.Request, error) {
+	transferReq := transactionRequest{Denomination: denomination{Amount: amount, Currency: &altc}, Destination: destination, Message: message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, err
@@ -446,8 +446,8 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
-func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (string, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, message)
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, amount string, destination string, message string) (string, error) {
+	req, err := w.signTransfer(altcurrency, amount, destination, message)
 	if err != nil {
 		return "", err
 	}
@@ -466,8 +466,8 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 }
 
 // Transfer moves funds out of the associated wallet and to the specific destination
-func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, "")
+func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, amount string, destination string) (*walletutils.TransactionInfo, error) {
+	req, err := w.signTransfer(altcurrency, amount, destination, "")
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +569,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println("remarshalled body", string(remarshalledBody), signedTx.Body)
 	if string(remarshalledBody) != signedTx.Body {
 		return nil, errors.New("The remarshalled body must be identical")
 	}
@@ -587,7 +587,11 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*walletutils.Transact
 		return nil, err
 	}
 	var info walletutils.TransactionInfo
-	info.Probi = transaction.Denomination.Currency.ToProbi(transaction.Denomination.Amount)
+	amount, err := decimal.NewFromString(transaction.Denomination.Amount)
+	if err != nil {
+		return &info, err
+	}
+	info.Probi = transaction.Denomination.Currency.ToProbi(amount)
 	{
 		tmp := *transaction.Denomination.Currency
 		info.AltCurrency = &tmp
@@ -654,7 +658,7 @@ type upholdTransactionResponse struct {
 
 func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.TransactionInfo {
 	var txInfo walletutils.TransactionInfo
-	txInfo.Probi = resp.Denomination.Currency.ToProbi(resp.Denomination.Amount)
+	txInfo.Probi = resp.Denomination.Currency.ToProbi(decimal.RequireFromString(resp.Denomination.Amount))
 	{
 		tmp := *resp.Denomination.Currency
 		txInfo.AltCurrency = &tmp
@@ -953,7 +957,7 @@ func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, er
 		return zero, errors.New("donor wallet does not have an ID")
 	}
 
-	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
+	_, err = donorWallet.Transfer(altcurrency.BAT, amount.String(), destWallet.Info.ProviderID)
 	if err != nil {
 		return zero, err
 	}
