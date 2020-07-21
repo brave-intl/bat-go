@@ -745,7 +745,9 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 	fmt.Printf("%#v\n", bal)
 
 	var uhResp upholdTransactionResponse
+	fmt.Println(string(respBody))
 	err = json.Unmarshal(respBody, &uhResp)
+	fmt.Println("parse err", err)
 	if err != nil {
 		return nil, err
 	}
