@@ -736,6 +736,14 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
+	fmt.Println("providerID", w.ProviderID)
+	fmt.Println("confirm", confirm)
+	fmt.Println("url", url)
+	fmt.Printf("%#v\n", signedTx)
+	bal, err := w.GetBalance(true)
+	fmt.Println("balance err", err)
+	fmt.Printf("%#v\n", bal)
+
 	var uhResp upholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
