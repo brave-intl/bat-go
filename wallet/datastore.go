@@ -3,6 +3,7 @@ package wallet
 import (
 	"errors"
 	"os"
+	"strconv"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -270,6 +271,13 @@ func txGetByProviderLinkingID(tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]wall
 	return &wallets, err
 }
 
+func getEnvMaxCards() int {
+	if v, err := strconv.Atoi(os.Getenv("UPHOLD_WALLET_LINKING_LIMIT")); err == nil {
+		return v
+	}
+	return 4
+}
+
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) error {
 	tx, err := pg.RawDB().Beginx()
@@ -283,7 +291,7 @@ func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymous
 		return errorutils.Wrap(err, "error looking up wallets by provider id")
 	}
 	walletLinkedLength := len(*walletsMatchingProviderLinkingID)
-	if walletLinkedLength >= 4 {
+	if walletLinkedLength >= getEnvMaxCards() {
 		sentry.WithScope(func(scope *sentry.Scope) {
 			anonAddr := ""
 			if anonymousAddress != nil {
