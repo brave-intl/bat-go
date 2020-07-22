@@ -968,7 +968,7 @@ func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, er
 		return zero, errors.New("donor wallet does not have an ID")
 	}
 
-	_, err = donorWallet.Transfer(altcurrency.BAT, amount, destWallet.Info.ProviderID)
+	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
 	if err != nil {
 		return zero, err
 	}
