@@ -149,13 +149,13 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
 }
 
-// LinkDepositAccountV3 - produces an http handler for the service s which handles claiming of uphold wallets
-func LinkDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+// LinkUpholdDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
 			ctx = r.Context()
 			id  = new(inputs.ID)
-			cuw = new(LinkDepositAccountRequest)
+			cuw = new(LinkUpholdDepositAccountRequest)
 		)
 		// get logger from context
 		logger, err := appctx.GetLogger(ctx)

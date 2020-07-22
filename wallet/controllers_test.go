@@ -206,7 +206,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	suite.Require().NoError(err, "transaction must be signed client side")
 
 	// V3 Payload
-	reqBody := LinkDepositAccountRequest{
+	reqBody := LinkUpholdDepositAccountRequest{
 		SignedLinkingRequest: signedCreationRequest,
 	}
 
@@ -221,7 +221,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 
 	// V3 Handler
 
-	handler := LinkDepositAccountV3(service)
+	handler := LinkUpholdDepositAccountV3(service)
 
 	req, err := http.NewRequest("POST", "/v3/wallet/{paymentID}/claim", bytes.NewBuffer(body))
 	suite.Require().NoError(err, "wallet claim request could not be created")
