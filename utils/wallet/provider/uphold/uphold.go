@@ -424,6 +424,21 @@ type transactionRequest struct {
 	Message      string       `json:"message,omitempty"`
 }
 
+// denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
+// on the transaction being checked does not fail
+// in order to maintain the zeros, the transaction can be checked using a string
+// when using decimal.Decimal, and the transaction is re-serialized the trailing zeros are dropped
+type denominationRecode struct {
+	Amount   string                   `json:"amount"`
+	Currency *altcurrency.AltCurrency `json:"currency"`
+}
+
+type transactionRequestRecode struct {
+	Denomination denominationRecode `json:"denomination"`
+	Destination  string             `json:"destination"`
+	Message      string             `json:"message,omitempty"`
+}
+
 func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
 	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
@@ -542,17 +557,17 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("The signature is invalid")
 	}
 
-	var transaction transactionRequest
-	err = json.Unmarshal([]byte(signedTx.Body), &transaction)
+	var transactionRecode transactionRequestRecode
+	err = json.Unmarshal([]byte(signedTx.Body), &transactionRecode)
 	if err != nil {
 		return nil, err
 	}
 
-	if !govalidator.IsEmail(transaction.Destination) {
-		if !validators.IsUUID(transaction.Destination) {
-			if !validators.IsBTCAddress(transaction.Destination) {
-				if !validators.IsETHAddressNoChecksum(transaction.Destination) {
-					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)
+	if !govalidator.IsEmail(transactionRecode.Destination) {
+		if !validators.IsUUID(transactionRecode.Destination) {
+			if !validators.IsBTCAddress(transactionRecode.Destination) {
+				if !validators.IsETHAddressNoChecksum(transactionRecode.Destination) {
+					return nil, fmt.Errorf("%s is not a valid destination", transactionRecode.Destination)
 				}
 			}
 		}
@@ -565,15 +580,19 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	// of fields must be identical as well as numeric serialization. for encoding/json, note
 	// that struct keys are serialized in the order they are defined
 
-	remarshalledBody, err := json.Marshal(&transaction)
+	remarshalledBody, err := json.Marshal(&transactionRecode)
 	if err != nil {
 		return nil, err
 	}
-
 	if string(remarshalledBody) != signedTx.Body {
 		return nil, errors.New("The remarshalled body must be identical")
 	}
 
+	var transaction transactionRequest
+	err = json.Unmarshal([]byte(signedTx.Body), &transaction)
+	if err != nil {
+		return nil, err
+	}
 	return &transaction, nil
 }
 
