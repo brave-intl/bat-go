@@ -99,7 +99,7 @@ func TestDecodeTransaction(t *testing.T) {
 
 	var expected transactionRequest
 	expected.Destination = "foo@bar.com"
-	expected.Denomination.Amount = "25"
+	expected.Denomination.Amount, err = decimal.NewFromString("25.0")
 	if err != nil {
 		t.Error(err)
 	}
@@ -184,7 +184,7 @@ func TestTransactions(t *testing.T) {
 
 	tx, err := donorWallet.PrepareTransaction(
 		altcurrency.BAT,
-		value.String(),
+		altcurrency.BAT.ToProbi(value),
 		destWallet.Info.ProviderID,
 		"bat-go:uphold.TestTransactions",
 	)
@@ -258,7 +258,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Submit with confirm should result in a balance.")
 	}
 
-	txInfo, err := destWallet.Transfer(altcurrency.BAT, altcurrency.BAT.FromProbi(submitInfo.Probi).String(), donorWallet.ProviderID)
+	txInfo, err := destWallet.Transfer(altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)
 	}

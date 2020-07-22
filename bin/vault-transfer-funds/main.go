@@ -114,7 +114,7 @@ func main() {
 		}
 	}
 
-	signedTx, err := w.PrepareTransaction(altc, altc.FromProbi(valueProbi).String(), *to, *note)
+	signedTx, err := w.PrepareTransaction(altc, valueProbi, *to, *note)
 	if err != nil {
 		log.Fatalln(err)
 	}

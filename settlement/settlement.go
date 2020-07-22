@@ -79,7 +79,7 @@ func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error
 		if len(settlement.Note) > 0 {
 			message = settlement.Note
 		}
-		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.AltCurrency.FromProbi(settlement.Probi).String(), settlement.Destination, message)
+		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, message)
 		if err != nil {
 			return err
 		}

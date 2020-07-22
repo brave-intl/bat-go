@@ -264,7 +264,7 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 		} else {
 			// AnonCard Linking
-			err = s.LinkWallet(r.Context(), wallet, cuw.SignedLinkingRequest, &aa)
+			err = s.LinkWallet(r.Context(), uphold.Wallet{Info: *wallet}, cuw.SignedLinkingRequest, &aa)
 			if err != nil {
 				logger.Warn().Err(err).Msg("failed to link the wallet")
 				return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
