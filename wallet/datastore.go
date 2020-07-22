@@ -242,18 +242,23 @@ func (pg *Postgres) TxSetDepositProvider(tx *sqlx.Tx, ID string, provider string
 	statement := `
 	UPDATE wallets
 	SET
-			user_account_deposit_provider = $2
+			user_deposit_account_provider = $2
 	WHERE id = $1;`
 	r, err := tx.Exec(
 		statement,
 		ID,
-		provider,
+		&provider,
 	)
-	count, _ := r.RowsAffected()
-	if count < 1 {
-		return errors.New("should have updated at least one wallet")
+	if err != nil {
+		return err
 	}
-	return err
+	if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			return errors.New("should have updated at least one wallet")
+		}
+	}
+	return nil
 }
 
 // TxLinkWalletInfo pass a tx to set the anonymous address
