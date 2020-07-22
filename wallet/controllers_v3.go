@@ -228,7 +228,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			}
 			logger.Debug().Msg("able to verify transaction")
 			// get the card id from the submitted destination
-			*wallet.ProviderLinkingID = uuid.Must(uuid.FromString(txInfo.Destination))
+			wallet.ProviderID = txInfo.Destination
 			upholdProvider := "uphold"
 			wallet.UserDepositAccountProvider = &upholdProvider
 			wallet.AnonymousAddress = &aa
