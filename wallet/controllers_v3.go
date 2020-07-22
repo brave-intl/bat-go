@@ -19,7 +19,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 )
 
 // ------------------ V3 Wallet APIs ---------------
@@ -203,22 +202,22 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 			}
 		}
 
-		var amount decimal.Decimal
+		publicKey, err := hex.DecodeString(wallet.PublicKey)
+		if err != nil {
+			logger.Warn().Err(err).Msg("unable to decode wallet public key")
+			return handlers.WrapError(errors.New("unable to decode wallet public key"),
+				"unable to decode wallet public key for creation request validation",
+				http.StatusInternalServerError)
+		}
+		uwallet := uphold.Wallet{
+			Info:    *wallet,
+			PrivKey: ed25519.PrivateKey{},
+			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
+		}
 
-		if wallet.ProviderID == "" && cuw.SignedLinkingRequest != "" {
-
-			publicKey, err := hex.DecodeString(wallet.PublicKey)
-			if err != nil {
-				logger.Warn().Err(err).Msg("unable to decode wallet public key")
-				return handlers.WrapError(errors.New("unable to decode wallet public key"),
-					"unable to decode wallet public key for creation request validation",
-					http.StatusInternalServerError)
-			}
-			uwallet := uphold.Wallet{
-				Info:    *wallet,
-				PrivKey: ed25519.PrivateKey{},
-				PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
-			}
+		// if this if we do not have a UserDepositAccountProviderID on this wallet,
+		// and it is a "brave" provided wallet
+		if wallet.UserDepositAccountProviderID == nil && wallet.Provider == "brave" {
 			// parse the signedlinkingreationrequest to get the provider id
 			txInfo, err := uwallet.VerifyTransaction(cuw.SignedLinkingRequest)
 			if err != nil {
@@ -236,33 +235,33 @@ func ClaimUpholdWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request
 
 			// updated wallet info for uphold wallet
 			uwallet.Info = *wallet
+		}
 
-			amount = txInfo.DestAmount
-			logger.Debug().Str("amount", amount.String()).Msg("amount on the signed request")
+		// verify that the user is kyc from uphold. (for all wallet provider cases)
+		logger.Debug().Msg("performing kyc check")
+		if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
+			// there was an error
+			logger.Warn().Err(err).Msg("failed to link the wallet")
+			return handlers.WrapError(errors.New("failed to link wallet"),
+				"wallet could not be kyc checked", http.StatusInternalServerError)
+		} else if !ok {
+			// fail
+			logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
+			return handlers.WrapError(errors.New("failed to link wallet"),
+				"wallet is not kyc", http.StatusForbidden)
+		}
 
-			// verify that the user is kyc from uphold.
-			logger.Debug().Msg("performing kyc check")
-			if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
-				// there was an error
-				logger.Warn().Err(err).Msg("failed to link the wallet")
-				return handlers.WrapError(errors.New("failed to link wallet"),
-					"wallet could not be kyc checked", http.StatusInternalServerError)
-			} else if !ok {
-				// fail
-				logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
-				return handlers.WrapError(errors.New("failed to link wallet"),
-					"wallet is not kyc", http.StatusForbidden)
-			}
-
+		// if the wallet provider is brave then upsert the wallet, as we are linked
+		if wallet.Provider == "brave" {
 			// update the wallet in the datastore only if we are successful in linking
 			// uphold will validate the signature
 			if err := s.Datastore.UpsertWallet(wallet); err != nil {
 				logger.Warn().Err(err).Msg("failed to upsert wallet")
 				return handlers.WrapError(
 					errors.New("unable to update wallet to uphold provider"),
-					"failed to register wallet with uphold", http.StatusServiceUnavailable)
+					"failed to register wallet with uphold", http.StatusInternalServerError)
 			}
-		} else {
+		} else if wallet.Provider == "uphold" {
 			// AnonCard Linking
 			err = s.LinkWallet(r.Context(), wallet, cuw.SignedLinkingRequest, &aa)
 			if err != nil {
