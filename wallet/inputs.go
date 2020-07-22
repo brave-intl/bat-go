@@ -142,19 +142,19 @@ func (bcr *BraveCreationRequest) HandleErrors(err error) *handlers.AppError {
 	return handlers.ValidationError("brave create wallet request validation errors", issues)
 }
 
-// ClaimUpholdWalletRequest - the structure for a brave provider wallet creation request
-type ClaimUpholdWalletRequest struct {
+// LinkUpholdDepositAccountRequest - the structure for a linking request for uphold deposit account
+type LinkUpholdDepositAccountRequest struct {
 	SignedLinkingRequest string `json:"signedLinkingRequest"`
 	AnonymousAddress     string `json:"anonymousAddress"`
 }
 
 // Validate - implementation of validatable interface
-func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
+func (ludar *LinkUpholdDepositAccountRequest) Validate(ctx context.Context) error {
 	var merr = new(errorutils.MultiError)
-	if cuw.SignedLinkingRequest == "" {
+	if ludar.SignedLinkingRequest == "" {
 		merr.Append(errors.New("failed to validate 'signedLinkingRequest': must not be empty"))
 	}
-	if cuw.AnonymousAddress != "" && !govalidator.IsUUID(cuw.AnonymousAddress) {
+	if ludar.AnonymousAddress != "" && !govalidator.IsUUID(ludar.AnonymousAddress) {
 		merr.Append(errors.New("failed to validate 'anonymousAddress': must be uuid"))
 	}
 	if merr.Count() > 0 {
@@ -164,15 +164,15 @@ func (cuw *ClaimUpholdWalletRequest) Validate(ctx context.Context) error {
 }
 
 // Decode - implementation of  decodable interface
-func (cuw *ClaimUpholdWalletRequest) Decode(ctx context.Context, v []byte) error {
-	if err := inputs.DecodeJSON(ctx, v, cuw); err != nil {
+func (ludar *LinkUpholdDepositAccountRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, ludar); err != nil {
 		return fmt.Errorf("failed to decode json: %w", err)
 	}
 	return nil
 }
 
 // HandleErrors - handle any errors from this request
-func (cuw *ClaimUpholdWalletRequest) HandleErrors(err error) *handlers.AppError {
+func (ludar *LinkUpholdDepositAccountRequest) HandleErrors(err error) *handlers.AppError {
 	issues := map[string]string{}
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()
