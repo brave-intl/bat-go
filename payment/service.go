@@ -351,7 +351,7 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 		ctx,
 		walletID,
 		transaction,
-		"",
+		uphold.AnonCardSettlementAddress,
 	)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
