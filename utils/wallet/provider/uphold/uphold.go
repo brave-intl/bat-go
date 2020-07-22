@@ -129,8 +129,13 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	if info.Provider != "uphold" {
-		return nil, errors.New("The wallet provider must be uphold")
+	var depositAccountProvider string
+	if info.UserDepositAccountProvider != nil {
+		depositAccountProvider = *info.UserDepositAccountProvider
+	}
+
+	if info.Provider != "uphold" && depositAccountProvider != "uphold" {
+		return nil, errors.New("The wallet provider or deposit account must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
 		if !validators.IsUUID(info.ProviderID) {
