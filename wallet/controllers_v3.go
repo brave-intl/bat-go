@@ -217,7 +217,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		// if this wallet does not have a provider id then it is not linked...
 		// we need to verify the transaction and use the destination from the transaction
-		if wallet.ProviderID == nil {
+		if wallet.ProviderID == "" {
 			// parse the signedlinkingreationrequest to get the provider id
 			txInfo, err := uwallet.VerifyTransaction(cuw.SignedLinkingRequest)
 			if err != nil {
