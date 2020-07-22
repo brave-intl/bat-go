@@ -59,7 +59,7 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 
 			// create wallet claim routes for our wallet providers
 			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
-				"ClaimUpholdWallet", wallet.ClaimUpholdWalletV3(s)))
+				"LinkDepositAccount", wallet.LinkDepositAccountV3(s)))
 
 			// get wallet routes
 			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
