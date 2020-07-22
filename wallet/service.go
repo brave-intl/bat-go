@@ -91,15 +91,14 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 // LinkWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkWallet(
 	ctx context.Context,
-	w uphold.Wallet,
+	info *walletutils.Info,
 	transaction string,
 	anonymousAddress *uuid.UUID,
 ) error {
 	// do not confirm this transaction yet
-	info := w.GetWalletInfo()
 	tx, err := service.SubmitCommitableAnonCardTransaction(
 		ctx,
-		&info,
+		info,
 		transaction,
 		"",
 		false,
@@ -135,7 +134,7 @@ func (service *Service) LinkWallet(
 	}
 
 	if decimal.NewFromFloat(0).LessThan(tx.Probi) {
-		_, err := w.ConfirmTransaction(tx.ID)
+		_, err := service.SubmitCommitableAnonCardTransaction(ctx, info, transaction, "", true)
 		if err != nil {
 			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
