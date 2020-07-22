@@ -237,37 +237,10 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			uwallet.Info = *wallet
 		}
 
-		// verify that the user is kyc from uphold. (for all wallet provider cases)
-		logger.Debug().Msg("performing kyc check")
-		if ok, err := uwallet.IsUserKYC(r.Context()); err != nil {
-			// there was an error
-			logger.Warn().Err(err).Msg("failed to link the wallet")
-			return handlers.WrapError(errors.New("failed to link wallet"),
-				"wallet could not be kyc checked", http.StatusInternalServerError)
-		} else if !ok {
-			// fail
-			logger.Warn().Msg("failed to link the wallet: wallet is not kyc")
-			return handlers.WrapError(errors.New("failed to link wallet"),
-				"wallet is not kyc", http.StatusForbidden)
-		}
-
-		// if the wallet provider is brave then upsert the wallet, as we are linked
-		if wallet.Provider == "brave" {
-			// update the wallet in the datastore only if we are successful in linking
-			// uphold will validate the signature
-			if err := s.Datastore.UpsertWallet(wallet); err != nil {
-				logger.Warn().Err(err).Msg("failed to upsert wallet")
-				return handlers.WrapError(
-					errors.New("unable to update wallet to uphold provider"),
-					"failed to register wallet with uphold", http.StatusInternalServerError)
-			}
-		} else if wallet.Provider == "uphold" {
-			// AnonCard Linking
-			err = s.LinkWallet(r.Context(), wallet, cuw.SignedLinkingRequest, &aa)
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to link the wallet")
-				return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
-			}
+		// AnonCard Linking
+		err = s.LinkWallet(r.Context(), uwallet, cuw.SignedLinkingRequest, &aa)
+		if err != nil {
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
 		// render the wallet

@@ -91,14 +91,15 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 // LinkWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkWallet(
 	ctx context.Context,
-	info *walletutils.Info,
+	wallet uphold.Wallet,
 	transaction string,
 	anonymousAddress *uuid.UUID,
 ) error {
 	// do not confirm this transaction yet
+	info := wallet.GetWalletInfo()
 	tx, err := service.SubmitCommitableAnonCardTransaction(
 		ctx,
-		info,
+		&info,
 		transaction,
 		"",
 		false,
@@ -110,6 +111,22 @@ func (service *Service) LinkWallet(
 		err := errors.New("user id not provided")
 		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
 	}
+
+	// verify that the user is kyc from uphold. (for all wallet provider cases)
+	if ok, err := wallet.IsUserKYC(ctx); err != nil {
+		// there was an error
+		return handlers.WrapError(err,
+			"wallet could not be kyc checked",
+			http.StatusInternalServerError,
+		)
+	} else if !ok {
+		// fail
+		return &handlers.AppError{
+			Cause: errors.New("user kyc did not pass"),
+			Code:  http.StatusForbidden,
+		}
+	}
+
 	providerLinkingID := uuid.NewV5(walletClaimNamespace, tx.UserID)
 	if info.ProviderLinkingID != nil {
 		// check if the member matches the associated member
@@ -134,7 +151,7 @@ func (service *Service) LinkWallet(
 	}
 
 	if decimal.NewFromFloat(0).LessThan(tx.Probi) {
-		_, err := service.SubmitCommitableAnonCardTransaction(ctx, info, transaction, "", true)
+		_, err := service.SubmitCommitableAnonCardTransaction(ctx, &info, transaction, "", true)
 		if err != nil {
 			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
 		}
