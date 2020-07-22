@@ -98,7 +98,7 @@ func (_d DatastoreWithPrometheus) InsertWallet(wallet *walletutils.Info) (err er
 }
 
 // LinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) (err error) {
+func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID string, depositProvider string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -108,7 +108,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerLinkingID uuid.U
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.LinkWallet(ID, providerLinkingID, anonymousAddress, depositProvider)
+	return _d.base.LinkWallet(ID, providerLinkingID, anonymousAddress, pID, depositProvider)
 }
 
 // Migrate implements Datastore
@@ -189,7 +189,7 @@ func (_d DatastoreWithPrometheus) SetAnonymousAddress(ID string, anonymousAddres
 }
 
 // TxLinkWalletInfo implements Datastore
-func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID string, pda string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -199,21 +199,7 @@ func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, provi
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "TxLinkWalletInfo", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress)
-}
-
-// TxSetDepositProvider implements Datastore
-func (_d DatastoreWithPrometheus) TxSetDepositProvider(tx *sqlx.Tx, ID string, provider string) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "TxSetDepositProvider", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.TxSetDepositProvider(tx, ID, provider)
+	return _d.base.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, pID, pda)
 }
 
 // UpsertWallet implements Datastore

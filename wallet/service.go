@@ -161,7 +161,7 @@ func (service *Service) LinkWallet(
 			}
 		}
 	} else {
-		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, depositProvider)
+		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, info.ProviderID, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {

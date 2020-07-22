@@ -37,9 +37,8 @@ func init() {
 type Datastore interface {
 	grantserver.Datastore
 	SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) error
-	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) error
-	TxSetDepositProvider(tx *sqlx.Tx, ID string, provider string) error
-	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
+	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, pda string) error
+	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -237,17 +236,29 @@ func (pg *Postgres) SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) 
 	return err
 }
 
-// TxSetDepositProvider pass a tx to set the anonymous address
-func (pg *Postgres) TxSetDepositProvider(tx *sqlx.Tx, ID string, provider string) error {
+// TxLinkWalletInfo pass a tx to set the anonymous address
+func (pg *Postgres) TxLinkWalletInfo(
+	tx *sqlx.Tx,
+	ID string,
+	providerLinkingID uuid.UUID,
+	anonymousAddress *uuid.UUID,
+	providerID string,
+	userDepositAccountProvider string) error {
 	statement := `
 	UPDATE wallets
 	SET
-			user_deposit_account_provider = $2
+			provider_linking_id = $2,
+			anonymous_address = $3,
+			user_deposit_account_provider = $4,
+			provider_id = $5
 	WHERE id = $1;`
 	r, err := tx.Exec(
 		statement,
 		ID,
-		&provider,
+		providerLinkingID,
+		anonymousAddress,
+		userDepositAccountProvider,
+		providerID,
 	)
 	if err != nil {
 		return err
@@ -259,27 +270,6 @@ func (pg *Postgres) TxSetDepositProvider(tx *sqlx.Tx, ID string, provider string
 		}
 	}
 	return nil
-}
-
-// TxLinkWalletInfo pass a tx to set the anonymous address
-func (pg *Postgres) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID) error {
-	statement := `
-	UPDATE wallets
-	SET
-			provider_linking_id = $2,
-			anonymous_address = $3
-	WHERE id = $1;`
-	r, err := tx.Exec(
-		statement,
-		ID,
-		providerLinkingID,
-		anonymousAddress,
-	)
-	count, _ := r.RowsAffected()
-	if count < 1 {
-		return errors.New("should have updated at least one wallet")
-	}
-	return err
 }
 
 func txGetByProviderLinkingID(tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
@@ -304,7 +294,7 @@ func getEnvMaxCards() int {
 }
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
@@ -331,16 +321,9 @@ func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymous
 		})
 		return ErrTooManyCardsLinked
 	}
-	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress)
+	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, pID, depositProvider)
 	if err != nil {
 		return errorutils.Wrap(err, "unable to set an anonymous address")
-	}
-
-	if depositProvider != "" {
-		err = pg.TxSetDepositProvider(tx, ID, depositProvider)
-		if err != nil {
-			return errorutils.Wrap(err, "unable to set a deposit provider")
-		}
 	}
 
 	err = tx.Commit()
