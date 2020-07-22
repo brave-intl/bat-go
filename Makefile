@@ -31,7 +31,6 @@ mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
-	mockgen -source=./utils/clients/ledger/client.go -destination=utils/clients/ledger/mock/mock.go -package=mock_ledger
 	mockgen -source=./utils/clients/balance/client.go -destination=utils/clients/balance/mock/mock.go -package=mock_balance
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
@@ -56,13 +55,11 @@ instrumented:
 	# http clients
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/balance/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
-	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ledger -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ledger/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/reputation/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/balance_client_duration_seconds/g' utils/clients/balance/instrumented_client.go
-	sed -i'bak' 's/client_duration_seconds/ledger_client_duration_seconds/g' utils/clients/ledger/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 

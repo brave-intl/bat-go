@@ -23,7 +23,7 @@ type ClientWithPrometheus struct {
 
 var clientDurationSummaryVec = promauto.NewSummaryVec(
 	prometheus.SummaryOpts{
-		Name:       "cbr_client_duration_seconds",
+		Name:       "client_duration_seconds",
 		Help:       "client runtime duration and result",
 		MaxAge:     time.Minute,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},

@@ -99,8 +99,9 @@ func (service *Service) LinkWallet(
 	info := wallet.GetWalletInfo()
 
 	var (
-		userID string
-		probi  decimal.Decimal
+		userID          string
+		depositProvider string
+		probi           decimal.Decimal
 	)
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
@@ -144,6 +145,7 @@ func (service *Service) LinkWallet(
 		}
 		// get the original transaction probi amount
 		probi = tx.Probi
+		depositProvider = "uphold"
 	}
 
 	providerLinkingID := uuid.NewV5(walletClaimNamespace, userID)
@@ -159,7 +161,7 @@ func (service *Service) LinkWallet(
 			}
 		}
 	} else {
-		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress)
+		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {

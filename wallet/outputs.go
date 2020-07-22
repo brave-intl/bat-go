@@ -36,6 +36,7 @@ type ProviderDetailsV3 struct {
 type DepositAccountProviderDetailsV3 struct {
 	Name             *string `json:"name"`
 	ID               *string `json:"id"`
+	LinkingID        string  `json:"linkingId,omitempty"`
 	AnonymousAddress string  `json:"anonymousAddress,omitempty"`
 }
 
@@ -152,7 +153,8 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		// this brave wallet has a linked deposit account
 		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
 			Name:             info.UserDepositAccountProvider,
-			ID:               &linkingID,
+			ID:               &info.ProviderID,
+			LinkingID:        linkingID,
 			AnonymousAddress: anonymousAddress,
 		}
 	}
