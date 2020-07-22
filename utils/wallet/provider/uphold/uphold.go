@@ -424,6 +424,10 @@ type transactionRequest struct {
 	Message      string       `json:"message,omitempty"`
 }
 
+// denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
+// on the transaction being checked does not fail
+// in order to maintain the zeros, the transaction can be checked using a string
+// when using decimal.Decimal, and the transaction is re-serialized the trailing zeros are dropped
 type denominationRecode struct {
 	Amount   string                   `json:"amount"`
 	Currency *altcurrency.AltCurrency `json:"currency"`
