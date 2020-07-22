@@ -229,7 +229,7 @@ type createCardRequest struct {
 }
 
 // IsUserKYC - is this user a "member"
-func (w *Wallet) IsUserKYC(ctx context.Context) (bool, error) {
+func (w *Wallet) IsUserKYC(ctx context.Context) (string, bool, error) {
 	// get logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -243,12 +243,12 @@ func (w *Wallet) IsUserKYC(ctx context.Context) (bool, error) {
 	gwPublicKey, err := hex.DecodeString(grantWalletPublicKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system public key")
-		return false, fmt.Errorf("invalid system public key: %w", err)
+		return "", false, fmt.Errorf("invalid system public key: %w", err)
 	}
 	gwPrivateKey, err := hex.DecodeString(grantWalletPrivateKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system private key")
-		return false, fmt.Errorf("invalid system private key: %w", err)
+		return "", false, fmt.Errorf("invalid system private key: %w", err)
 	}
 
 	grantWallet := Wallet{
@@ -265,17 +265,17 @@ func (w *Wallet) IsUserKYC(ctx context.Context) (bool, error) {
 	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), w.Info.ProviderID, "")
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
-		return false, fmt.Errorf("failed to prepare transaction: %w", err)
+		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
 	}
 
 	// submit the transaction the payload
 	uhResp, err := grantWallet.SubmitTransaction(transactionB64, false)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to submit transaction")
-		return false, fmt.Errorf("failed to submit transaction: %w", err)
+		return "", false, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
-	return uhResp.KYC, nil
+	return uhResp.UserID, uhResp.KYC, nil
 }
 
 // sign registration for this wallet with Uphold with label

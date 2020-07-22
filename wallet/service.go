@@ -97,23 +97,14 @@ func (service *Service) LinkWallet(
 ) error {
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
-	tx, err := service.SubmitCommitableAnonCardTransaction(
-		ctx,
-		&info,
-		transaction,
-		"",
-		false,
+
+	var (
+		userID string
+		probi  decimal.Decimal
 	)
-	if err != nil {
-		return handlers.WrapError(err, "unable to verify transaction", http.StatusBadRequest)
-	}
-	if tx.UserID == "" {
-		err := errors.New("user id not provided")
-		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
-	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if ok, err := wallet.IsUserKYC(ctx); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -125,9 +116,37 @@ func (service *Service) LinkWallet(
 			Cause: errors.New("user kyc did not pass"),
 			Code:  http.StatusForbidden,
 		}
+	} else {
+		userID = uID
 	}
 
-	providerLinkingID := uuid.NewV5(walletClaimNamespace, tx.UserID)
+	if wallet.Provider == "uphold" {
+		tx, err := service.SubmitCommitableAnonCardTransaction(
+			ctx,
+			&info,
+			transaction,
+			"",
+			false,
+		)
+		if err != nil {
+			return handlers.WrapError(err, "unable to verify transaction", http.StatusBadRequest)
+		}
+		if tx.UserID == "" {
+			err := errors.New("user id not provided")
+			return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
+		}
+		userID = tx.UserID
+		probi = tx.Probi
+	} else {
+		tx, err := wallet.VerifyTransaction(transaction)
+		if err != nil {
+			return handlers.WrapError(errors.New("failed to verify transaction"), "failed to verify transaction", http.StatusForbidden)
+		}
+		// get the original transaction probi amount
+		probi = tx.Probi
+	}
+
+	providerLinkingID := uuid.NewV5(walletClaimNamespace, userID)
 	if info.ProviderLinkingID != nil {
 		// check if the member matches the associated member
 		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
@@ -150,7 +169,8 @@ func (service *Service) LinkWallet(
 		}
 	}
 
-	if decimal.NewFromFloat(0).LessThan(tx.Probi) {
+	// if this wallet is linking a deposit account do not submit a transaction
+	if decimal.NewFromFloat(0).LessThan(probi) {
 		_, err := service.SubmitCommitableAnonCardTransaction(ctx, &info, transaction, "", true)
 		if err != nil {
 			return handlers.WrapError(err, "unable to transfer tokens", http.StatusBadRequest)
