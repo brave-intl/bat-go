@@ -215,9 +215,9 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		// if this if we do not have a UserDepositAccountProviderID on this wallet,
-		// and it is a "brave" provided wallet
-		if wallet.UserDepositAccountProviderID == nil && wallet.Provider == "brave" {
+		// if this wallet does not have a provider id then it is not linked...
+		// we need to verify the transaction and use the destination from the transaction
+		if wallet.ProviderID == nil {
 			// parse the signedlinkingreationrequest to get the provider id
 			txInfo, err := uwallet.VerifyTransaction(cuw.SignedLinkingRequest)
 			if err != nil {
@@ -227,6 +227,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 					"failed transaction validation for uphold", http.StatusBadRequest)
 			}
 			logger.Debug().Msg("able to verify transaction")
+
 			// get the card id from the submitted destination
 			wallet.ProviderID = txInfo.Destination
 			upholdProvider := "uphold"
