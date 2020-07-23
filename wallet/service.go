@@ -105,7 +105,7 @@ func (service *Service) LinkWallet(
 	)
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx, transaction); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -145,6 +145,7 @@ func (service *Service) LinkWallet(
 		}
 		// get the original transaction probi amount
 		probi = tx.Probi
+		info.ProviderID = tx.Destination
 		depositProvider = "uphold"
 	}
 

@@ -215,29 +215,6 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		// we need to verify the transaction and use the destination from the transaction
-		if wallet.ProviderID == "" {
-			// parse the signedlinkingreationrequest to get the provider id
-			txInfo, err := uwallet.VerifyTransaction(cuw.SignedLinkingRequest)
-			if err != nil {
-				logger.Warn().Err(err).Msg("failed to transaction validation for uphold")
-				return handlers.WrapError(
-					errors.New("unable to create uphold wallet"),
-					"failed transaction validation for uphold", http.StatusBadRequest)
-			}
-			logger.Debug().Msg("able to verify transaction")
-
-			// get the card id from the submitted destination
-			wallet.ProviderID = txInfo.Destination
-			upholdProvider := "uphold"
-			wallet.UserDepositAccountProvider = &upholdProvider
-			wallet.AnonymousAddress = &aa
-
-			// updated wallet info for uphold wallet
-			uwallet.Info = *wallet
-		}
-
-		// AnonCard Linking
 		err = s.LinkWallet(r.Context(), uwallet, cuw.SignedLinkingRequest, &aa)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
