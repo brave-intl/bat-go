@@ -38,7 +38,6 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) error
 	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, pda string) error
 	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
@@ -242,23 +241,6 @@ func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
 	}
 
 	return nil
-}
-
-// SetAnonymousAddress sets the anon addresses of the provided wallets
-func (pg *Postgres) SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) error {
-	// do not update anonymous addresses
-	statement := `
-	UPDATE wallets
-	SET
-			anonymous_address = $2
-	WHERE id = $1 and (anonymous_address is null or anonymous_address = '')
-	`
-	_, err := pg.RawDB().Exec(
-		statement,
-		ID,
-		anonymousAddress,
-	)
-	return err
 }
 
 // TxLinkWalletInfo pass a tx to set the anonymous address
