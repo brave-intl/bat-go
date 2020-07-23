@@ -154,12 +154,6 @@ func (service *Service) LinkWallet(
 		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
-		if anonymousAddress != nil && info.AnonymousAddress != nil && !uuid.Equal(*anonymousAddress, *info.AnonymousAddress) {
-			err := service.Datastore.SetAnonymousAddress(info.ID, anonymousAddress)
-			if err != nil {
-				return handlers.WrapError(err, "unable to set anonymous address", http.StatusInternalServerError)
-			}
-		}
 	} else {
 		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, info.ProviderID, depositProvider)
 		if err != nil {
