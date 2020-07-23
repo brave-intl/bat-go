@@ -105,7 +105,7 @@ func (service *Service) LinkWallet(
 	)
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx, transaction); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -145,6 +145,7 @@ func (service *Service) LinkWallet(
 		}
 		// get the original transaction probi amount
 		probi = tx.Probi
+		info.ProviderID = tx.Destination
 		depositProvider = "uphold"
 	}
 
@@ -153,12 +154,6 @@ func (service *Service) LinkWallet(
 		// check if the member matches the associated member
 		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
-		}
-		if anonymousAddress != nil && info.AnonymousAddress != nil && !uuid.Equal(*anonymousAddress, *info.AnonymousAddress) {
-			err := service.Datastore.SetAnonymousAddress(info.ID, anonymousAddress)
-			if err != nil {
-				return handlers.WrapError(err, "unable to set anonymous address", http.StatusInternalServerError)
-			}
 		}
 	} else {
 		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, info.ProviderID, depositProvider)

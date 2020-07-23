@@ -174,20 +174,6 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
-// SetAnonymousAddress implements Datastore
-func (_d DatastoreWithPrometheus) SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetAnonymousAddress", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.SetAnonymousAddress(ID, anonymousAddress)
-}
-
 // TxLinkWalletInfo implements Datastore
 func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID string, pda string) (err error) {
 	_since := time.Now()
