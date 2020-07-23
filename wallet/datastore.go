@@ -1,7 +1,9 @@
 package wallet
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -36,7 +38,6 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) error
 	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, pda string) error
 	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
@@ -169,6 +170,28 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	return nil, nil
 }
 
+// txGetWallet by ID
+func (pg *Postgres) txHasAnonymousAddress(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
+	statement := `
+	select
+		true
+	from
+		wallets
+	where
+		anonymous_address is not null and
+		id = $1`
+	var result bool
+	err := tx.Get(&result, statement, ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return result, nil
+}
+
 // GetWalletByPublicKey gets a wallet by a public key
 func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
 	statement := `
@@ -220,22 +243,6 @@ func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
 	return nil
 }
 
-// SetAnonymousAddress sets the anon addresses of the provided wallets
-func (pg *Postgres) SetAnonymousAddress(ID string, anonymousAddress *uuid.UUID) error {
-	statement := `
-	UPDATE wallets
-	SET
-			anonymous_address = $2
-	WHERE id = $1
-	`
-	_, err := pg.RawDB().Exec(
-		statement,
-		ID,
-		anonymousAddress,
-	)
-	return err
-}
-
 // TxLinkWalletInfo pass a tx to set the anonymous address
 func (pg *Postgres) TxLinkWalletInfo(
 	tx *sqlx.Tx,
@@ -244,24 +251,52 @@ func (pg *Postgres) TxLinkWalletInfo(
 	anonymousAddress *uuid.UUID,
 	providerID string,
 	userDepositAccountProvider string) error {
-	statement := `
-	UPDATE wallets
-	SET
-			provider_linking_id = $2,
-			anonymous_address = $3,
-			user_deposit_account_provider = $4,
-			provider_id = $5
-	WHERE id = $1;`
-	r, err := tx.Exec(
-		statement,
-		ID,
-		providerLinkingID,
-		anonymousAddress,
-		userDepositAccountProvider,
-		providerID,
+
+	var (
+		statement string
+		sqlErr    error
+		id        = uuid.Must(uuid.FromString(ID))
+		r         sql.Result
 	)
-	if err != nil {
-		return err
+
+	if ok, err := pg.txHasAnonymousAddress(tx, id); err != nil {
+		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
+	} else if ok {
+		statement = `
+			UPDATE wallets
+			SET
+				provider_linking_id = $2,
+				user_deposit_account_provider = $3,
+				provider_id = $4
+			WHERE id = $1;`
+		r, sqlErr = tx.Exec(
+			statement,
+			ID,
+			providerLinkingID,
+			userDepositAccountProvider,
+			providerID,
+		)
+	} else {
+		statement = `
+			UPDATE wallets
+			SET
+					provider_linking_id = $2,
+					anonymous_address = $3,
+					user_deposit_account_provider = $4,
+					provider_id = $5
+			WHERE id = $1;`
+		r, sqlErr = tx.Exec(
+			statement,
+			ID,
+			providerLinkingID,
+			anonymousAddress,
+			userDepositAccountProvider,
+			providerID,
+		)
+	}
+
+	if sqlErr != nil {
+		return sqlErr
 	}
 	if r != nil {
 		count, _ := r.RowsAffected()
@@ -321,6 +356,7 @@ func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymous
 		})
 		return ErrTooManyCardsLinked
 	}
+
 	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, pID, depositProvider)
 	if err != nil {
 		return errorutils.Wrap(err, "unable to set an anonymous address")
