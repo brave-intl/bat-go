@@ -188,19 +188,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
 		}
 
-		var aa uuid.UUID
-
-		if cuw.AnonymousAddress != "" {
-			aa, err = uuid.FromString(cuw.AnonymousAddress)
-			if err != nil {
-				return handlers.ValidationError(
-					"error validating anonymousAddress",
-					map[string]interface{}{
-						"anonymousAddress": err.Error(),
-					},
-				)
-			}
-		}
+		var aa = uuid.Must(uuid.FromString(cuw.AnonymousAddress))
 
 		publicKey, err := hex.DecodeString(wallet.PublicKey)
 		if err != nil {
