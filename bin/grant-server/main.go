@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
@@ -19,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/brave-intl/bat-go/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -73,23 +75,39 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(middleware.BearerToken)
 	r.Use(middleware.RateLimiter(ctx))
 
-	roDB := os.Getenv("RO_DATABASE_URL")
+	var walletService *wallet.Service
+	// use cobra configurations for setting up wallet service
+	// this way we can have the wallet service completely separated from
+	// grants service and easily deployable.
+	r, ctx, walletService = cmd.SetupWalletService(ctx, r)
 
-	var grantRoPg grant.ReadOnlyDatastore
-	grantPg, err := grant.NewPostgres("", true, "grant_db")
+	promotionDB, promotionRODB, err := promotion.NewPostgres()
+	if err != nil {
+		log.Panic().Err(err).Msg("unable connect to promotion db")
+	}
+	promotionService, err := promotion.InitService(
+		ctx,
+		promotionDB,
+		promotionRODB,
+		walletService,
+	)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-	}
-	if len(roDB) > 0 {
-		grantRoPg, err = grant.NewROPostgres(roDB, false, "grant_read_only_db")
-		if err != nil {
-			sentry.CaptureException(err)
-			log.Error().Err(err).Msg("Could not start reader postgres connection")
-		}
+		log.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
-	grantService, err := grant.InitService(ctx, grantPg, grantRoPg)
+	grantDB, grantRODB, err := grant.NewPostgres()
+	if err != nil {
+		log.Panic().Err(err).Msg("unable connect to grant db")
+	}
+
+	grantService, err := grant.InitService(
+		ctx,
+		grantDB,
+		grantRODB,
+		walletService,
+		promotionService,
+	)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Grant service initialization failed")
@@ -97,26 +115,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	// add runnable jobs:
 	jobs = append(jobs, grantService.Jobs()...)
-
-	var roPg promotion.ReadOnlyDatastore
-	pg, err := promotion.NewPostgres("", true, "promotion_db")
-	if err != nil {
-		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
-	}
-	if len(roDB) > 0 {
-		roPg, err = promotion.NewROPostgres(roDB, false, "promotion_read_only_db")
-		if err != nil {
-			sentry.CaptureException(err)
-			log.Error().Err(err).Msg("Could not start reader postgres connection")
-		}
-	}
-
-	promotionService, err := promotion.InitService(ctx, pg, roPg)
-	if err != nil {
-		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Promotion service initialization failed")
-	}
 
 	// add runnable jobs:
 	jobs = append(jobs, promotionService.Jobs()...)
@@ -133,7 +131,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
-	paymentService, err := payment.InitService(paymentPG)
+	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Payment service initialization failed")
@@ -147,18 +145,19 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
-		paymentPG, err := payment.NewPostgres("", true, "merch_payment_db")
+		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
-		paymentService, err := payment.InitService(paymentPG)
+		paymentService, err := payment.InitService(ctx, paymentDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
+
 	r.Get("/metrics", middleware.Metrics())
 
 	// add profiling flag to enable profiling routes

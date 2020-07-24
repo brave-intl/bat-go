@@ -11,7 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/go-chi/chi"
 )
 
@@ -34,7 +34,7 @@ type ActiveGrantsResponse struct {
 // GetActive is the handler for returning info about active grants
 func GetActive(service *grant.Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var wallet wallet.Info
+		var wallet walletutils.Info
 		var walletID = new(inputs.ID)
 
 		err := inputs.DecodeAndValidateString(context.Background(), walletID, r.URL.Query().Get("paymentId"))

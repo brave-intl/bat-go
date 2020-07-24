@@ -20,6 +20,8 @@ services:
       - "POSTGRES_DB=reputation"
     networks:
       - grant
+    ports:
+      - "3402:5432"
   reputation-web-grant:
     container_name: reputation-web-grant
     image: reputation-web
@@ -37,7 +39,7 @@ services:
       - "DATABASE_MIGRATIONS_URL=file:///migrations"
       - "GRPC_ENABLED=1"
       - "IOS_ENROLLMENT_WAIT_HOURS=720h"
-      - "TOKEN_LIST=foobarfoobar"
+      - "TOKEN_LIST=636765a9-1f92-4b40-ab0b-85ebd1e2c23d"
       - "TEST_TAGS=integration"
       - "GOTEST=go test"
     depends_on:

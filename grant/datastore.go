@@ -1,16 +1,17 @@
 package grant
 
 import (
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/jmoiron/sqlx"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/getsentry/sentry-go"
+	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 
 	// needed magically?
-	migrate "github.com/golang-migrate/migrate/v4"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -18,30 +19,16 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	RawDB() *sqlx.DB
-	// NewMigrate
-	NewMigrate() (*migrate.Migrate, error)
-	// Migrate
-	Migrate() error
-	// RollbackTx
-	RollbackTx(tx *sqlx.Tx)
-
+	grantserver.Datastore
 	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
-	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
+	GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) ([]Grant, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
-	RawDB() *sqlx.DB
-	// NewMigrate
-	NewMigrate() (*migrate.Migrate, error)
-	// Migrate
-	Migrate() error
-	// RollbackTx
-	RollbackTx(tx *sqlx.Tx)
-
+	grantserver.Datastore
 	// GetGrantsOrderedByExpiry returns ordered grant claims with optional promotion type filter
-	GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error)
+	GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) ([]Grant, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -49,8 +36,8 @@ type Postgres struct {
 	grantserver.Postgres
 }
 
-// NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
+// NewDB creates a new Postgres Datastore
+func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
@@ -60,8 +47,8 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return nil, err
 }
 
-// NewROPostgres creates a new Postgres RO Datastore
-func NewROPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+// NewRODB creates a new Postgres RO Datastore
+func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
@@ -71,8 +58,28 @@ func NewROPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...s
 	return nil, err
 }
 
+// NewPostgres creates postgres connections
+func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
+	var grantRoPg ReadOnlyDatastore
+	grantPg, err := NewDB("", true, "grant_db")
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+
+	roDB := os.Getenv("RO_DATABASE_URL")
+	if len(roDB) > 0 {
+		grantRoPg, err = NewRODB(roDB, false, "grant_read_only_db")
+		if err != nil {
+			sentry.CaptureException(err)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
+	return grantPg, grantRoPg, err
+}
+
 // GetGrantsOrderedByExpiry returns ordered grant claims for a wallet
-func (pg *Postgres) GetGrantsOrderedByExpiry(wallet wallet.Info, promotionType string) ([]Grant, error) {
+func (pg *Postgres) GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) ([]Grant, error) {
 	type GrantResult struct {
 		Grant
 		ApproximateValue decimal.Decimal `db:"approximate_value"`

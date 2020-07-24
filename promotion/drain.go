@@ -8,7 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
@@ -17,22 +17,14 @@ import (
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
 		return fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	// A verified wallet will have a payout address
-	if wallet.PayoutAddress == nil {
-		// Try to retrieve updated wallet from the ledger service
-		wallet, err = service.wallet.UpsertWallet(ctx, walletID)
-		if err != nil {
-			return fmt.Errorf("error upserting wallet: %w", err)
-		}
-
-		if wallet.PayoutAddress == nil {
-			return errors.New("Wallet is not verified")
-		}
+	if wallet.AnonymousAddress == nil {
+		return errors.New("Wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
@@ -48,7 +40,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		promotion := promotions[k]
 
-		claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			return fmt.Errorf("error finding claim for wallet: %w", err)
 		}
@@ -66,7 +58,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
+			err := service.Datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
 				return fmt.Errorf("error draining claim: %w", err)
 			}
@@ -99,12 +91,12 @@ type DrainWorker interface {
 
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(walletID)
 	if err != nil {
 		return nil, err
 	}
 
-	if wallet == nil || wallet.PayoutAddress == nil {
+	if wallet == nil || wallet.AnonymousAddress == nil {
 		return nil, errors.New("missing wallet")
 	}
 
@@ -114,14 +106,18 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	// FIXME should use idempotency key
-	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), *wallet.PayoutAddress)
-	if err != nil {
-		return nil, err
-	}
+	anonymousString := ""
+	if wallet.AnonymousAddress != nil {
+		anonymousString = wallet.AnonymousAddress.String()
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), anonymousString)
+		if err != nil {
+			return nil, err
+		}
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
 
-	if service.drainChannel != nil {
-		service.drainChannel <- tx
+		return tx, err
 	}
-
-	return tx, err
+	return nil, errors.New("no anonymous address for wallet for transfer")
 }

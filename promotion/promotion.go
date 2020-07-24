@@ -91,7 +91,7 @@ func (service *Service) GetAvailablePromotions(
 	if walletID != nil {
 		logging.AddWalletIDToContext(ctx, *walletID)
 
-		wallet, err := service.wallet.GetOrCreateWallet(ctx, *walletID)
+		wallet, err := service.wallet.GetWallet(*walletID)
 		if err != nil {
 			return nil, err
 		}

@@ -21,16 +21,15 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/crypto/ed25519"
 )
 
 type ControllersTestSuite struct {
@@ -62,7 +61,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 
 	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 }
 
@@ -71,7 +70,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	handler := CreateOrder(service)
 
@@ -123,7 +122,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	handler := CreateOrder(service)
 
@@ -197,7 +196,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 	order := suite.setupCreateOrder(1 / .25)
 
@@ -238,7 +237,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	// Old order
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
-	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	updatedOrder, err := service.Datastore.GetOrder(order.ID)
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
@@ -262,7 +261,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 	}
 
 	// Delete transactions so we don't run into any validation errors
@@ -316,7 +315,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	// Old order
 	suite.Assert().Equal("pending", order.Status)
 	// Check the new order
-	updatedOrder, err := service.datastore.GetOrder(order.ID)
+	updatedOrder, err := service.Datastore.GetOrder(order.ID)
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
@@ -347,50 +346,8 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
-func fundWallet(t *testing.T, destWallet *uphold.Wallet, amount decimal.Decimal) {
-	var donorInfo wallet.Info
-	donorInfo.Provider = "uphold"
-	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
-	{
-		tmp := altcurrency.BAT
-		donorInfo.AltCurrency = &tmp
-	}
-
-	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
-	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
-	var donorPublicKey httpsignature.Ed25519PubKey
-	var donorPrivateKey ed25519.PrivateKey
-	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	donorWallet := &uphold.Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
-
-	if len(donorWallet.ID) > 0 {
-		t.Fatal("FIXME")
-	}
-
-	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	balance, err := destWallet.GetBalance(true)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if balance.TotalProbi.Equals(decimal.Zero) {
-		t.Error("Submit with confirm should result in a balance.")
-	}
-}
-
 func generateWallet(t *testing.T) *uphold.Wallet {
-	var info wallet.Info
+	var info walletutils.Info
 	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
 	info.ProviderID = ""
@@ -421,6 +378,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Create connection to Kafka
 	// FIXME stick kafka setup in suite setup
@@ -439,10 +398,10 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: walletservice.Service{
-			Datastore: pg,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 
@@ -490,10 +449,12 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	userWallet := generateWallet(suite.T())
-	err = pg.UpsertWallet(&userWallet.Info)
+	err = walletDB.UpsertWallet(&userWallet.Info)
 	suite.Require().NoError(err)
 
-	fundWallet(suite.T(), userWallet, order.TotalPrice)
+	balanceBefore, err := userWallet.GetBalance(true)
+	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
 

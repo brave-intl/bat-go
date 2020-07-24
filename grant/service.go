@@ -7,13 +7,15 @@ import (
 	"errors"
 	"os"
 
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -28,8 +30,10 @@ var (
 
 // Service contains datastore as well as prometheus metrics
 type Service struct {
-	datastore              Datastore
-	roDatastore            ReadOnlyDatastore
+	Datastore              Datastore
+	RoDatastore            ReadOnlyDatastore
+	wallet                 *wallet.Service
+	promotion              *promotion.Service
 	grantWalletBalanceDesc *prometheus.Desc
 	jobs                   []srv.Job
 }
@@ -40,10 +44,18 @@ func (s *Service) Jobs() []srv.Job {
 }
 
 // InitService initializes the grant service
-func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(
+	ctx context.Context,
+	datastore Datastore,
+	roDatastore ReadOnlyDatastore,
+	walletService *wallet.Service,
+	promotionService *promotion.Service,
+) (*Service, error) {
 	gs := &Service{
-		datastore:   datastore,
-		roDatastore: roDatastore,
+		Datastore:   datastore,
+		RoDatastore: roDatastore,
+		wallet:      walletService,
+		promotion:   promotionService,
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",
@@ -56,7 +68,7 @@ func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyD
 	gs.jobs = []srv.Job{}
 
 	if len(grantWalletCardID) > 0 {
-		var info wallet.Info
+		var info walletutils.Info
 		info.Provider = "uphold"
 		info.ProviderID = grantWalletCardID
 		{
@@ -94,10 +106,10 @@ func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyD
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
 func (s *Service) ReadableDatastore() ReadOnlyDatastore {
-	if s.roDatastore != nil {
-		return s.roDatastore
+	if s.RoDatastore != nil {
+		return s.RoDatastore
 	}
-	return s.datastore
+	return s.Datastore
 }
 
 // Describe returns all descriptions of the collector.
