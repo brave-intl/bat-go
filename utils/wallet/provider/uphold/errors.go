@@ -25,6 +25,7 @@ type upholdDenominationErrors struct {
 type upholdValidationErrors struct {
 	SignatureError     []upholdBaseError        `json:"signature,omitempty"`
 	DenominationErrors upholdDenominationErrors `json:"denomination,omitempty"`
+	DestinationErrors  []upholdBaseError        `json:"destination,omitempty"`
 	Data               json.RawMessage          `json:",omitempty"`
 }
 

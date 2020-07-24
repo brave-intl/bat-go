@@ -91,7 +91,7 @@ func CreateKey(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Could not generate a secret key ", http.StatusInternalServerError)
 		}
 
-		key, err := service.datastore.CreateKey(reqMerchant, req.Name, encrypted, nonce)
+		key, err := service.Datastore.CreateKey(reqMerchant, req.Name, encrypted, nonce)
 		if err != nil {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
@@ -124,7 +124,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		key, err := service.datastore.DeleteKey(id.UUID(), req.DelaySeconds)
+		key, err := service.Datastore.DeleteKey(id.UUID(), req.DelaySeconds)
 		if err != nil {
 			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
 		}
@@ -145,7 +145,7 @@ func GetKeys(service *Service) handlers.AppHandler {
 		showExpired := expired == "true"
 
 		var keys *[]Key
-		keys, err := service.datastore.GetKeys(reqID, showExpired)
+		keys, err := service.Datastore.GetKeys(reqID, showExpired)
 		if err != nil {
 			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
 		}
@@ -224,7 +224,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		order, err := service.datastore.GetOrder(orderID.UUID())
+		order, err := service.Datastore.GetOrder(orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -250,7 +250,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 			)
 		}
 
-		transactions, err := service.datastore.GetTransactions(orderID.UUID())
+		transactions, err := service.Datastore.GetTransactions(orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the transactions", http.StatusInternalServerError)
 		}
@@ -289,7 +289,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		// Ensure the external transaction ID hasn't already been added to any orders.
-		transaction, err := service.datastore.GetTransaction(req.ExternalTransactionID.String())
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
 		if err != nil {
 			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
 		}
@@ -372,7 +372,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), req.ItemID, false)
+		orderCreds, err := service.Datastore.GetOrderCredsByItemID(orderID.UUID(), req.ItemID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -402,7 +402,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, err := service.datastore.GetOrderCreds(orderID.UUID(), false)
+		creds, err := service.Datastore.GetOrderCreds(orderID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -458,7 +458,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID(), false)
+		creds, err := service.Datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -558,7 +558,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		}
 
 		// Get Paginated Results
-		transactions, total, err := service.datastore.GetPagedMerchantTransactions(
+		transactions, total, err := service.Datastore.GetPagedMerchantTransactions(
 			ctx, merchantID.UUID(), pagination)
 		if err != nil {
 			return handlers.WrapError(err, "error getting transactions", http.StatusInternalServerError)

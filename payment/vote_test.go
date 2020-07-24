@@ -52,10 +52,13 @@ func TestVoteAnonCard(t *testing.T) {
 	if err := s.InitCodecs(); err != nil {
 		t.Error("failed to initialize avro codecs for test: ", err)
 	}
-	s.datastore = Datastore(
+	s.Datastore = Datastore(
 		&Postgres{
 			grantserver.Postgres{
-				DB: sqlx.NewDb(db, "postgres")}})
+				DB: sqlx.NewDb(db, "postgres"),
+			},
+		},
+	)
 
 	defer func() {
 		if err := db.Close(); err != nil {

@@ -31,7 +31,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -41,7 +42,7 @@ import (
 // Wallet a wallet information using Uphold as the provider
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
-	wallet.Info
+	walletutils.Info
 	logger  *zerolog.Logger
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
@@ -69,6 +70,10 @@ var (
 	AnonCardSettlementAddress = os.Getenv("ANON_CARD_SETTLEMENT_ADDRESS")
 	// UpholdSettlementAddress is the address of the settlement wallet
 	UpholdSettlementAddress = os.Getenv("UPHOLD_SETTLEMENT_ADDRESS")
+
+	grantWalletCardID     = os.Getenv("GRANT_WALLET_CARD_ID")
+	grantWalletPrivateKey = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletPublicKey  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 
 	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
 	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
@@ -118,14 +123,14 @@ func init() {
 
 // New returns an uphold wallet constructed using the provided parameters
 // NOTE that it does not register a wallet with Uphold if it does not already exist
-func New(ctx context.Context, info wallet.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
+func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubKey httpsignature.Verifier) (*Wallet, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
 	if info.Provider != "uphold" {
-		return nil, errors.New("The wallet provider must be uphold")
+		return nil, errors.New("The wallet provider or deposit account must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
 		if !validators.IsUUID(info.ProviderID) {
@@ -141,7 +146,7 @@ func New(ctx context.Context, info wallet.Info, privKey crypto.Signer, pubKey ht
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
-func FromWalletInfo(ctx context.Context, info wallet.Info) (*Wallet, error) {
+func FromWalletInfo(ctx context.Context, info walletutils.Info) (*Wallet, error) {
 	var publicKey httpsignature.Ed25519PubKey
 	if len(info.PublicKey) > 0 {
 		var err error
@@ -199,7 +204,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 			Str("type", "http.Response").
 			Int("status", resp.StatusCode).
 			Str("headers", string(jsonHeaders)).
-			Msg(string(dump))
+			Msg(string(body))
 	}
 
 	if resp.StatusCode/100 != 2 {
@@ -216,6 +221,56 @@ type createCardRequest struct {
 	Label       string                   `json:"label"`
 	AltCurrency *altcurrency.AltCurrency `json:"currency"`
 	PublicKey   string                   `json:"publicKey"`
+}
+
+// IsUserKYC - is this user a "member"
+func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, error) {
+	// get logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+
+	// in order to get the isMember status of the wallet, we need to start
+	// a transaction of 0 BAT to the wallet "w" from "grant_wallet" but never commit
+
+	gwPublicKey, err := hex.DecodeString(grantWalletPublicKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid system public key")
+		return "", false, fmt.Errorf("invalid system public key: %w", err)
+	}
+	gwPrivateKey, err := hex.DecodeString(grantWalletPrivateKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid system private key")
+		return "", false, fmt.Errorf("invalid system private key: %w", err)
+	}
+
+	grantWallet := Wallet{
+		Info: walletutils.Info{
+			ProviderID: grantWalletCardID,
+			Provider:   "uphold",
+			PublicKey:  grantWalletPublicKey,
+		},
+		PrivKey: ed25519.PrivateKey([]byte(gwPrivateKey)),
+		PubKey:  httpsignature.Ed25519PubKey([]byte(gwPublicKey)),
+	}
+
+	// prepare a transaction by creating a payload
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "")
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to prepare transaction")
+		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
+	}
+
+	// submit the transaction the payload
+	uhResp, err := grantWallet.SubmitTransaction(transactionB64, false)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to submit transaction")
+		return "", false, fmt.Errorf("failed to submit transaction: %w", err)
+	}
+
+	return uhResp.UserID, uhResp.KYC, nil
 }
 
 // sign registration for this wallet with Uphold with label
@@ -354,7 +409,7 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 // TODO implement func (w *Wallet) UpdatePublicKey() error
 
 // GetWalletInfo returns the info associated with the wallet
-func (w *Wallet) GetWalletInfo() wallet.Info {
+func (w *Wallet) GetWalletInfo() walletutils.Info {
 	return w.Info
 }
 
@@ -367,6 +422,21 @@ type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
 	Message      string       `json:"message,omitempty"`
+}
+
+// denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
+// on the transaction being checked does not fail
+// in order to maintain the zeros, the transaction can be checked using a string
+// when using decimal.Decimal, and the transaction is re-serialized the trailing zeros are dropped
+type denominationRecode struct {
+	Amount   string                   `json:"amount"`
+	Currency *altcurrency.AltCurrency `json:"currency"`
+}
+
+type transactionRequestRecode struct {
+	Denomination denominationRecode `json:"denomination"`
+	Destination  string             `json:"destination"`
+	Message      string             `json:"message,omitempty"`
 }
 
 func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
@@ -411,7 +481,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 }
 
 // Transfer moves funds out of the associated wallet and to the specific destination
-func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
 	req, err := w.signTransfer(altcurrency, probi, destination, "")
 	if err != nil {
 		return nil, err
@@ -487,17 +557,17 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("The signature is invalid")
 	}
 
-	var transaction transactionRequest
-	err = json.Unmarshal([]byte(signedTx.Body), &transaction)
+	var transactionRecode transactionRequestRecode
+	err = json.Unmarshal([]byte(signedTx.Body), &transactionRecode)
 	if err != nil {
 		return nil, err
 	}
 
-	if !govalidator.IsEmail(transaction.Destination) {
-		if !validators.IsUUID(transaction.Destination) {
-			if !validators.IsBTCAddress(transaction.Destination) {
-				if !validators.IsETHAddressNoChecksum(transaction.Destination) {
-					return nil, fmt.Errorf("%s is not a valid destination", transaction.Destination)
+	if !govalidator.IsEmail(transactionRecode.Destination) {
+		if !validators.IsUUID(transactionRecode.Destination) {
+			if !validators.IsBTCAddress(transactionRecode.Destination) {
+				if !validators.IsETHAddressNoChecksum(transactionRecode.Destination) {
+					return nil, fmt.Errorf("%s is not a valid destination", transactionRecode.Destination)
 				}
 			}
 		}
@@ -510,15 +580,19 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	// of fields must be identical as well as numeric serialization. for encoding/json, note
 	// that struct keys are serialized in the order they are defined
 
-	remarshalledBody, err := json.Marshal(&transaction)
+	remarshalledBody, err := json.Marshal(&transactionRecode)
 	if err != nil {
 		return nil, err
 	}
-
 	if string(remarshalledBody) != signedTx.Body {
 		return nil, errors.New("The remarshalled body must be identical")
 	}
 
+	var transaction transactionRequest
+	err = json.Unmarshal([]byte(signedTx.Body), &transaction)
+	if err != nil {
+		return nil, err
+	}
 	return &transaction, nil
 }
 
@@ -526,12 +600,12 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 // NOTE VerifyTransaction guards against transactions that seek to exploit parser differences
 // such as including additional fields that are not understood by this implementation but may
 // be understood by the upstream wallet provider. See DecodeTransaction for details.
-func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) VerifyTransaction(transactionB64 string) (*walletutils.TransactionInfo, error) {
 	transaction, err := w.decodeTransaction(transactionB64)
 	if err != nil {
 		return nil, err
 	}
-	var info wallet.TransactionInfo
+	var info walletutils.TransactionInfo
 	info.Probi = transaction.Denomination.Currency.ToProbi(transaction.Denomination.Amount)
 	{
 		tmp := *transaction.Denomination.Currency
@@ -543,7 +617,7 @@ func (w *Wallet) VerifyTransaction(transactionB64 string) (*wallet.TransactionIn
 }
 
 // VerifyAnonCardTransaction calls VerifyTransaction and checks the currency, amount and destination
-func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string, requiredDestination string) (*walletutils.TransactionInfo, error) {
 	txInfo, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
@@ -554,16 +628,21 @@ func (w *Wallet) VerifyAnonCardTransaction(transactionB64 string) (*wallet.Trans
 	if txInfo.Probi.LessThan(decimal.Zero) {
 		return nil, errors.New("anon card transaction cannot be for negative BAT")
 	}
-	if txInfo.Destination != AnonCardSettlementAddress {
+	if requiredDestination != "" && txInfo.Destination != requiredDestination {
 		return nil, errors.New("anon card transactions must have settlement as their destination")
 	}
 
 	return txInfo, nil
 }
 
+type upholdTransactionResponseDestinationNodeUser struct {
+	ID string `json:"id"`
+}
+
 type upholdTransactionResponseDestinationNode struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
+	Type string                                       `json:"type"`
+	ID   string                                       `json:"id"`
+	User upholdTransactionResponseDestinationNodeUser `json:"user"`
 }
 
 type upholdTransactionResponseDestination struct {
@@ -574,6 +653,7 @@ type upholdTransactionResponseDestination struct {
 	Amount      decimal.Decimal                          `json:"amount"`
 	ExchangeFee decimal.Decimal                          `json:"commission"`
 	TransferFee decimal.Decimal                          `json:"fee"`
+	IsMember    bool                                     `json:"isMember"`
 }
 
 type upholdTransactionResponseParams struct {
@@ -591,17 +671,20 @@ type upholdTransactionResponse struct {
 	Message      string                               `json:"message"`
 }
 
-func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInfo {
-	var txInfo wallet.TransactionInfo
+func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.TransactionInfo {
+	var txInfo walletutils.TransactionInfo
 	txInfo.Probi = resp.Denomination.Currency.ToProbi(resp.Denomination.Amount)
 	{
 		tmp := *resp.Denomination.Currency
 		txInfo.AltCurrency = &tmp
 	}
-	if len(resp.Destination.CardID) > 0 {
-		txInfo.Destination = resp.Destination.CardID
-	} else if len(resp.Destination.Node.ID) > 0 {
-		txInfo.Destination = resp.Destination.Node.ID
+	destination := resp.Destination
+	destinationNode := destination.Node
+	txInfo.UserID = destinationNode.User.ID
+	if len(destination.CardID) > 0 {
+		txInfo.Destination = destination.CardID
+	} else if len(destinationNode.ID) > 0 {
+		txInfo.Destination = destinationNode.ID
 	}
 
 	if len(resp.Origin.CardID) > 0 {
@@ -616,23 +699,24 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *wallet.TransactionInf
 		log.Fatalf("%s is not a valid ISO 8601 datetime\n", resp.CreatedAt)
 	}
 
-	txInfo.DestCurrency = resp.Destination.Currency
-	txInfo.DestAmount = resp.Destination.Amount
-	txInfo.TransferFee = resp.Destination.TransferFee
-	txInfo.ExchangeFee = resp.Destination.ExchangeFee
+	txInfo.DestCurrency = destination.Currency
+	txInfo.DestAmount = destination.Amount
+	txInfo.TransferFee = destination.TransferFee
+	txInfo.ExchangeFee = destination.ExchangeFee
 	txInfo.Status = resp.Status
 	if txInfo.Status == "pending" {
 		txInfo.ValidUntil = time.Now().UTC().Add(time.Duration(resp.Params.TTL) * time.Millisecond)
 	}
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message
+	txInfo.KYC = destination.IsMember
 
 	return &txInfo
 }
 
 // SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
 //   unless confirm is set to true.
-func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet.TransactionInfo, error) {
+func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*walletutils.TransactionInfo, error) {
 	_, err := w.VerifyTransaction(transactionB64)
 	if err != nil {
 		return nil, err
@@ -678,7 +762,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 }
 
 // ConfirmTransaction confirms a previously submitted transaction, moving funds
-func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) ConfirmTransaction(id string) (*walletutils.TransactionInfo, error) {
 	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderID+"/transactions/"+id+"/commit", nil)
 	if err != nil {
 		return nil, err
@@ -702,7 +786,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*wallet.TransactionInfo, error) 
 }
 
 // GetTransaction returns info about a previously confirmed transaction
-func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
+func (w *Wallet) GetTransaction(id string) (*walletutils.TransactionInfo, error) {
 	req, err := newRequest("GET", "/v0/me/transactions/"+id, nil)
 	if err != nil {
 		return nil, err
@@ -722,10 +806,10 @@ func (w *Wallet) GetTransaction(id string) (*wallet.TransactionInfo, error) {
 }
 
 // ListTransactions for this wallet, pagination not yet supported
-func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]wallet.TransactionInfo, error) {
-	var out []wallet.TransactionInfo
+func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils.TransactionInfo, error) {
+	var out []walletutils.TransactionInfo
 	if limit > 0 {
-		out = make([]wallet.TransactionInfo, 0, limit)
+		out = make([]walletutils.TransactionInfo, 0, limit)
 	}
 	var totalTransactions int
 	toExit := false
@@ -858,5 +942,45 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 		return "", err
 	}
 	return details.ID, nil
+}
 
+// FundWallet should fund a given wallet from the donor card (only used in wallet testing)
+func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, error) {
+	var donorInfo walletutils.Info
+	donorInfo.Provider = "uphold"
+	donorInfo.ProviderID = os.Getenv("DONOR_WALLET_CARD_ID")
+	{
+		tmp := altcurrency.BAT
+		donorInfo.AltCurrency = &tmp
+	}
+	zero := decimal.NewFromFloat(0)
+	donorWalletPublicKeyHex := os.Getenv("DONOR_WALLET_PUBLIC_KEY")
+	donorWalletPrivateKeyHex := os.Getenv("DONOR_WALLET_PRIVATE_KEY")
+	var donorPublicKey httpsignature.Ed25519PubKey
+	var donorPrivateKey ed25519.PrivateKey
+	donorPublicKey, err := hex.DecodeString(donorWalletPublicKeyHex)
+	if err != nil {
+		return zero, err
+	}
+	donorPrivateKey, err = hex.DecodeString(donorWalletPrivateKeyHex)
+	if err != nil {
+		return zero, err
+	}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+
+	if len(donorWallet.ID) > 0 {
+		return zero, errors.New("donor wallet does not have an ID")
+	}
+
+	_, err = donorWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(amount), destWallet.Info.ProviderID)
+	if err != nil {
+		return zero, err
+	}
+
+	balance, err := destWallet.GetBalance(true)
+	if err != nil {
+		return zero, err
+	}
+
+	return balance.TotalProbi, nil
 }

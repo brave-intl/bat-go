@@ -18,7 +18,7 @@ type Client interface {
 	FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error)
 }
 
-// HTTPClient wraps http.Client for interacting with the ledger server
+// HTTPClient wraps http.Client for interacting with the ratios server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 	cache  *cache.Cache

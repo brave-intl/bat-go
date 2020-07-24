@@ -17,7 +17,7 @@ type Client interface {
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
 }
 
-// HTTPClient wraps http.Client for interacting with the ledger server
+// HTTPClient wraps http.Client for interacting with the cbr server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 }

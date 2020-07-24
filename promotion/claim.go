@@ -77,7 +77,7 @@ func (service *Service) ClaimPromotionForWallet(
 	walletID uuid.UUID,
 	blindedCreds []string,
 ) (*uuid.UUID, error) {
-	promotion, err := service.datastore.GetPromotion(promotionID)
+	promotion, err := service.Datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,19 +85,19 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errors.New("promotion did not exist")
 	}
 
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
-	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+	claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
 	if claim != nil {
 		// get the claim credentials to check if these blinded creds were used before
-		claimCreds, err := service.datastore.GetClaimCreds(claim.ID)
+		claimCreds, err := service.Datastore.GetClaimCreds(claim.ID)
 		if err != nil {
 			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
 		}
@@ -133,7 +133,7 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 
 	if promotion.Type == "ads" {
-		claim, err := service.datastore.GetPreClaim(promotionID, wallet.ID)
+		claim, err := service.Datastore.GetPreClaim(promotionID, wallet.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +155,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
+	claim, err = service.Datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}

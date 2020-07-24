@@ -18,7 +18,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-const currentMigrationVersion = 16
+const currentMigrationVersion = 18
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
@@ -36,7 +36,17 @@ var (
 		"db.r5.12xlarge": 5000,
 		"db.r5.24xlarge": 5000,
 	}
+	dbs = map[string]*sqlx.DB{}
 )
+
+// Datastore holds generic methods
+type Datastore interface {
+	RawDB() *sqlx.DB
+	NewMigrate() (*migrate.Migrate, error)
+	Migrate() error
+	RollbackTxAndHandle(tx *sqlx.Tx) error
+	RollbackTx(tx *sqlx.Tx)
+}
 
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
@@ -87,23 +97,32 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	if len(databaseURL) == 0 {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
+	dbStatsPref := strings.Join(dbStatsPrefix, "_")
+
+	key := dbStatsPref + ":" + databaseURL
+
+	if dbs[key] != nil {
+		return &Postgres{dbs[key]}, nil
+	}
 
 	db, err := sqlx.Open("postgres", databaseURL)
 	if err != nil {
 		return nil, err
 	}
 
+	dbs[key] = db
+
 	// setup instrumentation using sqlstats
 	if len(dbStatsPrefix) > 0 {
 		// Create a new collector, the name will be used as a label on the metrics
-		collector := metrics.NewStatsCollector(strings.Join(dbStatsPrefix, "_"), db)
+		collector := metrics.NewStatsCollector(dbStatsPref, db)
 		// Register it with Prometheus
 		err := prometheus.Register(collector)
 
 		if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
 			// take old collector, and add the new db
 			if sc, ok := ae.ExistingCollector.(*metrics.StatsCollector); ok {
-				sc.AddStatsGetter(strings.Join(dbStatsPrefix, "_"), db)
+				sc.AddStatsGetter(dbStatsPref, db)
 			}
 		}
 	}
@@ -142,10 +161,16 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return pg, nil
 }
 
-// RollbackTx rolls back a transaction (useful with defer)
-func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
+// RollbackTxAndHandle rolls back a transaction
+func (pg *Postgres) RollbackTxAndHandle(tx *sqlx.Tx) error {
 	err := tx.Rollback()
 	if err != nil && err != sql.ErrTxDone {
 		sentry.CaptureMessage(err.Error())
 	}
+	return err
+}
+
+// RollbackTx rolls back a transaction (useful with defer)
+func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
+	_ = pg.RollbackTxAndHandle(tx)
 }
