@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -152,12 +151,12 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	w3 := suite.NewWallet(service, "uphold")
 	w4 := suite.NewWallet(service, "uphold")
 	bat1 := decimal.NewFromFloat(1)
+	bat2 := decimal.NewFromFloat(2)
 
 	suite.FundWallet(w1, bat1)
 	suite.FundWallet(w2, bat1)
 	suite.FundWallet(w3, bat1)
 	suite.FundWallet(w4, bat1)
-	settlement := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 
 	anonCard1ID, err := w1.CreateCardAddress("anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
@@ -173,11 +172,12 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 
 	w1ProviderID := w1.GetWalletInfo().ProviderID
 	w2ProviderID := w2.GetWalletInfo().ProviderID
+	w3ProviderID := w3.GetWalletInfo().ProviderID
 
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCardV3(service, w1, settlement, http.StatusOK, bat1, &anonCard3UUID)
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
@@ -188,13 +188,13 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w2, zero)
 
-	suite.CheckBalance(w3, bat1)
+	suite.CheckBalance(w3, bat2)
 	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
-	suite.CheckBalance(w3, zero)
+	suite.CheckBalance(w3, bat1)
 
-	suite.CheckBalance(w3, zero)
-	suite.claimCardV3(service, w3, settlement, http.StatusOK, zero, &anonCard2UUID)
-	suite.CheckBalance(w3, zero)
+	suite.CheckBalance(w3, bat1)
+	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.CheckBalance(w3, bat1)
 }
 
 func (suite *WalletControllersTestSuite) claimCardV3(
