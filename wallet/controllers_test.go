@@ -167,13 +167,17 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
 
+	anonCard3ID, err := w3.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
+
 	w1ProviderID := w1.GetWalletInfo().ProviderID
 	w2ProviderID := w2.GetWalletInfo().ProviderID
 
 	zero := decimal.NewFromFloat(0)
 
 	suite.CheckBalance(w1, bat1)
-	suite.claimCardV3(service, w1, settlement, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w1, settlement, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
@@ -181,11 +185,11 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w2, bat1)
 
 	suite.CheckBalance(w2, bat1)
-	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w2, zero)
 
 	suite.CheckBalance(w3, bat1)
-	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, noUUID())
+	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w3, zero)
 
 	suite.CheckBalance(w3, zero)
