@@ -204,7 +204,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 			Str("type", "http.Response").
 			Int("status", resp.StatusCode).
 			Str("headers", string(jsonHeaders)).
-			Msg(string(dump))
+			Msg(string(body))
 	}
 
 	if resp.StatusCode/100 != 2 {
