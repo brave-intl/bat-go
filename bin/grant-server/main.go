@@ -158,10 +158,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 
-	if os.Getenv("FEATURE_WALLET") != "" {
-		r.Mount("/v1/wallet", wallet.Router(walletService))
-	}
-
 	r.Get("/metrics", middleware.Metrics())
 
 	// add profiling flag to enable profiling routes

@@ -38,8 +38,8 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, pda string) error
-	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error
+	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
+	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -249,7 +249,6 @@ func (pg *Postgres) TxLinkWalletInfo(
 	ID string,
 	providerLinkingID uuid.UUID,
 	anonymousAddress *uuid.UUID,
-	providerID string,
 	userDepositAccountProvider string) error {
 
 	var (
@@ -266,15 +265,13 @@ func (pg *Postgres) TxLinkWalletInfo(
 			UPDATE wallets
 			SET
 				provider_linking_id = $2,
-				user_deposit_account_provider = $3,
-				provider_id = $4
+				user_deposit_account_provider = $3
 			WHERE id = $1;`
 		r, sqlErr = tx.Exec(
 			statement,
 			ID,
 			providerLinkingID,
 			userDepositAccountProvider,
-			providerID,
 		)
 	} else {
 		statement = `
@@ -282,8 +279,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 			SET
 					provider_linking_id = $2,
 					anonymous_address = $3,
-					user_deposit_account_provider = $4,
-					provider_id = $5
+					user_deposit_account_provider = $4
 			WHERE id = $1;`
 		r, sqlErr = tx.Exec(
 			statement,
@@ -291,7 +287,6 @@ func (pg *Postgres) TxLinkWalletInfo(
 			providerLinkingID,
 			anonymousAddress,
 			userDepositAccountProvider,
-			providerID,
 		)
 	}
 
@@ -329,7 +324,7 @@ func getEnvMaxCards() int {
 }
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
@@ -357,7 +352,7 @@ func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymous
 		return ErrTooManyCardsLinked
 	}
 
-	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, pID, depositProvider)
+	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		return errorutils.Wrap(err, "unable to set an anonymous address")
 	}

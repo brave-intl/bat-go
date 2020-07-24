@@ -104,8 +104,13 @@ func (service *Service) LinkWallet(
 		probi           decimal.Decimal
 	)
 
+	tx, err := wallet.VerifyTransaction(transaction)
+	if err != nil {
+		return handlers.WrapError(errors.New("failed to verify transaction"), "failed to verify transaction", http.StatusForbidden)
+	}
+
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx, transaction); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx, tx.Destination); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -121,33 +126,14 @@ func (service *Service) LinkWallet(
 		userID = uID
 	}
 
-	if wallet.Provider == "uphold" {
-		tx, err := service.SubmitCommitableAnonCardTransaction(
-			ctx,
-			&info,
-			transaction,
-			"",
-			false,
-		)
-		if err != nil {
-			return handlers.WrapError(err, "unable to verify transaction", http.StatusBadRequest)
-		}
-		if tx.UserID == "" {
-			err := errors.New("user id not provided")
-			return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
-		}
-		userID = tx.UserID
-		probi = tx.Probi
-	} else {
-		tx, err := wallet.VerifyTransaction(transaction)
-		if err != nil {
-			return handlers.WrapError(errors.New("failed to verify transaction"), "failed to verify transaction", http.StatusForbidden)
-		}
-		// get the original transaction probi amount
-		probi = tx.Probi
-		info.ProviderID = tx.Destination
-		depositProvider = "uphold"
+	// check kyc user id validity
+	if userID == "" {
+		err := errors.New("user id not provided")
+		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
 	}
+
+	probi = tx.Probi
+	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(walletClaimNamespace, userID)
 	if info.ProviderLinkingID != nil {
@@ -156,7 +142,7 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	} else {
-		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, info.ProviderID, depositProvider)
+		err := service.Datastore.LinkWallet(info.ID, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {

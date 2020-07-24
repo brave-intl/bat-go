@@ -229,21 +229,13 @@ type createCardRequest struct {
 }
 
 // IsUserKYC - is this user a "member"
-func (w *Wallet) IsUserKYC(ctx context.Context, transaction string) (string, bool, error) {
+func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, error) {
 	// get logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		// no logger, setup
 		_, logger = logging.SetupLogger(ctx)
 	}
-
-	// parse the signedlinkingreationrequest to get the provider id
-	txInfo, err := w.VerifyTransaction(transaction)
-	if err != nil {
-		logger.Warn().Err(err).Msg("failed to transaction validation for uphold")
-		return "", false, errors.New("failed to validate transaction for uphold")
-	}
-	logger.Debug().Msg("able to verify transaction")
 
 	// in order to get the isMember status of the wallet, we need to start
 	// a transaction of 0 BAT to the wallet "w" from "grant_wallet" but never commit
@@ -270,7 +262,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, transaction string) (string, boo
 	}
 
 	// prepare a transaction by creating a payload
-	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), txInfo.Destination, "")
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "")
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
 		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
