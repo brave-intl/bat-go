@@ -38,8 +38,8 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
-	LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
+	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
+	LinkWallet(ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -247,6 +247,7 @@ func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
 func (pg *Postgres) TxLinkWalletInfo(
 	tx *sqlx.Tx,
 	ID string,
+	ProviderID string,
 	providerLinkingID uuid.UUID,
 	anonymousAddress *uuid.UUID,
 	userDepositAccountProvider string) error {
@@ -324,7 +325,7 @@ func getEnvMaxCards() int {
 }
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
@@ -352,7 +353,7 @@ func (pg *Postgres) LinkWallet(ID string, providerLinkingID uuid.UUID, anonymous
 		return ErrTooManyCardsLinked
 	}
 
-	err = pg.TxLinkWalletInfo(tx, ID, providerLinkingID, anonymousAddress, depositProvider)
+	err = pg.TxLinkWalletInfo(tx, ID, providerID, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		return errorutils.Wrap(err, "unable to set an anonymous address")
 	}
