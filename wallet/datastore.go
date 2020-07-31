@@ -247,7 +247,7 @@ func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
 func (pg *Postgres) TxLinkWalletInfo(
 	tx *sqlx.Tx,
 	ID string,
-	ProviderID string,
+	providerID string,
 	providerLinkingID uuid.UUID,
 	anonymousAddress *uuid.UUID,
 	userDepositAccountProvider string) error {
@@ -265,6 +265,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 		statement = `
 			UPDATE wallets
 			SET
+				provider_id = $4,
 				provider_linking_id = $2,
 				user_deposit_account_provider = $3
 			WHERE id = $1;`
@@ -273,6 +274,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 			ID,
 			providerLinkingID,
 			userDepositAccountProvider,
+			providerID,
 		)
 	} else {
 		statement = `
