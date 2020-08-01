@@ -280,6 +280,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 		statement = `
 			UPDATE wallets
 			SET
+					provider_id = $5,
 					provider_linking_id = $2,
 					anonymous_address = $3,
 					user_deposit_account_provider = $4
@@ -290,6 +291,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 			providerLinkingID,
 			anonymousAddress,
 			userDepositAccountProvider,
+			providerID,
 		)
 	}
 
