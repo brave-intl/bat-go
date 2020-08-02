@@ -55,8 +55,8 @@ const (
 )
 
 const (
-	sandboxFingerprint = "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw4="
-	prodFingerprint    = "IYSLsapSKlkofKfi6M2hmS4gzXbQKGIX/DHBWIgstw4="
+	sandboxFingerprint = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
+	prodFingerprint    = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
 )
 
 var (
