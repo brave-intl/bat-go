@@ -28,7 +28,7 @@ func TestGetParametersController(t *testing.T) {
 
 	var (
 		h      = GetParametersHandler(NewService(context.Background(), mockRatios))
-		params = new(Parameters)
+		params = new(ParametersV1)
 	)
 
 	req, err := http.NewRequest("GET", "/parameters", nil)

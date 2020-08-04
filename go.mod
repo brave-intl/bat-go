@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.1
 	github.com/Microsoft/go-winio v0.4.14 // indirect
+	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38

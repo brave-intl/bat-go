@@ -50,7 +50,7 @@ func InitService(ctx context.Context) (*Service, error) {
 }
 
 // GetParameters - respond to caller with the rewards parameters
-func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*Parameters, error) {
+func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -77,7 +77,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	var rate, _ = rateData.Payload[currency.String()].Float64()
 
-	return &Parameters{
+	return &ParametersV1{
 		BATRate: rate,
 		AutoContribute: AutoContribute{
 			DefaultChoice: defaultChoice,
