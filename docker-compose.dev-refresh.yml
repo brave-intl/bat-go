@@ -25,6 +25,7 @@ services:
       - grant
     environment:
       - PPROF_ENABLED=true
+      - ENABLE_LINKING_DRAINING=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
