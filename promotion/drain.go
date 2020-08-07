@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -105,26 +107,34 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	// first use the provider id, if not exists use anon address
-	var destination = wallet.ProviderID
-
-	if destination == "" {
-		if wallet.AnonymousAddress != nil {
-			destination = wallet.AnonymousAddress.String()
-		}
+	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
 	}
 
-	if destination != "" {
-		// FIXME should use idempotency key
-		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), destination)
-		if err != nil {
-			return nil, err
-		}
-		if service.drainChannel != nil {
-			service.drainChannel <- tx
+	if enableLinkingDraining {
+		// first use the provider id, if not exists use anon address
+		var destination = wallet.ProviderID
+
+		if destination == "" {
+			if wallet.AnonymousAddress != nil {
+				destination = wallet.AnonymousAddress.String()
+			}
 		}
 
-		return tx, err
+		if destination != "" {
+			// FIXME should use idempotency key
+			tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), destination)
+			if err != nil {
+				return nil, err
+			}
+			if service.drainChannel != nil {
+				service.drainChannel <- tx
+			}
+
+			return tx, err
+		}
+		return nil, errors.New("no anonymous address for wallet for transfer")
 	}
-	return nil, errors.New("no anonymous address for wallet for transfer")
+	return nil, errors.New("linking and draining is disabled")
 }
