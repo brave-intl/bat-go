@@ -132,7 +132,8 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 		provider_id = $3,
 		provider_linking_id = $5,
 		anonymous_address = $6,
-		user_deposit_account_provider = $7
+		user_deposit_account_provider = $7,
+		user_deposit_card_id = $8
 	returning *`
 	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress, wallet.UserDepositAccountProvider, wallet.UserDepositCardID)
 	if err != nil {
