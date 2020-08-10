@@ -3,11 +3,13 @@ package promotion
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -83,6 +85,12 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 	if promotion == nil {
 		return nil, errors.New("promotion did not exist")
+	}
+	if !promotion.Active {
+		return nil, &handlers.AppError{
+			Message: "promotion is no longer active",
+			Code:    http.StatusGone,
+		}
 	}
 
 	wallet, err := service.wallet.Datastore.GetWallet(walletID)

@@ -278,6 +278,7 @@ func (suite *ControllersTestSuite) ClaimGrant(
 	promotion *Promotion,
 	blindedCreds []string,
 	claimFails bool,
+	promoActive bool,
 ) *uuid.UUID {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
@@ -309,6 +310,11 @@ func (suite *ControllersTestSuite) ClaimGrant(
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+	if !promoActive {
+		// return early if claim is supposed to fail because of inactive promotion
+		suite.Require().Equal(rr.Code, http.StatusGone, string(rr.Body.Bytes()))
+		return nil
+	}
 	if claimFails {
 		suite.Require().NotEqual(rr.Code, http.StatusOK, string(rr.Body.Bytes()))
 		// return early if claim is supposed to fail
@@ -421,7 +427,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -604,7 +610,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1120,37 +1126,39 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
-		if !test.FailToClaim {
-			mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
-				BatchProof:   batchProof,
-				SignedTokens: signedCreds,
-			}, nil)
-		}
+		if test.PromoActive {
+			if !test.FailToClaim {
+				mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+					BatchProof:   batchProof,
+					SignedTokens: signedCreds,
+				}, nil)
+			}
 
-		// non legacy pathway
-		if test.ChecksReputation {
-			mockReputation.EXPECT().
-				IsWalletReputable(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).
-				Return(
-					true,
-					nil,
-				)
+			// non legacy pathway
+			if test.ChecksReputation {
+				mockReputation.EXPECT().
+					IsWalletReputable(
+						gomock.Any(),
+						gomock.Any(),
+						gomock.Any(),
+					).
+					Return(
+						true,
+						nil,
+					)
+			}
+			// legacy pathway
+			if test.InvalidatesBalance {
+				mockBalance.EXPECT().
+					InvalidateBalance(
+						gomock.Any(),
+						gomock.Eq(walletID),
+					).
+					Return(nil)
+			}
 		}
-		// legacy pathway
-		if test.InvalidatesBalance {
-			mockBalance.EXPECT().
-				InvalidateBalance(
-					gomock.Any(),
-					gomock.Eq(walletID),
-				).
-				Return(nil)
-		}
-		claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, test.FailToClaim)
-		if !test.FailToClaim {
+		claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, test.FailToClaim, test.PromoActive)
+		if !test.FailToClaim && test.PromoActive {
 			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
 	}
@@ -1245,7 +1253,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1428,7 +1436,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
