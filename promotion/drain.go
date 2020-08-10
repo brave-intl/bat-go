@@ -25,7 +25,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// A verified wallet will have a payout address
-	if wallet.AnonymousAddress == nil && wallet.ProviderID == "" {
+	if wallet.UserDepositCardID == "" {
 		return errors.New("Wallet is not verified")
 	}
 
@@ -98,8 +98,8 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	if wallet == nil || (wallet.AnonymousAddress == nil && wallet.ProviderID == "") {
-		return nil, errors.New("missing wallet")
+	if wallet == nil || wallet.UserDepositCardID == "" {
+		return nil, errors.New("missing deposit wallet")
 	}
 
 	err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String())
@@ -114,17 +114,9 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 	if enableLinkingDraining {
 		// first use the provider id, if not exists use anon address
-		var destination = wallet.ProviderID
-
-		if destination == "" {
-			if wallet.AnonymousAddress != nil {
-				destination = wallet.AnonymousAddress.String()
-			}
-		}
-
-		if destination != "" {
+		if wallet.UserDepositCardID != "" {
 			// FIXME should use idempotency key
-			tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), destination)
+			tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositCardID)
 			if err != nil {
 				return nil, err
 			}
