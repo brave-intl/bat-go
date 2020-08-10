@@ -267,8 +267,8 @@ func (pg *Postgres) TxLinkWalletInfo(
 			UPDATE wallets
 			SET
 				provider_linking_id = $2,
-				user_deposit_account_provider = $3
-				user_deposit_card_id = $4,
+				user_deposit_account_provider = $3,
+				user_deposit_card_id = $4
 			WHERE id = $1;`
 		r, sqlErr = tx.Exec(
 			statement,
@@ -283,7 +283,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 			SET
 					provider_linking_id = $2,
 					anonymous_address = $3,
-					user_deposit_account_provider = $4
+					user_deposit_account_provider = $4,
 					user_deposit_card_id = $5
 			WHERE id = $1;`
 		r, sqlErr = tx.Exec(
