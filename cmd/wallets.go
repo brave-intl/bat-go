@@ -22,7 +22,6 @@ var (
 	}
 	db                        string
 	walletsFeatureFlag        bool
-	walletsInMigrationFlag    bool
 	enableLinkingDrainingFlag bool
 	roDB                      string
 )
@@ -46,12 +45,6 @@ func init() {
 		"the feature flag enabling the wallets feature")
 	must(viper.BindPFlag("wallets-feature-flag", walletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
 	must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
-
-	// walletsInMigrationFlag - enable the wallet endpoints through this in migration flag
-	walletsCmd.PersistentFlags().BoolVarP(&walletsInMigrationFlag, "wallets-in-migration-flag", "", false,
-		"the in-migration flag disabling the wallets link feature")
-	must(viper.BindPFlag("wallets-in-migration-flag", walletsCmd.PersistentFlags().Lookup("wallets-in-migration-flag")))
-	must(viper.BindEnv("wallets-in-migration-flag", "WALLETS_IN_MIGRATION"))
 
 	// ENABLE_LINKING_DRAINING - enable ability to link wallets and drain wallets
 	walletsCmd.PersistentFlags().BoolVarP(&enableLinkingDrainingFlag, "enable-linking-draining-flag", "", false,
