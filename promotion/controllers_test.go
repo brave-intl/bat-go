@@ -1293,7 +1293,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	info.UserDepositCardID = w.ProviderID
+	info.UserDepositDestination = w.ProviderID
 
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
