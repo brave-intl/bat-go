@@ -58,7 +58,7 @@ func SetupWalletService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Cont
 				"CreateBraveWallet", wallet.CreateBraveWalletV3))
 
 			// if wallets are being migrated we do not want to over claim, we might go over the limit
-			if !viper.GetBool("wallets-in-migration-flag") && viper.GetBool("enable-linking-draining-flag") {
+			if viper.GetBool("enable-linking-draining-flag") {
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", wallet.LinkUpholdDepositAccountV3(s)))

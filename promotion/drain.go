@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -25,7 +23,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// A verified wallet will have a payout address
-	if wallet.UserDepositCardID == "" {
+	if wallet.UserDepositDestination == "" {
 		return errors.New("Wallet is not verified")
 	}
 
@@ -98,7 +96,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	if wallet == nil || wallet.UserDepositCardID == "" {
+	if wallet == nil || wallet.UserDepositDestination == "" {
 		return nil, errors.New("missing deposit wallet")
 	}
 
@@ -107,26 +105,18 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
-	}
-
-	if enableLinkingDraining {
-		// first use the provider id, if not exists use anon address
-		if wallet.UserDepositCardID != "" {
-			// FIXME should use idempotency key
-			tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositCardID)
-			if err != nil {
-				return nil, err
-			}
-			if service.drainChannel != nil {
-				service.drainChannel <- tx
-			}
-
-			return tx, err
+	// use the deposit provider's destination, if absent fail the transfer
+	if wallet.UserDepositDestination != "" {
+		// FIXME should use idempotency key
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
+		if err != nil {
+			return nil, err
 		}
-		return nil, errors.New("no anonymous address for wallet for transfer")
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
+
+		return tx, err
 	}
-	return nil, errors.New("linking and draining is disabled")
+	return nil, errors.New("no deposit provider destination for wallet for transfer")
 }
