@@ -20,10 +20,10 @@ var (
 		Short: "provides REST api services",
 		Run:   WalletRestRun,
 	}
-	db                        string
-	walletsFeatureFlag        bool
-	enableLinkingDrainingFlag bool
-	roDB                      string
+	db                  string
+	walletsFeatureFlag  bool
+	enableLinkDrainFlag bool
+	roDB                string
 )
 
 func init() {
@@ -47,10 +47,10 @@ func init() {
 	must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
 
 	// ENABLE_LINKING_DRAINING - enable ability to link wallets and drain wallets
-	walletsCmd.PersistentFlags().BoolVarP(&enableLinkingDrainingFlag, "enable-linking-draining-flag", "", false,
+	walletsCmd.PersistentFlags().BoolVarP(&enableLinkDrainFlag, "enable-link-drain-flag", "", false,
 		"the in-migration flag disabling the wallets link feature")
-	must(viper.BindPFlag("enable-linking-draining-flag", walletsCmd.PersistentFlags().Lookup("enable-linking-draining-flag")))
-	must(viper.BindEnv("enable-linking-draining-flag", "ENABLE_LINKING_DRAINING"))
+	must(viper.BindPFlag("enable-link-drain-flag", walletsCmd.PersistentFlags().Lookup("enable-link-drain-flag")))
+	must(viper.BindEnv("enable-link-drain-flag", "ENABLE_LINKING_DRAINING"))
 
 	// ro-datastore - the writable datastore
 	walletsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
