@@ -277,8 +277,8 @@ func (suite *ControllersTestSuite) ClaimGrant(
 	privKey crypto.Signer,
 	promotion *Promotion,
 	blindedCreds []string,
-	claimFails bool,
-	promoActive bool,
+	claimStatus int,
+	// promoActive bool,
 ) *uuid.UUID {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
@@ -310,14 +310,9 @@ func (suite *ControllersTestSuite) ClaimGrant(
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	if !promoActive {
-		// return early if claim is supposed to fail because of inactive promotion
-		suite.Require().Equal(rr.Code, http.StatusGone, string(rr.Body.Bytes()))
-		return nil
-	}
-	if claimFails {
-		suite.Require().NotEqual(rr.Code, http.StatusOK, string(rr.Body.Bytes()))
+	if claimStatus != 200 {
 		// return early if claim is supposed to fail
+		suite.Require().Equal(rr.Code, claimStatus, string(rr.Body.Bytes()))
 		return nil
 	}
 	// if claim was not supposed to fail, or rr.Code is supposed to be ok following line fails
@@ -427,7 +422,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -610,7 +605,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1031,7 +1026,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		Legacy             bool      // set the claim as legacy
 		PromoActive        bool      // set the promotion to be active
 		ExpiresAt          time.Time // set the expiration time
-		FailToClaim        bool      // the claim will be redeemed
+		ClaimStatus        int       // the claim request status
 		ChecksReputation   bool      // reputation will be checked
 		InvalidatesBalance bool      // the balance will be invalidated
 		Type               string    // the type of promotion (ugp/ads)
@@ -1040,7 +1035,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			Legacy:             false,
 			PromoActive:        true,
 			ExpiresAt:          later,
-			FailToClaim:        false,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
 			Type:               "ugp",
@@ -1049,7 +1044,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			Legacy:             false,
 			PromoActive:        false,
 			ExpiresAt:          later,
-			FailToClaim:        true,
+			ClaimStatus:        http.StatusGone,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
 			Type:               "ugp",
@@ -1058,7 +1053,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			Legacy:             true,
 			PromoActive:        true,
 			ExpiresAt:          later,
-			FailToClaim:        false,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
 			Type:               "ugp",
@@ -1067,7 +1062,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			Legacy:             true,
 			PromoActive:        false,
 			ExpiresAt:          later,
-			FailToClaim:        false,
+			ClaimStatus:        http.StatusGone,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
 			Type:               "ugp",
@@ -1076,7 +1071,16 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			Legacy:             true,
 			PromoActive:        false,
 			ExpiresAt:          time.Now().UTC(),
-			FailToClaim:        true,
+			ClaimStatus:        http.StatusGone,
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+			Type:               "ugp",
+		},
+		{
+			Legacy:             true,
+			PromoActive:        true,
+			ExpiresAt:          time.Now().UTC(),
+			ClaimStatus:        http.StatusGone,
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
 			Type:               "ugp",
@@ -1127,7 +1131,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		}
 
 		if test.PromoActive {
-			if !test.FailToClaim {
+			if test.ClaimStatus == http.StatusOK {
 				mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
 					BatchProof:   batchProof,
 					SignedTokens: signedCreds,
@@ -1157,8 +1161,15 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 					Return(nil)
 			}
 		}
-		claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, test.FailToClaim, test.PromoActive)
-		if !test.FailToClaim && test.PromoActive {
+		claimID := suite.ClaimGrant(
+			service,
+			info,
+			privKey,
+			promotion,
+			blindedCreds,
+			test.ClaimStatus,
+		)
+		if test.ClaimStatus == http.StatusOK && test.PromoActive {
 			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
 	}
@@ -1253,7 +1264,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1436,7 +1447,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false, true)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
