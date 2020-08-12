@@ -1021,69 +1021,92 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 	}
 
-	later := time.Now().UTC().Add(1000 * time.Second)
+	now := time.Now().UTC()
+	threeMonthsAgo := now.Add(-(time.Hour * 24 * 30 * 3))
+	later := now.Add(1000 * time.Second)
 	scenarios := []struct {
 		Legacy             bool      // set the claim as legacy
+		Type               string    // the type of promotion (ugp/ads)
 		PromoActive        bool      // set the promotion to be active
+		CreatedAt          time.Time // set the created at time
 		ExpiresAt          time.Time // set the expiration time
 		ClaimStatus        int       // the claim request status
 		ChecksReputation   bool      // reputation will be checked
 		InvalidatesBalance bool      // the balance will be invalidated
-		Type               string    // the type of promotion (ugp/ads)
 	}{
 		{
 			Legacy:             false,
+			Type:               "ugp",
 			PromoActive:        true,
+			CreatedAt:          now,
 			ExpiresAt:          later,
 			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
 			Legacy:             false,
+			Type:               "ugp",
 			PromoActive:        false,
+			CreatedAt:          now,
 			ExpiresAt:          later,
 			ClaimStatus:        http.StatusGone,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
 			Legacy:             true,
+			Type:               "ugp",
 			PromoActive:        true,
+			CreatedAt:          now,
 			ExpiresAt:          later,
 			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
-			Type:               "ugp",
 		},
 		{
-			Legacy:             true,
-			PromoActive:        false,
-			ExpiresAt:          later,
-			ClaimStatus:        http.StatusGone,
-			ChecksReputation:   false,
-			InvalidatesBalance: true,
-			Type:               "ugp",
-		},
-		{
-			Legacy:             true,
-			PromoActive:        false,
-			ExpiresAt:          time.Now().UTC(),
-			ClaimStatus:        http.StatusGone,
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
-			Legacy:             true,
-			PromoActive:        true,
-			ExpiresAt:          time.Now().UTC(),
-			ClaimStatus:        http.StatusGone,
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
-			Type:               "ugp",
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   threeMonthsAgo,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
 		},
 	}
 	for _, test := range scenarios {
@@ -1116,7 +1139,12 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		suite.Require().NoError(err, "Insert issuer should succeed")
 
 		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
-		_, err = pg.RawDB().Exec("update promotions set expires_at = $2 where id = $1", promotion.ID, test.ExpiresAt)
+		_, err = pg.RawDB().Exec(
+			"update promotions set expires_at = $2, created_at = $3 where id = $1",
+			promotion.ID,
+			test.ExpiresAt,
+			test.CreatedAt,
+		)
 		suite.Require().NoError(err, "setting the expires_at property shouldn't fail")
 		if !test.PromoActive {
 			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")

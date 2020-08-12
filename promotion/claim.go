@@ -18,6 +18,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	threeMonths = time.Hour * 24 * 30 * 3
+)
+
 // Claim encapsulates a redeemed or unredeemed ("pre-registered") claim to a promotion by a wallet
 type Claim struct {
 	ID               uuid.UUID       `db:"id"`
@@ -86,7 +90,7 @@ func (service *Service) ClaimPromotionForWallet(
 	if promotion == nil {
 		return nil, errors.New("promotion did not exist")
 	}
-	if !promotion.Active || promotion.ExpiresAt.Before(time.Now()) {
+	if !promotion.Active || promotion.ExpiresAt.Before(time.Now()) || time.Since(promotion.CreatedAt) > threeMonths {
 		return nil, &handlers.AppError{
 			Message: "promotion is no longer active",
 			Code:    http.StatusGone,
