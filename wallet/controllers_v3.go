@@ -363,6 +363,8 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 		// not anoncard wallet, invalid
 		logger.Warn().Str("id", id.String()).Msg("wallet not capable of balance inquiry")
 		return handlers.WrapError(err, "wallet not capable of balance inquiry", http.StatusBadRequest)
+	} else if info.ProviderID == "" { // implied only for uphold
+		return handlers.WrapError(errors.New("provider id does not exist"), "wallet not capable of balance inquiry", http.StatusForbidden)
 	}
 
 	// convert this wallet to an uphold wallet
