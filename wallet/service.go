@@ -142,11 +142,8 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	} else {
-		destination := info.ProviderID
-		if info.ProviderID == "" {
-			destination = tx.Destination
-		}
-		err := service.Datastore.LinkWallet(info.ID, destination, providerLinkingID, anonymousAddress, depositProvider)
+		// tx.Destination will be stored as wallet.UserDepositDestination in the wallet info upon linking
+		err := service.Datastore.LinkWallet(info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {

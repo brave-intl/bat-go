@@ -22,6 +22,7 @@ type Info struct {
 	ProviderLinkingID          *uuid.UUID               `json:"providerLinkingId" valid:"-" db:"provider_linking_id"`
 	AnonymousAddress           *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
 	UserDepositAccountProvider *string                  `json:"userDepositAccountProvider" valid:"in(uphold)" db:"user_deposit_account_provider"`
+	UserDepositDestination     string                   `json:"userDepositCardId" db:"user_deposit_destination"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,
