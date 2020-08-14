@@ -18,10 +18,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var (
-	threeMonths = time.Hour * 24 * 30 * 3
-)
-
 // Claim encapsulates a redeemed or unredeemed ("pre-registered") claim to a promotion by a wallet
 type Claim struct {
 	ID               uuid.UUID       `db:"id"`
