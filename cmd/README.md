@@ -17,6 +17,8 @@ Below is the command structure for bat-go microservices using cobra
   - settlement
     - paypal
       - transform
-      - transform
       - email
+    - gemini
+      - transform
+      - submit
 ```
