@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/cmd"
+	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -37,6 +38,7 @@ var (
 		"gemini": {"contribution", "referral"},
 	}
 	artifactGenerators map[string]func(
+		context.Context,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -52,6 +54,7 @@ func init() {
 	}
 	// let the functions become initialized before creating the map
 	artifactGenerators = map[string]func(
+		context.Context,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -108,6 +111,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	ctx := context.Background()
 	for _, provider := range providers {
 		for _, txType := range providerType[provider] {
 			walletKey := provider + "-" + txType
@@ -116,6 +120,7 @@ func main() {
 				continue
 			}
 			err := artifactGenerators[provider](
+				ctx,
 				walletKey+"-"+outputFile,
 				wrappedClient,
 				config.GetWalletKey(walletKey),
@@ -131,6 +136,7 @@ func main() {
 func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) map[string][]settlement.Transaction {
 	settlementTransactionsByWallet := make(map[string][]settlement.Transaction)
 
+	// alt := altcurrency.BAT
 	for _, antifraudTx := range antifraudTxs {
 		tx := antifraudTx.ToTransaction()
 
@@ -152,6 +158,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 }
 
 func createUpholdArtifact(
+	ctx context.Context,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -186,13 +193,14 @@ func createUpholdArtifact(
 	if err != nil {
 		return err
 	}
-
-	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: upholdOnlySettlements}
-
-	out, err := json.MarshalIndent(state, "", "    ")
+	oauthClientID := response.Data["clientid"].(string)
+	// group transactions (500 at a time)
+	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
 	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
@@ -202,6 +210,7 @@ func createUpholdArtifact(
 }
 
 func createGeminiArtifact(
+	ctx context.Context,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -213,7 +222,7 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := settlementcmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -259,7 +268,6 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
-			nil,
 			clientID,
 			&privateRequestRequirements,
 		)
@@ -294,12 +302,14 @@ func signGeminiRequests(
 }
 
 func createPaypalArtifact(
+	ctx context.Context,
 	outputFile string,
 	client *vaultsigner.WrappedClient,
 	walletKey string,
 	paypalOnlySettlements []settlement.Transaction,
 ) error {
-	return cmd.PaypalTransformForMassPay(
+	return settlementcmd.PaypalTransformForMassPay(
+		ctx,
 		&paypalOnlySettlements,
 		"JPY",
 		decimal.NewFromFloat(*jpyRate),

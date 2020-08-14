@@ -5,14 +5,18 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/brave-intl/bat-go/middleware"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -48,7 +52,7 @@ func (service *Service) SubmitAnonCardTransaction(
 	walletID uuid.UUID,
 	transaction string,
 	destination string,
-) (*wallet.TransactionInfo, error) {
+) (*walletutils.TransactionInfo, error) {
 	info, err := service.Datastore.GetWallet(walletID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
@@ -68,7 +72,7 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	transaction string,
 	destination string,
 	confirm bool,
-) (*wallet.TransactionInfo, error) {
+) (*walletutils.TransactionInfo, error) {
 	providerWallet, err := provider.GetWallet(ctx, *info)
 	if err != nil {
 		return nil, err
@@ -142,7 +146,7 @@ func (service *Service) LinkWallet(
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	} else {
-		// tx.Destination will be stored as wallet.UserDepositDestination in the wallet info upon linking
+		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
 		err := service.Datastore.LinkWallet(info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
@@ -161,4 +165,64 @@ func (service *Service) LinkWallet(
 		}
 	}
 	return nil
+}
+
+// SetupService - setup the wallet microservice
+func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// setup the service now
+	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")
+	if err != nil {
+		logger.Panic().Err(err).Msg("unable connect to wallet db")
+	}
+	roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "wallet_ro_db")
+	if err != nil {
+		logger.Panic().Err(err).Msg("unable connect to wallet db")
+	}
+
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDB)
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
+
+	// add our command line params to context
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
+
+	s, err := InitService(ctx, db, roDB)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+	}
+
+	// if feature is enabled, setup the routes
+	if viper.GetBool("wallets-feature-flag") {
+		// setup our wallet routes
+		r.Route("/v3/wallet", func(r chi.Router) {
+			// create wallet routes for our wallet providers
+			r.Post("/uphold", middleware.InstrumentHandlerFunc(
+				"CreateUpholdWallet", CreateUpholdWalletV3))
+			r.Post("/brave", middleware.InstrumentHandlerFunc(
+				"CreateBraveWallet", CreateBraveWalletV3))
+
+			// if wallets are being migrated we do not want to over claim, we might go over the limit
+			if viper.GetBool("enable-link-drain-flag") {
+				// create wallet claim routes for our wallet providers
+				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
+					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+			}
+
+			// get wallet routes
+			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
+				"GetWallet", GetWalletV3))
+			r.Get("/recover/{publicKey}", middleware.InstrumentHandlerFunc(
+				"RecoverWallet", RecoverWalletV3))
+
+			// get wallet balance routes
+			r.Get("/uphold/{paymentID}", middleware.InstrumentHandlerFunc(
+				"GetUpholdWalletBalance", GetUpholdWalletBalanceV3))
+		})
+	}
+	return r, ctx, s
 }

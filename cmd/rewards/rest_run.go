@@ -1,4 +1,4 @@
-package cmd
+package rewards
 
 import (
 	"context"
@@ -8,26 +8,23 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/rewards"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// RewardsRestRun - Main entrypoint of the REST subcommand
+// RestRun - Main entrypoint of the REST subcommand
 // This function takes a cobra command and starts up the
 // rewards rest microservice.
-func RewardsRestRun(cmd *cobra.Command, args []string) {
+func RestRun(command *cobra.Command, args []string) {
+	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
-
+	cmd.Must(err)
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux
@@ -74,7 +71,7 @@ func RewardsRestRun(cmd *cobra.Command, args []string) {
 	}
 
 	// do rest endpoints
-	r := setupRouter(ctx)
+	r := cmd.SetupRouter(command.Context())
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
 

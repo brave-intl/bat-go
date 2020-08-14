@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/brave-intl/bat-go/cmd"
+	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/formatters"
@@ -52,7 +52,8 @@ func main() {
 	case "uphold":
 		err = upholdSubmit()
 	case "gemini":
-		err = cmd.GeminiUploadSettlement(*inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
+		ctx := context.Background()
+		err = settlementcmd.GeminiUploadSettlement(ctx, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
 	}
 	if err != nil {
 		log.Fatalln(err)

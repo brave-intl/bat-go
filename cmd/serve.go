@@ -7,7 +7,6 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
@@ -20,28 +19,27 @@ const (
 )
 
 func init() {
-	rootCmd.AddCommand(serveCmd)
+	RootCmd.AddCommand(ServeCmd)
 
 	// env - defaults to development
-	serveCmd.PersistentFlags().StringVarP(&address, "address", "a", ":8080",
+	ServeCmd.PersistentFlags().StringVarP(&address, "address", "a", ":8080",
 		"the default address to bind to")
-	must(viper.BindPFlag("address", serveCmd.PersistentFlags().Lookup("address")))
-	must(viper.BindEnv("address", "ADDR"))
+	Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
+	Must(viper.BindEnv("address", "ADDR"))
 }
 
 var address string
 
-var serveCmd = &cobra.Command{
+// ServeCmd the serve command
+var ServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "entrypoint to serve a micro-service",
 }
 
-func setupRouter(ctx context.Context) *chi.Mux {
+// SetupRouter sets up a router
+func SetupRouter(ctx context.Context) *chi.Mux {
 	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger on context, make a new one
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	Must(err)
 
 	r := chi.NewRouter()
 	r.Use(

@@ -50,6 +50,8 @@ type Transaction struct {
 
 // AntifraudTransaction a transaction object that comes from antifraud
 type AntifraudTransaction struct {
+	// CreatedAt         time.Time       `json:"created_at"`
+	// InsertedAt        time.Time       `json:"inserted_at"`
 	Address           string          `json:"address"`
 	BAT               decimal.Decimal `json:"bat"`
 	ChannelType       string          `json:"channel_type"`
@@ -91,18 +93,27 @@ func (at AntifraudTransaction) ToTransaction() Transaction {
 	alt := altcurrency.BAT
 	providerInfo := at.ProviderInfo()
 	return Transaction{
-		AltCurrency:      &alt,
-		Amount:           at.BAT,
-		Currency:         alt.String(),
-		Destination:      at.Address,
-		Publisher:        at.Owner,
-		BATPlatformFee:   alt.ToProbi(at.Fees),
-		Probi:            alt.ToProbi(at.BAT),
+		AltCurrency: &alt,
+		// Authority: ,
+		Amount: at.BAT,
+		// ExchangeFee: ,
+		Currency:       alt.String(),
+		Destination:    at.Address,
+		Publisher:      at.Owner,
+		BATPlatformFee: alt.ToProbi(at.Fees),
+		Probi:          alt.ToProbi(at.BAT),
+		// ProviderID:       providerInfo.ID,
 		WalletProvider:   providerInfo.Establishment,
 		WalletProviderID: providerInfo.ID,
 		Channel:          at.Publisher,
-		SettlementID:     at.PayoutReportID,
-		Type:             at.Type,
+		// SignedTx: ,
+		// Status: ,
+		SettlementID: at.PayoutReportID,
+		// TransferFee: ,
+		Type: at.Type,
+		// ValidUntil: ,
+		// DocumentID: ,
+		// Note: ,
 	}
 }
 

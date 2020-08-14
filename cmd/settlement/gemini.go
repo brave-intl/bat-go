@@ -1,4 +1,4 @@
-package cmd
+package settlement
 
 import (
 	"context"
@@ -14,13 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -42,7 +40,7 @@ var (
 		Use:   "upload",
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := GeminiUploadSettlement(input, signatureSwitch, allTransactionsFile, out); err != nil {
+			if err := GeminiUploadSettlement(cmd.Context(), input, signatureSwitch, allTransactionsFile, out); err != nil {
 				fmt.Printf("failed to perform upload to gemini: %s\n", err)
 				os.Exit(1)
 			}
@@ -53,7 +51,7 @@ var (
 		Use:   "transform",
 		Short: "provides transform of gemini settlement for mass pay",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := GeminiTransformForMassPay(input, oauthClientID, out); err != nil {
+			if err := GeminiTransformForMassPay(cmd.Context(), input, oauthClientID, out); err != nil {
 				log.Printf("failed to perform transform: %s\n", err)
 				os.Exit(1)
 			}
@@ -74,28 +72,28 @@ func init() {
 	// input (required by all)
 	geminiSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
 		"the file or comma delimited list of files that should be utilized")
-	must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
-	must(viper.BindEnv("input", "INPUT"))
-	must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
+	cmd.Must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
+	cmd.Must(viper.BindEnv("input", "INPUT"))
+	cmd.Must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
 	geminiSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./gemini-settlement",
 		"the location of the file")
-	must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
-	must(viper.BindEnv("out", "OUT"))
+	cmd.Must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
+	cmd.Must(viper.BindEnv("out", "OUT"))
 
 	// txnID (required by transform)
 	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
-	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
-	must(viper.BindEnv("txn-id", "TXN_ID"))
-	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+	cmd.Must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
+	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
 	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&oauthClientID, "gemini-client-id", "g", "",
 		"the oauth client id needed to check that the user authorized the payment")
-	must(viper.BindPFlag("gemini-client-id", geminiSettlementCmd.PersistentFlags().Lookup("gemini-client-id")))
-	must(viper.BindEnv("gemini-client-id", "GEMINI_CLIENT_ID"))
-	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
+	cmd.Must(viper.BindPFlag("gemini-client-id", geminiSettlementCmd.PersistentFlags().Lookup("gemini-client-id")))
+	cmd.Must(viper.BindEnv("gemini-client-id", "GEMINI_CLIENT_ID"))
+	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 }
 
 func geminiSiftThroughResponses(
@@ -106,17 +104,15 @@ func geminiSiftThroughResponses(
 
 	for _, payout := range *response {
 		original := originalTransactions[payout.TxRef]
-		key := "failed"
+		var key string
 		if payout.Result == "Error" {
+			key = "failed"
 			original.Note = *payout.Reason
 		} else {
-			status := *payout.Status
-			if status == "Pending" {
+			if *payout.Status == "Pending" {
 				key = "pending"
-			} else if status == "Completed" {
-				key = "complete"
 			} else {
-				key = "unknown"
+				key = "complete"
 			}
 		}
 		original.Status = key
@@ -129,18 +125,13 @@ func geminiSiftThroughResponses(
 	return transactions
 }
 
-func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
-}
-
 // GeminiUploadSettlement marks the settlement file as complete
-func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
+func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
 	if outPath == "./gemini-settlement" {
 		// use a file with extension if none is passed
 		outPath = "./gemini-settlement-complete.json"
 	}
 
-	ctx, _ := setupLogger(context.Background())
 	bulkPayoutFiles := strings.Split(inPath, ",")
 	geminiClient, err := gemini.New()
 	if err != nil {
@@ -268,7 +259,7 @@ func GeminiWriteRequests(outPath string, metadata *[][]gemini.PayoutPayload) err
 }
 
 // GeminiTransformForMassPay starts the process to transform a settlement into a mass pay csv
-func GeminiTransformForMassPay(input string, oauthClientID string, output string) (err error) {
+func GeminiTransformForMassPay(ctx context.Context, input string, oauthClientID string, output string) (err error) {
 	transactions, err := settlement.ReadFiles(strings.Split(input, ","))
 	if err != nil {
 		return err
