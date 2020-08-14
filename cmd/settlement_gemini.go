@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/settlement/paypal"
+	"github.com/brave-intl/bat-go/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/gocarina/gocsv"
@@ -22,61 +22,61 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	input    string
-	currency string
-	txnID    string
-	rate     float64
-	out      string
-)
+// var (
+// 	input    string
+// 	currency string
+// 	txnID    string
+// 	rate     float64
+// 	out      string
+// )
 
 func init() {
 	// add complete and transform subcommand
-	paypalSettlementCmd.AddCommand(completePaypalSettlementCmd)
-	paypalSettlementCmd.AddCommand(transformPaypalSettlementCmd)
-	paypalSettlementCmd.AddCommand(emailPaypalSettlementCmd)
+	geminiSettlementCmd.AddCommand(completeGeminiSettlementCmd)
+	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
+	geminiSettlementCmd.AddCommand(emailGeminiSettlementCmd)
 
 	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(paypalSettlementCmd)
+	settlementCmd.AddCommand(geminiSettlementCmd)
 
 	// setup the flags
 
 	// input (required by all)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
+	geminiSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
 		"the file or comma delimited list of files that should be utilized")
-	must(viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input")))
+	must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
 	must(viper.BindEnv("input", "INPUT"))
-	must(paypalSettlementCmd.MarkPersistentFlagRequired("input"))
+	must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./paypal-settlement",
+	geminiSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./gemini-settlement",
 		"the location of the file")
-	must(viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out")))
+	must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
 	must(viper.BindEnv("out", "OUT"))
 
 	// currency (required by transform)
-	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
+	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
 		"a currency must be set")
-	must(viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
+	must(viper.BindPFlag("currency", transformGeminiSettlementCmd.PersistentFlags().Lookup("currency")))
 	must(viper.BindEnv("currency", "CURRENCY"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
+	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("currency"))
 
 	// txnID (required by complete)
-	completePaypalSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
+	completeGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
-	must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	must(viper.BindEnv("txn-id", "TXN_ID"))
-	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+	must(completeGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
 	// rate
-	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
+	transformGeminiSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
 		"the rate to compute the currency conversion")
-	must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
+	must(viper.BindPFlag("rate", transformGeminiSettlementCmd.PersistentFlags().Lookup("rate")))
 	must(viper.BindEnv("rate", "RATE"))
 }
 
-// PaypalEmailTemplate performs template replacement of date fields in emails
-func PaypalEmailTemplate(inPath string, outPath string) (err error) {
+// EmailTemplate performs template replacement of date fields in emails
+func EmailTemplate(inPath string, outPath string) (err error) {
 	// read in email template
 	data, err := ioutil.ReadFile(inPath)
 	if err != nil {
@@ -117,43 +117,43 @@ func PaypalEmailTemplate(inPath string, outPath string) (err error) {
 }
 
 var (
-	paypalSettlementCmd = &cobra.Command{
-		Use:   "paypal",
-		Short: "provides paypal settlement",
+	geminiSettlementCmd = &cobra.Command{
+		Use:   "gemini",
+		Short: "provides gemini settlement",
 	}
 
-	emailPaypalSettlementCmd = &cobra.Command{
+	emailGeminiSettlementCmd = &cobra.Command{
 		Use:   "email",
 		Short: "provides population of a templated email",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalEmailTemplate(input, out); err != nil {
+			if err := EmailTemplate(input, out); err != nil {
 				log.Printf("failed to perform email templating: %s\n", err)
 				os.Exit(1)
 			}
 		},
 	}
 
-	completePaypalSettlementCmd = &cobra.Command{
+	completeGeminiSettlementCmd = &cobra.Command{
 		Use:   "complete",
-		Short: "provides completion of paypal settlement",
+		Short: "provides completion of gemini settlement",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalCompleteSettlement(input, out, txnID); err != nil {
+			if err := CompleteSettlement(input, out, txnID); err != nil {
 				log.Printf("failed to perform complete: %s\n", err)
 				os.Exit(1)
 			}
 		},
 	}
 
-	transformPaypalSettlementCmd = &cobra.Command{
+	transformGeminiSettlementCmd = &cobra.Command{
 		Use:   "transform",
-		Short: "provides transform of paypal settlement for mass pay",
+		Short: "provides transform of gemini settlement for mass pay",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// add flag values to our base context that need to be there
 			ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
 			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalTransformForMassPay(PaypalTransformArgs{
+			if err := TransformForMassPay(TransformArgs{
 				In:       input,
 				Currency: currency,
 				Rate:     decimal.NewFromFloat(rate),
@@ -166,8 +166,8 @@ var (
 	}
 )
 
-// PaypalCompleteSettlement marks the settlement file as complete
-func PaypalCompleteSettlement(inPath string, outPath string, txnID string) error {
+// CompleteSettlement marks the settlement file as complete
+func CompleteSettlement(inPath string, outPath string, txnID string) error {
 	fmt.Println("RUNNING: complete")
 	if inPath == "" {
 		return errors.New("the '-i' or '--input' flag must be set")
@@ -175,34 +175,34 @@ func PaypalCompleteSettlement(inPath string, outPath string, txnID string) error
 	if txnID == "" {
 		return errors.New("the '-t' or '--txn-id' flag must be set")
 	}
-	if outPath == "./paypal-settlement" {
+	if outPath == "./gemini-settlement" {
 		// use a file with extension if none is passed
-		outPath = "./paypal-settlement-complete.json"
+		outPath = "./gemini-settlement-complete.json"
 	}
-	payouts, err := PaypalReadFiles(inPath)
+	payouts, err := ReadFiles(inPath)
 	if err != nil {
 		return err
 	}
 	for i, payout := range *payouts {
-		if payout.WalletProvider != "paypal" {
-			return errors.New("Error, non-paypal payment included.\nThis command should be called only on the filtered paypal-settlement.json")
+		if payout.WalletProvider != "gemini" {
+			return errors.New("Error, non-gemini payment included.\nThis command should be called only on the filtered gemini-settlement.json")
 		}
 		if !payout.Amount.GreaterThan(decimal.Zero) {
-			return errors.New("Error, non-zero payment included.\nThis command should be called only on the post-rate paypal-settlement.json")
+			return errors.New("Error, non-zero payment included.\nThis command should be called only on the post-rate gemini-settlement.json")
 		}
 		payout.Status = "complete"
 		payout.ProviderID = txnID
 		(*payouts)[i] = payout
 	}
-	err = PaypalWriteTransactions(outPath, payouts)
+	err = WriteTransactions(outPath, payouts)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// PaypalTransformArgs are the args required for the transform command
-type PaypalTransformArgs struct {
+// TransformArgs are the args required for the transform command
+type TransformArgs struct {
 	In       string
 	Currency string
 	Auth     string
@@ -210,8 +210,8 @@ type PaypalTransformArgs struct {
 	Out      string
 }
 
-// PaypalWriteTransactions writes settlement transactions to a json file
-func PaypalWriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
+// WriteTransactions writes settlement transactions to a json file
+func WriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
@@ -219,9 +219,9 @@ func PaypalWriteTransactions(outPath string, metadata *[]settlement.Transaction)
 	return ioutil.WriteFile(outPath, data, 0600)
 }
 
-// PaypalWriteMassPayCSV writes a csv for using with Paypal web mass payments
-func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
-	rows := []*paypal.MassPayRow{}
+// WriteMassPayCSV writes a csv for using with Gemini web mass payments
+func WriteMassPayCSV(outPath string, metadata *[]gemini.Metadata) error {
+	rows := []*gemini.MassPayRow{}
 	total := decimal.NewFromFloat(0)
 	currency := ""
 	for _, entry := range *metadata {
@@ -253,8 +253,8 @@ func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 	return nil
 }
 
-// PaypalTransformForMassPay starts the process to transform a settlement into a mass pay csv
-func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
+// TransformForMassPay starts the process to transform a settlement into a mass pay csv
+func TransformForMassPay(args TransformArgs) (err error) {
 	fmt.Println("RUNNING: transform")
 	if args.In == "" {
 		return errors.New("the '-i' or '--input' flag must be set")
@@ -263,41 +263,41 @@ func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
 		return errors.New("the '-c' or '--currency' flag must be set")
 	}
 
-	payouts, err := PaypalReadFiles(args.In)
+	payouts, err := ReadFiles(args.In)
 	if err != nil {
 		return err
 	}
 
-	rate, err := paypal.GetRate(ctx, args.Currency, args.Rate)
+	rate, err := gemini.GetRate(ctx, args.Currency, args.Rate)
 	if err != nil {
 		return err
 	}
 	args.Rate = rate
 
-	txs, err := paypal.CalculateTransactionAmounts(args.Currency, args.Rate, payouts)
+	txs, err := gemini.CalculateTransactionAmounts(args.Currency, args.Rate, payouts)
 	if err != nil {
 		return err
 	}
 
-	err = PaypalWriteTransactions(args.Out+".json", txs)
+	err = WriteTransactions(args.Out+".json", txs)
 	if err != nil {
 		return err
 	}
 
-	metadata, err := paypal.MergeAndTransformPayouts(txs)
+	metadata, err := gemini.MergeAndTransformPayouts(txs)
 	if err != nil {
 		return err
 	}
 
-	err = PaypalWriteMassPayCSV(args.Out+".csv", metadata)
+	err = WriteMassPayCSV(args.Out+".csv", metadata)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// PaypalReadFiles reads a series of files
-func PaypalReadFiles(input string) (*[]settlement.Transaction, error) {
+// ReadFiles reads a series of files
+func ReadFiles(input string) (*[]settlement.Transaction, error) {
 	var allPayouts []settlement.Transaction
 	files := strings.Split(input, ",")
 	for _, file := range files {
