@@ -1022,7 +1022,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 	}
 
 	now := time.Now().UTC()
-	threeMonthsAgo := now.Add(-(time.Hour * 24 * 30 * 3))
+	threeMonthsAgo := now.AddDate(0, -3, 0)
 	later := now.Add(1000 * time.Second)
 	scenarios := []struct {
 		Legacy             bool      // set the claim as legacy
@@ -1388,7 +1388,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
 	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
 	pg, _, err := NewPostgres()
-	suite.Require().NoError(err, "Failed to get postgres conn")
+	suite.Require().NoError(err, "Failed to get postgres   ")
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
