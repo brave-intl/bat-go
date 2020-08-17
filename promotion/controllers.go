@@ -62,11 +62,19 @@ func Router(service *Service) chi.Router {
 }
 
 // SuggestionsRouter for suggestions endpoints
-func SuggestionsRouter(service *Service) chi.Router {
+func SuggestionsRouter(service *Service) (chi.Router, error) {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
-	r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
-	return r
+
+	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+	}
+
+	if enableLinkingDraining {
+		r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
+	}
+	return r, nil
 }
 
 // WalletEventRouter for reporting bat loss events

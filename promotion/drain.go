@@ -23,7 +23,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	// A verified wallet will have a payout address
-	if wallet.AnonymousAddress == nil {
+	if wallet.UserDepositDestination == "" {
 		return errors.New("Wallet is not verified")
 	}
 
@@ -96,8 +96,8 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	if wallet == nil || wallet.AnonymousAddress == nil {
-		return nil, errors.New("missing wallet")
+	if wallet == nil || wallet.UserDepositDestination == "" {
+		return nil, errors.New("missing deposit wallet")
 	}
 
 	err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String())
@@ -105,11 +105,10 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	// FIXME should use idempotency key
-	anonymousString := ""
-	if wallet.AnonymousAddress != nil {
-		anonymousString = wallet.AnonymousAddress.String()
-		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), anonymousString)
+	// use the deposit provider's destination, if absent fail the transfer
+	if wallet.UserDepositDestination != "" {
+		// FIXME should use idempotency key
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
 		if err != nil {
 			return nil, err
 		}
@@ -119,5 +118,5 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 		return tx, err
 	}
-	return nil, errors.New("no anonymous address for wallet for transfer")
+	return nil, errors.New("no deposit provider destination for wallet for transfer")
 }

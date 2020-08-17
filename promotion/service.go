@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -386,11 +387,21 @@ func InitService(
 			Cadence: 5 * time.Second,
 			Workers: 1,
 		},
-		{
-			Func:    service.RunNextDrainJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
+	}
+
+	// make sure that we only enable the DrainJob if we have linking/draining enabled
+	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+	}
+
+	if enableLinkingDraining {
+		service.jobs = append(service.jobs,
+			srv.Job{
+				Func:    service.RunNextDrainJob,
+				Cadence: 5 * time.Second,
+				Workers: 1,
+			})
 	}
 
 	err = service.InitKafka()

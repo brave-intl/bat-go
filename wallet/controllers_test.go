@@ -116,7 +116,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	// call the balance endpoint and check that you get back a total of 1
 	handler := GetUpholdWalletBalanceV3
 
-	req, err := http.NewRequest("GET", "/v3/wallet/{paymentID}", nil)
+	req, err := http.NewRequest("GET", "/v3/wallet/uphold/{paymentID}", nil)
 	suite.Require().NoError(err, "wallet claim request could not be created")
 
 	rctx := chi.NewRouteContext()
@@ -133,6 +133,22 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	suite.Require().NoError(err, "failed to unmarshal balance result")
 
 	suite.Require().Equal(balance.Total, float64(1), fmt.Sprintf("balance is expected to match %f: %f", balance.Total, float64(1)))
+
+	_, err = pg.RawDB().Exec(`update wallets set provider_id = '' where id = $1`, w1.ID)
+	suite.Require().NoError(err, "wallet provider_id could not be set as empty string")
+
+	req, err = http.NewRequest("GET", "/v3/wallet/uphold/{paymentID}", nil)
+	suite.Require().NoError(err, "wallet claim request could not be created")
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", w1.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+
+	rr = httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	expectingForbidden := fmt.Sprintf("status is expected to match %d: %s", http.StatusForbidden, rr.Body.String())
+	suite.Require().Equal(http.StatusForbidden, rr.Code, expectingForbidden)
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {

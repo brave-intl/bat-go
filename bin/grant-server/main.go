@@ -122,7 +122,13 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
-	r.Mount("/v1/suggestions", promotion.SuggestionsRouter(promotionService))
+
+	sRouter, err := promotion.SuggestionsRouter(promotionService)
+	if err != nil {
+		log.Panic().Err(err).Msg("failed to initialize the suggestions router")
+	}
+
+	r.Mount("/v1/suggestions", sRouter)
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 

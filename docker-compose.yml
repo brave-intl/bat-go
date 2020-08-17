@@ -16,6 +16,7 @@ services:
           BUILD_TIME: "${BUILD_TIME}"
     environment:
       - PPROF_ENABLED=true
+      - ENABLE_LINKING_DRAINING=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -70,6 +71,7 @@ services:
       - "6061:6061"
     environment:
       - PPROF_ENABLED=true
+      - ENABLE_LINKING_DRAINING=true
       - ENV=local
       - PKG
       - RUN

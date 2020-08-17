@@ -1284,6 +1284,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
+
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
 	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
@@ -1292,8 +1293,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	anonymousAddress := uuid.Must(uuid.FromString(w.ProviderID))
-	info.AnonymousAddress = &anonymousAddress
+	info.UserDepositDestination = w.ProviderID
 
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
