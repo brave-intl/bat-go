@@ -356,7 +356,10 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	if eventMap["orderId"] != nil && eventMap["orderId"] != "" {
-		orderID := uuid.Must(uuid.FromString(eventMap["orderId"].(string)))
+		orderID, err := uuid.FromString(eventMap["orderId"].(string))
+		if err != nil {
+			return err
+		}
 		amount, err := decimal.NewFromString(eventMap["totalAmount"].(string))
 		if err != nil {
 			return err
