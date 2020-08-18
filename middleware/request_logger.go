@@ -68,7 +68,7 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
-					logger.Panic().Stack()
+					logger.Panic().Stack().Msg("panic")
 					// consolodate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
 					// any panic that has an ipaddress/port in it
 					m := string(ipPortRE.ReplaceAll(
