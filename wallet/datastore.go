@@ -179,7 +179,7 @@ func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 	from
 		wallets
 	where
-		user_deposit_destination is not null and 
+		user_deposit_destination is not null and
 		user_deposit_destination != '' and
 		id = $1`
 	var result bool
@@ -257,9 +257,13 @@ func (pg *Postgres) TxLinkWalletInfo(
 	var (
 		statement string
 		sqlErr    error
-		id        = uuid.Must(uuid.FromString(ID))
 		r         sql.Result
 	)
+
+	id, err := uuid.FromString(ID)
+	if err != nil {
+		return err
+	}
 
 	if ok, err := pg.txHasDestination(tx, id); err != nil {
 		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
