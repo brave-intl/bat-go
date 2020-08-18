@@ -172,14 +172,14 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 }
 
 // txGetWallet by ID
-func (pg *Postgres) txHasAnonymousAddress(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
+func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 	statement := `
 	select
 		true
 	from
 		wallets
 	where
-		anonymous_address is not null and
+		user_deposit_destination is not null and
 		id = $1`
 	var result bool
 	err := tx.Get(&result, statement, ID)
@@ -260,7 +260,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 		r         sql.Result
 	)
 
-	if ok, err := pg.txHasAnonymousAddress(tx, id); err != nil {
+	if ok, err := pg.txHasDestination(tx, id); err != nil {
 		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
 	} else if ok {
 		statement = `
@@ -268,14 +268,12 @@ func (pg *Postgres) TxLinkWalletInfo(
 			SET
 				provider_linking_id = $2,
 				user_deposit_account_provider = $3,
-				user_deposit_destination = $4
 			WHERE id = $1;`
 		r, sqlErr = tx.Exec(
 			statement,
 			ID,
 			providerLinkingID,
 			userDepositAccountProvider,
-			userDepositDestination,
 		)
 	} else {
 		statement = `
