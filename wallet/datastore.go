@@ -179,7 +179,8 @@ func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 	from
 		wallets
 	where
-		user_deposit_destination is not null and
+		user_deposit_destination is not null and 
+		user_deposit_destination != '' and
 		id = $1`
 	var result bool
 	err := tx.Get(&result, statement, ID)
