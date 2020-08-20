@@ -179,7 +179,7 @@ func PaypalCompleteSettlement(inPath string, outPath string, txnID string) error
 		// use a file with extension if none is passed
 		outPath = "./paypal-settlement-complete.json"
 	}
-	payouts, err := PaypalReadFiles(inPath)
+	payouts, err := settlement.ReadFiles(strings.Split(inPath, ","))
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
 		return errors.New("the '-c' or '--currency' flag must be set")
 	}
 
-	payouts, err := PaypalReadFiles(args.In)
+	payouts, err := settlement.ReadFiles(strings.Split(args.In, ","))
 	if err != nil {
 		return err
 	}
@@ -294,23 +294,4 @@ func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
 		return err
 	}
 	return nil
-}
-
-// PaypalReadFiles reads a series of files
-func PaypalReadFiles(input string) (*[]settlement.Transaction, error) {
-	var allPayouts []settlement.Transaction
-	files := strings.Split(input, ",")
-	for _, file := range files {
-		var batPayouts []settlement.Transaction
-		bytes, err := ioutil.ReadFile(file)
-		if err != nil {
-			return nil, err
-		}
-		err = json.Unmarshal(bytes, &batPayouts)
-		if err != nil {
-			return nil, err
-		}
-		allPayouts = append(allPayouts, batPayouts...)
-	}
-	return &allPayouts, nil
 }
