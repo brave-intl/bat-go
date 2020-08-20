@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -253,12 +254,14 @@ func GeminiCreateRequestBlocks(payouts []gemini.PayoutRequest) (*[]gemini.Privat
 		payoutBlock := payouts[i*maxCount : (i+1)*maxCount]
 		// marshal the payout block
 		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.BulkPayoutRequest{
+			Request: "/v1/payments/bulkPay",
+			Nonce:   time.Now().UnixNano(),
 			Payouts: payoutBlock,
 		})
 		if err != nil {
 			return nil, err
 		}
-		// turn into base64
+		// turn into base64 to sign in next step
 		base64Payload := base64.StdEncoding.EncodeToString(bulkPaymentPayloadSerialized)
 		// create space for the gemini request to be signed offline
 		privateRequest := gemini.PrivateRequest{

@@ -30,6 +30,8 @@ type PayoutRequest struct {
 
 // BulkPayoutRequest the payload to be base64'd
 type BulkPayoutRequest struct {
+	Request string          `json:"request"`
+	Nonce   int64           `json:"nonce"`
 	Payouts []PayoutRequest `json:"payouts"`
 }
 
