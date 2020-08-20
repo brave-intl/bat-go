@@ -2,39 +2,26 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
-	"text/template"
-	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/settlement/gemini"
-	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/gocarina/gocsv"
-	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// var (
-// 	input    string
-// 	currency string
-// 	txnID    string
-// 	rate     float64
-// 	out      string
-// )
-
 func init() {
 	// add complete and transform subcommand
-	geminiSettlementCmd.AddCommand(completeGeminiSettlementCmd)
 	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
-	geminiSettlementCmd.AddCommand(emailGeminiSettlementCmd)
+	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
 
 	// add this command as a settlement subcommand
 	settlementCmd.AddCommand(geminiSettlementCmd)
@@ -54,66 +41,12 @@ func init() {
 	must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
 	must(viper.BindEnv("out", "OUT"))
 
-	// currency (required by transform)
-	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
-		"a currency must be set")
-	must(viper.BindPFlag("currency", transformGeminiSettlementCmd.PersistentFlags().Lookup("currency")))
-	must(viper.BindEnv("currency", "CURRENCY"))
-	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("currency"))
-
 	// txnID (required by complete)
-	completeGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
+	uploadGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
 	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	must(viper.BindEnv("txn-id", "TXN_ID"))
-	must(completeGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
-
-	// rate
-	transformGeminiSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
-		"the rate to compute the currency conversion")
-	must(viper.BindPFlag("rate", transformGeminiSettlementCmd.PersistentFlags().Lookup("rate")))
-	must(viper.BindEnv("rate", "RATE"))
-}
-
-// EmailTemplate performs template replacement of date fields in emails
-func EmailTemplate(inPath string, outPath string) (err error) {
-	// read in email template
-	data, err := ioutil.ReadFile(inPath)
-	if err != nil {
-		err = fmt.Errorf("failed to read template: %w", err)
-		return
-	}
-	// perform template rendering to out
-	f, err := os.Create(outPath)
-	if err != nil {
-		err = fmt.Errorf("failed to create output: %w", err)
-		return
-	}
-	defer func() {
-		if err = f.Close(); err != nil {
-			err = fmt.Errorf("failed to create output: %w", err)
-			return
-		}
-	}()
-
-	var (
-		today = time.Now()
-		// template will have a "year" and "month" field
-		v = struct {
-			Month int
-			Year  int
-		}{
-			Month: int(today.Month()),
-			Year:  today.Year(),
-		}
-		t = template.Must(template.New("email").Parse(string(data)))
-	)
-
-	if err = t.Execute(f, v); err != nil {
-		err = fmt.Errorf("failed to execute template: %w", err)
-		return
-	}
-	return
+	must(uploadGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 }
 
 var (
@@ -122,23 +55,12 @@ var (
 		Short: "provides gemini settlement",
 	}
 
-	emailGeminiSettlementCmd = &cobra.Command{
-		Use:   "email",
-		Short: "provides population of a templated email",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := EmailTemplate(input, out); err != nil {
-				log.Printf("failed to perform email templating: %s\n", err)
-				os.Exit(1)
-			}
-		},
-	}
-
-	completeGeminiSettlementCmd = &cobra.Command{
+	uploadGeminiSettlementCmd = &cobra.Command{
 		Use:   "complete",
-		Short: "provides completion of gemini settlement",
+		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := CompleteSettlement(input, out, txnID); err != nil {
-				log.Printf("failed to perform complete: %s\n", err)
+			if err := GeminiUploadSettlement(input, out, txnID); err != nil {
+				log.Printf("failed to perform upload to gemini: %s\n", err)
 				os.Exit(1)
 			}
 		},
@@ -153,12 +75,7 @@ var (
 			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := TransformForMassPay(TransformArgs{
-				In:       input,
-				Currency: currency,
-				Rate:     decimal.NewFromFloat(rate),
-				Out:      out,
-			}); err != nil {
+			if err := GeminiTransformForMassPay(input, out); err != nil {
 				log.Printf("failed to perform transform: %s\n", err)
 				os.Exit(1)
 			}
@@ -166,52 +83,101 @@ var (
 	}
 )
 
-// CompleteSettlement marks the settlement file as complete
-func CompleteSettlement(inPath string, outPath string, txnID string) error {
-	fmt.Println("RUNNING: complete")
-	if inPath == "" {
-		return errors.New("the '-i' or '--input' flag must be set")
+func geminiValidateResponse(
+	transactions *[]gemini.PayoutRequest,
+	response *[]gemini.PayoutResponse,
+) (map[string]gemini.PayoutRequest, error) {
+	if len(*transactions) != len(*response) {
+		return nil, errors.New("response count did not match request count")
 	}
-	if txnID == "" {
-		return errors.New("the '-t' or '--txn-id' flag must be set")
+	mappedTransactions := convertTransactionListIntoMap(transactions)
+	return mappedTransactions, nil
+}
+
+func geminiSiftThroughResponses(
+	originalTransactions map[string]settlement.Transaction,
+	response *[]gemini.PayoutResponse,
+) []settlement.Transaction {
+	successful := []settlement.Transaction{}
+
+	for _, payout := range *response {
+		if payout.Result == "Error" {
+			// fmt.Println(payout.GenerateLog())
+		} else {
+			successful = append(successful, originalTransactions[payout.TxRef])
+		}
 	}
+	return successful
+}
+
+func convertTransactionListIntoMap(
+	transactions *[]gemini.PayoutRequest,
+) map[string]gemini.PayoutRequest {
+	var transactionMap map[string]gemini.PayoutRequest
+	for _, payoutRequest := range *transactions {
+		transactionMap[payoutRequest.TxRef] = payoutRequest
+	}
+	return transactionMap
+}
+
+// GeminiUploadSettlement marks the settlement file as complete
+func GeminiUploadSettlement(inPath string, outPath string, txnID string) error {
 	if outPath == "./gemini-settlement" {
 		// use a file with extension if none is passed
 		outPath = "./gemini-settlement-complete.json"
 	}
-	payouts, err := ReadFiles(inPath)
+
+	ctx := context.Background()
+	bulkPayoutFiles := strings.Split(inPath, ",")
+	geminiClient, err := gemini.New()
 	if err != nil {
 		return err
 	}
-	for i, payout := range *payouts {
-		if payout.WalletProvider != "gemini" {
-			return errors.New("Error, non-gemini payment included.\nThis command should be called only on the filtered gemini-settlement.json")
+
+	transactionsForEyeshade := []settlement.Transaction{}
+	for _, bulkPayoutFile := range bulkPayoutFiles {
+		bytes, err := ioutil.ReadFile(bulkPayoutFile)
+		if err != nil {
+			return err
 		}
-		if !payout.Amount.GreaterThan(decimal.Zero) {
-			return errors.New("Error, non-zero payment included.\nThis command should be called only on the post-rate gemini-settlement.json")
+
+		var geminiBulkPayoutRequestRequirements []gemini.PrivateRequest
+		err = json.Unmarshal(bytes, &geminiBulkPayoutRequestRequirements)
+		for _, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
+			// make sure payload is parsable
+			// upload the bulk payout
+			response, err := geminiClient.UploadBulkPayout(ctx, bulkPayoutRequestRequirements)
+			if err != nil {
+				return err
+			}
+			// // create a map of the request transactions
+			transactionsMap := geminiMapTransactionsToID(bulkPayoutRequestRequirements.Transactions)
+			// collect all successful transactions to send to eyeshade
+			transactionsForEyeshade = append(
+				transactionsForEyeshade,
+				geminiSiftThroughResponses(transactionsMap, response)...,
+			)
 		}
-		payout.Status = "complete"
-		payout.ProviderID = txnID
-		(*payouts)[i] = payout
 	}
-	err = WriteTransactions(outPath, payouts)
+	// write file for upload to eyeshade
+	err = GeminiWriteTransactions(outPath, &transactionsForEyeshade)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// TransformArgs are the args required for the transform command
-type TransformArgs struct {
-	In       string
-	Currency string
-	Auth     string
-	Rate     decimal.Decimal
-	Out      string
+// geminiMapTransactionsToID creates a map of guid's to transactions
+func geminiMapTransactionsToID(transactions []settlement.Transaction) map[string]settlement.Transaction {
+	transactionsMap := make(map[string]settlement.Transaction)
+	for _, tx := range transactions {
+		transactionsMap[generateTxRef(&tx)] = tx
+	}
+	return transactionsMap
 }
 
-// WriteTransactions writes settlement transactions to a json file
-func WriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
+// GeminiWriteTransactions writes settlement transactions to a json file
+func GeminiWriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
@@ -219,98 +185,91 @@ func WriteTransactions(outPath string, metadata *[]settlement.Transaction) error
 	return ioutil.WriteFile(outPath, data, 0600)
 }
 
-// WriteMassPayCSV writes a csv for using with Gemini web mass payments
-func WriteMassPayCSV(outPath string, metadata *[]gemini.Metadata) error {
-	rows := []*gemini.MassPayRow{}
-	total := decimal.NewFromFloat(0)
-	currency := ""
-	for _, entry := range *metadata {
-		row := entry.ToMassPayCSVRow()
-		total = total.Add(row.Amount)
-		currency = row.Currency
-		rows = append(rows, row)
+// GeminiWriteRequests writes settlement transactions to a json file
+func GeminiWriteRequests(outPath string, metadata *[]gemini.PrivateRequest) error {
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
 	}
-	if len(rows) > 5000 {
-		return errors.New("a payout cannot be larger than 5000 lines items long")
-	}
-	fmt.Println("payouts", len(rows))
-	fmt.Println("total", total.String(), currency)
+	return ioutil.WriteFile(outPath, data, 0600)
+}
 
-	data, err := gocsv.MarshalString(&rows)
+// GeminiTransformForMassPay starts the process to transform a settlement into a mass pay csv
+func GeminiTransformForMassPay(input string, output string) (err error) {
+	transactions, err := settlement.ReadFiles(strings.Split(input, ","))
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(outPath)
+	payouts, err := GeminiConvertTransactionsToGeminiPayouts(transactions)
 	if err != nil {
 		return err
 	}
-	defer closers.Panic(f)
-	_, err = f.WriteString(data)
+
+	txs, err := GeminiCreateRequestBlocks(*payouts)
+	if err != nil {
+		return err
+	}
+
+	err = GeminiWriteRequests(output, txs)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// TransformForMassPay starts the process to transform a settlement into a mass pay csv
-func TransformForMassPay(args TransformArgs) (err error) {
-	fmt.Println("RUNNING: transform")
-	if args.In == "" {
-		return errors.New("the '-i' or '--input' flag must be set")
+// GeminiConvertTransactionsToGeminiPayouts converts transactions from antifraud to "payouts" for gemini
+func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transaction) (*[]gemini.PayoutRequest, error) {
+	payouts := make([]gemini.PayoutRequest, len(*transactions))
+	for _, tx := range *transactions {
+		payouts = append(payouts, gemini.PayoutRequest{
+			TxRef:       generateTxRef(&tx),
+			Amount:      tx.Amount,
+			Currency:    tx.Currency,
+			Destination: tx.Destination,
+		})
 	}
-	if args.Currency == "" {
-		return errors.New("the '-c' or '--currency' flag must be set")
-	}
-
-	payouts, err := ReadFiles(args.In)
-	if err != nil {
-		return err
-	}
-
-	rate, err := gemini.GetRate(ctx, args.Currency, args.Rate)
-	if err != nil {
-		return err
-	}
-	args.Rate = rate
-
-	txs, err := gemini.CalculateTransactionAmounts(args.Currency, args.Rate, payouts)
-	if err != nil {
-		return err
-	}
-
-	err = WriteTransactions(args.Out+".json", txs)
-	if err != nil {
-		return err
-	}
-
-	metadata, err := gemini.MergeAndTransformPayouts(txs)
-	if err != nil {
-		return err
-	}
-
-	err = WriteMassPayCSV(args.Out+".csv", metadata)
-	if err != nil {
-		return err
-	}
-	return nil
+	return &payouts, nil
 }
 
-// ReadFiles reads a series of files
-func ReadFiles(input string) (*[]settlement.Transaction, error) {
-	var allPayouts []settlement.Transaction
-	files := strings.Split(input, ",")
-	for _, file := range files {
-		var batPayouts []settlement.Transaction
-		bytes, err := ioutil.ReadFile(file)
+func generateTxRef(tx *settlement.Transaction) string {
+	key := strings.Join([]string{
+		tx.SettlementID,
+		tx.Destination,
+		tx.Channel,
+	}, "_")
+	bytes := sha256.Sum256([]byte(key))
+	return string(bytes[:])
+}
+
+// GeminiCreateRequestBlocks splits the transactions into appropriately sized blocks for signing
+func GeminiCreateRequestBlocks(payouts []gemini.PayoutRequest) (*[]gemini.PrivateRequest, error) {
+	maxCount := 500
+	blocksCount := (len(payouts) / maxCount) + 1
+	privateRequests := make([]gemini.PrivateRequest, blocksCount)
+	i := 0
+
+	for i < blocksCount {
+		payoutBlock := payouts[i*maxCount : (i+1)*maxCount]
+		// marshal the payout block
+		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.BulkPayoutRequest{
+			Payouts: payoutBlock,
+		})
 		if err != nil {
 			return nil, err
 		}
-		err = json.Unmarshal(bytes, &batPayouts)
-		if err != nil {
-			return nil, err
+		// turn into base64
+		base64Payload := base64.StdEncoding.EncodeToString(bulkPaymentPayloadSerialized)
+		// create space for the gemini request to be signed offline
+		privateRequest := gemini.PrivateRequest{
+			APIKey:    "",
+			Payload:   base64Payload,
+			Signature: "",
 		}
-		allPayouts = append(allPayouts, batPayouts...)
+		// append to list of requests to make in future
+		privateRequests = append(privateRequests, privateRequest)
+		// increment i
+		i++
 	}
-	return &allPayouts, nil
+	return &privateRequests, nil
 }
