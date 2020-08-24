@@ -202,21 +202,29 @@ func GeminiTransformForMassPay(input string, output string) (err error) {
 		return err
 	}
 
-	payouts, err := GeminiConvertTransactionsToGeminiPayouts(transactions)
+	geminiPayouts, err := GeminiTransformTransactions(transactions)
 	if err != nil {
 		return err
 	}
-
-	txs, err := GeminiCreateRequestBlocks(*payouts)
-	if err != nil {
-		return err
-	}
-
-	err = GeminiWriteRequests(output, txs)
+	err = GeminiWriteRequests(output, geminiPayouts)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// GeminiTransformTransactions transforms transactions into a request bundle
+func GeminiTransformTransactions(transactions *[]settlement.Transaction) (*[]gemini.PrivateRequest, error) {
+	payouts, err := GeminiConvertTransactionsToGeminiPayouts(transactions)
+	if err != nil {
+		return nil, err
+	}
+
+	requests, err := GeminiCreateRequestBlocks(*payouts)
+	if err != nil {
+		return nil, err
+	}
+	return requests, nil
 }
 
 // GeminiConvertTransactionsToGeminiPayouts converts transactions from antifraud to "payouts" for gemini
