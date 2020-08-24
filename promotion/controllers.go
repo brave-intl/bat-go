@@ -66,9 +66,16 @@ func SuggestionsRouter(service *Service) (chi.Router, error) {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
 
-	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+	var (
+		enableLinkingDraining bool
+		err                   error
+	)
+	// make sure that we only enable the DrainJob if we have linking/draining enabled
+	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
+		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+		}
 	}
 
 	if enableLinkingDraining {

@@ -389,10 +389,14 @@ func InitService(
 		},
 	}
 
+	var enableLinkingDraining bool
 	// make sure that we only enable the DrainJob if we have linking/draining enabled
-	enableLinkingDraining, err := strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
+		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+		if err != nil {
+			// there was an error parsing the environment variable
+			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+		}
 	}
 
 	if enableLinkingDraining {

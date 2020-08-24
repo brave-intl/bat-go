@@ -191,7 +191,10 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		var aa uuid.UUID
 
 		if cuw.AnonymousAddress != "" {
-			aa = uuid.Must(uuid.FromString(cuw.AnonymousAddress))
+			aa, err = uuid.FromString(cuw.AnonymousAddress)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing anonymous address", http.StatusBadRequest)
+			}
 		}
 
 		publicKey, err := hex.DecodeString(wallet.PublicKey)
