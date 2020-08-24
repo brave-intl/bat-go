@@ -24,7 +24,7 @@ func RateLimiter(ctx context.Context) func(next http.Handler) http.Handler {
 			logger.Fatal().Err(err)
 		}
 		quota := throttled.RateQuota{
-			MaxRate: throttled.PerMin(60),
+			MaxRate: throttled.PerMin(180),
 		}
 		rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
 		if err != nil {
