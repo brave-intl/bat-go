@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto"
+	"crypto/rand"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
@@ -86,26 +89,92 @@ func main() {
 	}
 
 	var upholdOnlySettlements []settlement.Transaction
-	for i := 0; i < len(settlements); i++ {
-		if settlements[i].WalletProvider == "uphold" {
-			upholdOnlySettlements = append(upholdOnlySettlements, settlements[i])
+	var geminiOnlySettlements []settlement.Transaction
+	for _, settlement := range settlements {
+		if settlement.WalletProvider == "uphold" {
+			upholdOnlySettlements = append(upholdOnlySettlements, settlement)
+		} else if settlement.WalletProvider == "gemini" {
+			geminiOnlySettlements = append(geminiOnlySettlements, settlement)
 		}
 	}
+	if len(upholdOnlySettlements) > 0 {
+		err = createUpholdArtifact(
+			outputFile,
+			settlementWallet,
+			upholdOnlySettlements,
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+	if len(geminiOnlySettlements) > 0 {
+		err = createGeminiArtifact(
+			outputFile,
+			settlementWallet,
+			geminiOnlySettlements,
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+}
 
-	err = settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements)
+func createUpholdArtifact(
+	outputFile string,
+	settlementWallet *uphold.Wallet,
+	upholdOnlySettlements []settlement.Transaction,
+) error {
+	err := settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: upholdOnlySettlements}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
+	return nil
+}
+
+func createGeminiArtifact(
+	outputFile string,
+	settlementWallet *uphold.Wallet,
+	geminiOnlySettlements []settlement.Transaction,
+) error {
+	// group transactions (500 at a time)
+	privateRequests, err := cmd.GeminiTransformTransactions(&geminiOnlySettlements)
+	if err != nil {
+		return err
+	}
+	// sign each request
+	for _, privateRequestRequirements := range *privateRequests {
+		sig, err := settlementWallet.PrivKey.Sign(
+			rand.Reader,
+			// base64 string
+			[]byte(privateRequestRequirements.Payload),
+			crypto.Hash(0),
+		)
+		if err != nil {
+			return err
+		}
+		privateRequestRequirements.Signature = string(sig)
+		privateRequestRequirements.APIKey = settlementWallet.PublicKey
+	}
+	// serialize requests to be sent in next step
+	out, err := json.Marshal(privateRequests)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile("gemini-"+outputFile, out, 0400)
+	if err != nil {
+		return err
+	}
+	return nil
 }
