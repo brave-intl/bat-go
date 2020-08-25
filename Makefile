@@ -19,10 +19,13 @@ endif
 .PHONY: all bins docker test lint clean
 all: test bins
 
-bins: clean $(BINS)
+bins: clean $(BINS) buildcmd
 
 .DEFAULT:
 	go build ./bin/$@
+
+buildcmd:
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o bat-go main.go
 
 target/%:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $@ ./bin/$(notdir $@)
