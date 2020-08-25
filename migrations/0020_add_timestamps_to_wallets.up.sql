@@ -1,8 +1,8 @@
-alter table wallets add column created_at timestamp with timezone default current timestamp;
+alter table wallets add column created_at timestamp with time zone default current timestamp;
 
 create index concurrently wallets_created_at_idx on wallets(created_at);
 
-alter table wallets add column updated_at timestamp with timezone default current timestamp;
+alter table wallets add column updated_at timestamp with time zone default current timestamp;
 
 create index concurrently wallets_updated_at_idx on wallets(updated_at);
 
