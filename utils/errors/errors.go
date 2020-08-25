@@ -38,7 +38,7 @@ func (err *ErrorBundle) Cause() error {
 	return err.cause
 }
 
-// Cause returns the associated cause
+// Unwrap returns the associated cause
 func (err *ErrorBundle) Unwrap() error {
 	return err.cause
 }
