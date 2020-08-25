@@ -19,37 +19,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-func init() {
-	// add complete and transform subcommand
-	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
-	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
-
-	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(geminiSettlementCmd)
-
-	// setup the flags
-
-	// input (required by all)
-	geminiSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
-		"the file or comma delimited list of files that should be utilized")
-	must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
-	must(viper.BindEnv("input", "INPUT"))
-	must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
-
-	// out (required by all with default)
-	geminiSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./gemini-settlement",
-		"the location of the file")
-	must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
-	must(viper.BindEnv("out", "OUT"))
-
-	// txnID (required by complete)
-	uploadGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
-		"the completed mass pay transaction id")
-	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
-	must(viper.BindEnv("txn-id", "TXN_ID"))
-	must(uploadGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
-}
-
 var (
 	geminiSettlementCmd = &cobra.Command{
 		Use:   "gemini",
@@ -83,6 +52,37 @@ var (
 		},
 	}
 )
+
+func init() {
+	// add complete and transform subcommand
+	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
+	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
+
+	// add this command as a settlement subcommand
+	settlementCmd.AddCommand(geminiSettlementCmd)
+
+	// setup the flags
+
+	// input (required by all)
+	geminiSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
+		"the file or comma delimited list of files that should be utilized")
+	must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
+	must(viper.BindEnv("input", "INPUT"))
+	must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
+
+	// out (required by all with default)
+	geminiSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./gemini-settlement",
+		"the location of the file")
+	must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
+	must(viper.BindEnv("out", "OUT"))
+
+	// txnID (required by complete)
+	uploadGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
+		"the completed mass pay transaction id")
+	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	must(viper.BindEnv("txn-id", "TXN_ID"))
+	must(uploadGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+}
 
 func geminiValidateResponse(
 	transactions *[]gemini.PayoutRequest,
