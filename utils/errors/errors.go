@@ -38,6 +38,11 @@ func (err *ErrorBundle) Cause() error {
 	return err.cause
 }
 
+// Cause returns the associated cause
+func (err *ErrorBundle) Unwrap() error {
+	return err.cause
+}
+
 // Error turns into an error
 func (err *ErrorBundle) Error() string {
 	return err.message
