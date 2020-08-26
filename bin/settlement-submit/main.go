@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/formatters"
@@ -19,8 +20,13 @@ import (
 )
 
 var (
+	logFile    string
+	outputFile string
+
 	verbose   = flag.Bool("v", false, "verbose output")
 	inputFile = flag.String("in", "./contributions-signed.json", "input file path")
+	provider  = flag.String("provider", "", "the provider that the transactions should be sent to")
+	// auth      = flag.String("auth", "oauth", "the authentication method")
 )
 
 func main() {
@@ -37,10 +43,25 @@ func main() {
 	if *verbose {
 		log.SetLevel(log.DebugLevel)
 	}
+	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
+	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
-	logFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
-	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
+	switch *provider {
+	case "uphold":
+		upholdSubmit()
+	case "gemini":
+		geminiSubmit()
+	}
+}
 
+func geminiSubmit() {
+	err := cmd.GeminiUploadSettlement(*inputFile, outputFile)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func upholdSubmit() {
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)

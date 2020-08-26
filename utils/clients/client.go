@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -204,6 +205,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
+		fmt.Println(code)
 		return resp, NewHTTPError(err, "response", code, v)
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)

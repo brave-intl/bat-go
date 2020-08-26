@@ -86,8 +86,8 @@ func (c *HTTPClient) UploadBulkPayout(ctx context.Context, request PrivateReques
 	}
 	req.Header.Set("Content-Type", "text/plain")
 	req.Header.Set("Content-Length", "0")
-	req.Header.Set("X-GEMINI-APIKEY", request.APIKey)
 	req.Header.Set("X-GEMINI-PAYLOAD", request.Payload)
+	req.Header.Set("X-GEMINI-APIKEY", request.APIKey)
 	req.Header.Set("X-GEMINI-SIGNATURE", request.Signature)
 	req.Header.Set("Cache-Control", "no-cache")
 
