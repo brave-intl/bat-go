@@ -1,11 +1,12 @@
 alter table wallets add column created_at timestamp with time zone default current_timestamp;
 
-create index concurrently wallets_created_at_idx on wallets(created_at);
+/* create index concurrently wallets_created_at_idx on wallets(created_at); */ -- This statement should be run outside the migration suite
+                                                                               -- since we cannot create indices concurrently with using it
 
 alter table wallets add column updated_at timestamp with time zone default current_timestamp;
 
-create index concurrently wallets_updated_at_idx on wallets(updated_at);
-
+/* create index concurrently wallets_updated_at_idx on wallets(updated_at); */ -- This statement should be run outside the migration suite
+                                                                               -- since we cannot create indices concurrently with using it
 create function update_updated_at()
   returns trigger
 as
