@@ -21,5 +21,6 @@ Below is the command structure for bat-go microservices using cobra
       - email
     - gemini
       - transform
+      - sign
       - submit
 ```

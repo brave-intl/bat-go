@@ -177,14 +177,23 @@ var (
 			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalTransformForMassPay(PaypalTransformArgs{
-				In:       input,
-				Currency: currency,
-				Rate:     decimal.NewFromFloat(rate),
-				Out:      out,
-			}); err != nil {
+			transformFailed := func(err error) {
 				log.Printf("failed to perform transform: %s\n", err)
 				os.Exit(1)
+			}
+
+			payouts, err := settlement.ReadFiles(strings.Split(input, ","))
+			if err != nil {
+				transformFailed(err)
+			}
+
+			if err := PaypalTransformForMassPay(
+				payouts,
+				currency,
+				decimal.NewFromFloat(rate),
+				out,
+			); err != nil {
+				transformFailed(err)
 			}
 		},
 	}
@@ -278,32 +287,18 @@ func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 }
 
 // PaypalTransformForMassPay starts the process to transform a settlement into a mass pay csv
-func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
-	fmt.Println("RUNNING: transform")
-	if args.In == "" {
-		return errors.New("the '-i' or '--input' flag must be set")
-	}
-	if args.Currency == "" {
-		return errors.New("the '-c' or '--currency' flag must be set")
-	}
-
-	payouts, err := settlement.ReadFiles(strings.Split(args.In, ","))
+func PaypalTransformForMassPay(payouts *[]settlement.Transaction, currency string, rate decimal.Decimal, out string) error {
+	rate, err := paypal.GetRate(ctx, currency, rate)
 	if err != nil {
 		return err
 	}
 
-	rate, err := paypal.GetRate(ctx, args.Currency, args.Rate)
-	if err != nil {
-		return err
-	}
-	args.Rate = rate
-
-	txs, err := paypal.CalculateTransactionAmounts(args.Currency, args.Rate, payouts)
+	txs, err := paypal.CalculateTransactionAmounts(currency, rate, payouts)
 	if err != nil {
 		return err
 	}
 
-	err = PaypalWriteTransactions(args.Out+".json", txs)
+	err = PaypalWriteTransactions(out+".json", txs)
 	if err != nil {
 		return err
 	}
@@ -313,7 +308,7 @@ func PaypalTransformForMassPay(args PaypalTransformArgs) (err error) {
 		return err
 	}
 
-	err = PaypalWriteMassPayCSV(args.Out+".csv", metadata)
+	err = PaypalWriteMassPayCSV(out+".csv", metadata)
 	if err != nil {
 		return err
 	}
