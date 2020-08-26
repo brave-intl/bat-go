@@ -41,7 +41,7 @@ type Transaction struct {
 	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
 	TransferFee      decimal.Decimal          `json:"fee"`
 	Type             string                   `json:"type"`
-	ValidUntil       time.Time                `json:"validUntil"`
+	ValidUntil       time.Time                `json:"validUntil,omitempty"`
 	DocumentID       string                   `json:"documentId,omitempty"`
 	Note             string                   `json:"note"`
 }

@@ -17,7 +17,7 @@ type PrivateRequest struct {
 	Signature    string                   `json:"signature"`
 	Payload      string                   `json:"payload"` // base64'd
 	APIKey       string                   `json:"api_key"`
-	Transactions []settlement.Transaction `json:"transaction"`
+	Transactions []settlement.Transaction `json:"transactions"`
 }
 
 // PayoutRequest contains details about transactions to be confirmed
