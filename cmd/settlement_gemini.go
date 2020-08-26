@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -15,12 +16,15 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	geminiSettlementCmd = &cobra.Command{
+	transactionHashNamespace = uuid.Must(uuid.FromString("1dfbe4ca-bfa7-468d-afa6-cc62adedc63e"))
+	geminiSettlementCmd      = &cobra.Command{
 		Use:   "gemini",
 		Short: "provides gemini settlement",
 	}
@@ -202,7 +206,7 @@ func GeminiTransformForMassPay(input string, output string) (err error) {
 		return err
 	}
 
-	geminiPayouts, err := GeminiTransformTransactions(transactions)
+	geminiPayouts, err := GeminiTransformTransactions(*transactions)
 	if err != nil {
 		return err
 	}
@@ -213,32 +217,40 @@ func GeminiTransformForMassPay(input string, output string) (err error) {
 	return nil
 }
 
-// GeminiTransformTransactions transforms transactions into a request bundle
-func GeminiTransformTransactions(transactions *[]settlement.Transaction) (*[]gemini.PrivateRequest, error) {
-	payouts, err := GeminiConvertTransactionsToGeminiPayouts(transactions)
-	if err != nil {
-		return nil, err
-	}
+// // GeminiTransformTransactions transforms transactions into a request bundle
+// func GeminiTransformTransactions(transactions *[]settlement.Transaction) (*[]gemini.PrivateRequest, error) {
+// 	// payouts, err := GeminiConvertTransactionsToGeminiPayouts(transactions)
+// 	// if err != nil {
+// 	// 	return nil, err
+// 	// }
 
-	requests, err := GeminiCreateRequestBlocks(*payouts)
-	if err != nil {
-		return nil, err
-	}
-	return requests, nil
-}
+// 	requests, err := GeminiCreateRequestBlocks(*transactions, *payouts)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return requests, nil
+// }
 
 // GeminiConvertTransactionsToGeminiPayouts converts transactions from antifraud to "payouts" for gemini
-func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transaction) (*[]gemini.PayoutRequest, error) {
-	payouts := make([]gemini.PayoutRequest, len(*transactions))
+func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transaction) (*[]gemini.PayoutRequest, decimal.Decimal) {
+	payouts := make([]gemini.PayoutRequest, 0)
+	total := decimal.NewFromFloat(0)
 	for _, tx := range *transactions {
-		payouts = append(payouts, gemini.PayoutRequest{
-			TxRef:       generateTxRef(&tx),
-			Amount:      tx.Amount,
-			Currency:    tx.Currency,
-			Destination: tx.Destination,
-		})
+		payout := GeminiConvertTxToGeminiPayout(tx)
+		total = total.Add(payout.Amount)
+		payouts = append(payouts, payout)
 	}
-	return &payouts, nil
+	return &payouts, total
+}
+
+// GeminiConvertTxToGeminiPayout converts a single transaction to a payout request
+func GeminiConvertTxToGeminiPayout(tx settlement.Transaction) gemini.PayoutRequest {
+	return gemini.PayoutRequest{
+		TxRef:       generateTxRef(&tx),
+		Amount:      tx.Amount,
+		Currency:    tx.Currency,
+		Destination: tx.Destination,
+	}
 }
 
 func generateTxRef(tx *settlement.Transaction) string {
@@ -251,20 +263,32 @@ func generateTxRef(tx *settlement.Transaction) string {
 	return string(bytes[:])
 }
 
-// GeminiCreateRequestBlocks splits the transactions into appropriately sized blocks for signing
-func GeminiCreateRequestBlocks(payouts []gemini.PayoutRequest) (*[]gemini.PrivateRequest, error) {
+// GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
+func GeminiTransformTransactions(transactions []settlement.Transaction) (*[]gemini.PrivateRequest, error) {
 	maxCount := 500
-	blocksCount := (len(payouts) / maxCount) + 1
-	privateRequests := make([]gemini.PrivateRequest, blocksCount)
+	blocksCount := (len(transactions) / maxCount) + 1
+	privateRequests := make([]gemini.PrivateRequest, 0)
 	i := 0
 
+	fmt.Printf("creating %d blocks\n", blocksCount)
+	fmt.Printf("with %d transactions\n", len(transactions))
+	total := decimal.NewFromFloat(0)
 	for i < blocksCount {
-		payoutBlock := payouts[i*maxCount : (i+1)*maxCount]
+		var transactionBlock []settlement.Transaction
+		lowerBound := i * maxCount
+		upperBound := (i + 1) * maxCount
+		payoutLength := len(transactions)
+		if payoutLength <= upperBound {
+			upperBound = payoutLength
+		}
+		transactionBlock = transactions[lowerBound:upperBound]
+		payoutBlock, blockTotal := GeminiConvertTransactionsToGeminiPayouts(&transactionBlock)
+		total = total.Add(blockTotal)
 		// marshal the payout block
 		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.BulkPayoutRequest{
 			Request: "/v1/payments/bulkPay",
 			Nonce:   time.Now().UnixNano(),
-			Payouts: payoutBlock,
+			Payouts: *payoutBlock,
 		})
 		if err != nil {
 			return nil, err
@@ -273,14 +297,16 @@ func GeminiCreateRequestBlocks(payouts []gemini.PayoutRequest) (*[]gemini.Privat
 		base64Payload := base64.StdEncoding.EncodeToString(bulkPaymentPayloadSerialized)
 		// create space for the gemini request to be signed offline
 		privateRequest := gemini.PrivateRequest{
-			APIKey:    "",
-			Payload:   base64Payload,
-			Signature: "",
+			APIKey:       "",
+			Payload:      base64Payload,
+			Signature:    "",
+			Transactions: transactionBlock,
 		}
 		// append to list of requests to make in future
 		privateRequests = append(privateRequests, privateRequest)
 		// increment i
 		i++
 	}
+	fmt.Printf("%s bat to be paid out\n", total.String())
 	return &privateRequests, nil
 }
