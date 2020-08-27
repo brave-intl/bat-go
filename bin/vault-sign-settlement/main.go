@@ -34,11 +34,11 @@ var (
 		"paypal": {"default"},
 		"gemini": {"contribution", "referral"},
 	}
-	providerByAntifraudInt = map[string]string{
-		"0": "uphold",
-		"1": "paypal",
-		"2": "gemini",
-	}
+	// providerByAntifraudInt = map[string]string{
+	// 	"0": "uphold",
+	// 	"1": "paypal",
+	// 	"2": "gemini",
+	// }
 	artifactGenerators map[string]func(
 		string,
 		*api.Client,
