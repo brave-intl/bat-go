@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -128,7 +127,9 @@ func (c *SimpleHTTPClient) newRequest(
 		req.Header.Add("content-type", "application/json")
 	}
 	requestutils.SetRequestID(ctx, req)
-	req.Header.Set("authorization", "Bearer "+c.AuthToken)
+	if c.AuthToken != "" {
+		req.Header.Set("authorization", "Bearer "+c.AuthToken)
+	}
 	return req, 0, nil
 }
 
@@ -205,7 +206,6 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
-		fmt.Println(code)
 		return resp, NewHTTPError(err, "response", code, v)
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)

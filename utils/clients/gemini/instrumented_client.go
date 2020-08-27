@@ -38,8 +38,36 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
+// FetchAccountList implements Client
+func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, request PrivateRequest) (aap1 *[]Account, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchAccountList", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FetchAccountList(ctx, request)
+}
+
+// FetchBalances implements Client
+func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, request PrivateRequest) (bap1 *[]Balance, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchBalances", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FetchBalances(ctx, request)
+}
+
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, request PrivateRequest) (pap1 *[]PayoutResponse, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, request PrivateRequest) (pap1 *[]PayoutResult, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

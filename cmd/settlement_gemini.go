@@ -2,19 +2,16 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -86,9 +83,9 @@ func init() {
 }
 
 // func geminiValidateResponse(
-// 	transactions *[]gemini.PayoutRequest,
-// 	response *[]gemini.PayoutResponse,
-// ) (map[string]gemini.PayoutRequest, error) {
+// 	transactions *[]gemini.PayoutPayload,
+// 	response *[]gemini.PayoutResult,
+// ) (map[string]gemini.PayoutPayload, error) {
 // 	if len(*transactions) != len(*response) {
 // 		return nil, errors.New("response count did not match request count")
 // 	}
@@ -98,7 +95,7 @@ func init() {
 
 func geminiSiftThroughResponses(
 	originalTransactions map[string]settlement.Transaction,
-	response *[]gemini.PayoutResponse,
+	response *[]gemini.PayoutResult,
 ) []settlement.Transaction {
 	successful := []settlement.Transaction{}
 
@@ -113,9 +110,9 @@ func geminiSiftThroughResponses(
 }
 
 // func convertTransactionListIntoMap(
-// 	transactions *[]gemini.PayoutRequest,
-// ) map[string]gemini.PayoutRequest {
-// 	transactionMap := make(map[string]gemini.PayoutRequest)
+// 	transactions *[]gemini.PayoutPayload,
+// ) map[string]gemini.PayoutPayload {
+// 	transactionMap := make(map[string]gemini.PayoutPayload)
 // 	for _, payoutRequest := range *transactions {
 // 		transactionMap[payoutRequest.TxRef] = payoutRequest
 // 	}
@@ -177,7 +174,7 @@ func GeminiUploadSettlement(inPath string, outPath string) error {
 func geminiMapTransactionsToID(transactions []settlement.Transaction) map[string]settlement.Transaction {
 	transactionsMap := make(map[string]settlement.Transaction)
 	for _, tx := range transactions {
-		transactionsMap[generateTxRef(&tx)] = tx
+		transactionsMap[gemini.GenerateTxRef(&tx)] = tx
 	}
 	return transactionsMap
 }
@@ -219,38 +216,17 @@ func GeminiTransformForMassPay(input string, output string) (err error) {
 }
 
 // GeminiConvertTransactionsToGeminiPayouts converts transactions from antifraud to "payouts" for gemini
-func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transaction, txID string) (*[]gemini.PayoutRequest, decimal.Decimal) {
-	payouts := make([]gemini.PayoutRequest, 0)
+func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transaction, txID string) (*[]gemini.PayoutPayload, decimal.Decimal) {
+	payouts := make([]gemini.PayoutPayload, 0)
 	total := decimal.NewFromFloat(0)
 	for i, tx := range *transactions {
 		tx.SettlementID = txID
 		(*transactions)[i] = tx
-		payout := GeminiConvertTxToGeminiPayout(tx)
+		payout := gemini.SettlementTransactionToPayoutPayload(&tx)
 		total = total.Add(payout.Amount)
 		payouts = append(payouts, payout)
 	}
 	return &payouts, total
-}
-
-// GeminiConvertTxToGeminiPayout converts a single transaction to a payout request
-func GeminiConvertTxToGeminiPayout(tx settlement.Transaction) gemini.PayoutRequest {
-	return gemini.PayoutRequest{
-		TxRef:       generateTxRef(&tx),
-		Amount:      tx.Amount,
-		Currency:    tx.Currency,
-		Destination: tx.Destination,
-	}
-}
-
-func generateTxRef(tx *settlement.Transaction) string {
-	key := strings.Join([]string{
-		tx.SettlementID,
-		tx.Destination,
-		tx.Channel,
-	}, "_")
-	bytes := sha256.Sum256([]byte(key))
-	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
-	return refID
 }
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
@@ -279,11 +255,7 @@ func GeminiTransformTransactions(transactions []settlement.Transaction) (*[]gemi
 		payoutBlock, blockTotal := GeminiConvertTransactionsToGeminiPayouts(&transactionBlock, txnID)
 		total = total.Add(blockTotal)
 		// marshal the payout block
-		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.BulkPayoutRequest{
-			Request: "/v1/payments/bulkPay",
-			Nonce:   time.Now().UnixNano(),
-			Payouts: *payoutBlock,
-		})
+		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.NewBulkPayoutPayload(payoutBlock))
 		if err != nil {
 			return nil, err
 		}
