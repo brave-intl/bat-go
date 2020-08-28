@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -208,14 +209,37 @@ func createUpholdArtifact(
 	return nil
 }
 
+func getOauthClientID(
+	client *api.Client,
+	walletKey string,
+) (string, error) {
+	response, err := client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return "", err
+	}
+	oauthClientID, ok := response.Data["oauthClientId"]
+	if !ok {
+		return "", errors.New("oauth client id not set")
+	}
+	converted, ok := oauthClientID.(string)
+	if !ok {
+		return "", errors.New("unable to convert oauth client id to string")
+	}
+	return converted, nil
+}
+
 func createGeminiArtifact(
 	outputFile string,
 	client *api.Client,
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
+	oauthClientID, err := getOauthClientID(client, walletKey)
+	if err != nil {
+		return err
+	}
 	// group transactions (500 at a time)
-	privateRequests, err := cmd.GeminiTransformTransactions(geminiOnlySettlements)
+	privateRequests, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
