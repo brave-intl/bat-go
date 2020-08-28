@@ -18,6 +18,7 @@ import (
 )
 
 var (
+	oauthClientID       string
 	geminiSettlementCmd = &cobra.Command{
 		Use:   "gemini",
 		Short: "provides gemini settlement",
@@ -43,7 +44,7 @@ var (
 		// 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		// },
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := GeminiTransformForMassPay(input, out); err != nil {
+			if err := GeminiTransformForMassPay(input, oauthClientID, out); err != nil {
 				log.Printf("failed to perform transform: %s\n", err)
 				os.Exit(1)
 			}
@@ -80,6 +81,12 @@ func init() {
 	must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	must(viper.BindEnv("txn-id", "TXN_ID"))
 	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+
+	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&oauthClientID, "oauth-client-id", "oid", "",
+		"the oauth client id needed to check that the user authorized the payment")
+	must(viper.BindPFlag("oauth-client-id", geminiSettlementCmd.PersistentFlags().Lookup("oauth-client-id")))
+	must(viper.BindEnv("oauth-client-id", "OAUTH_CLIENT_ID"))
+	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("oauth-client-id"))
 }
 
 // func geminiValidateResponse(
@@ -198,13 +205,13 @@ func GeminiWriteRequests(outPath string, metadata *[]gemini.PrivateRequest) erro
 }
 
 // GeminiTransformForMassPay starts the process to transform a settlement into a mass pay csv
-func GeminiTransformForMassPay(input string, output string) (err error) {
+func GeminiTransformForMassPay(input string, oauthClientID string, output string) (err error) {
 	transactions, err := settlement.ReadFiles(strings.Split(input, ","))
 	if err != nil {
 		return err
 	}
 
-	geminiPayouts, err := GeminiTransformTransactions(*transactions)
+	geminiPayouts, err := GeminiTransformTransactions(oauthClientID, *transactions)
 	if err != nil {
 		return err
 	}
@@ -230,7 +237,7 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 }
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
-func GeminiTransformTransactions(transactions []settlement.Transaction) (*[]gemini.PrivateRequest, error) {
+func GeminiTransformTransactions(oauthClientID string, transactions []settlement.Transaction) (*[]gemini.PrivateRequest, error) {
 	maxCount := 500
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([]gemini.PrivateRequest, 0)
@@ -255,7 +262,7 @@ func GeminiTransformTransactions(transactions []settlement.Transaction) (*[]gemi
 		payoutBlock, blockTotal := GeminiConvertTransactionsToGeminiPayouts(&transactionBlock, txnID)
 		total = total.Add(blockTotal)
 		// marshal the payout block
-		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.NewBulkPayoutPayload(payoutBlock))
+		bulkPaymentPayloadSerialized, err := json.Marshal(gemini.NewBulkPayoutPayload("primary", oauthClientID, payoutBlock))
 		if err != nil {
 			return nil, err
 		}

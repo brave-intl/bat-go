@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -23,6 +22,7 @@ type PrivateRequest struct {
 	Payload      string                   `json:"payload"` // base64'd
 	APIKey       string                   `json:"api_key"`
 	Transactions []settlement.Transaction `json:"transactions"`
+	Auth         string                   `json:"-"` // type of auth to setup
 }
 
 // PayoutPayload contains details about transactions to be confirmed
@@ -31,7 +31,7 @@ type PayoutPayload struct {
 	Amount      decimal.Decimal `json:"amount"`
 	Currency    string          `json:"currency"`
 	Destination string          `json:"destination"`
-	// 	Account     string          `json:"account"`
+	Account     *string         `json:"account,omitempty"`
 }
 
 // AccountListPayload retrieves all accounts associated with a gemini key
@@ -49,10 +49,11 @@ type BalancesPayload struct {
 
 // BulkPayoutPayload the payload to be base64'd
 type BulkPayoutPayload struct {
-	Request string          `json:"request"`
-	Nonce   int64           `json:"nonce"`
-	Payouts []PayoutPayload `json:"payouts"`
-	Account string          `json:"account"`
+	Request       string          `json:"request"`
+	Nonce         int64           `json:"nonce"`
+	Payouts       []PayoutPayload `json:"payouts"`
+	Account       string          `json:"account"`
+	OauthClientID string          `json:"client_id"`
 }
 
 func nonce() int64 {
@@ -82,12 +83,13 @@ func GenerateTxRef(tx *settlement.Transaction) string {
 }
 
 // NewBulkPayoutPayload generate a new bulk payout payload
-func NewBulkPayoutPayload(account string, payouts *[]PayoutPayload) BulkPayoutPayload {
+func NewBulkPayoutPayload(account string, oauthClientID string, payouts *[]PayoutPayload) BulkPayoutPayload {
 	return BulkPayoutPayload{
-		Account: account,
-		Request: "/v1/payments/bulkPay",
-		Nonce:   nonce(),
-		Payouts: *payouts,
+		Account:       account,
+		OauthClientID: oauthClientID,
+		Request:       "/v1/payments/bulkPay",
+		Nonce:         nonce(),
+		Payouts:       *payouts,
 	}
 }
 
@@ -178,8 +180,10 @@ func setPrivateRequestHeaders(req *http.Request, request PrivateRequest) {
 	req.Header.Set("Content-Type", "text/plain")
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("X-GEMINI-PAYLOAD", request.Payload)
-	req.Header.Set("X-GEMINI-APIKEY", request.APIKey)
-	req.Header.Set("X-GEMINI-SIGNATURE", request.Signature)
+	if request.Auth == "hmac" {
+		req.Header.Set("X-GEMINI-APIKEY", request.APIKey)
+		req.Header.Set("X-GEMINI-SIGNATURE", request.Signature)
+	}
 	req.Header.Set("Cache-Control", "no-cache")
 }
 
@@ -193,9 +197,6 @@ func (c *HTTPClient) UploadBulkPayout(ctx context.Context, request PrivateReques
 
 	res, err := c.client.Do(ctx, req, nil)
 	if err != nil {
-		body, readErr := requestutils.Read(res.Body)
-		fmt.Printf("%#v\n", res)
-		fmt.Println(string(body), err, readErr)
 		return nil, err
 	}
 	var response []PayoutResult
