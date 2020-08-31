@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/cryptography"
@@ -72,7 +71,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: tx.Destination,
 		// Account:     primary,
 	}}
-	bulkPayoutRequest := suite.preparePrivateRequest("oauth", NewBulkPayoutPayload(
+	bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
 		primary,
 		os.Getenv("GEMINI_CLIENT_ID"),
 		&payouts,
@@ -91,15 +90,21 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Status:      &pendingStatus,
 	}}
 	suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "response should be predictable")
-	for {
-		<-time.After(5 * time.Second)
-		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
-		suite.Require().NoError(err, "should not error during bulk payout uploading")
-		if (*(*bulkPayoutResponse)[0].Status) != pendingStatus {
-			suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
-			return
-		}
-	}
+	// for {
+	// 	<-time.After(5 * time.Second)
+	// 	bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
+	// 		primary,
+	// 		os.Getenv("GEMINI_CLIENT_ID"),
+	// 		&payouts,
+	// 	))
+
+	// 	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
+	// 	suite.Require().NoError(err, "should not error during bulk payout uploading")
+	// 	if (*(*bulkPayoutResponse)[0].Status) != pendingStatus {
+	// 		suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
+	// 		return
+	// 	}
+	// }
 }
 
 func findBalanceByCurrency(balances *[]Balance, currency string) Balance {
