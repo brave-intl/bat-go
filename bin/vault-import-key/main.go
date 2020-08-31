@@ -46,12 +46,12 @@ func main() {
 		log.Fatalln("ERROR: Key material must be passed as hex")
 	}
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	_, err = vaultsigner.FromKeypair(client, privKey, pubKey, args[0])
+	_, err = wrappedClient.FromKeypair(privKey, pubKey, args[0])
 	if err != nil {
 		log.Fatalln(err)
 	}

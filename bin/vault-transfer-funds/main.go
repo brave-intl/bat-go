@@ -52,12 +52,12 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	response, err := client.Logical().Read("wallets/" + *from)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + *from)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -68,7 +68,7 @@ func main() {
 		log.Fatalln("invalid wallet name")
 	}
 
-	signer, err := vaultsigner.New(client, *from)
+	signer, err := wrappedClient.GenerateEd25519Signer(*from)
 	if err != nil {
 		log.Fatalln(err)
 	}

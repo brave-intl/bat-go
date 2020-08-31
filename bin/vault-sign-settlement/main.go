@@ -19,7 +19,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
-	"github.com/hashicorp/vault/api"
 	"github.com/shopspring/decimal"
 )
 
@@ -42,7 +41,7 @@ var (
 	// }
 	artifactGenerators map[string]func(
 		string,
-		*api.Client,
+		*vaultsigner.WrappedClient,
 		string,
 		[]settlement.Transaction,
 	) error
@@ -57,7 +56,7 @@ func init() {
 	// let the functions become initialized before creating the map
 	artifactGenerators = map[string]func(
 		string,
-		*api.Client,
+		*vaultsigner.WrappedClient,
 		string,
 		[]settlement.Transaction,
 	) error{
@@ -110,7 +109,7 @@ func main() {
 
 	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -124,7 +123,7 @@ func main() {
 			}
 			err := artifactGenerators[provider](
 				outputFile,
-				client,
+				wrappedClient,
 				walletKey,
 				settlements,
 			)
@@ -161,11 +160,11 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 
 func createUpholdArtifact(
 	outputFile string,
-	client *api.Client,
+	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	upholdOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := client.Logical().Read("wallets/" + walletKey)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -175,7 +174,7 @@ func createUpholdArtifact(
 		log.Fatalln("invalid wallet name")
 	}
 
-	signer, err := vaultsigner.New(client, walletKey)
+	signer, err := wrappedClient.GenerateEd25519Signer(walletKey)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -210,10 +209,10 @@ func createUpholdArtifact(
 }
 
 func getOauthClientID(
-	client *api.Client,
+	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 ) (string, error) {
-	response, err := client.Logical().Read("wallets/" + walletKey)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return "", err
 	}
@@ -230,11 +229,11 @@ func getOauthClientID(
 
 func createGeminiArtifact(
 	outputFile string,
-	client *api.Client,
+	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	oauthClientID, err := getOauthClientID(client, walletKey)
+	oauthClientID, err := getOauthClientID(wrappedClient, walletKey)
 	if err != nil {
 		return err
 	}
@@ -244,7 +243,7 @@ func createGeminiArtifact(
 		return err
 	}
 	privateRequests, err = signGeminiRequests(
-		client,
+		wrappedClient,
 		walletKey,
 		privateRequests,
 	)
@@ -264,11 +263,11 @@ func createGeminiArtifact(
 }
 
 func signGeminiRequests(
-	client *api.Client,
+	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	privateRequests *[]gemini.PrivateRequest,
 ) (*[]gemini.PrivateRequest, error) {
-	response, err := client.Logical().Read("wallets/" + walletKey)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +297,7 @@ func signGeminiRequests(
 
 func createPaypalArtifact(
 	outputFile string,
-	client *api.Client,
+	client *vaultsigner.WrappedClient,
 	walletKey string,
 	paypalOnlySettlements []settlement.Transaction,
 ) error {
