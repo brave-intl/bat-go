@@ -78,6 +78,63 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	return &Ed25519Signer{Client: client, KeyName: importName, KeyVersion: 1}, nil
 }
 
+// ImportHmacSecret create a new vault transit key by importing privKey under importName
+func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*HmacSigner, error) {
+	client := wc.Client
+	key := keysutil.KeyEntry{}
+
+	key.Key = secret
+
+	{
+		tmp := make([]byte, 32)
+		_, err := rand.Read(tmp)
+		if err != nil {
+			return nil, err
+		}
+		key.HMACKey = tmp
+	}
+
+	key.CreationTime = time.Now().UTC()
+	key.DeprecatedCreationTime = key.CreationTime.Unix()
+
+	keyData := keysutil.KeyData{Policy: &keysutil.Policy{Keys: map[string]keysutil.KeyEntry{"1": key}}}
+
+	keyData.Policy.ArchiveVersion = 1
+	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now().UTC(), Version: 1}
+	keyData.Policy.LatestVersion = 1
+	keyData.Policy.MinDecryptionVersion = 1
+	keyData.Policy.Name = importName
+
+	encodedBackup, err := jsonutil.EncodeJSON(keyData)
+	if err != nil {
+		return nil, err
+	}
+	backup := base64.StdEncoding.EncodeToString(encodedBackup)
+
+	mounts, err := client.Sys().ListMounts()
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := mounts["transit/"]; !ok {
+		// Mount transit secret backend if not already mounted
+		if err = client.Sys().Mount("transit", &api.MountInput{
+			Type: "transit",
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	// Restore the generated key backup
+	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
+		"backup": backup,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &HmacSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
+}
+
 // GenerateEd25519Signer create Ed25519Signer by generating a keypair with name using vault backend
 func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, error) {
 	mounts, err := wc.Client.Sys().ListMounts()
