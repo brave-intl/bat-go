@@ -28,23 +28,23 @@ func validateAndImportSecrets() error {
 	if len(privateKeyHex) == 0 || len(publicKeyHex) == 0 {
 		fmt.Println("importing uphold key pair")
 		// uphold importing
-		err = upholdVaultImportKey("uphold-contribution")
+		err = upholdVaultImportKey("wallets/uphold-contribution")
 		if err != nil {
 			return err
 		}
-		err = upholdVaultImportKey("uphold-referral")
+		err = upholdVaultImportKey("wallets/uphold-referral")
 		if err != nil {
 			return err
 		}
 	}
-	if len(geminiSecret) == 0 {
+	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
 		// gemini importing
-		err = geminiVaultImportSecret("gemini-contribution")
+		err = geminiVaultImportSecret("wallets/gemini-contribution")
 		if err != nil {
 			return err
 		}
-		err = geminiVaultImportSecret("gemini-referral")
+		err = geminiVaultImportSecret("wallets/gemini-referral")
 		if err != nil {
 			return err
 		}
