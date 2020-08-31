@@ -55,8 +55,12 @@ const (
 )
 
 const (
-	sandboxFingerprint = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
-	prodFingerprint    = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
+	// The Leaf Certificates
+	//sandboxFingerprint = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
+	//prodFingerprint    = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
+	// The Intermediate Certificates
+	sandboxFingerprint = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
+	prodFingerprint    = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
 )
 
 var (
