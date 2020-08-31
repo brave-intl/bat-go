@@ -2,57 +2,91 @@ package main
 
 import (
 	"encoding/hex"
-	"flag"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 )
 
-var privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
-var publicKeyHex = os.Getenv("ED25519_PUBLIC_KEY")
+var (
+	privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
+	publicKeyHex  = os.Getenv("ED25519_PUBLIC_KEY")
+	geminiSecret  = os.Getenv("GEMINI_CLIENT_SECRET")
+)
 
 func main() {
-	log.SetFlags(0)
-
-	flag.Usage = func() {
-		log.Printf("A helper for importing existing ed25519 keys into vault.\n\n")
-		log.Printf("Usage:\n\n")
-		log.Printf("        %s VAULT_KEY_NAME\n\n", os.Args[0])
-		log.Printf("  Hex key material is read from the environment, ED25519_PUBLIC_KEY and ED25519_PRIVATE_KEY.\n\n")
+	err := validateAndImportSecrets()
+	if err != nil {
+		log.Fatalln(err)
 	}
-	flag.Parse()
+}
 
+func validateAndImportSecrets() error {
+	var err error
 	if len(privateKeyHex) == 0 || len(publicKeyHex) == 0 {
-		log.Printf("ERROR: Environment variables ED25519_PRIVATE_KEY and ED25519_PUBLIC_KEY must be passed\n\n")
-		flag.Usage()
-		os.Exit(1)
+		fmt.Println("importing uphold key pair")
+		// uphold importing
+		err = upholdVaultImportKey("uphold-contribution")
+		if err != nil {
+			return err
+		}
+		err = upholdVaultImportKey("uphold-referral")
+		if err != nil {
+			return err
+		}
 	}
-
-	args := flag.Args()
-	if len(args) != 1 {
-		log.Printf("ERROR: Must pass a single argument to name imported keypair\n\n")
-		flag.Usage()
-		os.Exit(1)
+	if len(geminiSecret) == 0 {
+		fmt.Println("importing gemini secret")
+		// gemini importing
+		err = geminiVaultImportSecret("gemini-contribution")
+		if err != nil {
+			return err
+		}
+		err = geminiVaultImportSecret("gemini-referral")
+		if err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
+func upholdVaultImportKey(
+	upholdImportName string,
+) error {
 	privKey, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
-		log.Fatalln("ERROR: Key material must be passed as hex")
+		return errors.New("ERROR: Key material must be passed as hex")
 	}
 
 	pubKey, err := hex.DecodeString(publicKeyHex)
 	if err != nil {
-		log.Fatalln("ERROR: Key material must be passed as hex")
+		return errors.New("ERROR: Key material must be passed as hex")
 	}
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
-	_, err = wrappedClient.FromKeypair(privKey, pubKey, args[0])
+	_, err = wrappedClient.FromKeypair(privKey, pubKey, upholdImportName)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
+	return nil
+}
+
+func geminiVaultImportSecret(
+	geminiImportName string,
+) error {
+	wrappedClient, err := vaultsigner.Connect()
+	if err != nil {
+		return err
+	}
+	_, err = wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
+	if err != nil {
+		return err
+	}
+	return nil
 }

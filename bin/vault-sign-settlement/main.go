@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -166,7 +165,7 @@ func createUpholdArtifact(
 ) error {
 	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	providerID, ok := response.Data["providerId"]
@@ -273,22 +272,26 @@ func signGeminiRequests(
 	}
 
 	// replace with new vault interface
-	settlementKey := cryptography.NewHMACHasher(
+	hmacSecret, err := wrappedClient.ImportHmacSecret(
 		[]byte(response.Data["secret"].(string)),
+		walletKey,
 	)
+	if err != nil {
+		return nil, err
+	}
 	clientKey := response.Data["clientkey"].(string)
 
 	// sign each request
 	for i, privateRequestRequirements := range *privateRequests {
-		sig, err := settlementKey.HMACSha384(
+		sig, err := hmacSecret.Sign(
 			// base64 string
 			[]byte(privateRequestRequirements.Payload),
 		)
 		if err != nil {
 			return nil, err
 		}
-		sigBase64 := base64.StdEncoding.EncodeToString(sig)
-		privateRequestRequirements.Signature = sigBase64
+		sigHex := hex.EncodeToString(sig)
+		privateRequestRequirements.Signature = sigHex
 		privateRequestRequirements.APIKey = clientKey
 		(*privateRequests)[i] = privateRequestRequirements
 	}
