@@ -12,7 +12,7 @@ import (
 )
 
 func TestSign(t *testing.T) {
-	client, err := Connect()
+	wrappedClient, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestSign(t *testing.T) {
 	}
 	name := uuid.NewV4()
 
-	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name.String())
+	signer, err := wrappedClient.FromKeypair(privateKey, publicKey, "vaultsigner-test-"+name.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestSign(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	client, err := Connect()
+	wrappedClient, err := Connect()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	signer, err := FromKeypair(client, privateKey, publicKey, "vaultsigner-test-"+name.String())
+	signer, err := wrappedClient.FromKeypair(privateKey, publicKey, "vaultsigner-test-"+name.String())
 	if err != nil {
 		t.Fatal(err)
 	}

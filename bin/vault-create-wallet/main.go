@@ -89,12 +89,12 @@ func main() {
 		}
 		state.WalletInfo = info
 
-		client, err := vaultsigner.Connect()
+		wrappedClient, err := vaultsigner.Connect()
 		if err != nil {
 			log.Fatalln(err)
 		}
 
-		signer, err := vaultsigner.New(client, name)
+		signer, err := wrappedClient.GenerateEd25519Signer(name)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -157,25 +157,25 @@ func main() {
 		}
 	}
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	mounts, err := client.Sys().ListMounts()
+	mounts, err := wrappedClient.Client.Sys().ListMounts()
 	if err != nil {
 		log.Fatalln(err)
 	}
 	if _, ok := mounts["wallets/"]; !ok {
 		// Mount kv secret backend if not already mounted
-		if err = client.Sys().Mount("wallets", &api.MountInput{
+		if err = wrappedClient.Client.Sys().Mount("wallets", &api.MountInput{
 			Type: "kv",
 		}); err != nil {
 			log.Fatalln(err)
 		}
 	}
 
-	_, err = client.Logical().Write("wallets/"+name, map[string]interface{}{
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+name, map[string]interface{}{
 		"providerId": state.WalletInfo.ProviderID,
 	})
 	if err != nil {
