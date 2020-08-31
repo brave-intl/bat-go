@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -61,7 +60,9 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	)
 
 	tx := settlement.Transaction{
-		SettlementID: uuid.Must(uuid.FromString("4077459f-7389-46d3-a0d8-b1e56b2d279b")).String(), //uuid.NewV4().String(),
+		// use this settlement id to create an ephemeral test
+		// SettlementID: uuid.NewV4().String(),
+		SettlementID: uuid.Must(uuid.FromString("4077459f-7389-46d3-a0d8-b1e56b2d279b")).String(),
 		Destination:  os.Getenv("GEMINI_TEST_DESTINATION_ID"),
 		Channel:      "brave.com",
 	}
@@ -79,7 +80,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		&payouts,
 	))
 
-	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
+	_, err = client.UploadBulkPayout(ctx, bulkPayoutRequest)
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 
 	pendingStatus := "Pending"
@@ -91,26 +92,24 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: &tx.Destination,
 		Status:      &pendingStatus,
 	}}
-	fmt.Println("here")
-	fmt.Println(expectedPayoutResult)
-	suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "response should be predictable")
-	<-time.After(time.Second)
-	// for {
-	// 	<-time.After(5 * time.Second)
-	// 	bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
-	// 		primary,
-	// 		os.Getenv("GEMINI_CLIENT_ID"),
-	// 		&payouts,
-	// 	))
+	// suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "response should be predictable")
+	completeStatus := "Completed"
+	for {
+		<-time.After(5 * time.Second)
+		bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
+			primary,
+			os.Getenv("GEMINI_CLIENT_ID"),
+			&payouts,
+		))
 
-	// 	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
-	// 	fmt.Println((*(*bulkPayoutResponse)[0].Status))
-	// 	suite.Require().NoError(err, "should not error during bulk payout uploading")
-	// 	if (*(*bulkPayoutResponse)[0].Status) != pendingStatus {
-	// 		suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
-	// 		return
-	// 	}
-	// }
+		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
+		suite.Require().NoError(err, "should not error during bulk payout uploading")
+		if (*(*bulkPayoutResponse)[0].Status) == completeStatus {
+			expectedPayoutResult[0].Status = &completeStatus
+			suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
+			return
+		}
+	}
 }
 
 func findBalanceByCurrency(balances *[]Balance, currency string) Balance {
