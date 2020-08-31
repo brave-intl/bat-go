@@ -57,7 +57,7 @@ type BulkPayoutPayload struct {
 }
 
 func nonce() int64 {
-	return time.Now().UnixNano()
+	return time.Now().UTC().UnixNano()
 }
 
 // SettlementTransactionToPayoutPayload converts to a payout request
