@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -66,25 +65,8 @@ func init() {
 }
 
 func main() {
-	log.SetFlags(0)
-
-	flag.Usage = func() {
-		log.Printf("Use a wallet backed by vault to sign settlements.\n\n")
-		log.Printf("Usage:\n\n")
-		log.Printf("        %s WALLET_NAME\n\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-signed.json"
-
-	// args := flag.Args()
-	// if len(args) != 1 {
-	// 	log.Printf("ERROR: Must pass a single argument, name of wallet / keypair\n\n")
-	// 	flag.Usage()
-	// 	os.Exit(1)
-	// }
 
 	// all settlements file
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
@@ -211,19 +193,20 @@ func getOauthClientID(
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 ) (string, error) {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return "", err
-	}
-	oauthClientID, ok := response.Data["oauthClientId"]
-	if !ok {
-		return "", errors.New("oauth client id not set")
-	}
-	converted, ok := oauthClientID.(string)
-	if !ok {
-		return "", errors.New("unable to convert oauth client id to string")
-	}
-	return converted, nil
+	return os.Getenv("GEMINI_CLIENT_ID"), nil
+	// response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	// if err != nil {
+	// 	return "", err
+	// }
+	// oauthClientID, ok := response.Data["oauthClientId"]
+	// if !ok {
+	// 	return "", errors.New("oauth client id not set")
+	// }
+	// converted, ok := oauthClientID.(string)
+	// if !ok {
+	// 	return "", errors.New("unable to convert oauth client id to string")
+	// }
+	// return converted, nil
 }
 
 func createGeminiArtifact(

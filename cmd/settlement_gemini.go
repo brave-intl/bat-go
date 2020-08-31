@@ -82,11 +82,11 @@ func init() {
 	must(viper.BindEnv("txn-id", "TXN_ID"))
 	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
-	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&oauthClientID, "oauth-client-id", "oid", "",
+	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&oauthClientID, "gemini-client-id", "g", "",
 		"the oauth client id needed to check that the user authorized the payment")
-	must(viper.BindPFlag("oauth-client-id", geminiSettlementCmd.PersistentFlags().Lookup("oauth-client-id")))
-	must(viper.BindEnv("oauth-client-id", "OAUTH_CLIENT_ID"))
-	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("oauth-client-id"))
+	must(viper.BindPFlag("gemini-client-id", geminiSettlementCmd.PersistentFlags().Lookup("gemini-client-id")))
+	must(viper.BindEnv("gemini-client-id", "GEMINI_CLIENT_ID"))
+	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 }
 
 // func geminiValidateResponse(
