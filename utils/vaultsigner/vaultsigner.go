@@ -3,6 +3,7 @@ package vaultsigner
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/hashicorp/vault/api"
@@ -48,6 +49,7 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	keyData.Policy.Name = importName
 	keyData.Policy.Type = keysutil.KeyType_ED25519
 
+	fmt.Printf("%#v\n", keyData)
 	encodedBackup, err := jsonutil.EncodeJSON(keyData)
 	if err != nil {
 		return nil, err
@@ -70,6 +72,8 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	// Restore the generated key backup
 	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
 		"backup": backup,
+		"name":   importName,
+		"force":  true,
 	})
 	if err != nil {
 		return nil, err
@@ -127,12 +131,31 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	// Restore the generated key backup
 	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
 		"backup": backup,
+		"name":   importName,
+		"force":  true,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return &HmacSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
+}
+
+// GenerateMounts generates the appropriate mount points if they do not exist
+func (wc *WrappedClient) GenerateMounts() error {
+	mounts, err := wc.Client.Sys().ListMounts()
+	if err != nil {
+		return err
+	}
+	if _, ok := mounts["wallets/"]; !ok {
+		// Mount kv secret backend if not already mounted
+		if err = wc.Client.Sys().Mount("wallets", &api.MountInput{
+			Type: "kv",
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GenerateEd25519Signer create Ed25519Signer by generating a keypair with name using vault backend

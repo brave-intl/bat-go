@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
-	publicKeyHex  = os.Getenv("ED25519_PUBLIC_KEY")
-	geminiSecret  = os.Getenv("GEMINI_CLIENT_SECRET")
+	privateKeyHex  = os.Getenv("ED25519_PRIVATE_KEY")
+	publicKeyHex   = os.Getenv("ED25519_PUBLIC_KEY")
+	geminiSecret   = os.Getenv("GEMINI_CLIENT_SECRET")
+	geminiClientID = os.Getenv("GEMINI_CLIENT_ID")
 )
 
 func main() {
@@ -25,26 +26,36 @@ func main() {
 
 func validateAndImportSecrets() error {
 	var err error
-	if len(privateKeyHex) == 0 || len(publicKeyHex) == 0 {
+
+	wrappedClient, err := vaultsigner.Connect()
+	if err != nil {
+		return err
+	}
+
+	if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
 		fmt.Println("importing uphold key pair")
 		// uphold importing
-		err = upholdVaultImportKey("wallets/uphold-contribution")
+		err = upholdVaultImportKey(wrappedClient, "uphold-contribution")
 		if err != nil {
 			return err
 		}
-		err = upholdVaultImportKey("wallets/uphold-referral")
+		err = upholdVaultImportKey(wrappedClient, "uphold-referral")
 		if err != nil {
 			return err
 		}
 	}
 	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
+		geminiKVs := map[string]interface{}{
+			"secret":    geminiSecret,
+			"clientkey": geminiClientID,
+		}
 		// gemini importing
-		err = geminiVaultImportSecret("wallets/gemini-contribution")
+		err = geminiVaultImportValues(wrappedClient, "gemini-contribution", geminiKVs)
 		if err != nil {
 			return err
 		}
-		err = geminiVaultImportSecret("wallets/gemini-referral")
+		err = geminiVaultImportValues(wrappedClient, "gemini-referral", geminiKVs)
 		if err != nil {
 			return err
 		}
@@ -53,6 +64,7 @@ func validateAndImportSecrets() error {
 }
 
 func upholdVaultImportKey(
+	wrappedClient *vaultsigner.WrappedClient,
 	upholdImportName string,
 ) error {
 	privKey, err := hex.DecodeString(privateKeyHex)
@@ -65,11 +77,6 @@ func upholdVaultImportKey(
 		return errors.New("ERROR: Key material must be passed as hex")
 	}
 
-	wrappedClient, err := vaultsigner.Connect()
-	if err != nil {
-		return err
-	}
-
 	_, err = wrappedClient.FromKeypair(privKey, pubKey, upholdImportName)
 	if err != nil {
 		return err
@@ -77,16 +84,19 @@ func upholdVaultImportKey(
 	return nil
 }
 
-func geminiVaultImportSecret(
+func geminiVaultImportValues(
+	wrappedClient *vaultsigner.WrappedClient,
 	geminiImportName string,
+	kvMap map[string]interface{},
 ) error {
-	wrappedClient, err := vaultsigner.Connect()
+	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
 	if err != nil {
 		return err
 	}
-	_, err = wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
+	err = wrappedClient.GenerateMounts()
 	if err != nil {
 		return err
 	}
-	return nil
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+geminiImportName, kvMap)
+	return err
 }

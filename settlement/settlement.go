@@ -98,7 +98,7 @@ func (at AntifraudTransaction) ToTransaction() Transaction {
 		// Authority: ,
 		Amount: at.BAT,
 		// ExchangeFee: ,
-		// Currency: ,
+		Currency:    alt.String(),
 		Destination: providerInfo.ID,
 		Publisher:   at.Owner,
 		// BATPlatformFee: ,

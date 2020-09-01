@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -29,7 +30,7 @@ var (
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := GeminiUploadSettlement(input, out); err != nil {
-				log.Printf("failed to perform upload to gemini: %s\n", err)
+				fmt.Printf("failed to perform upload to gemini: %s\n", err)
 				os.Exit(1)
 			}
 		},
@@ -38,11 +39,6 @@ var (
 	transformGeminiSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of gemini settlement for mass pay",
-		// PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// 	// add flag values to our base context that need to be there
-		// 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
-		// 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
-		// },
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := GeminiTransformForMassPay(input, oauthClientID, out); err != nil {
 				log.Printf("failed to perform transform: %s\n", err)
@@ -103,17 +99,18 @@ func init() {
 func geminiSiftThroughResponses(
 	originalTransactions map[string]settlement.Transaction,
 	response *[]gemini.PayoutResult,
-) []settlement.Transaction {
+) ([]settlement.Transaction, []settlement.Transaction) {
 	successful := []settlement.Transaction{}
+	failures := []settlement.Transaction{}
 
 	for _, payout := range *response {
 		if payout.Result == "Error" {
-			// fmt.Println(payout.GenerateLog())
+			failures = append(failures, originalTransactions[payout.TxRef])
 		} else {
 			successful = append(successful, originalTransactions[payout.TxRef])
 		}
 	}
-	return successful
+	return successful, failures
 }
 
 // func convertTransactionListIntoMap(
@@ -141,6 +138,7 @@ func GeminiUploadSettlement(inPath string, outPath string) error {
 	}
 
 	transactionsForEyeshade := []settlement.Transaction{}
+	failedTransactions := []settlement.Transaction{}
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -155,7 +153,7 @@ func GeminiUploadSettlement(inPath string, outPath string) error {
 		for _, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
 			// make sure payload is parsable
 			// upload the bulk payout
-			fmt.Printf("%#v\n", bulkPayoutRequestRequirements)
+			bulkPayoutRequestRequirements.Auth = "hmac"
 			response, err := geminiClient.UploadBulkPayout(ctx, bulkPayoutRequestRequirements)
 			if err != nil {
 				return err
@@ -163,14 +161,18 @@ func GeminiUploadSettlement(inPath string, outPath string) error {
 			// // create a map of the request transactions
 			transactionsMap := geminiMapTransactionsToID(bulkPayoutRequestRequirements.Transactions)
 			// collect all successful transactions to send to eyeshade
-			transactionsForEyeshade = append(
-				transactionsForEyeshade,
-				geminiSiftThroughResponses(transactionsMap, response)...,
-			)
+			successful, failures := geminiSiftThroughResponses(transactionsMap, response)
+			transactionsForEyeshade = append(transactionsForEyeshade, successful...)
+			failedTransactions = append(failedTransactions, failures...)
 		}
 	}
 	// write file for upload to eyeshade
 	err = GeminiWriteTransactions(outPath, &transactionsForEyeshade)
+	if err != nil {
+		return err
+	}
+	// write file for upload to eyeshade
+	err = GeminiWriteTransactions("failed-"+outPath, &failedTransactions)
 	if err != nil {
 		return err
 	}
@@ -188,6 +190,9 @@ func geminiMapTransactionsToID(transactions []settlement.Transaction) map[string
 
 // GeminiWriteTransactions writes settlement transactions to a json file
 func GeminiWriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
+	if len(*metadata) == 0 {
+		return nil
+	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
@@ -268,7 +273,7 @@ func GeminiTransformTransactions(oauthClientID string, transactions []settlement
 		}
 		// create space for the gemini request to be signed offline
 		privateRequest := gemini.PrivateRequest{
-			Payload:      string(bulkPaymentPayloadSerialized),
+			Payload:      base64.StdEncoding.EncodeToString(bulkPaymentPayloadSerialized),
 			Transactions: transactionBlock,
 		}
 		// append to list of requests to make in future
