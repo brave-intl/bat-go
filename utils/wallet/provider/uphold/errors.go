@@ -52,6 +52,14 @@ func (uhErr upholdError) DenominationError() bool {
 	return uhErr.ValidationError() && uhErr.ValidationErrors.DenominationErrors.Code == "validation_failed"
 }
 
+func (uhErr upholdError) DestinationError() bool {
+	return uhErr.ValidationError() && len(uhErr.ValidationErrors.DestinationErrors) > 0
+}
+
+func (uhErr upholdError) InvalidDestination() bool {
+	return uhErr.DestinationError()
+}
+
 func (uhErr upholdError) AmountError() bool {
 	return uhErr.DenominationError() && len(uhErr.ValidationErrors.DenominationErrors.ValidationErrors.AmountError) > 0
 }

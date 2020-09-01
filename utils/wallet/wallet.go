@@ -95,6 +95,15 @@ func IsNotFound(err error) bool {
 	return ok && te.NotFoundError()
 }
 
+// IsInvalidDestination is a helper method for determining if an error indicates an invalid destination
+func IsInvalidDestination(err error) bool {
+	type invalidDestination interface {
+		InvalidDestination() bool
+	}
+	te, ok := err.(invalidDestination)
+	return ok && te.InvalidDestination()
+}
+
 // IsInsufficientBalance is a helper method for determining if an error indicates insufficient balance
 func IsInsufficientBalance(err error) bool {
 	type insufficientBalance interface {

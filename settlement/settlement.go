@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/shopspring/decimal"
 )
 

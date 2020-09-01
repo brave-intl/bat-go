@@ -13,6 +13,7 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/formatters"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	log "github.com/sirupsen/logrus"
 )
@@ -88,6 +89,10 @@ func main() {
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
+			if wallet.IsInvalidDestination(err) {
+				log.Println(err)
+				continue
+			}
 			log.Fatalln(err)
 		}
 
