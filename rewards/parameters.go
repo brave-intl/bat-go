@@ -12,8 +12,8 @@ type Tips struct {
 	DefaultMonthlyChoices []float64 `json:"defaultMonthlyChoices,omitempty"`
 }
 
-// Parameters - structure of reward parameters
-type Parameters struct {
+// ParametersV1 - structure of reward parameters
+type ParametersV1 struct {
 	BATRate        float64        `json:"batRate,omitempty"`
 	AutoContribute AutoContribute `json:"autocontribute,omitempty"`
 	Tips           Tips           `json:"tips,omitempty"`

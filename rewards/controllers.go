@@ -20,7 +20,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 			currencyInput = r.URL.Query().Get("currency")
 
 			// response structure
-			parameters *Parameters
+			parameters *ParametersV1
 		)
 
 		if currencyInput == "" {
