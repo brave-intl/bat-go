@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -21,7 +24,7 @@ import (
 )
 
 var (
-	inputFile = flag.String("in", "./contributions.json", "input file path")
+	inputFile = flag.String("in", "contributions.json", "input file path")
 	provider  = flag.String("provider", "", "wallet provider to settle out to")
 
 	// split into provider / transaction type pairings
@@ -65,8 +68,18 @@ func init() {
 }
 
 func main() {
+	log.SetFlags(0)
+
+	flag.Usage = func() {
+		log.Printf("Use a wallet backed by vault to sign settlements.\n\n")
+		log.Printf("Usage:\n\n")
+		log.Printf("        %s WALLET_NAME\n\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-signed.json"
+	fmt.Println(*inputFile, outputFile)
 
 	// all settlements file
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
@@ -152,12 +165,12 @@ func createUpholdArtifact(
 
 	providerID, ok := response.Data["providerId"]
 	if !ok {
-		log.Fatalln("invalid wallet name")
+		return errors.New("invalid wallet name")
 	}
 
 	signer, err := wrappedClient.GenerateEd25519Signer(walletKey)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	var info wallet.Info
@@ -249,27 +262,36 @@ func signGeminiRequests(
 	walletKey string,
 	privateRequests *[]gemini.PrivateRequest,
 ) (*[]gemini.PrivateRequest, error) {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return nil, err
-	}
+	// response, err := wrappedClient.Client.Logical().Read("transit/keys/" + walletKey)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	// replace with new vault interface
-	hmacSecret, err := wrappedClient.ImportHmacSecret(
-		[]byte(response.Data["secret"].(string)),
-		walletKey,
-	)
-	if err != nil {
-		return nil, err
-	}
-	clientKey := response.Data["clientkey"].(string)
+	// hmacSecret, err := wrappedClient.ImportHmacSecret(
+	// 	[]byte(response.Data["secret"].(string)),
+	// 	walletKey,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// clientKey := response.Data["clientkey"].(string)
+
+	// online version
+	hmacSecret := cryptography.NewHMACHasher([]byte(os.Getenv("GEMINI_CLIENT_SECRET")))
+	clientKey := os.Getenv("GEMINI_CLIENT_KEY")
 
 	// sign each request
 	for i, privateRequestRequirements := range *privateRequests {
-		sig, err := hmacSecret.Sign(
-			// base64 string
+		// online signing
+		sig, err := hmacSecret.HMACSha384(
 			[]byte(privateRequestRequirements.Payload),
 		)
+		// offline signing?
+		// sig, err := hmacSecret.Sign(
+		// 	// base64 string
+		// 	[]byte(privateRequestRequirements.Payload),
+		// )
 		if err != nil {
 			return nil, err
 		}

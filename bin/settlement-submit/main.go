@@ -45,22 +45,19 @@ func main() {
 	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
 	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
+	var err error
 	switch *provider {
 	case "uphold":
-		upholdSubmit()
+		err = upholdSubmit()
 	case "gemini":
-		geminiSubmit()
+		err = cmd.GeminiUploadSettlement(*inputFile, outputFile)
 	}
-}
-
-func geminiSubmit() {
-	err := cmd.GeminiUploadSettlement(*inputFile, outputFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
 }
 
-func upholdSubmit() {
+func upholdSubmit() error {
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)
@@ -176,4 +173,5 @@ func upholdSubmit() {
 	}
 
 	fmt.Println("done!")
+	return nil
 }
