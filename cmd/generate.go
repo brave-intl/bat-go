@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,11 +13,20 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
+
+var overwrite bool
 
 func init() {
 	rootCmd.AddCommand(generateCmd)
 	generateCmd.AddCommand(jsonSchemaCmd)
+
+	// overwrite - defaults to false
+	jsonSchemaCmd.PersistentFlags().BoolVarP(&overwrite, "overwrite", "", false,
+		"overwrite the existing json schema files")
+	must(viper.BindPFlag("overwrite", jsonSchemaCmd.PersistentFlags().Lookup("overwrite")))
+	must(viper.BindEnv("overwrite", "OVERWRITE"))
 }
 
 var generateCmd = &cobra.Command{
@@ -52,6 +62,25 @@ func jsonSchemaRun(cmd *cobra.Command, args []string) {
 		}
 
 		parts := strings.Split(t.String(), ".")
+
+		// read old schema file
+		existingSchema, err := ioutil.ReadFile(
+			fmt.Sprintf("./schema/%s/%s", parts[0], parts[1]))
+		if err != nil {
+			logger.Info().Err(err).Msg("could not find existing schema file, might be a new api")
+		} else {
+			// test equality of schema file with what we just generated
+			if !bytes.Equal(existingSchema, schema) {
+				if viper.GetBool("overwrite") {
+					logger.Warn().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
+				} else {
+					logger.Error().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
+					<-time.After(1 * time.Second)
+					os.Exit(1)
+				}
+			}
+		}
+
 		err = ioutil.WriteFile(
 			fmt.Sprintf("./schema/%s/%s", parts[0], parts[1]),
 			schema, 0644)
