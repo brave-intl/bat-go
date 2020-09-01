@@ -41,20 +41,18 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	}
 	var output io.Writer
 	if env != "local" {
-		output = os.Stdout
+		// this log writer uses a ring buffer and drops messages that cannot be processed
+		// in a timely manner
+		output = diode.NewWriter(os.Stdout, 1000, time.Duration(20*time.Millisecond), func(missed int) {
+			// add to our counter of lost log messages
+			droppedLogTotal.Add(float64(missed))
+		})
 	} else {
 		output = zerolog.ConsoleWriter{Out: os.Stdout}
 	}
 
-	// this log writer uses a ring buffer and drops messages that cannot be processed
-	// in a timely manner
-	wr := diode.NewWriter(output, 1000, time.Duration(20*time.Millisecond), func(missed int) {
-		// add to our counter of lost log messages
-		droppedLogTotal.Add(float64(missed))
-	})
-
 	// always print out timestamp
-	l := zerolog.New(wr).With().Timestamp().Logger()
+	l := zerolog.New(output).With().Timestamp().Logger()
 
 	debug := os.Getenv("DEBUG")
 	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
