@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -262,20 +261,15 @@ func signGeminiRequests(
 		return nil, err
 	}
 	clientKey := response.Data["clientkey"].(string)
-	hmacSecret, err := wrappedClient.GenerateHmacSecret(walletKey, "sha2-384")
+	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
 	if err != nil {
 		return nil, err
 	}
 
 	// sign each request
 	for i, privateRequestRequirements := range *privateRequests {
-		// offline signing?
-		decoded, err := base64.StdEncoding.DecodeString(privateRequestRequirements.Payload)
-		if err != nil {
-			return nil, err
-		}
 		sig, err := hmacSecret.HMACSha384(
-			decoded,
+			[]byte(privateRequestRequirements.Payload),
 		)
 		if err != nil {
 			return nil, err

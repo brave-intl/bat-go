@@ -63,7 +63,6 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
 		"backup": backup,
 		"name":   importName,
-		"force":  true,
 	})
 	if err != nil {
 		return nil, err
@@ -108,7 +107,6 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
 		"backup": backup,
 		"name":   importName,
-		"force":  true,
 	})
 	if err != nil {
 		return nil, err
@@ -169,7 +167,7 @@ func (wc *WrappedClient) GetEd25519Signer(name string) (*Ed25519Signer, error) {
 	return &Ed25519Signer{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
 }
 
-// GenerateHmacKey create hmac key using vault backend
+// GenerateHmacSecret create hmac key using vault backend
 func (wc *WrappedClient) GenerateHmacSecret(name string, algo string) (*HmacSigner, error) {
 	err := wc.GenerateMounts()
 	if err != nil {
@@ -178,6 +176,16 @@ func (wc *WrappedClient) GenerateHmacSecret(name string, algo string) (*HmacSign
 
 	// Generate a new hmac set
 	_, err = wc.Client.Logical().Write("transit/hmac/"+name+"/"+algo, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &HmacSigner{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
+}
+
+// GetHmacSecret gets a key pair but doesn't generate new key
+func (wc *WrappedClient) GetHmacSecret(name string) (*HmacSigner, error) {
+	err := wc.GenerateMounts()
 	if err != nil {
 		return nil, err
 	}

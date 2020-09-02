@@ -33,7 +33,7 @@ func TestHmacSign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer, err := wrappedClient.GenerateHmacSecret(name, "sha2-384")
+	signer, err := wrappedClient.GetHmacSecret(name)
 	if err != nil {
 		t.Fatal(err)
 	}
