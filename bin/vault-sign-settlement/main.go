@@ -16,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -202,36 +201,17 @@ func createUpholdArtifact(
 	return nil
 }
 
-func getOauthClientID(
-	wrappedClient *vaultsigner.WrappedClient,
-	walletKey string,
-) (string, error) {
-	return os.Getenv("GEMINI_CLIENT_ID"), nil
-	// response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// oauthClientID, ok := response.Data["oauthClientId"]
-	// if !ok {
-	// 	return "", errors.New("oauth client id not set")
-	// }
-	// converted, ok := oauthClientID.(string)
-	// if !ok {
-	// 	return "", errors.New("unable to convert oauth client id to string")
-	// }
-	// return converted, nil
-}
-
 func createGeminiArtifact(
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	oauthClientID, err := getOauthClientID(wrappedClient, walletKey)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return err
 	}
+	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
 	privateRequests, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
@@ -262,36 +242,23 @@ func signGeminiRequests(
 	walletKey string,
 	privateRequests *[]gemini.PrivateRequest,
 ) (*[]gemini.PrivateRequest, error) {
-	// response, err := wrappedClient.Client.Logical().Read("transit/keys/" + walletKey)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// hmacSecret, err := wrappedClient.ImportHmacSecret(
-	// 	[]byte(response.Data["secret"].(string)),
-	// 	walletKey,
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// clientKey := response.Data["clientkey"].(string)
-
-	// online version
-	hmacSecret := cryptography.NewHMACHasher([]byte(os.Getenv("GEMINI_CLIENT_SECRET")))
-	clientKey := os.Getenv("GEMINI_CLIENT_KEY")
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return nil, err
+	}
+	clientKey := response.Data["clientkey"].(string)
+	hmacSecret, err := wrappedClient.GenerateHmacKey(walletKey, "sha2-384")
+	if err != nil {
+		return nil, err
+	}
 
 	// sign each request
 	for i, privateRequestRequirements := range *privateRequests {
-		// online signing
+		// offline signing?
 		sig, err := hmacSecret.HMACSha384(
+			// base64 string
 			[]byte(privateRequestRequirements.Payload),
 		)
-		// offline signing?
-		// sig, err := hmacSecret.Sign(
-		// 	// base64 string
-		// 	[]byte(privateRequestRequirements.Payload),
-		// )
 		if err != nil {
 			return nil, err
 		}

@@ -3,7 +3,6 @@ package vaultsigner
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"time"
 
 	"github.com/hashicorp/vault/api"
@@ -49,24 +48,15 @@ func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.
 	keyData.Policy.Name = importName
 	keyData.Policy.Type = keysutil.KeyType_ED25519
 
-	fmt.Printf("%#v\n", keyData)
 	encodedBackup, err := jsonutil.EncodeJSON(keyData)
 	if err != nil {
 		return nil, err
 	}
 	backup := base64.StdEncoding.EncodeToString(encodedBackup)
 
-	mounts, err := client.Sys().ListMounts()
+	err = wc.GenerateMounts()
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
 	}
 
 	// Restore the generated key backup
@@ -115,17 +105,9 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	}
 	backup := base64.StdEncoding.EncodeToString(encodedBackup)
 
-	mounts, err := client.Sys().ListMounts()
+	err = wc.GenerateMounts()
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
 	}
 
 	// Restore the generated key backup
@@ -155,24 +137,23 @@ func (wc *WrappedClient) GenerateMounts() error {
 			return err
 		}
 	}
-	return nil
-}
-
-// GenerateEd25519Signer create Ed25519Signer by generating a keypair with name using vault backend
-func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, error) {
-	mounts, err := wc.Client.Sys().ListMounts()
-	if err != nil {
-		return nil, err
-	}
 	if _, ok := mounts["transit/"]; !ok {
 		// Mount transit secret backend if not already mounted
 		if err = wc.Client.Sys().Mount("transit", &api.MountInput{
 			Type: "transit",
 		}); err != nil {
-			return nil, err
+			return err
 		}
 	}
+	return nil
+}
 
+// GenerateEd25519Signer create Ed25519Signer by generating a keypair with name using vault backend
+func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, error) {
+	err := wc.GenerateMounts()
+	if err != nil {
+		return nil, err
+	}
 	// Generate a new keypair
 	_, err = wc.Client.Logical().Write("transit/keys/"+name, map[string]interface{}{
 		"type": "ed25519",
@@ -186,17 +167,9 @@ func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, err
 
 // GetEd25519Signer gets a key pair but doesn't generate new key
 func (wc *WrappedClient) GetEd25519Signer(name string) (*Ed25519Signer, error) {
-	mounts, err := wc.Client.Sys().ListMounts()
+	err := wc.GenerateMounts()
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = wc.Client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
 	}
 
 	return &Ed25519Signer{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
@@ -204,17 +177,9 @@ func (wc *WrappedClient) GetEd25519Signer(name string) (*Ed25519Signer, error) {
 
 // GenerateHmacKey create hmac key using vault backend
 func (wc *WrappedClient) GenerateHmacKey(name string, algo string) (*HmacSigner, error) {
-	mounts, err := wc.Client.Sys().ListMounts()
+	err := wc.GenerateMounts()
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = wc.Client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
 	}
 
 	// Generate a new hmac set
