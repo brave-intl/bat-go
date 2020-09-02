@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	privateKeyHex  = os.Getenv("ED25519_PRIVATE_KEY")
-	publicKeyHex   = os.Getenv("ED25519_PUBLIC_KEY")
-	geminiSecret   = os.Getenv("GEMINI_CLIENT_SECRET")
-	geminiClientID = os.Getenv("GEMINI_CLIENT_ID")
+	privateKeyHex   = os.Getenv("ED25519_PRIVATE_KEY")
+	publicKeyHex    = os.Getenv("ED25519_PUBLIC_KEY")
+	geminiSecret    = os.Getenv("GEMINI_CLIENT_SECRET")
+	geminiClientID  = os.Getenv("GEMINI_CLIENT_ID")
+	geminiClientKey = os.Getenv("GEMINI_CLIENT_KEY")
 )
 
 func main() {
@@ -46,16 +47,12 @@ func validateAndImportSecrets() error {
 	}
 	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
-		geminiKVs := map[string]interface{}{
-			"secret":    geminiSecret,
-			"clientkey": geminiClientID,
-		}
 		// gemini importing
-		err = geminiVaultImportValues(wrappedClient, "gemini-contribution", geminiKVs)
+		err = geminiVaultImportValues(wrappedClient, "gemini-contribution")
 		if err != nil {
 			return err
 		}
-		err = geminiVaultImportValues(wrappedClient, "gemini-referral", geminiKVs)
+		err = geminiVaultImportValues(wrappedClient, "gemini-referral")
 		if err != nil {
 			return err
 		}
@@ -87,13 +84,16 @@ func upholdVaultImportKey(
 func geminiVaultImportValues(
 	wrappedClient *vaultsigner.WrappedClient,
 	geminiImportName string,
-	kvMap map[string]interface{},
 ) error {
-	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
+	kvMap := map[string]interface{}{
+		"clientid":  geminiClientID,
+		"clientkey": geminiClientKey,
+	}
+	err := wrappedClient.GenerateMounts()
 	if err != nil {
 		return err
 	}
-	err = wrappedClient.GenerateMounts()
+	_, err = wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
 	if err != nil {
 		return err
 	}
