@@ -78,6 +78,7 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	key := keysutil.KeyEntry{}
 
 	key.HMACKey = secret
+	key.Key = secret
 
 	key.CreationTime = time.Now().UTC()
 	key.DeprecatedCreationTime = key.CreationTime.Unix()
