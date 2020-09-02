@@ -24,9 +24,10 @@ func (vs *HmacSigner) HMACSha384(message []byte) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	sig := response.Data["hmac"].(string)
+	hmac := response.Data["hmac"].(string)
+	fmt.Println(hmac)
 
-	return base64.StdEncoding.DecodeString(strings.Split(sig, ":")[2])
+	return base64.StdEncoding.DecodeString(strings.Split(hmac, ":")[2])
 }
 
 // Verify the included signature over message using the vault held keypair
