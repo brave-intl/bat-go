@@ -3,6 +3,7 @@ package cryptography
 import (
 	"crypto/hmac"
 	"crypto/sha512"
+	"encoding/base64"
 	"errors"
 )
 
@@ -25,8 +26,9 @@ func NewHMACHasher(secret []byte) HMACKey {
 
 // HMACSha384 hashes using an in process secret
 func (hmh *HMACHasher) HMACSha384(payload []byte) ([]byte, error) {
+	encoded := base64.StdEncoding.EncodeToString(payload)
 	mac := hmac.New(sha512.New384, hmh.secret)
-	len, err := mac.Write(payload)
+	len, err := mac.Write([]byte(encoded))
 	if err != nil {
 		return []byte{}, err
 	}

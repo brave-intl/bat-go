@@ -138,7 +138,7 @@ func (suite *GeminiTestSuite) preparePrivateRequest(auth string, payload interfa
 
 	var signatureHex string
 	if auth == "hmac" {
-		signature, err := suite.secret.HMACSha384([]byte(payloadBase64))
+		signature, err := suite.secret.HMACSha384([]byte(payloadSerialized))
 		suite.Require().NoError(err, "payload must be able to be hashed")
 		signatureHex = hex.EncodeToString(signature)
 	}

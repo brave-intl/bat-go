@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,12 @@ var (
 		"paypal": {"default"},
 		"gemini": {"contribution", "referral"},
 	}
+	walletKeys = map[string]string{
+		// "gemini-contribution": "different-key",
+		// "gemini-referral": "different-key",
+		// "uphold-contribution": "different-key",
+		// "uphold-referral": "different-key",
+	}
 	// providerByAntifraudInt = map[string]string{
 	// 	"0": "uphold",
 	// 	"1": "paypal",
@@ -46,6 +53,14 @@ var (
 		[]settlement.Transaction,
 	) error
 )
+
+func swapWalletKey(key string) string {
+	value := walletKeys[key]
+	if value == "" {
+		return key
+	}
+	return value
+}
 
 func init() {
 	// just add to providerType to add to allProviders
@@ -117,7 +132,7 @@ func main() {
 			err := artifactGenerators[provider](
 				outputFile,
 				wrappedClient,
-				walletKey,
+				swapWalletKey(walletKey),
 				settlements,
 			)
 			if err != nil {
@@ -255,9 +270,12 @@ func signGeminiRequests(
 	// sign each request
 	for i, privateRequestRequirements := range *privateRequests {
 		// offline signing?
+		decoded, err := base64.StdEncoding.DecodeString(privateRequestRequirements.Payload)
+		if err != nil {
+			return nil, err
+		}
 		sig, err := hmacSecret.HMACSha384(
-			// base64 string
-			[]byte(privateRequestRequirements.Payload),
+			decoded,
 		)
 		if err != nil {
 			return nil, err
