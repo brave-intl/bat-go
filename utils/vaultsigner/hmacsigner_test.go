@@ -3,13 +3,10 @@
 package vaultsigner
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"testing"
 
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -23,18 +20,16 @@ func TestHmacSign(t *testing.T) {
 
 	secret := []byte("mysecret")
 	data := []byte("hello world")
-	fmt.Printf("Secret: %s Data: %s\n", secret, data)
 
 	// Create a new HMAC by defining the hash type and the key (as byte array)
-	h := hmac.New(sha256.New, secret)
+	h := cryptography.NewHMACHasher(secret)
+	inMemorySha, err := h.HMACSha384(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexInMemorySha := hex.EncodeToString(inMemorySha)
 
-	// Write Data to it
-	h.Write([]byte(data))
-
-	// Get result and encode as hexadecimal string
-	hexInMemorySha := hex.EncodeToString(h.Sum(nil))
-
-	_, err = wrappedClient.ImportHmacSecret([]byte(base64.StdEncoding.EncodeToString(secret)), name)
+	_, err = wrappedClient.ImportHmacSecret(secret, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,39 +48,3 @@ func TestHmacSign(t *testing.T) {
 		t.Fatalf("shas did not match:\n%s\n%s", hexVaultSha, hexInMemorySha)
 	}
 }
-
-// func TestVerify(t *testing.T) {
-// 	wrappedClient, err := Connect()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	publicKey, privateKey, err := ed25519.GenerateKey(nil)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	name := uuid.NewV4()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	signer, err := wrappedClient.FromKeypair(privateKey, publicKey, "vaultsigner-test-"+name.String())
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	message := []byte("hello world")
-
-// 	signature, err := privateKey.Sign(rand.Reader, message, crypto.Hash(0))
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-
-// 	valid, err := signer.Verify(message, signature, crypto.Hash(0))
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if !valid {
-// 		t.Fatal("Signature should be valid")
-// 	}
-// }
