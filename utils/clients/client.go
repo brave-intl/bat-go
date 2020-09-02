@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -180,7 +181,8 @@ func (c *SimpleHTTPClient) do(
 		panic(err)
 	}
 	logger.Debug().Str("type", "http.Response").Msg(string(dump))
-
+	bod, readerr := requestutils.Read(resp.Body)
+	fmt.Println(string(bod), readerr)
 	if status >= 200 && status <= 299 {
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)

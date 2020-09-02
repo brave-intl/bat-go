@@ -2,7 +2,6 @@ package vaultsigner
 
 import (
 	"encoding/base64"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/vault/api"
@@ -25,20 +24,6 @@ func (vs *HmacSigner) HMACSha384(message []byte) ([]byte, error) {
 	}
 
 	hmac := response.Data["hmac"].(string)
-	fmt.Println(hmac)
 
 	return base64.StdEncoding.DecodeString(strings.Split(hmac, ":")[2])
-}
-
-// Verify the included signature over message using the vault held keypair
-func (vs *HmacSigner) Verify(message, signature []byte) (bool, error) {
-	response, err := vs.Client.Logical().Write("transit/verify/"+vs.KeyName, map[string]interface{}{
-		"input":     base64.StdEncoding.EncodeToString(message),
-		"signature": fmt.Sprintf("vault:v%d:%s", vs.KeyVersion, base64.StdEncoding.EncodeToString(signature)),
-	})
-	if err != nil {
-		return false, err
-	}
-
-	return response.Data["valid"].(bool), nil
 }

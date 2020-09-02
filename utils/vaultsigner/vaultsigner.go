@@ -77,16 +77,7 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	client := wc.Client
 	key := keysutil.KeyEntry{}
 
-	key.Key = secret
-
-	{
-		tmp := make([]byte, 32)
-		_, err := rand.Read(tmp)
-		if err != nil {
-			return nil, err
-		}
-		key.HMACKey = tmp
-	}
+	key.HMACKey = secret
 
 	key.CreationTime = time.Now().UTC()
 	key.DeprecatedCreationTime = key.CreationTime.Unix()
@@ -98,6 +89,8 @@ func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*Hm
 	keyData.Policy.LatestVersion = 1
 	keyData.Policy.MinDecryptionVersion = 1
 	keyData.Policy.Name = importName
+	keyData.Policy.Exportable = true
+	keyData.Policy.AllowPlaintextBackup = true
 
 	encodedBackup, err := jsonutil.EncodeJSON(keyData)
 	if err != nil {
@@ -176,7 +169,7 @@ func (wc *WrappedClient) GetEd25519Signer(name string) (*Ed25519Signer, error) {
 }
 
 // GenerateHmacKey create hmac key using vault backend
-func (wc *WrappedClient) GenerateHmacKey(name string, algo string) (*HmacSigner, error) {
+func (wc *WrappedClient) GenerateHmacSecret(name string, algo string) (*HmacSigner, error) {
 	err := wc.GenerateMounts()
 	if err != nil {
 		return nil, err

@@ -262,7 +262,7 @@ func signGeminiRequests(
 		return nil, err
 	}
 	clientKey := response.Data["clientkey"].(string)
-	hmacSecret, err := wrappedClient.GenerateHmacKey(walletKey, "sha2-384")
+	hmacSecret, err := wrappedClient.GenerateHmacSecret(walletKey, "sha2-384")
 	if err != nil {
 		return nil, err
 	}
