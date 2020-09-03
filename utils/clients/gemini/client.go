@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
@@ -11,18 +12,27 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
-// PrivateRequest holds all of the requisite info to complete a gemini bulk payout
-type PrivateRequest struct {
-	Signature    string                   `json:"signature"`
-	Payload      string                   `json:"payload"` // base64'd
-	APIKey       string                   `json:"api_key"`
-	Transactions []settlement.Transaction `json:"transactions"`
-	Auth         string                   `json:"-"` // type of auth to setup
+// // PrivateRequest holds all of the requisite info to complete a gemini bulk payout
+// type PrivateRequest struct {
+// 	Signature    string                   `json:"signature"` // signed over base64 payload
+// 	Payload      string                   `json:"payload"`   // base64'd
+// 	APIKey       string                   `json:"api_key"`
+// 	Transactions []settlement.Transaction `json:"transactions"`
+// }
+
+// PrivateRequestSequence handles the ability to sign a request multiple times
+type PrivateRequestSequence struct {
+	// the baseline object, corresponds to the signature in the first item
+	// must update the nonce before sending otherwise invalid signature will be encountered
+	Base       BulkPayoutPayload `json:"base"`
+	Signatures []string          `json:"signatures"` // a list of hex encoded singatures
+	APIKey     string            `json:"apikey"`     // the api key that corresponds to the checksum server side
 }
 
 // PayoutPayload contains details about transactions to be confirmed
@@ -150,11 +160,11 @@ func (pr PayoutResult) GenerateLog() string {
 // Client abstracts over the underlying client
 type Client interface {
 	// FetchAccountList requests account information to scope future requests
-	FetchAccountList(ctx context.Context, request PrivateRequest) (*[]Account, error)
+	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
-	FetchBalances(ctx context.Context, request PrivateRequest) (*[]Balance, error)
+	FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to gemini
-	UploadBulkPayout(ctx context.Context, request PrivateRequest) (*[]PayoutResult, error)
+	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -176,22 +186,35 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
 }
 
-func setPrivateRequestHeaders(req *http.Request, request PrivateRequest) {
+func setPrivateRequestHeaders(req *http.Request, APIKey string, signer cryptography.HMACKey, payload string) error {
+	signature, err := signer.HMACSha384([]byte(payload))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "text/plain")
 	req.Header.Set("Content-Length", "0")
-	req.Header.Set("X-GEMINI-PAYLOAD", request.Payload)
-	req.Header.Set("X-GEMINI-APIKEY", request.APIKey)
-	req.Header.Set("X-GEMINI-SIGNATURE", request.Signature)
+	req.Header.Set("X-GEMINI-PAYLOAD", payload)
+	req.Header.Set("X-GEMINI-APIKEY", APIKey)
+	req.Header.Set("X-GEMINI-SIGNATURE", hex.EncodeToString(signature))
 	req.Header.Set("Cache-Control", "no-cache")
+	return nil
 }
 
 // UploadBulkPayout uploads the bulk payout for gemini
-func (c *HTTPClient) UploadBulkPayout(ctx context.Context, request PrivateRequest) (*[]PayoutResult, error) {
+func (c *HTTPClient) UploadBulkPayout(
+	ctx context.Context,
+	APIKey string,
+	signer cryptography.HMACKey,
+	payload string,
+) (*[]PayoutResult, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil)
 	if err != nil {
 		return nil, err
 	}
-	setPrivateRequestHeaders(req, request)
+	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := c.client.Do(ctx, req, nil)
 	if err != nil {
@@ -204,12 +227,20 @@ func (c *HTTPClient) UploadBulkPayout(ctx context.Context, request PrivateReques
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key
-func (c *HTTPClient) FetchAccountList(ctx context.Context, request PrivateRequest) (*[]Account, error) {
+func (c *HTTPClient) FetchAccountList(
+	ctx context.Context,
+	APIKey string,
+	signer cryptography.HMACKey,
+	payload string,
+) (*[]Account, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/list", nil)
 	if err != nil {
 		return nil, err
 	}
-	setPrivateRequestHeaders(req, request)
+	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := c.client.Do(ctx, req, nil)
 	if err != nil {
@@ -222,12 +253,20 @@ func (c *HTTPClient) FetchAccountList(ctx context.Context, request PrivateReques
 }
 
 // FetchBalances fetches the list of accounts associated with the given api key
-func (c *HTTPClient) FetchBalances(ctx context.Context, request PrivateRequest) (*[]Balance, error) {
+func (c *HTTPClient) FetchBalances(
+	ctx context.Context,
+	APIKey string,
+	signer cryptography.HMACKey,
+	payload string,
+) (*[]Balance, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/balances", nil)
 	if err != nil {
 		return nil, err
 	}
-	setPrivateRequestHeaders(req, request)
+	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := c.client.Do(ctx, req, nil)
 	if err != nil {

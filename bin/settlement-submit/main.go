@@ -22,9 +22,11 @@ var (
 	logFile    string
 	outputFile string
 
-	verbose   = flag.Bool("v", false, "verbose output")
-	inputFile = flag.String("in", "./contributions-signed.json", "input file path")
-	provider  = flag.String("provider", "", "the provider that the transactions should be sent to")
+	verbose             = flag.Bool("v", false, "verbose output")
+	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
+	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
+	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
+	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
 	// auth      = flag.String("auth", "oauth", "the authentication method")
 )
 
@@ -50,7 +52,7 @@ func main() {
 	case "uphold":
 		err = upholdSubmit()
 	case "gemini":
-		err = cmd.GeminiUploadSettlement(*inputFile, outputFile)
+		err = cmd.GeminiUploadSettlement(*inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
 	}
 	if err != nil {
 		log.Fatalln(err)
