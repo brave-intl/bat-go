@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -132,18 +133,20 @@ func init() {
 
 // Service contains datastore and challenge bypass client connections
 type Service struct {
-	wallet           *wallet.Service
-	Datastore        Datastore
-	RoDatastore      ReadOnlyDatastore
-	cbClient         cbr.Client
-	reputationClient reputation.Client
-	balanceClient    balance.Client
-	codecs           map[string]*goavro.Codec
-	kafkaWriter      *kafka.Writer
-	kafkaDialer      *kafka.Dialer
-	hotWallet        *uphold.Wallet
-	drainChannel     chan *w.TransactionInfo
-	jobs             []srv.Job
+	wallet                  *wallet.Service
+	Datastore               Datastore
+	RoDatastore             ReadOnlyDatastore
+	cbClient                cbr.Client
+	reputationClient        reputation.Client
+	balanceClient           balance.Client
+	codecs                  map[string]*goavro.Codec
+	kafkaWriter             *kafka.Writer
+	kafkaDialer             *kafka.Dialer
+	hotWallet               *uphold.Wallet
+	drainChannel            chan *w.TransactionInfo
+	jobs                    []srv.Job
+	pauseSuggestionsUntil   time.Time
+	pauseSuggestionsUntilMu sync.RWMutex
 }
 
 // Jobs - Implement srv.JobService interface
@@ -239,6 +242,12 @@ func tlsDialer() (*kafka.Dialer, error) {
 	if err != nil {
 		return nil, errorutils.Wrap(err, "Could not parse certificate")
 	}
+
+	if time.Now().After(x509Cert.NotAfter) {
+		// the certificate has expired, raise error
+		return nil, errorutils.ErrCertificateExpired
+	}
+
 	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
 	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
@@ -362,12 +371,13 @@ func InitService(
 	}
 
 	service := &Service{
-		Datastore:        promotionDB,
-		RoDatastore:      promotionRODB,
-		cbClient:         cbClient,
-		reputationClient: reputationClient,
-		balanceClient:    balanceClient,
-		wallet:           walletService,
+		Datastore:               promotionDB,
+		RoDatastore:             promotionRODB,
+		cbClient:                cbClient,
+		reputationClient:        reputationClient,
+		balanceClient:           balanceClient,
+		wallet:                  walletService,
+		pauseSuggestionsUntilMu: sync.RWMutex{},
 	}
 
 	// setup runnable jobs
@@ -412,6 +422,7 @@ func InitService(
 	if err != nil {
 		return nil, err
 	}
+
 	err = service.InitHotWallet(ctx)
 	if err != nil {
 		return nil, err

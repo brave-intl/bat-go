@@ -10,6 +10,8 @@ var (
 	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
 	// ErrWalletNotFound when there is no wallet found
 	ErrWalletNotFound = errors.New("unable to find wallet")
+	// ErrCertificateExpired - a certificate is expired
+	ErrCertificateExpired = errors.New("certificate expired")
 )
 
 // ErrorBundle creates a new response error
