@@ -5,7 +5,6 @@ package gemini
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"testing"
@@ -43,14 +42,14 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 
 	accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
-	accounts, err := client.FetchAccountList(ctx, accountListRequest)
+	accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
 	suite.Require().NoError(err, "should not error during account list fetching")
 	primary := "primary"
 	account := findAccountByClass(accounts, primary)
 	suite.Require().Equal(primary, account.Class, "should have a primary account")
 
 	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload(&primary))
-	balances, err := client.FetchBalances(ctx, balancesRequest)
+	balances, err := client.FetchBalances(ctx, suite.apikey, suite.secret, balancesRequest)
 	suite.Require().NoError(err, "should not error during balances fetching")
 	balance := findBalanceByCurrency(balances, "BAT")
 	five := decimal.NewFromFloat(5)
@@ -79,7 +78,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		&payouts,
 	))
 
-	_, err = client.UploadBulkPayout(ctx, bulkPayoutRequest)
+	_, err = client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 
 	pendingStatus := "Pending"
@@ -101,7 +100,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 			&payouts,
 		))
 
-		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, bulkPayoutRequest)
+		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
 		suite.Require().NoError(err, "should not error during bulk payout uploading")
 		if (*(*bulkPayoutResponse)[0].Status) == completeStatus {
 			expectedPayoutResult[0].Status = &completeStatus
@@ -129,19 +128,9 @@ func findAccountByClass(accounts *[]Account, typ string) Account {
 	return Account{}
 }
 
-func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) PrivateRequest {
+func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) string {
 	payloadSerialized, err := json.Marshal(payload)
 	suite.Require().NoError(err, "payload must be able to be serialized")
 
-	payloadBase64 := base64.StdEncoding.EncodeToString(payloadSerialized)
-
-	signature, err := suite.secret.HMACSha384([]byte(payloadBase64))
-	suite.Require().NoError(err, "payload must be able to be hashed")
-	signatureHex := hex.EncodeToString(signature)
-
-	return PrivateRequest{
-		Signature: signatureHex,
-		Payload:   payloadBase64,
-		APIKey:    suite.apikey,
-	}
+	return base64.StdEncoding.EncodeToString(payloadSerialized)
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -39,7 +40,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // FetchAccountList implements Client
-func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, request PrivateRequest) (aap1 *[]Account, err error) {
+func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (aap1 *[]Account, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -49,11 +50,11 @@ func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, request Pri
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchAccountList", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchAccountList(ctx, request)
+	return _d.base.FetchAccountList(ctx, APIKey, signer, payload)
 }
 
 // FetchBalances implements Client
-func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, request PrivateRequest) (bap1 *[]Balance, err error) {
+func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (bap1 *[]Balance, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -63,11 +64,11 @@ func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, request Privat
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchBalances", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchBalances(ctx, request)
+	return _d.base.FetchBalances(ctx, APIKey, signer, payload)
 }
 
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, request PrivateRequest) (pap1 *[]PayoutResult, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (pap1 *[]PayoutResult, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -77,5 +78,5 @@ func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, request Pri
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UploadBulkPayout", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UploadBulkPayout(ctx, request)
+	return _d.base.UploadBulkPayout(ctx, APIKey, signer, payload)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
@@ -227,14 +229,16 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privateRequests, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
-	privateRequests, err = signGeminiRequests(
+	// leave enough space to increment nonce
+	<-time.After(time.Microsecond)
+	privateRequests, err := signGeminiRequests(
 		wrappedClient,
 		walletKey,
-		privateRequests,
+		privatePayloads,
 	)
 	if err != nil {
 		return err
@@ -254,32 +258,59 @@ func createGeminiArtifact(
 func signGeminiRequests(
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
-	privateRequests *[]gemini.PrivateRequest,
-) (*[]gemini.PrivateRequest, error) {
+	privateRequests *[][]gemini.PayoutPayload,
+) (*[]gemini.PrivateRequestSequence, error) {
 	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return nil, err
 	}
 	clientKey := response.Data["clientkey"].(string)
+	clientID := response.Data["clientid"].(string)
 	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
 	if err != nil {
 		return nil, err
 	}
 
+	privateRequestSequences := make([]gemini.PrivateRequestSequence, 0)
 	// sign each request
-	for i, privateRequestRequirements := range *privateRequests {
-		sig, err := hmacSecret.HMACSha384(
-			[]byte(privateRequestRequirements.Payload),
+	for _, privateRequestRequirements := range *privateRequests {
+		base := gemini.NewBulkPayoutPayload(
+			"primary",
+			clientID,
+			&privateRequestRequirements,
 		)
-		if err != nil {
-			return nil, err
+		signatures := []string{}
+		// store the original nonce
+		originalNonce := base.Nonce
+		for i := 0; i < 10; i++ {
+			// increment the nonce to correspond to each signature
+			base.Nonce = originalNonce + int64(i)
+			marshalled, err := json.Marshal(base)
+			if err != nil {
+				return nil, err
+			}
+			serializedPayload := base64.StdEncoding.EncodeToString(marshalled)
+			sig, err := hmacSecret.HMACSha384(
+				[]byte(serializedPayload),
+			)
+			if err != nil {
+				return nil, err
+			}
+			signatures = append(signatures, hex.EncodeToString(sig))
 		}
-		sigHex := hex.EncodeToString(sig)
-		privateRequestRequirements.Signature = sigHex
-		privateRequestRequirements.APIKey = clientKey
-		(*privateRequests)[i] = privateRequestRequirements
+		base.Nonce = originalNonce
+		// marshalled, err := json.Marshal(base)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		requestSequence := gemini.PrivateRequestSequence{
+			Signatures: signatures,
+			Base:       base,
+			APIKey:     clientKey,
+		}
+		privateRequestSequences = append(privateRequestSequences, requestSequence)
 	}
-	return privateRequests, nil
+	return &privateRequestSequences, nil
 }
 
 func createPaypalArtifact(
