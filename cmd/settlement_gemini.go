@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -107,18 +108,21 @@ func init() {
 func geminiSiftThroughResponses(
 	originalTransactions map[string]settlement.Transaction,
 	response *[]gemini.PayoutResult,
-) ([]settlement.Transaction, []settlement.Transaction) {
-	successful := []settlement.Transaction{}
-	failures := []settlement.Transaction{}
+) map[string][]settlement.Transaction {
+	transactions := make(map[string][]settlement.Transaction)
 
 	for _, payout := range *response {
 		if payout.Result == "Error" {
-			failures = append(failures, originalTransactions[payout.TxRef])
+			transactions["failed"] = append(transactions["failed"], originalTransactions[payout.TxRef])
 		} else {
-			successful = append(successful, originalTransactions[payout.TxRef])
+			if *payout.Status == "Pending" {
+				transactions["pending"] = append(transactions["pending"], originalTransactions[payout.TxRef])
+			} else {
+				transactions["completed"] = append(transactions["completed"], originalTransactions[payout.TxRef])
+			}
 		}
 	}
-	return successful, failures
+	return transactions
 }
 
 // func convertTransactionListIntoMap(
@@ -145,11 +149,13 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 		return err
 	}
 
-	transactionsForEyeshade := []settlement.Transaction{}
-	failedTransactions := []settlement.Transaction{}
+	// transactionsForEyeshade := []settlement.Transaction{}
+	// failedTransactions := []settlement.Transaction{}
 	if allTransactionsFile == "" {
 		return errors.New("unable to upload without a transactions file to check against")
 	}
+	submittedTransactions := make(map[string][]settlement.Transaction)
+
 	bytes, err := ioutil.ReadFile(allTransactionsFile)
 	if err != nil {
 		return err
@@ -199,20 +205,19 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 				return err
 			}
 			// collect all successful transactions to send to eyeshade
-			successful, failures := geminiSiftThroughResponses(transactionsMap, response)
-			transactionsForEyeshade = append(transactionsForEyeshade, successful...)
-			failedTransactions = append(failedTransactions, failures...)
+			submitted := geminiSiftThroughResponses(transactionsMap, response)
+			for key, txs := range submitted {
+				submittedTransactions[key] = append(submittedTransactions[key], txs...)
+			}
 		}
 	}
 	// write file for upload to eyeshade
-	err = GeminiWriteTransactions(outPath, &transactionsForEyeshade)
-	if err != nil {
-		return err
-	}
-	// write file for upload to eyeshade
-	err = GeminiWriteTransactions("failed-"+outPath, &failedTransactions)
-	if err != nil {
-		return err
+	for key, txs := range submittedTransactions {
+		outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
+		err = GeminiWriteTransactions(outputPath, &txs)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
