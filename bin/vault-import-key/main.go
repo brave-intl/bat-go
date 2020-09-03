@@ -89,10 +89,6 @@ func geminiVaultImportValues(
 		"clientid":  geminiClientID,
 		"clientkey": geminiClientKey,
 	}
-	// secret, err := base64.StdEncoding.DecodeString(geminiSecret)
-	// if err != nil {
-	// 	return err
-	// }
 	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
 	if err != nil {
 		return err
