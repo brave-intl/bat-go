@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	sentry "github.com/getsentry/sentry-go"
@@ -158,7 +159,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 				fmt.Printf("transaction already complete for channel %s\n", settlement.Channel)
 				return nil
 			}
-		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
+		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
 			if time.Now().UTC().Before(settlement.ValidUntil) {
 				return nil
 			}
@@ -240,7 +241,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 
 			break
 
-		} else if wallet.IsNotFound(err) { // unconfirmed transactions appear as "not found"
+		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
 			if time.Now().UTC().After(settlement.ValidUntil) {
 				log.Printf("quote has expired, must resubmit transaction for channel %s\n", settlement.Channel)
 				return nil
@@ -262,7 +263,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 				}
 
 				break
-			} else if wallet.AlreadyExists(err) {
+			} else if errorutils.IsErrAlreadyExists(err) {
 				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
 				upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
 				if err == nil {
