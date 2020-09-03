@@ -42,14 +42,14 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	client, err := New()
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 
-	accountListRequest := suite.preparePrivateRequest("hmac", NewAccountListPayload())
+	accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
 	accounts, err := client.FetchAccountList(ctx, accountListRequest)
 	suite.Require().NoError(err, "should not error during account list fetching")
 	primary := "primary"
 	account := findAccountByClass(accounts, primary)
 	suite.Require().Equal(primary, account.Class, "should have a primary account")
 
-	balancesRequest := suite.preparePrivateRequest("hmac", NewBalancesPayload(&primary))
+	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload(&primary))
 	balances, err := client.FetchBalances(ctx, balancesRequest)
 	suite.Require().NoError(err, "should not error during balances fetching")
 	balance := findBalanceByCurrency(balances, "BAT")
@@ -72,9 +72,8 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Amount:      five,
 		Currency:    BAT,
 		Destination: tx.Destination,
-		// Account:     primary,
 	}}
-	bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
+	bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
 		primary,
 		os.Getenv("GEMINI_CLIENT_ID"),
 		&payouts,
@@ -96,7 +95,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	completeStatus := "Completed"
 	for {
 		<-time.After(5 * time.Second)
-		bulkPayoutRequest := suite.preparePrivateRequest("hmac", NewBulkPayoutPayload(
+		bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
 			primary,
 			os.Getenv("GEMINI_CLIENT_ID"),
 			&payouts,
@@ -130,21 +129,17 @@ func findAccountByClass(accounts *[]Account, typ string) Account {
 	return Account{}
 }
 
-func (suite *GeminiTestSuite) preparePrivateRequest(auth string, payload interface{}) PrivateRequest {
+func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) PrivateRequest {
 	payloadSerialized, err := json.Marshal(payload)
 	suite.Require().NoError(err, "payload must be able to be serialized")
 
 	payloadBase64 := base64.StdEncoding.EncodeToString(payloadSerialized)
 
-	var signatureHex string
-	if auth == "hmac" {
-		signature, err := suite.secret.HMACSha384([]byte(payloadBase64))
-		suite.Require().NoError(err, "payload must be able to be hashed")
-		signatureHex = hex.EncodeToString(signature)
-	}
+	signature, err := suite.secret.HMACSha384([]byte(payloadBase64))
+	suite.Require().NoError(err, "payload must be able to be hashed")
+	signatureHex := hex.EncodeToString(signature)
 
 	return PrivateRequest{
-		Auth:      auth,
 		Signature: signatureHex,
 		Payload:   payloadBase64,
 		APIKey:    suite.apikey,
