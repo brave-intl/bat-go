@@ -103,6 +103,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
 		suite.Require().NoError(err, "should not error during bulk payout uploading")
 		if (*(*bulkPayoutResponse)[0].Status) == completeStatus {
+			// fmt.Printf("status: %s", *expectedPayoutResult[0].Status)
 			expectedPayoutResult[0].Status = &completeStatus
 			suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
 			return
