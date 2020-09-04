@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -25,9 +24,9 @@ import (
 )
 
 var (
-	inputFile = flag.String("in", "contributions.json", "input file path")
-	provider  = flag.String("provider", "", "wallet provider to settle out to")
-
+	inputFile  = flag.String("in", "contributions.json", "input file path")
+	provider   = flag.String("provider", "", "wallet provider to settle out to")
+	configPath = flag.String("config", "./config.yaml", "configuration file path")
 	// split into provider / transaction type pairings
 	allProviders []string
 	// use correct vault key pair for each
@@ -36,17 +35,6 @@ var (
 		"paypal": {"default"},
 		"gemini": {"contribution", "referral"},
 	}
-	walletKeys = map[string]string{
-		// "gemini-contribution": "different-key",
-		// "gemini-referral": "different-key",
-		// "uphold-contribution": "different-key",
-		// "uphold-referral": "different-key",
-	}
-	// providerByAntifraudInt = map[string]string{
-	// 	"0": "uphold",
-	// 	"1": "paypal",
-	// 	"2": "gemini",
-	// }
 	artifactGenerators map[string]func(
 		string,
 		*vaultsigner.WrappedClient,
@@ -54,14 +42,6 @@ var (
 		[]settlement.Transaction,
 	) error
 )
-
-func swapWalletKey(key string) string {
-	value := walletKeys[key]
-	if value == "" {
-		return key
-	}
-	return value
-}
 
 func init() {
 	// just add to providerType to add to allProviders
@@ -94,7 +74,11 @@ func main() {
 	flag.Parse()
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-signed.json"
-	fmt.Println(*inputFile, outputFile)
+
+	config, err := vaultsigner.ReadYamlConfig(*configPath)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	// all settlements file
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
@@ -133,7 +117,7 @@ func main() {
 			err := artifactGenerators[provider](
 				outputFile,
 				wrappedClient,
-				swapWalletKey(walletKey),
+				config.GetWalletKey(walletKey),
 				settlements,
 			)
 			if err != nil {
@@ -299,10 +283,6 @@ func signGeminiRequests(
 			signatures = append(signatures, hex.EncodeToString(sig))
 		}
 		base.Nonce = originalNonce
-		// marshalled, err := json.Marshal(base)
-		// if err != nil {
-		// 	return nil, err
-		// }
 		requestSequence := gemini.PrivateRequestSequence{
 			Signatures: signatures,
 			Base:       base,

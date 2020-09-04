@@ -73,30 +73,6 @@ func init() {
 		"the rate to compute the currency conversion")
 	must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
 	must(viper.BindEnv("rate", "RATE"))
-
-	// ratiosAccessToken (required by all)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-token", "t", "",
-		"the ratios service token for this service")
-	must(viper.BindPFlag("ratios-token", paypalSettlementCmd.PersistentFlags().Lookup("ratios-token")))
-	must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
-
-	// ratiosService (required by all)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&ratiosService, "ratios-service", "r", "",
-		"the ratios service address")
-	must(viper.BindPFlag("ratios-service", paypalSettlementCmd.PersistentFlags().Lookup("ratios-service")))
-	must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
-
-	// ratiosClientExpiry
-	paypalSettlementCmd.PersistentFlags().DurationVarP(&ratiosClientExpiry, "ratios-client-cache-expiry", "", 5*time.Second,
-		"the ratios client cache default eviction duration")
-	must(viper.BindPFlag("ratios-client-cache-expiry", paypalSettlementCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
-	must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
-
-	// ratiosClientPurge
-	paypalSettlementCmd.PersistentFlags().DurationVarP(&ratiosClientPurge, "ratios-client-cache-purge", "", 1*time.Minute,
-		"the ratios client cache default purge duration")
-	must(viper.BindPFlag("ratios-client-cache-purge", paypalSettlementCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
-	must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 }
 
 // PaypalEmailTemplate performs template replacement of date fields in emails

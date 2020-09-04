@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -16,6 +17,8 @@ var (
 	geminiSecret    = os.Getenv("GEMINI_CLIENT_SECRET")
 	geminiClientID  = os.Getenv("GEMINI_CLIENT_ID")
 	geminiClientKey = os.Getenv("GEMINI_CLIENT_KEY")
+
+	configPath = flag.String("config", "./config.yaml", "read info from a config")
 )
 
 func main() {
@@ -33,14 +36,16 @@ func validateAndImportSecrets() error {
 		return err
 	}
 
+	config, err := vaultsigner.ReadYamlConfig(*configPath)
+
 	if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
 		fmt.Println("importing uphold key pair")
 		// uphold importing
-		err = upholdVaultImportKey(wrappedClient, "uphold-contribution")
+		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-contribution"))
 		if err != nil {
 			return err
 		}
-		err = upholdVaultImportKey(wrappedClient, "uphold-referral")
+		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-referral"))
 		if err != nil {
 			return err
 		}
@@ -48,11 +53,11 @@ func validateAndImportSecrets() error {
 	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
 		// gemini importing
-		err = geminiVaultImportValues(wrappedClient, "gemini-contribution")
+		err = geminiVaultImportValues(wrappedClient, config.GetWalletKey("gemini-contribution"))
 		if err != nil {
 			return err
 		}
-		err = geminiVaultImportValues(wrappedClient, "gemini-referral")
+		err = geminiVaultImportValues(wrappedClient, config.GetWalletKey("gemini-referral"))
 		if err != nil {
 			return err
 		}

@@ -29,3 +29,4 @@ grantTokens.json
 .vscode/
 **/*.gobak
 bat-go
+config.yaml
