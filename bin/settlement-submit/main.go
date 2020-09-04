@@ -28,7 +28,6 @@ var (
 	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
 	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
 	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
-	// auth      = flag.String("auth", "oauth", "the authentication method")
 )
 
 func main() {
