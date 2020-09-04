@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -191,8 +190,7 @@ func (c *SimpleHTTPClient) do(
 		}
 		return resp, nil
 	}
-	bod, readErr := requestutils.Read(resp.Body)
-	fmt.Println(string(bod), readErr)
+
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
 

@@ -277,17 +277,19 @@ func GeminiTransformTransactions(oauthClientID string, transactions []settlement
 	fmt.Printf("with %d transactions\n", len(transactions))
 	total := decimal.NewFromFloat(0)
 	for i < blocksCount {
-		var transactionBlock []settlement.Transaction
+		// var transactionBlock []settlement.Transaction
 		lowerBound := i * maxCount
 		upperBound := (i + 1) * maxCount
 		payoutLength := len(transactions)
 		if payoutLength <= upperBound {
 			upperBound = payoutLength
 		}
-		transactionBlock = transactions[lowerBound:upperBound]
-		payoutBlock, blockTotal := GeminiConvertTransactionsToGeminiPayouts(&transactionBlock, txnID)
-		total = total.Add(blockTotal)
-		privateRequests = append(privateRequests, *payoutBlock)
+		transactionBlock := transactions[lowerBound:upperBound]
+		if len(transactionBlock) > 0 {
+			payoutBlock, blockTotal := GeminiConvertTransactionsToGeminiPayouts(&transactionBlock, txnID)
+			total = total.Add(blockTotal)
+			privateRequests = append(privateRequests, *payoutBlock)
+		}
 		i++
 	}
 	fmt.Printf("%s bat to be paid out\n", total.String())
