@@ -68,4 +68,28 @@ func init() {
 		"the default environment")
 	must(viper.BindPFlag("environment", rootCmd.PersistentFlags().Lookup("environment")))
 	must(viper.BindEnv("environment", "ENV"))
+
+	// ratiosAccessToken (required by all)
+	rootCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-token", "t", "",
+		"the ratios service token for this service")
+	must(viper.BindPFlag("ratios-token", rootCmd.PersistentFlags().Lookup("ratios-token")))
+	must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
+
+	// ratiosService (required by all)
+	rootCmd.PersistentFlags().StringVarP(&ratiosService, "ratios-service", "r", "",
+		"the ratios service address")
+	must(viper.BindPFlag("ratios-service", rootCmd.PersistentFlags().Lookup("ratios-service")))
+	must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
+
+	// ratiosClientExpiry
+	rootCmd.PersistentFlags().DurationVarP(&ratiosClientExpiry, "ratios-client-cache-expiry", "", 5*time.Second,
+		"the ratios client cache default eviction duration")
+	must(viper.BindPFlag("ratios-client-cache-expiry", rootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
+	must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
+
+	// ratiosClientPurge
+	rootCmd.PersistentFlags().DurationVarP(&ratiosClientPurge, "ratios-client-cache-purge", "", 1*time.Minute,
+		"the ratios client cache default purge duration")
+	must(viper.BindPFlag("ratios-client-cache-purge", rootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
+	must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 }
