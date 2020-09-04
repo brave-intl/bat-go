@@ -6,10 +6,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	config *Config
-)
-
 // Config a space for complex inputs
 type Config struct {
 	Wallets map[string]string `yaml:"wallets"`
