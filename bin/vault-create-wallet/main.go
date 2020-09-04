@@ -13,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
-	"github.com/hashicorp/vault/api"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ed25519"
 )
@@ -162,17 +161,9 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	mounts, err := wrappedClient.Client.Sys().ListMounts()
+	err = wrappedClient.GenerateMounts()
 	if err != nil {
 		log.Fatalln(err)
-	}
-	if _, ok := mounts["wallets/"]; !ok {
-		// Mount kv secret backend if not already mounted
-		if err = wrappedClient.Client.Sys().Mount("wallets", &api.MountInput{
-			Type: "kv",
-		}); err != nil {
-			log.Fatalln(err)
-		}
 	}
 
 	_, err = wrappedClient.Client.Logical().Write("wallets/"+name, map[string]interface{}{

@@ -94,17 +94,6 @@ func init() {
 	must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 }
 
-// func geminiValidateResponse(
-// 	transactions *[]gemini.PayoutPayload,
-// 	response *[]gemini.PayoutResult,
-// ) (map[string]gemini.PayoutPayload, error) {
-// 	if len(*transactions) != len(*response) {
-// 		return nil, errors.New("response count did not match request count")
-// 	}
-// 	mappedTransactions := convertTransactionListIntoMap(transactions)
-// 	return mappedTransactions, nil
-// }
-
 func geminiSiftThroughResponses(
 	originalTransactions map[string]settlement.Transaction,
 	response *[]gemini.PayoutResult,
@@ -125,16 +114,6 @@ func geminiSiftThroughResponses(
 	return transactions
 }
 
-// func convertTransactionListIntoMap(
-// 	transactions *[]gemini.PayoutPayload,
-// ) map[string]gemini.PayoutPayload {
-// 	transactionMap := make(map[string]gemini.PayoutPayload)
-// 	for _, payoutRequest := range *transactions {
-// 		transactionMap[payoutRequest.TxRef] = payoutRequest
-// 	}
-// 	return transactionMap
-// }
-
 // GeminiUploadSettlement marks the settlement file as complete
 func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
 	if outPath == "./gemini-settlement" {
@@ -149,8 +128,6 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 		return err
 	}
 
-	// transactionsForEyeshade := []settlement.Transaction{}
-	// failedTransactions := []settlement.Transaction{}
 	if allTransactionsFile == "" {
 		return errors.New("unable to upload without a transactions file to check against")
 	}
