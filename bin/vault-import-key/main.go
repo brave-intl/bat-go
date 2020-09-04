@@ -37,6 +37,9 @@ func validateAndImportSecrets() error {
 	}
 
 	config, err := vaultsigner.ReadYamlConfig(*configPath)
+	if err != nil {
+		return err
+	}
 
 	if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
 		fmt.Println("importing uphold key pair")
