@@ -87,6 +87,9 @@ machine and run vault-create-wallet to record the provider ID in vault:
 vault-create-wallet -offline name-of-new-wallet
 ```
 
+## Creating a config
+the `config.example.yaml` should be copied wherever it is easiest to point to. just pass in the path while running a command that interacts with vault (import-key, sign-settlement) etc. be sure to change the values of the wallets to suit your setup if required.
+
 ## Importing keys
 
 the following line imports the keys from environment variables
