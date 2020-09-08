@@ -17,7 +17,6 @@ var (
 	publicKeyHex     = os.Getenv("ED25519_PUBLIC_KEY")
 	upholdProviderID = os.Getenv("UPHOLD_PROVIDER_ID")
 	geminiSecret     = os.Getenv("GEMINI_CLIENT_SECRET")
-	geminiClientID   = os.Getenv("GEMINI_CLIENT_ID")
 	geminiClientKey  = os.Getenv("GEMINI_CLIENT_KEY")
 
 	configPath = flag.String("config", "", "read info from a config")
@@ -100,7 +99,6 @@ func geminiVaultImportValues(
 	geminiImportName string,
 ) error {
 	kvMap := map[string]interface{}{
-		"clientid":  geminiClientID,
 		"clientkey": geminiClientKey,
 	}
 	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)

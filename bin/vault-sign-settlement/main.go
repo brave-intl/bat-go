@@ -214,13 +214,8 @@ func createGeminiArtifact(
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return err
-	}
-	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := cmd.GeminiTransformTransactions(geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -256,7 +251,6 @@ func signGeminiRequests(
 		return nil, err
 	}
 	clientKey := response.Data["clientkey"].(string)
-	clientID := response.Data["clientid"].(string)
 	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
 	if err != nil {
 		return nil, err
@@ -266,8 +260,6 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
-			"primary",
-			clientID,
 			&privateRequestRequirements,
 		)
 		signatures := []string{}
