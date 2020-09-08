@@ -15,7 +15,10 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -113,6 +116,10 @@ func geminiSiftThroughResponses(
 	return transactions
 }
 
+func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
+	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
+}
+
 // GeminiUploadSettlement marks the settlement file as complete
 func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
 	if outPath == "./gemini-settlement" {
@@ -120,7 +127,7 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 		outPath = "./gemini-settlement-complete.json"
 	}
 
-	ctx := context.Background()
+	ctx, _ := setupLogger(context.Background())
 	bulkPayoutFiles := strings.Split(inPath, ",")
 	geminiClient, err := gemini.New()
 	if err != nil {
