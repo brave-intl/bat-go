@@ -154,6 +154,7 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 
 	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, bulkPayoutFiles, transactionsMap)
 	// write file for upload to eyeshade
+	fmt.Printf("outputting to %s* files\n", outPath)
 	for key, txs := range *submittedTransactions {
 		outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
 		err = GeminiWriteTransactions(outputPath, &txs)
@@ -183,10 +184,11 @@ func geminiIterateRequest(
 			return &submittedTransactions, err
 		}
 
-		for _, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
+		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
 			// make sure payload is parsable
 			// upload the bulk payout
-			decodedSig, err := hex.DecodeString(bulkPayoutRequestRequirements.Signatures[signatureSwitch])
+			sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
+			decodedSig, err := hex.DecodeString(sig)
 			if err != nil {
 				return &submittedTransactions, err
 			}
@@ -197,16 +199,17 @@ func geminiIterateRequest(
 				return &submittedTransactions, err
 			}
 			payload := base64.StdEncoding.EncodeToString(serialized)
+			fmt.Printf("sending request %d api key: %s with signature: %s\n", i, bulkPayoutRequestRequirements.APIKey, sig)
 			response, err := geminiClient.UploadBulkPayout(
 				ctx,
 				bulkPayoutRequestRequirements.APIKey,
 				presigner,
 				payload,
 			)
+			<-time.After(time.Second)
 			if err != nil {
 				return &submittedTransactions, err
 			}
-			<-time.After(time.Second)
 			// collect all successful transactions to send to eyeshade
 			submitted := geminiSiftThroughResponses(transactionsMap, response)
 			for key, txs := range submitted {
