@@ -99,7 +99,7 @@ func (at AntifraudTransaction) ToTransaction() Transaction {
 		Amount: at.BAT,
 		// ExchangeFee: ,
 		Currency:    alt.String(),
-		Destination: providerInfo.ID,
+		Destination: at.Address,
 		Publisher:   at.Owner,
 		// BATPlatformFee: ,
 		Probi:            at.BAT.Mul(e18),
