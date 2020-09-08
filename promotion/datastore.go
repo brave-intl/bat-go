@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -794,24 +795,30 @@ limit 1`
 		return attempted, err
 	}
 
-	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
-	if err != nil {
-		// FIXME only non-retriable errors should set erred
-		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
-		if err == nil {
-			err = tx.Commit()
+	if !worker.IsPaused() {
+		err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+		if err != nil {
+			if strings.Contains(err.Error(), "expired") {
+				// set flag to stop this worker from running again
+				worker.PauseWorker(time.Now().Add(30 * time.Minute))
+			}
+			// FIXME only non-retriable errors should set erred
+			_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
+			if err == nil {
+				err = tx.Commit()
+			}
+			return attempted, err
 		}
-		return attempted, err
-	}
 
-	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
-	if err != nil {
-		return attempted, err
-	}
+		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		if err != nil {
+			return attempted, err
+		}
 
-	err = tx.Commit()
-	if err != nil {
-		return attempted, err
+		err = tx.Commit()
+		if err != nil {
+			return attempted, err
+		}
 	}
 
 	return attempted, nil
