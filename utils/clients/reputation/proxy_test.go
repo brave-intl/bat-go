@@ -27,6 +27,6 @@ func TestProxyRouter(t *testing.T) {
 
 	// Response should be 400, not 403 (which would indicate authorization wasn't added correctly)
 	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("Response code did not match: %w != %w", http.StatusBadRequest, rr.Code)
+		t.Fatalf("Response code did not match: %d != %d", http.StatusBadRequest, rr.Code)
 	}
 }

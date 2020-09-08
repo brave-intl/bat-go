@@ -115,8 +115,9 @@ func init() {
 		Timeout: time.Second * 60,
 		Transport: middleware.InstrumentRoundTripper(
 			&http.Transport{
-				Proxy:   proxy,
-				DialTLS: pindialer.MakeDialer(upholdCertFingerprint),
+				Proxy:          proxy,
+				DialTLSContext: pindialer.MakeContextDialer(upholdCertFingerprint),
+				DialTLS:        pindialer.MakeDialer(upholdCertFingerprint),
 			}, "uphold"),
 	}
 }

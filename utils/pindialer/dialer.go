@@ -2,12 +2,48 @@
 package pindialer
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
 )
+
+// ContextDialer is a function connecting to the address on the named network
+type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+
+func validateChain(fingerprint string, connstate tls.ConnectionState) error {
+	for _, chain := range connstate.VerifiedChains {
+		leafCert := chain[0]
+		hash := sha256.Sum256(leafCert.RawSubjectPublicKeyInfo)
+		digest := base64.StdEncoding.EncodeToString(hash[:])
+		if digest == fingerprint {
+			return nil
+		}
+	}
+	return errors.New("The server certificate was not valid")
+}
+
+// MakeContextDialer returns a ContextDialer that only succeeds on connection to a TLS secured address with the pinned fingerprint
+func MakeContextDialer(fingerprint string) ContextDialer {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		c, err := tls.Dial(network, addr, nil)
+		if err != nil {
+			return c, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context completed")
+		default:
+			if err := validateChain(fingerprint, c.ConnectionState()); err != nil {
+				return nil, fmt.Errorf("failed to validate certificate chain: %w", err)
+			}
+		}
+		return c, nil
+	}
+}
 
 // Dialer is a function connecting to the address on the named network
 type Dialer func(network, addr string) (net.Conn, error)
@@ -19,16 +55,10 @@ func MakeDialer(fingerprint string) Dialer {
 		if err != nil {
 			return c, err
 		}
-		connstate := c.ConnectionState()
-		for _, chain := range connstate.VerifiedChains {
-			leafCert := chain[0]
-			hash := sha256.Sum256(leafCert.RawSubjectPublicKeyInfo)
-			digest := base64.StdEncoding.EncodeToString(hash[:])
-			if digest == fingerprint {
-				return c, nil
-			}
+		if err := validateChain(fingerprint, c.ConnectionState()); err != nil {
+			return nil, fmt.Errorf("failed to validate certificate chain: %w", err)
 		}
-		return c, errors.New("The server certificate was not valid")
+		return c, nil
 	}
 }
 
