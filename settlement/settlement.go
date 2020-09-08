@@ -91,19 +91,18 @@ func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
 // ToTransaction turns the antifraud transaction into a transaction understandable by settlement tools
 func (at AntifraudTransaction) ToTransaction() Transaction {
 	alt := altcurrency.BAT
-	e18 := decimal.NewFromFloat(10).Pow(decimal.NewFromFloat(18))
 	providerInfo := at.ProviderInfo()
 	return Transaction{
 		AltCurrency: &alt,
 		// Authority: ,
 		Amount: at.BAT,
 		// ExchangeFee: ,
-		Currency:    alt.String(),
+		// Currency:    alt.String(),
 		Destination: at.Address,
 		Publisher:   at.Owner,
 		// BATPlatformFee: ,
-		Probi:            at.BAT.Mul(e18),
-		ProviderID:       providerInfo.ID,
+		Probi: alt.ToProbi(at.BAT),
+		// ProviderID:       providerInfo.ID,
 		WalletProvider:   providerInfo.Establishment,
 		WalletProviderID: providerInfo.ID,
 		Channel:          at.Publisher,
