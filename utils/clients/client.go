@@ -272,5 +272,6 @@ func logOut(
 			Str("type", "http."+outType).
 			RawJSON(outType, input).
 			Msg(outType + " dump")
+		<-time.After(time.Second)
 	}
 }

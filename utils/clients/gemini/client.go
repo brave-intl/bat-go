@@ -207,14 +207,12 @@ func (c *HTTPClient) UploadBulkPayout(
 		return nil, err
 	}
 
-	res, err := c.client.Do(ctx, req, nil)
+	var body []PayoutResult
+	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
-	var response []PayoutResult
-	err = requestutils.ReadJSON(res.Body, &response)
-
-	return &response, err
+	return &body, err
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key
