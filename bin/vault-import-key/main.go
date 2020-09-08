@@ -17,6 +17,7 @@ var (
 	publicKeyHex     = os.Getenv("ED25519_PUBLIC_KEY")
 	upholdProviderID = os.Getenv("UPHOLD_PROVIDER_ID")
 	geminiSecret     = os.Getenv("GEMINI_CLIENT_SECRET")
+	gemintClientID   = os.Getenv("GEMINI_CLIENT_ID")
 	geminiClientKey  = os.Getenv("GEMINI_CLIENT_KEY")
 
 	configPath = flag.String("config", "", "read info from a config")
@@ -32,6 +33,8 @@ func main() {
 func validateAndImportSecrets() error {
 	var err error
 
+	flag.Parse()
+
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		return err
@@ -42,18 +45,18 @@ func validateAndImportSecrets() error {
 		return err
 	}
 
-	// if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
-	// 	fmt.Println("importing uphold key pair")
-	// 	// uphold importing
-	// 	err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-contribution"))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-referral"))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
+	if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
+		fmt.Println("importing uphold key pair")
+		// uphold importing
+		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-contribution"))
+		if err != nil {
+			return err
+		}
+		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-referral"))
+		if err != nil {
+			return err
+		}
+	}
 	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
 		// gemini importing
@@ -98,7 +101,7 @@ func geminiVaultImportValues(
 	geminiImportName string,
 ) error {
 	kvMap := map[string]interface{}{
-		"clientid":  geminiClientID,
+		"clientid":  gemintClientID,
 		"clientkey": geminiClientKey,
 	}
 	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)

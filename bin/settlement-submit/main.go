@@ -34,7 +34,7 @@ func main() {
 	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
-		log.Printf("Submit signed settlements to uphold.\n\n")
+		log.Printf("Submit signed settlements to " + *provider + ".\n\n")
 		log.Printf("Usage:\n\n")
 		log.Printf("        %s\n\n", os.Args[0])
 		flag.PrintDefaults()

@@ -38,7 +38,6 @@ var (
 	}
 	artifactGenerators map[string]func(
 		string,
-		string,
 		*vaultsigner.WrappedClient,
 		string,
 		[]settlement.Transaction,
@@ -53,7 +52,6 @@ func init() {
 	}
 	// let the functions become initialized before creating the map
 	artifactGenerators = map[string]func(
-		string,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -118,8 +116,7 @@ func main() {
 				continue
 			}
 			err := artifactGenerators[provider](
-				txType,
-				outputFile,
+				walletKey+"-"+outputFile,
 				wrappedClient,
 				config.GetWalletKey(walletKey),
 				settlements,
@@ -156,7 +153,6 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 }
 
 func createUpholdArtifact(
-	txType string,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -199,7 +195,7 @@ func createUpholdArtifact(
 		return err
 	}
 
-	err = ioutil.WriteFile("uphold-"+txType+"-"+outputFile, out, 0400)
+	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -207,19 +203,18 @@ func createUpholdArtifact(
 }
 
 func createGeminiArtifact(
-	txType string,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	// response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	// if err != nil {
-	// 	return err
-	// }
-	// oauthClientID := response.Data["clientid"].(string)
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return err
+	}
+	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := cmd.GeminiTransformTransactions(geminiOnlySettlements)
+	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -238,7 +233,7 @@ func createGeminiArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile("gemini-"+txType+"-"+outputFile, out, 0400)
+	err = ioutil.WriteFile(outputFile, out, 0600)
 	if err != nil {
 		return err
 	}
@@ -254,6 +249,7 @@ func signGeminiRequests(
 	if err != nil {
 		return nil, err
 	}
+	clientID := response.Data["clientid"].(string)
 	clientKey := response.Data["clientkey"].(string)
 	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
 	if err != nil {
@@ -264,6 +260,7 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
+			clientID,
 			&privateRequestRequirements,
 		)
 		signatures := []string{}
@@ -297,7 +294,6 @@ func signGeminiRequests(
 }
 
 func createPaypalArtifact(
-	txType string,
 	outputFile string,
 	client *vaultsigner.WrappedClient,
 	walletKey string,
@@ -307,6 +303,6 @@ func createPaypalArtifact(
 		&paypalOnlySettlements,
 		"JPY",
 		decimal.NewFromFloat(*jpyRate),
-		"paypal-"+outputFile,
+		outputFile,
 	)
 }

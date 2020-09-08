@@ -41,22 +41,22 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	client, err := New()
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 
-	accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
-	accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
-	suite.Require().NoError(err, "should not error during account list fetching")
-	primary := "primary"
-	account := findAccountByClass(accounts, primary)
-	suite.Require().Equal(primary, account.Class, "should have a primary account")
+	// accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
+	// accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
+	// suite.Require().NoError(err, "should not error during account list fetching")
+	// primary := "primary"
+	// account := findAccountByClass(accounts, primary)
+	// suite.Require().Equal(primary, account.Class, "should have a primary account")
 
-	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload(&primary))
-	balances, err := client.FetchBalances(ctx, suite.apikey, suite.secret, balancesRequest)
-	suite.Require().NoError(err, "should not error during balances fetching")
-	balance := findBalanceByCurrency(balances, "BAT")
+	// balancesRequest := suite.preparePrivateRequest(NewBalancesPayload())
+	// balances, err := client.FetchBalances(ctx, suite.apikey, suite.secret, balancesRequest)
+	// suite.Require().NoError(err, "should not error during balances fetching")
+	// balance := findBalanceByCurrency(balances, "BAT")
+	// suite.Require().True(
+	// 	balance.Available.GreaterThanOrEqual(five),
+	// 	"must have at least 5 bat to pass the rest of the test",
+	// )
 	five := decimal.NewFromFloat(5)
-	suite.Require().True(
-		balance.Available.GreaterThanOrEqual(five),
-		"must have at least 5 bat to pass the rest of the test",
-	)
 
 	tx := settlement.Transaction{
 		// use this settlement id to create an ephemeral test
@@ -73,7 +73,6 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: tx.Destination,
 	}}
 	bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
-		primary,
 		os.Getenv("GEMINI_CLIENT_ID"),
 		&payouts,
 	))
@@ -95,7 +94,6 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	for {
 		<-time.After(5 * time.Second)
 		bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
-			primary,
 			os.Getenv("GEMINI_CLIENT_ID"),
 			&payouts,
 		))
