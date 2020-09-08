@@ -64,10 +64,14 @@ func nonce() int64 {
 
 // SettlementTransactionToPayoutPayload converts to a payout request
 func SettlementTransactionToPayoutPayload(tx *settlement.Transaction) PayoutPayload {
+	currency := "BAT"
+	if tx.Currency != "" {
+		currency = tx.Currency
+	}
 	return PayoutPayload{
 		TxRef:       GenerateTxRef(tx),
 		Amount:      tx.Amount,
-		Currency:    tx.Currency,
+		Currency:    currency,
 		Destination: tx.Destination,
 	}
 }

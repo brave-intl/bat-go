@@ -100,7 +100,7 @@ func geminiVaultImportValues(
 	wrappedClient *vaultsigner.WrappedClient,
 	geminiImportName string,
 ) error {
-	fmt.Printf("importing secret for %s of length: %d", geminiImportName, len(geminiSecret))
+	fmt.Printf("importing secret for %s of length: %d\n", geminiImportName, len(geminiSecret))
 	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
 	if err != nil {
 		return err
