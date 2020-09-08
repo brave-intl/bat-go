@@ -235,6 +235,7 @@ func GeminiWriteTransactions(outPath string, metadata *[]settlement.Transaction)
 	if len(*metadata) == 0 {
 		return nil
 	}
+	fmt.Printf("writing %s with %d transactions\n", outPath, len(*metadata))
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
