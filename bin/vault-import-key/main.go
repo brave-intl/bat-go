@@ -100,14 +100,14 @@ func geminiVaultImportValues(
 	wrappedClient *vaultsigner.WrappedClient,
 	geminiImportName string,
 ) error {
-	kvMap := map[string]interface{}{
-		"clientid":  gemintClientID,
-		"clientkey": geminiClientKey,
-	}
+	fmt.Printf("importing secret for %s of length: %d", geminiImportName, len(geminiSecret))
 	_, err := wrappedClient.ImportHmacSecret([]byte(geminiSecret), geminiImportName)
 	if err != nil {
 		return err
 	}
-	_, err = wrappedClient.Client.Logical().Write("wallets/"+geminiImportName, kvMap)
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+geminiImportName, map[string]interface{}{
+		"clientid":  gemintClientID,
+		"clientkey": geminiClientKey,
+	})
 	return err
 }
