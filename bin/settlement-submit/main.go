@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
@@ -53,6 +54,7 @@ func main() {
 		err = upholdSubmit()
 	case "gemini":
 		err = cmd.GeminiUploadSettlement(*inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
+		<-time.After(time.Second)
 	}
 	if err != nil {
 		log.Fatalln(err)
