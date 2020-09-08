@@ -1,7 +1,9 @@
-package vaultsigner
+package settlement
 
 import (
 	"os"
+	"os/user"
+	"path"
 
 	"gopkg.in/yaml.v2"
 )
@@ -22,6 +24,13 @@ func (config *Config) GetWalletKey(key string) string {
 
 // ReadYamlConfig reads a yaml config
 func ReadYamlConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		usr, err := user.Current()
+		if err != nil {
+			return nil, err
+		}
+		configPath = path.Join(usr.HomeDir, ".settlement.yaml")
+	}
 	// Open config file
 	var config Config
 	file, err := os.Open(configPath)

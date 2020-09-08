@@ -107,5 +107,5 @@ signing the settlement file will split the input files into many output files de
 ## Uploading files
 running `settlement-submit` with a provider tells the script where to submit the file and the kind of handler to use. the sig=0 flag is for gemini bulk uploads that will need multiple submissions to check future status and create a completed list of transactions.
 ```bash
-./settlement-submit -in=gemini-contributions-signed.json -provider=gemini -sig=0
+./settlement-submit -in=gemini-contributions-signed.json -provider=gemini -sig=0 -alltransactions=contributions.json
 ```

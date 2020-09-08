@@ -26,7 +26,8 @@ import (
 var (
 	inputFile  = flag.String("in", "contributions.json", "input file path")
 	provider   = flag.String("provider", "", "wallet provider to settle out to")
-	configPath = flag.String("config", "./config.yaml", "configuration file path")
+	jpyRate    = flag.Float64("rate", 0.0, "value of BAT in JPY")
+	configPath = flag.String("config", "", "configuration file path")
 	// split into provider / transaction type pairings
 	allProviders []string
 	// use correct vault key pair for each
@@ -36,6 +37,7 @@ var (
 		"gemini": {"contribution", "referral"},
 	}
 	artifactGenerators map[string]func(
+		string,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -51,6 +53,7 @@ func init() {
 	}
 	// let the functions become initialized before creating the map
 	artifactGenerators = map[string]func(
+		string,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -75,7 +78,7 @@ func main() {
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-signed.json"
 
-	config, err := vaultsigner.ReadYamlConfig(*configPath)
+	config, err := settlement.ReadYamlConfig(*configPath)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -108,13 +111,14 @@ func main() {
 	}
 
 	for _, provider := range providers {
-		for _, walletSubDir := range providerType[provider] {
-			walletKey := provider + "-" + walletSubDir
+		for _, txType := range providerType[provider] {
+			walletKey := provider + "-" + txType
 			settlements := settlementsByProviderAndWalletKey[walletKey]
 			if len(settlements) == 0 {
 				continue
 			}
 			err := artifactGenerators[provider](
+				txType,
 				outputFile,
 				wrappedClient,
 				config.GetWalletKey(walletKey),
@@ -152,6 +156,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 }
 
 func createUpholdArtifact(
+	txType string,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -194,7 +199,7 @@ func createUpholdArtifact(
 		return err
 	}
 
-	err = ioutil.WriteFile(outputFile, out, 0400)
+	err = ioutil.WriteFile("uphold-"+txType+"-"+outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -202,18 +207,19 @@ func createUpholdArtifact(
 }
 
 func createGeminiArtifact(
+	txType string,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return err
-	}
-	oauthClientID := response.Data["clientid"].(string)
+	// response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	// if err != nil {
+	// 	return err
+	// }
+	// oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := cmd.GeminiTransformTransactions(geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -232,7 +238,7 @@ func createGeminiArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile("gemini-"+outputFile, out, 0600)
+	err = ioutil.WriteFile("gemini-"+txType+"-"+outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -249,7 +255,6 @@ func signGeminiRequests(
 		return nil, err
 	}
 	clientKey := response.Data["clientkey"].(string)
-	clientID := response.Data["clientid"].(string)
 	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
 	if err != nil {
 		return nil, err
@@ -259,8 +264,6 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
-			"primary",
-			clientID,
 			&privateRequestRequirements,
 		)
 		signatures := []string{}
@@ -294,6 +297,7 @@ func signGeminiRequests(
 }
 
 func createPaypalArtifact(
+	txType string,
 	outputFile string,
 	client *vaultsigner.WrappedClient,
 	walletKey string,
@@ -302,7 +306,7 @@ func createPaypalArtifact(
 	return cmd.PaypalTransformForMassPay(
 		&paypalOnlySettlements,
 		"JPY",
-		decimal.NewFromFloat(0),
-		outputFile,
+		decimal.NewFromFloat(*jpyRate),
+		"paypal-"+outputFile,
 	)
 }

@@ -8,17 +8,18 @@ import (
 	"log"
 	"os"
 
+	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 )
 
 var (
-	privateKeyHex   = os.Getenv("ED25519_PRIVATE_KEY")
-	publicKeyHex    = os.Getenv("ED25519_PUBLIC_KEY")
-	geminiSecret    = os.Getenv("GEMINI_CLIENT_SECRET")
-	geminiClientID  = os.Getenv("GEMINI_CLIENT_ID")
-	geminiClientKey = os.Getenv("GEMINI_CLIENT_KEY")
+	privateKeyHex    = os.Getenv("ED25519_PRIVATE_KEY")
+	publicKeyHex     = os.Getenv("ED25519_PUBLIC_KEY")
+	upholdProviderID = os.Getenv("UPHOLD_PROVIDER_ID")
+	geminiSecret     = os.Getenv("GEMINI_CLIENT_SECRET")
+	geminiClientKey  = os.Getenv("GEMINI_CLIENT_KEY")
 
-	configPath = flag.String("config", "./config.yaml", "read info from a config")
+	configPath = flag.String("config", "", "read info from a config")
 )
 
 func main() {
@@ -36,23 +37,23 @@ func validateAndImportSecrets() error {
 		return err
 	}
 
-	config, err := vaultsigner.ReadYamlConfig(*configPath)
+	config, err := settlement.ReadYamlConfig(*configPath)
 	if err != nil {
 		return err
 	}
 
-	if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
-		fmt.Println("importing uphold key pair")
-		// uphold importing
-		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-contribution"))
-		if err != nil {
-			return err
-		}
-		err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-referral"))
-		if err != nil {
-			return err
-		}
-	}
+	// if len(privateKeyHex) != 0 && len(publicKeyHex) != 0 {
+	// 	fmt.Println("importing uphold key pair")
+	// 	// uphold importing
+	// 	err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-contribution"))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	err = upholdVaultImportKey(wrappedClient, config.GetWalletKey("uphold-referral"))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 	if len(geminiSecret) != 0 {
 		fmt.Println("importing gemini secret")
 		// gemini importing
@@ -86,7 +87,10 @@ func upholdVaultImportKey(
 	if err != nil {
 		return err
 	}
-	return nil
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+upholdImportName, map[string]interface{}{
+		"providerId": upholdProviderID,
+	})
+	return err
 }
 
 func geminiVaultImportValues(

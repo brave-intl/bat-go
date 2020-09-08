@@ -18,14 +18,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// // PrivateRequest holds all of the requisite info to complete a gemini bulk payout
-// type PrivateRequest struct {
-// 	Signature    string                   `json:"signature"` // signed over base64 payload
-// 	Payload      string                   `json:"payload"`   // base64'd
-// 	APIKey       string                   `json:"api_key"`
-// 	Transactions []settlement.Transaction `json:"transactions"`
-// }
-
 // PrivateRequestSequence handles the ability to sign a request multiple times
 type PrivateRequestSequence struct {
 	// the baseline object, corresponds to the signature in the first item
@@ -33,6 +25,7 @@ type PrivateRequestSequence struct {
 	Base       BulkPayoutPayload `json:"base"`
 	Signatures []string          `json:"signatures"` // a list of hex encoded singatures
 	APIKey     string            `json:"apikey"`     // the api key that corresponds to the checksum server side
+	Account    *string           `json:"account,omitempty"`
 }
 
 // PayoutPayload contains details about transactions to be confirmed
@@ -59,11 +52,10 @@ type BalancesPayload struct {
 
 // BulkPayoutPayload the payload to be base64'd
 type BulkPayoutPayload struct {
-	Request       string          `json:"request"`
-	Nonce         int64           `json:"nonce"`
-	Payouts       []PayoutPayload `json:"payouts"`
-	Account       string          `json:"account"`
-	OauthClientID string          `json:"client_id"`
+	Request string          `json:"request"`
+	Nonce   int64           `json:"nonce"`
+	Payouts []PayoutPayload `json:"payouts"`
+	Account string          `json:"account"`
 }
 
 func nonce() int64 {
@@ -93,13 +85,11 @@ func GenerateTxRef(tx *settlement.Transaction) string {
 }
 
 // NewBulkPayoutPayload generate a new bulk payout payload
-func NewBulkPayoutPayload(account string, oauthClientID string, payouts *[]PayoutPayload) BulkPayoutPayload {
+func NewBulkPayoutPayload(payouts *[]PayoutPayload) BulkPayoutPayload {
 	return BulkPayoutPayload{
-		Account:       account,
-		OauthClientID: oauthClientID,
-		Request:       "/v1/payments/bulkPay",
-		Nonce:         nonce(),
-		Payouts:       *payouts,
+		Request: "/v1/payments/bulkPay",
+		Nonce:   nonce(),
+		Payouts: *payouts,
 	}
 }
 
@@ -112,11 +102,10 @@ func NewAccountListPayload() AccountListPayload {
 }
 
 // NewBalancesPayload generate a new account list payload
-func NewBalancesPayload(account *string) BalancesPayload {
+func NewBalancesPayload() BalancesPayload {
 	return BalancesPayload{
 		Request: "/v1/balances",
 		Nonce:   nonce(),
-		Account: account,
 	}
 }
 
@@ -175,11 +164,12 @@ type HTTPClient struct {
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
 	serverEnvKey := "GEMINI_SERVER"
-	serverURL := os.Getenv("GEMINI_SERVER")
+	serverURL := os.Getenv(serverEnvKey)
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	client, err := clients.New(serverURL, os.Getenv("GEMINI_TOKEN"))
+	proxy := os.Getenv("HTTP_PROXY")
+	client, err := clients.NewWithProxy("gemini", serverURL, os.Getenv("GEMINI_TOKEN"), proxy)
 	if err != nil {
 		return nil, err
 	}
