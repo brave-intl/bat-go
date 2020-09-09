@@ -267,6 +267,5 @@ func (c *HTTPClient) FetchBalances(
 	}
 	var response []Balance
 	err = requestutils.ReadJSON(res.Body, &response)
-
 	return &response, err
 }
