@@ -289,8 +289,8 @@ func TestFingerprintCheck(t *testing.T) {
 		Timeout: time.Second * 60,
 		// remove middleware calls
 		Transport: &http.Transport{
-			Proxy:   proxy,
-			DialTLS: pindialer.MakeDialer(wrongFingerprint),
+			Proxy:          proxy,
+			DialTLSContext: pindialer.MakeContextDialer(wrongFingerprint),
 		},
 	}
 

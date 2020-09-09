@@ -117,7 +117,6 @@ func init() {
 			&http.Transport{
 				Proxy:          proxy,
 				DialTLSContext: pindialer.MakeContextDialer(upholdCertFingerprint),
-				DialTLS:        pindialer.MakeDialer(upholdCertFingerprint),
 			}, "uphold"),
 	}
 }

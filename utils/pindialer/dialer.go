@@ -45,23 +45,6 @@ func MakeContextDialer(fingerprint string) ContextDialer {
 	}
 }
 
-// Dialer is a function connecting to the address on the named network
-type Dialer func(network, addr string) (net.Conn, error)
-
-// MakeDialer returns a Dialer that only succeeds on connection to a TLS secured address with the pinned fingerprint
-func MakeDialer(fingerprint string) Dialer {
-	return func(network, addr string) (net.Conn, error) {
-		c, err := tls.Dial(network, addr, nil)
-		if err != nil {
-			return c, err
-		}
-		if err := validateChain(fingerprint, c.ConnectionState()); err != nil {
-			return nil, fmt.Errorf("failed to validate certificate chain: %w", err)
-		}
-		return c, nil
-	}
-}
-
 // GetFingerprints is a helper for getting the fingerprint needed to update pins
 func GetFingerprints(c *tls.Conn) (map[string]string, error) {
 	connstate := c.ConnectionState()
