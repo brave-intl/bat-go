@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -181,17 +182,25 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
 }
 
-func setPrivateRequestHeaders(req *http.Request, APIKey string, signer cryptography.HMACKey, payload string) error {
-	signature, err := signer.HMACSha384([]byte(payload))
-	if err != nil {
-		return err
-	}
+func setPrivateRequestHeaders(
+	req *http.Request,
+	APIKey string,
+	signer cryptography.HMACKey,
+	payload string,
+) error {
 	req.Header.Set("Content-Type", "text/plain")
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("X-GEMINI-PAYLOAD", payload)
-	req.Header.Set("X-GEMINI-APIKEY", APIKey)
-	req.Header.Set("X-GEMINI-SIGNATURE", hex.EncodeToString(signature))
+	if os.Getenv("GEMINI_SUBMIT_TYPE") != "oauth" {
+		signature, err := signer.HMACSha384([]byte(payload))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("X-GEMINI-APIKEY", APIKey)
+		req.Header.Set("X-GEMINI-SIGNATURE", hex.EncodeToString(signature))
+	}
 	req.Header.Set("Cache-Control", "no-cache")
+	fmt.Printf("%#v\n", req)
 	return nil
 }
 
@@ -201,6 +210,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	APIKey string,
 	signer cryptography.HMACKey,
 	payload string,
+	authType string,
 ) (*[]PayoutResult, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil)
 	if err != nil {
