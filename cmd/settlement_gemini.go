@@ -152,7 +152,7 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 	// create a map of the request transactions
 	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
 
-	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, bulkPayoutFiles, transactionsMap)
+	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
 	// write file for upload to eyeshade
 	fmt.Printf("outputting to %s* files\n", outPath)
 	for key, txs := range *submittedTransactions {
@@ -168,6 +168,7 @@ func GeminiUploadSettlement(inPath string, signatureSwitch int, allTransactionsF
 func geminiIterateRequest(
 	ctx context.Context,
 	geminiClient gemini.Client,
+	signatureSwitch int,
 	bulkPayoutFiles []string,
 	transactionsMap map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
@@ -192,9 +193,11 @@ func geminiIterateRequest(
 			if err != nil {
 				return &submittedTransactions, err
 			}
+			base := bulkPayoutRequestRequirements.Base
 			presigner := cryptography.NewPresigner(decodedSig)
-			bulkPayoutRequestRequirements.Base.Nonce = bulkPayoutRequestRequirements.Base.Nonce + int64(signatureSwitch)
-			serialized, err := json.Marshal(bulkPayoutRequestRequirements.Base)
+			base.Nonce = base.Nonce + int64(signatureSwitch)
+			fmt.Printf("nonce: %d\n signature switch: %d\n", base.Nonce, int64(signatureSwitch))
+			serialized, err := json.Marshal(base)
 			if err != nil {
 				return &submittedTransactions, err
 			}

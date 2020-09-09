@@ -210,7 +210,6 @@ func (c *HTTPClient) UploadBulkPayout(
 	APIKey string,
 	signer cryptography.HMACKey,
 	payload string,
-	authType string,
 ) (*[]PayoutResult, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil)
 	if err != nil {
