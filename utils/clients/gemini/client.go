@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/cryptography"
-	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -200,7 +198,6 @@ func setPrivateRequestHeaders(
 		req.Header.Set("X-GEMINI-SIGNATURE", hex.EncodeToString(signature))
 	}
 	req.Header.Set("Cache-Control", "no-cache")
-	fmt.Printf("%#v\n", req)
 	return nil
 }
 
@@ -244,14 +241,12 @@ func (c *HTTPClient) FetchAccountList(
 		return nil, err
 	}
 
-	res, err := c.client.Do(ctx, req, nil)
+	var body []Account
+	res, err := c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
-	var response []Account
-	err = requestutils.ReadJSON(res.Body, &response)
-
-	return &response, err
+	return &body, err
 }
 
 // FetchBalances fetches the list of accounts associated with the given api key
@@ -270,11 +265,10 @@ func (c *HTTPClient) FetchBalances(
 		return nil, err
 	}
 
-	res, err := c.client.Do(ctx, req, nil)
+	var body []Balance
+	res, err := c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
-	var response []Balance
-	err = requestutils.ReadJSON(res.Body, &response)
-	return &response, err
+	return &body, err
 }
