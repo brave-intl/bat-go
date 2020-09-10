@@ -79,6 +79,8 @@ func SettlementTransactionToPayoutPayload(tx *settlement.Transaction) PayoutPayl
 func GenerateTxRef(tx *settlement.Transaction) string {
 	key := strings.Join([]string{
 		tx.SettlementID,
+		// if you have to resubmit referrals to get status
+		tx.Type,
 		tx.Destination,
 		tx.Channel,
 	}, "_")
@@ -242,7 +244,7 @@ func (c *HTTPClient) FetchAccountList(
 	}
 
 	var body []Account
-	res, err := c.client.Do(ctx, req, &body)
+	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +268,7 @@ func (c *HTTPClient) FetchBalances(
 	}
 
 	var body []Balance
-	res, err := c.client.Do(ctx, req, &body)
+	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}

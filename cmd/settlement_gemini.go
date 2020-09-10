@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
@@ -104,15 +105,24 @@ func geminiSiftThroughResponses(
 	transactions := make(map[string][]settlement.Transaction)
 
 	for _, payout := range *response {
+		original := originalTransactions[payout.TxRef]
+		var key string
 		if payout.Result == "Error" {
-			transactions["failed"] = append(transactions["failed"], originalTransactions[payout.TxRef])
+			key = "failed"
+			original.Note = *payout.Reason
 		} else {
 			if *payout.Status == "Pending" {
-				transactions["pending"] = append(transactions["pending"], originalTransactions[payout.TxRef])
+				key = "pending"
 			} else {
-				transactions["completed"] = append(transactions["completed"], originalTransactions[payout.TxRef])
+				key = "complete"
 			}
 		}
+		original.Status = key
+		tmp := altcurrency.BAT
+		original.AltCurrency = &tmp
+		original.Currency = tmp.String()
+		original.ProviderID = payout.TxRef
+		transactions[key] = append(transactions[key], original)
 	}
 	return transactions
 }
@@ -289,7 +299,7 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
 func GeminiTransformTransactions(oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
-	maxCount := 500
+	maxCount := 30
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0
