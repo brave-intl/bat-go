@@ -123,7 +123,7 @@ func SignSettlement(command *cobra.Command, args []string) error {
 				settlements,
 			)
 			cmd.Must(err)
-			log.Msg("resulting signed")
+			log.Msg("created artifact")
 		}
 	}
 	return nil

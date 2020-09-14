@@ -319,7 +319,7 @@ func GeminiTransformTransactions(ctx context.Context, oauthClientID string, tran
 		i++
 	}
 
-	logEvent.Str("transaction id", txID.String()).
+	logEvent.Str("transaction_id", txID.String()).
 		Int("blocks", blocksCount).
 		Int("transactions", len(transactions)).
 		Str("total", total.String())
