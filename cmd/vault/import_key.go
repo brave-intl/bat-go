@@ -13,8 +13,6 @@ import (
 )
 
 var (
-	walletRefs []string
-
 	keysList = []string{
 		"uphold-contribution",
 		"uphold-referral",
