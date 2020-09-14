@@ -9,7 +9,7 @@ import (
 
 var (
 	// ConfigPath provides a path to read configuration out of
-	ConfigPath string
+	// ConfigPath string
 
 	// Config is a configuration file to map known wallet keys to unknown wallet keys
 	Config *settlement.Config
@@ -27,15 +27,15 @@ func init() {
 	cmd.RootCmd.AddCommand(VaultCmd)
 
 	// config - defaults to config.yaml
-	VaultCmd.PersistentFlags().StringVarP(&ConfigPath, "config", "c", "config.yaml",
+	VaultCmd.PersistentFlags().StringP("config", "c", "config.yaml",
 		"the default path to a configuration file")
 	cmd.Must(viper.BindPFlag("config", VaultCmd.PersistentFlags().Lookup("config")))
 	cmd.Must(viper.BindEnv("config", "CONFIG"))
-	// cmd.Must(VaultCmd.MarkFlagRequired("config"))
+	cmd.Must(VaultCmd.MarkPersistentFlagRequired("config"))
 }
 
 func initConfig() {
 	var err error
-	Config, err = settlement.ReadYamlConfig(ConfigPath)
+	Config, err = settlement.ReadYamlConfig(viper.GetString("config"))
 	cmd.Must(err)
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -60,7 +60,7 @@ func init() {
 	// in -> the file to parse and sign according to each provider's setup. default: contributions.json
 	SignSettlementCmd.PersistentFlags().String("in", "contributions.json",
 		"input file path")
-	cmd.Must(viper.BindPFlag("in", ImportKeyCmd.PersistentFlags().Lookup("in")))
+	cmd.Must(viper.BindPFlag("in", SignSettlementCmd.PersistentFlags().Lookup("in")))
 
 	providers := []string{}
 	for k := range providerTransactionTypes {
@@ -78,25 +78,20 @@ func init() {
 }
 
 // SignSettlement runs the signing of a settlement
-func SignSettlement(cmd *cobra.Command, args []string) error {
+func SignSettlement(command *cobra.Command, args []string) error {
 	providers := viper.GetStringSlice("providers")
 	inputFile := viper.GetString("in")
-	fmt.Println("input", inputFile)
-	fmt.Println("providers", providers)
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-signed.json"
-
+	logger, err := appctx.GetLogger(command.Context())
+	cmd.Must(err)
 	// all settlements file
 	settlementJSON, err := ioutil.ReadFile(inputFile)
-	if err != nil {
-		return err
-	}
+	cmd.Must(err)
 
 	var antifraudSettlements []settlement.AntifraudTransaction
 	err = json.Unmarshal(settlementJSON, &antifraudSettlements)
-	if err != nil {
-		return err
-	}
+	cmd.Must(err)
 
 	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
 
@@ -105,7 +100,6 @@ func SignSettlement(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ctx := context.Background()
 	for _, provider := range providers {
 		for _, txType := range providerTransactionTypes[provider] {
 			walletKey := provider + "-" + txType
@@ -113,16 +107,23 @@ func SignSettlement(cmd *cobra.Command, args []string) error {
 			if len(settlements) == 0 {
 				continue
 			}
+			output := walletKey + "-" + outputFile
+			secretKey := Config.GetWalletKey(walletKey)
+			ctx := command.Context()
+			log := logger.Info().
+				Str("output", output).
+				Str("provider", provider).
+				Str("secretkey", secretKey).
+				Int("settlements", len(settlements))
 			err := artifactGenerators[provider](
-				ctx,
-				walletKey+"-"+outputFile,
+				context.WithValue(ctx, appctx.LogEvent, log),
+				output,
 				wrappedClient,
-				Config.GetWalletKey(walletKey),
+				secretKey,
 				settlements,
 			)
-			if err != nil {
-				return err
-			}
+			cmd.Must(err)
+			log.Msg("resulting signed")
 		}
 	}
 	return nil
@@ -215,7 +216,7 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := settlementcmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := settlementcmd.GeminiTransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -234,7 +235,7 @@ func createGeminiArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(outputFile, out, 0600)
+	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}

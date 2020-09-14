@@ -64,12 +64,14 @@ func NewWithContext(ctx context.Context) (Client, error) {
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
-	serverEnvKey := "RATIOS_SERVER"
-	serverURL := os.Getenv("RATIOS_SERVER")
+	serverEnvKey := "RATIOS_SERVICE"
+	serverURL := os.Getenv(serverEnvKey)
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	client, err := clients.New(serverURL, os.Getenv("RATIOS_ACCESS_TOKEN"))
+	fmt.Println("server url", serverURL)
+	fmt.Println("server token", os.Getenv("RATIOS_TOKEN"))
+	client, err := clients.New(serverURL, os.Getenv("RATIOS_TOKEN"))
 	if err != nil {
 		return nil, err
 	}

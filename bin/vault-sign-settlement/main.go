@@ -222,7 +222,7 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := settlementcmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := settlementcmd.GeminiTransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}

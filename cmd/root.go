@@ -27,10 +27,9 @@ var (
 	buildTime string
 
 	// top level config items
-	pprofEnabled       string
-	env                string
-	ratiosAccessToken  string
-	ratiosService      string
+	pprofEnabled string
+	env          string
+
 	ratiosClientPurge  time.Duration
 	ratiosClientExpiry time.Duration
 )
@@ -75,13 +74,13 @@ func init() {
 	Must(viper.BindEnv("environment", "ENV"))
 
 	// ratiosAccessToken (required by all)
-	RootCmd.PersistentFlags().StringVarP(&ratiosAccessToken, "ratios-token", "t", "",
+	RootCmd.PersistentFlags().StringP("ratios-token", "t", "",
 		"the ratios service token for this service")
 	Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
 	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
 
 	// ratiosService (required by all)
-	RootCmd.PersistentFlags().StringVarP(&ratiosService, "ratios-service", "r", "",
+	RootCmd.PersistentFlags().StringP("ratios-service", "r", "",
 		"the ratios service address")
 	Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
 	Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))

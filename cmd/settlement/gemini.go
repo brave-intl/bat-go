@@ -18,7 +18,9 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -265,7 +267,7 @@ func GeminiTransformForMassPay(ctx context.Context, input string, oauthClientID 
 		return err
 	}
 
-	geminiPayouts, err := GeminiTransformTransactions(oauthClientID, *transactions)
+	geminiPayouts, err := GeminiTransformTransactions(ctx, oauthClientID, *transactions)
 	if err != nil {
 		return err
 	}
@@ -291,18 +293,15 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 }
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
-func GeminiTransformTransactions(oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
+func GeminiTransformTransactions(ctx context.Context, oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
 	maxCount := 30
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0
+	logEvent := ctx.Value(appctx.LogEvent).(*zerolog.Event)
 
 	txnID := transactions[0].SettlementID
 	txID := uuid.Must(uuid.FromString(txnID))
-	fmt.Println("transaction id", txID.String())
-
-	fmt.Printf("creating %d blocks\n", blocksCount)
-	fmt.Printf("with %d transactions\n", len(transactions))
 	total := decimal.NewFromFloat(0)
 	for i < blocksCount {
 		lowerBound := i * maxCount
@@ -319,6 +318,11 @@ func GeminiTransformTransactions(oauthClientID string, transactions []settlement
 		}
 		i++
 	}
-	fmt.Printf("%s bat to be paid out\n", total.String())
+
+	logEvent.Str("transaction id", txID.String()).
+		Int("blocks", blocksCount).
+		Int("transactions", len(transactions)).
+		Str("total", total.String())
+
 	return &privateRequests, nil
 }
