@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -80,6 +81,8 @@ func init() {
 func SignSettlement(cmd *cobra.Command, args []string) error {
 	providers := viper.GetStringSlice("providers")
 	inputFile := viper.GetString("in")
+	fmt.Println("input", inputFile)
+	fmt.Println("providers", providers)
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-signed.json"
 

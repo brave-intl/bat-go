@@ -31,7 +31,7 @@ func init() {
 		"the default path to a configuration file")
 	cmd.Must(viper.BindPFlag("config", VaultCmd.PersistentFlags().Lookup("config")))
 	cmd.Must(viper.BindEnv("config", "CONFIG"))
-	cmd.Must(VaultCmd.MarkFlagRequired("config"))
+	// cmd.Must(VaultCmd.MarkFlagRequired("config"))
 }
 
 func initConfig() {
