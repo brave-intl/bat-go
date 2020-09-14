@@ -30,3 +30,4 @@ grantTokens.json
 **/*.gobak
 bat-go
 config.yaml
+share-0.gpg
