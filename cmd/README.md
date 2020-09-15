@@ -45,4 +45,10 @@ Below is the command structure for bat-go microservices using cobra
           vault sign-settlement -c config.yaml \
             -i contributions.json \
             --providers=uphold,gemini
+    - unseal
+      example:
+          gpg -d ./share-0.gpg | bat-go vault unseal
+    - create-wallet
+      example:
+          bat-go vault create-wallet
 ```
