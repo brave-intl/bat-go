@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -55,6 +56,37 @@ func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
 		AuthToken: authToken,
 		client: &http.Client{
 			Timeout: time.Second * 10,
+		},
+	}, nil
+}
+
+// NewWithProxy returns a new SimpleHTTPClient, retrieving the base URL from the environment and adds a proxy
+func NewWithProxy(name string, serverURL string, authToken string, proxyURL string) (*SimpleHTTPClient, error) {
+	baseURL, err := url.Parse(serverURL)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var proxy func(*http.Request) (*url.URL, error)
+	if len(proxyURL) != 0 {
+		proxiedURL, err := url.Parse(proxyURL)
+		if err != nil {
+			panic("HTTP_PROXY is not a valid proxy URL")
+		}
+		proxy = http.ProxyURL(proxiedURL)
+	} else {
+		proxy = nil
+	}
+	return &SimpleHTTPClient{
+		BaseURL:   baseURL,
+		AuthToken: authToken,
+		client: &http.Client{
+			Timeout: time.Second * 10,
+			Transport: middleware.InstrumentRoundTripper(
+				&http.Transport{
+					Proxy: proxy,
+				}, name),
 		},
 	}, nil
 }
@@ -127,7 +159,9 @@ func (c *SimpleHTTPClient) newRequest(
 		req.Header.Add("content-type", "application/json")
 	}
 	requestutils.SetRequestID(ctx, req)
-	req.Header.Set("authorization", "Bearer "+c.AuthToken)
+	if c.AuthToken != "" {
+		req.Header.Set("authorization", "Bearer "+c.AuthToken)
+	}
 	return req, 0, nil
 }
 
@@ -188,6 +222,7 @@ func (c *SimpleHTTPClient) do(
 		}
 		return resp, nil
 	}
+
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
 

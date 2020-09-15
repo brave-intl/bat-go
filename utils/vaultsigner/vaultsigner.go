@@ -1,14 +1,8 @@
 package vaultsigner
 
 import (
-	"crypto"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/vault/api"
@@ -18,65 +12,14 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
-// VaultSigner an ed25519 signer / verifier that uses the vault transit backend
-type VaultSigner struct {
-	Client     *api.Client
-	KeyName    string
-	KeyVersion uint
-}
-
-// Sign the included message using the vault held keypair. rand and opts are not used
-func (vs *VaultSigner) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) ([]byte, error) {
-	response, err := vs.Client.Logical().Write("transit/sign/"+vs.KeyName, map[string]interface{}{
-		"input": base64.StdEncoding.EncodeToString(message),
-	})
-	if err != nil {
-		return []byte{}, err
-	}
-
-	sig := response.Data["signature"].(string)
-
-	return base64.StdEncoding.DecodeString(strings.Split(sig, ":")[2])
-}
-
-// Verify the included signature over message using the vault held keypair. opts are not used
-func (vs *VaultSigner) Verify(message, signature []byte, opts crypto.SignerOpts) (bool, error) {
-	response, err := vs.Client.Logical().Write("transit/verify/"+vs.KeyName, map[string]interface{}{
-		"input":     base64.StdEncoding.EncodeToString(message),
-		"signature": fmt.Sprintf("vault:v%d:%s", vs.KeyVersion, base64.StdEncoding.EncodeToString(signature)),
-	})
-	if err != nil {
-		return false, err
-	}
-
-	return response.Data["valid"].(bool), nil
-}
-
-// String returns the public key as a hex encoded string
-func (vs *VaultSigner) String() string {
-	return hex.EncodeToString(vs.Public().(ed25519.PublicKey))
-}
-
-// Public returns the public key
-func (vs *VaultSigner) Public() crypto.PublicKey {
-	response, err := vs.Client.Logical().Read("transit/keys/" + vs.KeyName)
-	if err != nil {
-		panic(err)
-	}
-
-	keys := response.Data["keys"].(map[string]interface{})
-	key := keys[strconv.Itoa(int(vs.KeyVersion))].(map[string]interface{})
-	b64PublicKey := key["public_key"].(string)
-	publicKey, err := base64.StdEncoding.DecodeString(b64PublicKey)
-	if err != nil {
-		panic(err)
-	}
-
-	return ed25519.PublicKey(publicKey)
+// WrappedClient holds an api client for interacting with vault
+type WrappedClient struct {
+	Client *api.Client
 }
 
 // FromKeypair create a new vault transit key by importing privKey and pubKey under importName
-func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, importName string) (*VaultSigner, error) {
+func (wc *WrappedClient) FromKeypair(privKey ed25519.PrivateKey, pubKey ed25519.PublicKey, importName string) (*Ed25519Signer, error) {
+	client := wc.Client
 	key := keysutil.KeyEntry{}
 
 	key.Key = privKey
@@ -111,60 +54,150 @@ func FromKeypair(client *api.Client, privKey ed25519.PrivateKey, pubKey ed25519.
 	}
 	backup := base64.StdEncoding.EncodeToString(encodedBackup)
 
-	mounts, err := client.Sys().ListMounts()
+	err = wc.GenerateMounts()
 	if err != nil {
 		return nil, err
-	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
 	}
 
 	// Restore the generated key backup
 	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
 		"backup": backup,
+		"name":   importName,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &VaultSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
+	return &Ed25519Signer{Client: client, KeyName: importName, KeyVersion: 1}, nil
 }
 
-// New VaultSigner by generating a keypair with name using vault backend
-func New(client *api.Client, name string) (*VaultSigner, error) {
-	mounts, err := client.Sys().ListMounts()
+// ImportHmacSecret create a new vault transit key by importing privKey under importName
+func (wc *WrappedClient) ImportHmacSecret(secret []byte, importName string) (*HmacSigner, error) {
+	client := wc.Client
+	key := keysutil.KeyEntry{}
+
+	key.HMACKey = secret
+	key.Key = secret
+
+	key.CreationTime = time.Now().UTC()
+	key.DeprecatedCreationTime = key.CreationTime.Unix()
+
+	keyData := keysutil.KeyData{Policy: &keysutil.Policy{Keys: map[string]keysutil.KeyEntry{"1": key}}}
+
+	keyData.Policy.ArchiveVersion = 1
+	keyData.Policy.BackupInfo = &keysutil.BackupInfo{Time: time.Now().UTC(), Version: 1}
+	keyData.Policy.LatestVersion = 1
+	keyData.Policy.MinDecryptionVersion = 1
+	keyData.Policy.Name = importName
+	keyData.Policy.Exportable = true
+	keyData.Policy.AllowPlaintextBackup = true
+
+	encodedBackup, err := jsonutil.EncodeJSON(keyData)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := mounts["transit/"]; !ok {
-		// Mount transit secret backend if not already mounted
-		if err = client.Sys().Mount("transit", &api.MountInput{
-			Type: "transit",
-		}); err != nil {
-			return nil, err
-		}
+	backup := base64.StdEncoding.EncodeToString(encodedBackup)
+
+	err = wc.GenerateMounts()
+	if err != nil {
+		return nil, err
 	}
 
+	// Restore the generated key backup
+	_, err = client.Logical().Write("transit/restore", map[string]interface{}{
+		"backup": backup,
+		"name":   importName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &HmacSigner{Client: client, KeyName: importName, KeyVersion: 1}, nil
+}
+
+// GenerateMounts generates the appropriate mount points if they do not exist
+func (wc *WrappedClient) GenerateMounts() error {
+	mounts, err := wc.Client.Sys().ListMounts()
+	if err != nil {
+		return err
+	}
+	if _, ok := mounts["wallets/"]; !ok {
+		// Mount kv secret backend if not already mounted
+		if err = wc.Client.Sys().Mount("wallets", &api.MountInput{
+			Type: "kv",
+		}); err != nil {
+			return err
+		}
+	}
+	if _, ok := mounts["transit/"]; !ok {
+		// Mount transit secret backend if not already mounted
+		if err = wc.Client.Sys().Mount("transit", &api.MountInput{
+			Type: "transit",
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GenerateEd25519Signer create Ed25519Signer by generating a keypair with name using vault backend
+func (wc *WrappedClient) GenerateEd25519Signer(name string) (*Ed25519Signer, error) {
+	err := wc.GenerateMounts()
+	if err != nil {
+		return nil, err
+	}
 	// Generate a new keypair
-	_, err = client.Logical().Write("transit/keys/"+name, map[string]interface{}{
+	_, err = wc.Client.Logical().Write("transit/keys/"+name, map[string]interface{}{
 		"type": "ed25519",
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &VaultSigner{Client: client, KeyName: name, KeyVersion: 1}, nil
+	return &Ed25519Signer{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
+}
+
+// GetEd25519Signer gets a key pair but doesn't generate new key
+func (wc *WrappedClient) GetEd25519Signer(name string) (*Ed25519Signer, error) {
+	err := wc.GenerateMounts()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Ed25519Signer{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
+}
+
+// GenerateHmacSecret create hmac key using vault backend
+func (wc *WrappedClient) GenerateHmacSecret(name string, algo string) (*HmacSigner, error) {
+	err := wc.GenerateMounts()
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate a new hmac set
+	_, err = wc.Client.Logical().Write("transit/hmac/"+name+"/"+algo, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &HmacSigner{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
+}
+
+// GetHmacSecret gets a key pair but doesn't generate new key
+func (wc *WrappedClient) GetHmacSecret(name string) (*HmacSigner, error) {
+	err := wc.GenerateMounts()
+	if err != nil {
+		return nil, err
+	}
+
+	return &HmacSigner{Client: wc.Client, KeyName: name, KeyVersion: 1}, nil
 }
 
 // Connect connects to the vaultsigner backend server, sets token written by vault
-func Connect() (client *api.Client, err error) {
+func Connect() (*WrappedClient, error) {
+	var client *api.Client
 	config := &api.Config{}
-	err = config.ReadEnvironment()
+	err := config.ReadEnvironment()
 
 	if err == nil {
 		client, err = api.NewClient(config)
@@ -190,5 +223,5 @@ func Connect() (client *api.Client, err error) {
 		}
 	}
 
-	return client, err
+	return &WrappedClient{Client: client}, err
 }

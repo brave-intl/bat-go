@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 )
 
 func TestGenerateSecret(t *testing.T) {

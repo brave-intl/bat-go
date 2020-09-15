@@ -32,7 +32,7 @@ func main() {
 	}
 	flag.Parse()
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -55,7 +55,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	status, err := client.Sys().Unseal(string(b))
+	status, err := wrappedClient.Client.Sys().Unseal(string(b))
 	if err != nil {
 		log.Fatalln(err)
 	}

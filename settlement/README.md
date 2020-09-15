@@ -64,7 +64,7 @@ transactions that were made.
 
 On the offline machine, first bring up vault as described above.
 
-Run vault-create-wallet, this will sign the registration and store it into 
+Run vault-create-wallet, this will sign the registration and store it into
 a local file:
 ```
 vault-create-wallet -offline name-of-new-wallet
@@ -85,4 +85,27 @@ Finally copy `name-of-new-wallet-registration.json` back to the offline
 machine and run vault-create-wallet to record the provider ID in vault:
 ```
 vault-create-wallet -offline name-of-new-wallet
+```
+
+## Creating a config
+the `config.example.yaml` should be copied wherever it is easiest to point to. just pass in the path while running a command that interacts with vault (import-key, sign-settlement) etc. be sure to change the values of the wallets to suit your setup if required.
+
+## Importing keys
+
+the following line imports the keys from environment variables
+```bash
+./vault-import-key
+```
+
+## Signing Files
+
+signing the settlement file will split the input files into many output files depending on the contents of the file
+```bash
+./vault-sign-settlement -in=contributions.json
+```
+
+## Uploading files
+running `settlement-submit` with a provider tells the script where to submit the file and the kind of handler to use. the sig=0 flag is for gemini bulk uploads that will need multiple submissions to check future status and create a completed list of transactions.
+```bash
+./settlement-submit -in=gemini-contributions-signed.json -provider=gemini -sig=0 -alltransactions=contributions.json
 ```
