@@ -115,6 +115,8 @@ func geminiSiftThroughResponses(
 				key = "pending"
 			} else if status == "Completed" {
 				key = "complete"
+			} else {
+				key = "unknown"
 			}
 		}
 		original.Status = key

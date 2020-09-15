@@ -65,7 +65,6 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	tx := settlement.Transaction{
 		// use this settlement id to create an ephemeral test
 		SettlementID: uuid.NewV4().String(),
-		// SettlementID: uuid.Must(uuid.FromString("4077459f-7389-46d3-a0d8-b1e56b2d279b")).String(),
 		Destination: os.Getenv("GEMINI_TEST_DESTINATION_ID"),
 		Channel:     "brave.com",
 	}
