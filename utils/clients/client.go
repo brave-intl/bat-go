@@ -72,7 +72,7 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 	if len(proxyURL) != 0 {
 		proxiedURL, err := url.Parse(proxyURL)
 		if err != nil {
-			panic("UPHOLD_HTTP_PROXY is not a valid proxy URL")
+			panic("HTTP_PROXY is not a valid proxy URL")
 		}
 		proxy = http.ProxyURL(proxiedURL)
 	} else {
@@ -86,8 +86,6 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 			Transport: middleware.InstrumentRoundTripper(
 				&http.Transport{
 					Proxy: proxy,
-					// can i just remove this?
-					// DialTLS: pindialer.MakeDialer(upholdCertFingerprint),
 				}, name),
 		},
 	}, nil

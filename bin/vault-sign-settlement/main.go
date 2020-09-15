@@ -131,7 +131,6 @@ func main() {
 func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) map[string][]settlement.Transaction {
 	settlementTransactionsByWallet := make(map[string][]settlement.Transaction)
 
-	// alt := altcurrency.BAT
 	for _, antifraudTx := range antifraudTxs {
 		tx := antifraudTx.ToTransaction()
 
@@ -260,6 +259,7 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
+			nil,
 			clientID,
 			&privateRequestRequirements,
 		)
