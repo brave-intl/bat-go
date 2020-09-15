@@ -8,9 +8,6 @@ import (
 )
 
 var (
-	// ConfigPath provides a path to read configuration out of
-	// ConfigPath string
-
 	// Config is a configuration file to map known wallet keys to unknown wallet keys
 	Config *settlement.Config
 
@@ -22,8 +19,6 @@ var (
 )
 
 func init() {
-	cobra.OnInitialize(initConfig)
-
 	cmd.RootCmd.AddCommand(VaultCmd)
 
 	// config - defaults to config.yaml
@@ -31,11 +26,12 @@ func init() {
 		"the default path to a configuration file")
 	cmd.Must(viper.BindPFlag("config", VaultCmd.PersistentFlags().Lookup("config")))
 	cmd.Must(viper.BindEnv("config", "CONFIG"))
-	cmd.Must(VaultCmd.MarkPersistentFlagRequired("config"))
 }
 
-func initConfig() {
-	var err error
-	Config, err = settlement.ReadYamlConfig(viper.GetString("config"))
+// ReadConfig sets up the config flag
+func ReadConfig(command *cobra.Command) *settlement.Config {
+	config, err := settlement.ReadYamlConfig(viper.GetString("config"))
 	cmd.Must(err)
+	Config = config
+	return config
 }

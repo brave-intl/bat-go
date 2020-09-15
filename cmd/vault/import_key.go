@@ -29,8 +29,9 @@ var (
 )
 
 func init() {
-	VaultCmd.AddCommand(ImportKeyCmd)
-
+	VaultCmd.AddCommand(
+		ImportKeyCmd,
+	)
 	// wallet-refs - default to keysList above. list of known keys
 	// under which new wallet secrets can be referenced
 	ImportKeyCmd.PersistentFlags().StringSlice("wallet-refs", keysList,
@@ -78,6 +79,7 @@ func init() {
 func ImportKey(command *cobra.Command, args []string) error {
 	var err error
 
+	ReadConfig(command)
 	walletRefs := viper.GetStringSlice("wallet-refs")
 	ed25519PrivateKey := viper.GetString("ed25519-private-key")
 	ed25519PublicKey := viper.GetString("ed25519-public-key")

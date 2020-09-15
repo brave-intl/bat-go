@@ -1,48 +1,62 @@
-package main
+package vault
 
 import (
 	"bytes"
 	"encoding/base64"
-	"flag"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/user"
 	"path"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/closers"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/packet"
 )
 
-var secretShares = flag.Uint("key-shares", 5, "number of total unseal shares")
-var secretThreshold = flag.Uint("key-threshold", 3, "number of shares needed to unseal")
-
-func main() {
-	log.SetFlags(0)
-
-	flag.Usage = func() {
-		log.Printf("A helper for quickly initializing vault.\n\n")
-		log.Printf("Usage:\n\n")
-		log.Printf("        %s GPG_PUB_KEY_FILE...\n\n", os.Args[0])
-		log.Printf("  %s initializes vault and writes the encrypted unseal shares to disk.\n", os.Args[0])
-		log.Printf("  Each share is written as a separate sequental file. Furthermore the initial root\n")
-		log.Printf("  token is saved to ~/.vault-token, meaning the initial `vault login` can be skipped.\n\n")
-		flag.PrintDefaults()
+var (
+	// InitCmd initializes the vault server
+	InitCmd = &cobra.Command{
+		Use:   "init",
+		Short: "initializes the vault server",
+		Run:   cmd.Perform("init vault", Initialize),
 	}
-	flag.Parse()
-	gpgKeyFiles := flag.Args()
+)
+
+func init() {
+	VaultCmd.AddCommand(
+		InitCmd,
+	)
+	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	InitCmd.PersistentFlags().Uint("key-shares", 5,
+		"number of total unseal shares")
+	cmd.Must(viper.BindPFlag("key-shares", InitCmd.PersistentFlags().Lookup("key-shares")))
+
+	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	InitCmd.PersistentFlags().Uint("key-threshold", 3,
+		"number of shares needed to unseal")
+	cmd.Must(viper.BindPFlag("key-threshold", InitCmd.PersistentFlags().Lookup("key-threshold")))
+}
+
+// Initialize initializes the vault server
+func Initialize(command *cobra.Command, args []string) error {
+	gpgKeyFiles := args
+	secretShares := viper.GetUint("key-shares")
+	secretThreshold := viper.GetUint("key-threshold")
+	logger, err := appctx.GetLogger(command.Context())
+	cmd.Must(err)
 
 	if len(gpgKeyFiles) == 0 {
-		flag.Usage()
-		os.Exit(1)
-	} else if len(gpgKeyFiles) != int(*secretShares) {
-		log.Printf("ERROR: A gpg public key file must be passed for every unseal share\n\n")
-		flag.Usage()
-		os.Exit(1)
+		return errors.New("a gpg file was not passed")
+	} else if len(gpgKeyFiles) != int(secretShares) {
+		return errors.New("a gpg public key file must be passed for every unseal share")
 	}
 
 	var entityList openpgp.EntityList
@@ -51,7 +65,7 @@ func main() {
 	for i := 0; i < len(gpgKeyFiles); i++ {
 		f, err := os.Open(gpgKeyFiles[i])
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		defer closers.Panic(f)
 
@@ -64,21 +78,21 @@ func main() {
 			// On failure try to read it in binary format
 			_, err = f.Seek(0, 0)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 			entity, err = openpgp.ReadKeyRing(f)
 			if err != nil {
-				log.Fatalln(err)
+				return err
 			}
 		}
 		if len(entity) > 1 {
-			log.Fatalln("Your gpg public key files should only contain a single public key")
+			return errors.New("your gpg public key files should only contain a single public key")
 		}
 
 		buf := new(bytes.Buffer)
 		err = entity[0].Serialize(buf)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		entityList = append(entityList, entity[0])
 		gpgKeys = append(gpgKeys, base64.StdEncoding.EncodeToString(buf.Bytes()))
@@ -86,27 +100,27 @@ func main() {
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	req := api.InitRequest{}
 
 	req.PGPKeys = gpgKeys
-	req.SecretShares = int(*secretShares)
-	req.SecretThreshold = int(*secretThreshold)
+	req.SecretShares = int(secretShares)
+	req.SecretThreshold = int(secretThreshold)
 
 	resp, err := wrappedClient.Client.Sys().Init(&req)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
-	fmt.Printf("Success, vault has been initialized\n\n")
+	logger.Info().Msg("success, vault has been initialized")
 
 	var b []byte
 	for i := range resp.KeysB64 {
 		b, err = base64.StdEncoding.DecodeString(resp.KeysB64[i])
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 
 		// Parse the resulting encrypted files to print corresponding key for each
@@ -123,7 +137,7 @@ func main() {
 				keys := entityList.KeysById(p.KeyId)
 				if len(keys) == 1 {
 					for k := range keys[0].Entity.Identities {
-						fmt.Printf("Writing share-%d.gpg for %s\n", i, k)
+						logger.Info().Msgf("Writing share-%d.gpg for %s\n", i, k)
 					}
 				}
 			}
@@ -131,19 +145,20 @@ func main() {
 
 		err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 	}
 
 	usr, err := user.Current()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	err = ioutil.WriteFile(path.Join(usr.HomeDir, ".vault-token"), []byte(resp.RootToken), 0600)
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
-	fmt.Println("Done! Note that the root token has been written to ~/.vault-token")
+	logger.Info().Msg("Done! Note that the root token has been written to ~/.vault-token")
+	return nil
 }

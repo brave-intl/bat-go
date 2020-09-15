@@ -79,6 +79,7 @@ func init() {
 
 // SignSettlement runs the signing of a settlement
 func SignSettlement(command *cobra.Command, args []string) error {
+	ReadConfig(command)
 	providers := viper.GetStringSlice("providers")
 	inputFile := viper.GetString("in")
 	// append -signed to the filename
