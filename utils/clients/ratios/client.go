@@ -69,8 +69,6 @@ func New() (Client, error) {
 	if len(serverURL) == 0 {
 		return nil, errors.New(serverEnvKey + " was empty")
 	}
-	fmt.Println("server url", serverURL)
-	fmt.Println("server token", os.Getenv("RATIOS_TOKEN"))
 	client, err := clients.New(serverURL, os.Getenv("RATIOS_TOKEN"))
 	if err != nil {
 		return nil, err
