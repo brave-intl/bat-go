@@ -16,11 +16,12 @@ type ContextDialer func(ctx context.Context, network, addr string) (net.Conn, er
 
 func validateChain(fingerprint string, connstate tls.ConnectionState) error {
 	for _, chain := range connstate.VerifiedChains {
-		leafCert := chain[0]
-		hash := sha256.Sum256(leafCert.RawSubjectPublicKeyInfo)
-		digest := base64.StdEncoding.EncodeToString(hash[:])
-		if digest == fingerprint {
-			return nil
+		for _, cert := range chain {
+			hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+			digest := base64.StdEncoding.EncodeToString(hash[:])
+			if digest == fingerprint {
+				return nil
+			}
 		}
 	}
 	return errors.New("The server certificate was not valid")
