@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/controllers"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"

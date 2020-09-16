@@ -46,7 +46,7 @@ type AccountListPayload struct {
 type BalancesPayload struct {
 	Request string  `json:"request"`
 	Nonce   int64   `json:"nonce"`
-	Account *string `json:"account"`
+	Account *string `json:"account,omitempty"`
 }
 
 // BulkPayoutPayload the payload to be base64'd
@@ -55,6 +55,7 @@ type BulkPayoutPayload struct {
 	Nonce         int64           `json:"nonce"`
 	Payouts       []PayoutPayload `json:"payouts"`
 	OauthClientID string          `json:"client_id"`
+	Account       *string         `json:"account,omitempty"`
 }
 
 func nonce() int64 {
@@ -90,8 +91,9 @@ func GenerateTxRef(tx *settlement.Transaction) string {
 }
 
 // NewBulkPayoutPayload generate a new bulk payout payload
-func NewBulkPayoutPayload(oauthClientID string, payouts *[]PayoutPayload) BulkPayoutPayload {
+func NewBulkPayoutPayload(account *string, oauthClientID string, payouts *[]PayoutPayload) BulkPayoutPayload {
 	return BulkPayoutPayload{
+		Account:       account,
 		OauthClientID: oauthClientID,
 		Request:       "/v1/payments/bulkPay",
 		Nonce:         nonce(),
@@ -108,10 +110,11 @@ func NewAccountListPayload() AccountListPayload {
 }
 
 // NewBalancesPayload generate a new account list payload
-func NewBalancesPayload() BalancesPayload {
+func NewBalancesPayload(account *string) BalancesPayload {
 	return BalancesPayload{
 		Request: "/v1/balances",
 		Nonce:   nonce(),
+		Account: account,
 	}
 }
 

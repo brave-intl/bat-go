@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/cryptography"
@@ -42,15 +42,18 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 	five := decimal.NewFromFloat(5)
 
-	// // uncomment if using a master key
-	// accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
-	// accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
-	// suite.Require().NoError(err, "should not error during account list fetching")
-	// primary := "primary"
-	// account := findAccountByClass(accounts, primary)
-	// suite.Require().Equal(primary, account.Class, "should have a primary account")
+	var accountKey *string
+	if strings.Split(suite.apikey, "-")[0] == "master" {
+		accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
+		accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
+		suite.Require().NoError(err, "should not error during account list fetching")
+		primary := "primary"
+		account := findAccountByClass(accounts, primary)
+		suite.Require().Equal(primary, account.Class, "should have a primary account")
+		accountKey = &primary
+	}
 
-	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload())
+	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload(accountKey))
 	balances, err := client.FetchBalances(ctx, suite.apikey, suite.secret, balancesRequest)
 	suite.Require().NoError(err, "should not error during balances fetching")
 	balance := findBalanceByCurrency(balances, "BAT")
@@ -61,8 +64,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 
 	tx := settlement.Transaction{
 		// use this settlement id to create an ephemeral test
-		// SettlementID: uuid.NewV4().String(),
-		SettlementID: uuid.Must(uuid.FromString("4077459f-7389-46d3-a0d8-b1e56b2d279b")).String(),
+		SettlementID: uuid.NewV4().String(),
 		Destination:  os.Getenv("GEMINI_TEST_DESTINATION_ID"),
 		Channel:      "brave.com",
 	}
@@ -74,6 +76,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: tx.Destination,
 	}}
 	bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
+		accountKey,
 		os.Getenv("GEMINI_CLIENT_ID"),
 		&payouts,
 	))
@@ -90,24 +93,14 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: &tx.Destination,
 		Status:      &pendingStatus,
 	}}
-	// suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "response should be predictable")
-	completeStatus := "Completed"
-	for {
-		<-time.After(5 * time.Second)
-		bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
-			os.Getenv("GEMINI_CLIENT_ID"),
-			&payouts,
-		))
-
-		bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
-		suite.Require().NoError(err, "should not error during bulk payout uploading")
-		if (*(*bulkPayoutResponse)[0].Status) == completeStatus {
-			// fmt.Printf("status: %s", *expectedPayoutResult[0].Status)
-			expectedPayoutResult[0].Status = &completeStatus
-			suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
-			return
-		}
-	}
+	bulkPayoutRequest = suite.preparePrivateRequest(NewBulkPayoutPayload(
+		accountKey,
+		os.Getenv("GEMINI_CLIENT_ID"),
+		&payouts,
+	))
+	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
+	suite.Require().NoError(err, "should not error during bulk payout uploading")
+	suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
 }
 
 func findBalanceByCurrency(balances *[]Balance, currency string) Balance {

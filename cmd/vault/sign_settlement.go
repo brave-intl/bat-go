@@ -263,6 +263,7 @@ func signGeminiRequests(
 	// sign each request
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
+			nil,
 			clientID,
 			&privateRequestRequirements,
 		)

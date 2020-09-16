@@ -106,14 +106,15 @@ func geminiSiftThroughResponses(
 
 	for _, payout := range *response {
 		original := originalTransactions[payout.TxRef]
-		var key string
+		key := "failed"
 		if payout.Result == "Error" {
-			key = "failed"
 			original.Note = *payout.Reason
 		} else {
+			status := *payout.Status
+			key = "unknown"
 			if *payout.Status == "Pending" {
 				key = "pending"
-			} else {
+			} else if status == "Completed" {
 				key = "complete"
 			}
 		}
