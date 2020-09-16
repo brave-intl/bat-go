@@ -32,8 +32,6 @@ const (
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
 	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
-	// LogEvent holds a log event to be passed through settlement functions
-	LogEvent CTXKey = "log_event"
 )
 
 var (

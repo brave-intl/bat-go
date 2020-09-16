@@ -110,21 +110,21 @@ func SignSettlement(command *cobra.Command, args []string) error {
 			}
 			output := walletKey + "-" + outputFile
 			secretKey := Config.GetWalletKey(walletKey)
-			ctx := command.Context()
-			log := logger.Info().
+			sublog := logger.With().
 				Str("output", output).
 				Str("provider", provider).
 				Str("secretkey", secretKey).
-				Int("settlements", len(settlements))
+				Int("settlements", len(settlements)).
+				Logger()
 			err := artifactGenerators[provider](
-				context.WithValue(ctx, appctx.LogEvent, log),
+				sublog.WithContext(command.Context()),
 				output,
 				wrappedClient,
 				secretKey,
 				settlements,
 			)
 			cmd.Must(err)
-			log.Msg("created artifact")
+			sublog.Info().Msg("created artifact")
 		}
 	}
 	return nil

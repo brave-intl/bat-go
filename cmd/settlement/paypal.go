@@ -16,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/settlement/paypal"
 	"github.com/brave-intl/bat-go/utils/closers"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/gocarina/gocsv"
 	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"
@@ -230,7 +229,7 @@ func PaypalWriteTransactions(outPath string, metadata *[]settlement.Transaction)
 func PaypalWriteMassPayCSV(ctx context.Context, outPath string, metadata *[]paypal.Metadata) error {
 	rows := []*paypal.MassPayRow{}
 	total := decimal.NewFromFloat(0)
-	logEvent := ctx.Value(appctx.LogEvent).(*zerolog.Event)
+	logger := zerolog.Ctx(ctx)
 	currency := ""
 	for _, entry := range *metadata {
 		row := entry.ToMassPayCSVRow()
@@ -241,9 +240,11 @@ func PaypalWriteMassPayCSV(ctx context.Context, outPath string, metadata *[]payp
 	if len(rows) > 5000 {
 		return errors.New("a payout cannot be larger than 5000 lines items long")
 	}
-	logEvent.Int("payouts", len(rows)).
-		Str("total", total.String()).
-		Str("currency", currency)
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Int("payouts", len(rows)).
+			Str("total", total.String()).
+			Str("currency", currency)
+	})
 
 	data, err := gocsv.MarshalString(&rows)
 	if err != nil {

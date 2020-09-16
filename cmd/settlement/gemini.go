@@ -18,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
@@ -299,7 +298,7 @@ func GeminiTransformTransactions(ctx context.Context, oauthClientID string, tran
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0
-	logEvent := ctx.Value(appctx.LogEvent).(*zerolog.Event)
+	logger := zerolog.Ctx(ctx)
 
 	txnID := transactions[0].SettlementID
 	txID := uuid.Must(uuid.FromString(txnID))
@@ -320,10 +319,12 @@ func GeminiTransformTransactions(ctx context.Context, oauthClientID string, tran
 		i++
 	}
 
-	logEvent.Str("transaction_id", txID.String()).
-		Int("blocks", blocksCount).
-		Int("transactions", len(transactions)).
-		Str("total", total.String())
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("transaction_id", txID.String()).
+			Int("blocks", blocksCount).
+			Int("transactions", len(transactions)).
+			Str("total", total.String())
+	})
 
 	return &privateRequests, nil
 }
