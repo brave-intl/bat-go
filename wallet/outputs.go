@@ -112,11 +112,12 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 	var (
 		linkingID        string
 		anonymousAddress string
-		altCurrency      string = convertAltCurrency(info.AltCurrency)
 	)
 	if info == nil {
 		return ResponseV3{}
 	}
+
+	var altCurrency string = convertAltCurrency(info.AltCurrency)
 
 	if info.ProviderLinkingID == nil {
 		linkingID = ""

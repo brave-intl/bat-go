@@ -1,4 +1,4 @@
-FROM golang:1.13.4 as builder
+FROM golang:1.14 as builder
 
 ARG VERSION
 ARG BUILD_TIME

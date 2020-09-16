@@ -290,8 +290,8 @@ func TestFingerprintCheck(t *testing.T) {
 		Timeout: time.Second * 60,
 		// remove middleware calls
 		Transport: &http.Transport{
-			Proxy:   proxy,
-			DialTLS: pindialer.MakeDialer(wrongFingerprint),
+			Proxy:          proxy,
+			DialTLSContext: pindialer.MakeContextDialer(wrongFingerprint),
 		},
 	}
 
@@ -307,7 +307,7 @@ func TestFingerprintCheck(t *testing.T) {
 	if err == nil {
 		t.Error("unable to fail with bad cert")
 	}
-	assert.Equal(t, errors.Unwrap(err).Error(), "The server certificate was not valid")
+	assert.Equal(t, errors.Unwrap(err).Error(), "failed to validate certificate chain: The server certificate was not valid")
 }
 
 func requireDonorWallet(t *testing.T) *Wallet {
