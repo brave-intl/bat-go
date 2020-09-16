@@ -55,10 +55,11 @@ func GetFingerprints(c *tls.Conn) (map[string]string, error) {
 	prints := make(map[string]string)
 
 	for _, chain := range connstate.VerifiedChains {
-		leafCert := chain[0]
-		hash := sha256.Sum256(leafCert.RawSubjectPublicKeyInfo)
-		digest := base64.StdEncoding.EncodeToString(hash[:])
-		prints[leafCert.Issuer.String()] = digest
+		for _, node := range chain {
+			hash := sha256.Sum256(node.RawSubjectPublicKeyInfo)
+			digest := base64.StdEncoding.EncodeToString(hash[:])
+			prints[node.Issuer.String()] = digest
+		}
 	}
 
 	return prints, nil

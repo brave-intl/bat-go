@@ -75,8 +75,8 @@ func init() {
 	must(viper.BindEnv("rate", "RATE"))
 }
 
-// EmailTemplate performs template replacement of date fields in emails
-func EmailTemplate(inPath string, outPath string) (err error) {
+// PaypalEmailTemplate performs template replacement of date fields in emails
+func PaypalEmailTemplate(inPath string, outPath string) (err error) {
 	// read in email template
 	data, err := ioutil.ReadFile(inPath)
 	if err != nil {
@@ -126,7 +126,7 @@ var (
 		Use:   "email",
 		Short: "provides population of a templated email",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := EmailTemplate(input, out); err != nil {
+			if err := PaypalEmailTemplate(input, out); err != nil {
 				log.Printf("failed to perform email templating: %s\n", err)
 				os.Exit(1)
 			}
@@ -137,7 +137,7 @@ var (
 		Use:   "complete",
 		Short: "provides completion of paypal settlement",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := CompleteSettlement(input, out, txnID); err != nil {
+			if err := PaypalCompleteSettlement(input, out, txnID); err != nil {
 				log.Printf("failed to perform complete: %s\n", err)
 				os.Exit(1)
 			}
@@ -153,21 +153,30 @@ var (
 			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := TransformForMassPay(TransformArgs{
-				In:       input,
-				Currency: currency,
-				Rate:     decimal.NewFromFloat(rate),
-				Out:      out,
-			}); err != nil {
+			transformFailed := func(err error) {
 				log.Printf("failed to perform transform: %s\n", err)
 				os.Exit(1)
+			}
+
+			payouts, err := settlement.ReadFiles(strings.Split(input, ","))
+			if err != nil {
+				transformFailed(err)
+			}
+
+			if err := PaypalTransformForMassPay(
+				payouts,
+				currency,
+				decimal.NewFromFloat(rate),
+				out,
+			); err != nil {
+				transformFailed(err)
 			}
 		},
 	}
 )
 
-// CompleteSettlement marks the settlement file as complete
-func CompleteSettlement(inPath string, outPath string, txnID string) error {
+// PaypalCompleteSettlement marks the settlement file as complete
+func PaypalCompleteSettlement(inPath string, outPath string, txnID string) error {
 	fmt.Println("RUNNING: complete")
 	if inPath == "" {
 		return errors.New("the '-i' or '--input' flag must be set")
@@ -179,7 +188,7 @@ func CompleteSettlement(inPath string, outPath string, txnID string) error {
 		// use a file with extension if none is passed
 		outPath = "./paypal-settlement-complete.json"
 	}
-	payouts, err := ReadFiles(inPath)
+	payouts, err := settlement.ReadFiles(strings.Split(inPath, ","))
 	if err != nil {
 		return err
 	}
@@ -194,15 +203,15 @@ func CompleteSettlement(inPath string, outPath string, txnID string) error {
 		payout.ProviderID = txnID
 		(*payouts)[i] = payout
 	}
-	err = WriteTransactions(outPath, payouts)
+	err = PaypalWriteTransactions(outPath, payouts)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// TransformArgs are the args required for the transform command
-type TransformArgs struct {
+// PaypalTransformArgs are the args required for the transform command
+type PaypalTransformArgs struct {
 	In       string
 	Currency string
 	Auth     string
@@ -210,8 +219,8 @@ type TransformArgs struct {
 	Out      string
 }
 
-// WriteTransactions writes settlement transactions to a json file
-func WriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
+// PaypalWriteTransactions writes settlement transactions to a json file
+func PaypalWriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return err
@@ -219,8 +228,8 @@ func WriteTransactions(outPath string, metadata *[]settlement.Transaction) error
 	return ioutil.WriteFile(outPath, data, 0600)
 }
 
-// WriteMassPayCSV writes a csv for using with Paypal web mass payments
-func WriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
+// PaypalWriteMassPayCSV writes a csv for using with Paypal web mass payments
+func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 	rows := []*paypal.MassPayRow{}
 	total := decimal.NewFromFloat(0)
 	currency := ""
@@ -253,33 +262,19 @@ func WriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 	return nil
 }
 
-// TransformForMassPay starts the process to transform a settlement into a mass pay csv
-func TransformForMassPay(args TransformArgs) (err error) {
-	fmt.Println("RUNNING: transform")
-	if args.In == "" {
-		return errors.New("the '-i' or '--input' flag must be set")
-	}
-	if args.Currency == "" {
-		return errors.New("the '-c' or '--currency' flag must be set")
-	}
-
-	payouts, err := ReadFiles(args.In)
+// PaypalTransformForMassPay starts the process to transform a settlement into a mass pay csv
+func PaypalTransformForMassPay(payouts *[]settlement.Transaction, currency string, rate decimal.Decimal, out string) error {
+	rate, err := paypal.GetRate(ctx, currency, rate)
 	if err != nil {
 		return err
 	}
 
-	rate, err := paypal.GetRate(ctx, args.Currency, args.Rate)
-	if err != nil {
-		return err
-	}
-	args.Rate = rate
-
-	txs, err := paypal.CalculateTransactionAmounts(args.Currency, args.Rate, payouts)
+	txs, err := paypal.CalculateTransactionAmounts(currency, rate, payouts)
 	if err != nil {
 		return err
 	}
 
-	err = WriteTransactions(args.Out+".json", txs)
+	err = PaypalWriteTransactions(out+".json", txs)
 	if err != nil {
 		return err
 	}
@@ -289,28 +284,9 @@ func TransformForMassPay(args TransformArgs) (err error) {
 		return err
 	}
 
-	err = WriteMassPayCSV(args.Out+".csv", metadata)
+	err = PaypalWriteMassPayCSV(out+".csv", metadata)
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-// ReadFiles reads a series of files
-func ReadFiles(input string) (*[]settlement.Transaction, error) {
-	var allPayouts []settlement.Transaction
-	files := strings.Split(input, ",")
-	for _, file := range files {
-		var batPayouts []settlement.Transaction
-		bytes, err := ioutil.ReadFile(file)
-		if err != nil {
-			return nil, err
-		}
-		err = json.Unmarshal(bytes, &batPayouts)
-		if err != nil {
-			return nil, err
-		}
-		allPayouts = append(allPayouts, batPayouts...)
-	}
-	return &allPayouts, nil
 }

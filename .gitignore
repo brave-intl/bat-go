@@ -28,3 +28,5 @@ grantTokens.json
 /paypal-settlement-complete.json
 .vscode/
 **/*.gobak
+bat-go
+config.yaml

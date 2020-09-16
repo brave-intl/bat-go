@@ -11,23 +11,30 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/formatters"
-	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	verbose   = flag.Bool("v", false, "verbose output")
-	inputFile = flag.String("in", "./contributions-signed.json", "input file path")
+	logFile    string
+	outputFile string
+
+	verbose             = flag.Bool("v", false, "verbose output")
+	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
+	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
+	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
+	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
 )
 
 func main() {
 	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
-		log.Printf("Submit signed settlements to uphold.\n\n")
+		log.Printf("Submit signed settlements to " + *provider + ".\n\n")
 		log.Printf("Usage:\n\n")
 		log.Printf("        %s\n\n", os.Args[0])
 		flag.PrintDefaults()
@@ -37,10 +44,22 @@ func main() {
 	if *verbose {
 		log.SetLevel(log.DebugLevel)
 	}
+	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
+	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
-	logFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
-	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
+	var err error
+	switch *provider {
+	case "uphold":
+		err = upholdSubmit()
+	case "gemini":
+		err = cmd.GeminiUploadSettlement(*inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
+	}
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
 
+func upholdSubmit() error {
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)
@@ -89,7 +108,7 @@ func main() {
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
-			if wallet.IsInvalidDestination(err) {
+			if errorutils.IsErrInvalidDestination(err) {
 				log.Println(err)
 				continue
 			}
@@ -160,4 +179,5 @@ func main() {
 	}
 
 	fmt.Println("done!")
+	return nil
 }

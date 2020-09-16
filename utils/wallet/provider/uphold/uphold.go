@@ -26,6 +26,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/digest"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/pindialer"
@@ -55,8 +56,9 @@ const (
 )
 
 const (
-	sandboxFingerprint = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
-	prodFingerprint    = "d961PqM/qoU9+Oc1t0v9V76A9ZlB5Dx/RFnhi4EkLIA="
+	// The Intermediate Certificates
+	sandboxFingerprint = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
+	prodFingerprint    = "Y9mvm0exBk1JoQ57f9Vm28jKo5lFm/woKcVxrYxu80o="
 )
 
 var (
@@ -184,7 +186,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, resp, err
+		return nil, resp, fmt.Errorf("%w: %s", errorutils.ErrFailedClientRequest, err.Error())
 	}
 
 	headers := map[string][]string(resp.Header)
@@ -195,7 +197,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 
 	body, err := requestutils.Read(resp.Body)
 	if err != nil {
-		return nil, resp, err
+		return nil, resp, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyRead, err.Error())
 	}
 
 	if logger != nil {
@@ -443,12 +445,12 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())
 	}
 
 	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderID+"/transactions?commit=true", bytes.NewBuffer(unsignedTransaction))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
 	}
 
 	var s httpsignature.Signature
@@ -456,8 +458,10 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
 
-	err = s.Sign(w.PrivKey, crypto.Hash(0), req)
-	return req, err
+	if err = s.Sign(w.PrivKey, crypto.Hash(0), req); err != nil {
+		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
+	}
+	return req, nil
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
@@ -484,18 +488,18 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
 	req, err := w.signTransfer(altcurrency, probi, destination, "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to sign the transfer: %w", err)
 	}
 
 	respBody, _, err := submit(w.logger, req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to submit the transfer: %w", err)
 	}
 
 	var uhResp upholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyUnmarshal, err.Error())
 	}
 
 	return uhResp.ToTransactionInfo(), nil

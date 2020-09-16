@@ -84,7 +84,7 @@ func main() {
 		gpgKeys = append(gpgKeys, base64.StdEncoding.EncodeToString(buf.Bytes()))
 	}
 
-	client, err := vaultsigner.Connect()
+	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -95,7 +95,7 @@ func main() {
 	req.SecretShares = int(*secretShares)
 	req.SecretThreshold = int(*secretThreshold)
 
-	resp, err := client.Sys().Init(&req)
+	resp, err := wrappedClient.Client.Sys().Init(&req)
 	if err != nil {
 		log.Fatalln(err)
 	}

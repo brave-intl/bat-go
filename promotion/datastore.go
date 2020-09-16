@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -14,6 +15,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -752,6 +754,7 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
+
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
@@ -766,6 +769,7 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 		SuggestionText  string    `db:"suggestion_text"`
 		SuggestionEvent []byte    `db:"suggestion_event"`
 		Erred           bool      `db:"erred"`
+		ErrCode         *string   `db:"errcode"`
 	}
 
 	statement := `
@@ -794,24 +798,33 @@ limit 1`
 		return attempted, err
 	}
 
-	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
-	if err != nil {
-		// FIXME only non-retriable errors should set erred
-		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
-		if err == nil {
-			err = tx.Commit()
+	if !worker.IsPaused() {
+		err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+		if err != nil {
+			if strings.Contains(err.Error(), "expired") {
+				// set flag to stop this worker from running again
+				worker.PauseWorker(time.Now().Add(30 * time.Minute))
+			}
+			errCode, retriable := errToDrainCode(err)
+
+			if !retriable {
+				if _, err = tx.Exec(
+					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+					err = tx.Commit()
+				}
+				return attempted, err
+			}
 		}
-		return attempted, err
-	}
 
-	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
-	if err != nil {
-		return attempted, err
-	}
+		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		if err != nil {
+			return attempted, err
+		}
 
-	err = tx.Commit()
-	if err != nil {
-		return attempted, err
+		err = tx.Commit()
+		if err != nil {
+			return attempted, err
+		}
 	}
 
 	return attempted, nil
@@ -877,6 +890,39 @@ func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedempt
 	return nil
 }
 
+// errToDrainCode - given a drain related processing error, generate a code and retriable flag
+func errToDrainCode(err error) (string, bool) {
+	var (
+		errCode   string
+		retriable bool
+	)
+	// possible protocol errors
+	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
+		errCode = "marshal_transfer"
+	} else if errors.Is(err, errorutils.ErrCreateTransferRequest) {
+		errCode = "create_transfer"
+	} else if errors.Is(err, errorutils.ErrSignTransferRequest) {
+		errCode = "sign_transfer"
+	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {
+		errCode = "failed_client"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyRead) {
+		errCode = "failed_response_body"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
+		errCode = "failed_response_unmarshal"
+		retriable = true
+	} else {
+		if codedErr, ok := err.(uphold.Coded); ok {
+			// possible wallet provider specific errors
+			errCode = codedErr.GetCode()
+		} else {
+			errCode = "unknown"
+		}
+	}
+	return errCode, retriable
+}
+
 // RunNextDrainJob to process deposits if there is one waiting
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
 	tx, err := pg.RawDB().Beginx()
@@ -894,6 +940,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 		Total         decimal.Decimal `db:"total"`
 		TransactionID *string         `db:"transaction_id"`
 		Erred         bool            `db:"erred"`
+		ErrCode       *string         `db:"errcode"`
 	}
 
 	statement := `
@@ -924,10 +971,10 @@ limit 1`
 
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
-		// FIXME only non-retriable errors should set erred
-		{
-			_, err := tx.Exec(`update claim_drain set erred = true where id = $1`, job.ID)
-			if err != nil {
+		errCode, retriable := errToDrainCode(err)
+
+		if !retriable {
+			if _, err := tx.Exec(`update claim_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err != nil {
 				pg.RollbackTx(tx)
 			}
 			_ = tx.Commit()

@@ -51,7 +51,10 @@ func ReadJSON(body io.Reader, intr interface{}) error {
 
 // SetRequestID transfers a request id from a context to a request header
 func SetRequestID(ctx context.Context, r *http.Request) {
-	r.Header.Set(RequestIDHeaderKey, GetRequestID(ctx))
+	id := GetRequestID(ctx)
+	if id != "" {
+		r.Header.Set(RequestIDHeaderKey, id)
+	}
 }
 
 // GetRequestID gets the request id

@@ -8,6 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -96,27 +97,29 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, err
 	}
 
-	if wallet == nil || wallet.UserDepositDestination == "" {
-		return nil, errors.New("missing deposit wallet")
+	// no wallet on record
+	if wallet == nil {
+		return nil, errorutils.ErrMissingWallet
 	}
 
-	err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String())
+	// wallet not linked to deposit destination, if absent fail redeem and transfer
+	if wallet.UserDepositDestination == "" {
+		return nil, errorutils.ErrNoDepositProviderDestination
+	}
+
+	// failed to redeem credentials
+	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
+		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+	}
+
+	// FIXME should use idempotency key
+	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
 	}
 
-	// use the deposit provider's destination, if absent fail the transfer
-	if wallet.UserDepositDestination != "" {
-		// FIXME should use idempotency key
-		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
-		if err != nil {
-			return nil, err
-		}
-		if service.drainChannel != nil {
-			service.drainChannel <- tx
-		}
-
-		return tx, err
-	}
-	return nil, errors.New("no deposit provider destination for wallet for transfer")
+	return tx, err
 }

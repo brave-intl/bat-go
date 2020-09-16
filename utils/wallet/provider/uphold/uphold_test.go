@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -211,7 +212,7 @@ func TestTransactions(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error retrieving unconfirmed transaction")
 	}
-	if !wallet.IsNotFound(err) {
+	if !errorutils.IsErrNotFound(err) {
 		t.Error("Expected \"missing\" transaction as error cause")
 	}
 

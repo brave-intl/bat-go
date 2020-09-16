@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"errors"
@@ -53,13 +54,29 @@ func init() {
 
 // Service contains datastore
 type Service struct {
-	wallet      *wallet.Service
-	cbClient    cbr.Client
-	Datastore   Datastore
-	codecs      map[string]*goavro.Codec
-	kafkaWriter *kafka.Writer
-	kafkaDialer *kafka.Dialer
-	jobs        []srv.Job
+	wallet           *wallet.Service
+	cbClient         cbr.Client
+	Datastore        Datastore
+	codecs           map[string]*goavro.Codec
+	kafkaWriter      *kafka.Writer
+	kafkaDialer      *kafka.Dialer
+	jobs             []srv.Job
+	pauseVoteUntil   time.Time
+	pauseVoteUntilMu sync.RWMutex
+}
+
+// PauseWorker - pause worker until time specified
+func (s *Service) PauseWorker(until time.Time) {
+	s.pauseVoteUntilMu.Lock()
+	defer s.pauseVoteUntilMu.Unlock()
+	s.pauseVoteUntil = until
+}
+
+// IsPaused - is the worker paused?
+func (s *Service) IsPaused() bool {
+	s.pauseVoteUntilMu.RLock()
+	defer s.pauseVoteUntilMu.RUnlock()
+	return time.Now().Before(s.pauseVoteUntil)
 }
 
 // Jobs - Implement srv.JobService interface
@@ -222,9 +239,10 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	}
 
 	service := &Service{
-		wallet:    walletService,
-		cbClient:  cbClient,
-		Datastore: datastore,
+		wallet:           walletService,
+		cbClient:         cbClient,
+		Datastore:        datastore,
+		pauseVoteUntilMu: sync.RWMutex{},
 	}
 
 	// setup runnable jobs
