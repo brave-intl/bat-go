@@ -75,8 +75,9 @@ func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 }
 
 func (suite *ServiceTestSuite) TestGetAvailablePromotions() {
-	service, ctx := suite.createService()
+	var nilPromotions *[]Promotion
 	noPromotions := []Promotion{}
+	service, ctx := suite.createService()
 
 	walletID := new(inputs.ID)
 	id := walletID.UUID()
@@ -84,4 +85,16 @@ func (suite *ServiceTestSuite) TestGetAvailablePromotions() {
 	promotions, err := service.GetAvailablePromotions(ctx, id, "", true)
 	suite.Require().NoError(err)
 	suite.Require().Equal(&noPromotions, promotions)
+
+	err = inputs.DecodeAndValidateString(
+		ctx,
+		walletID,
+		"00000000-0000-0000-0000-000000000000",
+	)
+	suite.Require().NoError(err)
+
+	id = walletID.UUID()
+	promotions, err = service.GetAvailablePromotions(ctx, id, "", true)
+	suite.Require().NoError(err)
+	suite.Require().Equal(nilPromotions, promotions)
 }
