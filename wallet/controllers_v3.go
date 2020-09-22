@@ -180,7 +180,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// get the wallet
-		wallet, err := s.GetWallet(id.UUID())
+		wallet, err := s.GetWallet(*id.UUID())
 		if err != nil {
 			if strings.Contains(err.Error(), "looking up wallet") {
 				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
@@ -252,7 +252,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	}
 
 	// get wallet from datastore
-	info, err := roDB.GetWallet(id.UUID())
+	info, err := roDB.GetWallet(*id.UUID())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
@@ -352,7 +352,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	}
 
 	// get wallet from datastore
-	info, err := roDB.GetWallet(id.UUID())
+	info, err := roDB.GetWallet(*id.UUID())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
