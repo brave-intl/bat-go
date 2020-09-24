@@ -124,7 +124,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		key, err := service.Datastore.DeleteKey(id.UUID(), req.DelaySeconds)
+		key, err := service.Datastore.DeleteKey(*id.UUID(), req.DelaySeconds)
 		if err != nil {
 			return handlers.WrapError(err, "Error updating keys for the merchant", http.StatusInternalServerError)
 		}
@@ -224,7 +224,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		order, err := service.Datastore.GetOrder(orderID.UUID())
+		order, err := service.Datastore.GetOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -250,7 +250,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 			)
 		}
 
-		transactions, err := service.Datastore.GetTransactions(orderID.UUID())
+		transactions, err := service.Datastore.GetTransactions(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the transactions", http.StatusInternalServerError)
 		}
@@ -299,7 +299,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(req, orderID.UUID())
+		transaction, err = service.CreateTransactionFromRequest(req, *orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
@@ -333,7 +333,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			)
 		}
 
-		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, orderID.UUID())
+		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, *orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
@@ -372,7 +372,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.Datastore.GetOrderCredsByItemID(orderID.UUID(), req.ItemID, false)
+		orderCreds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), req.ItemID, false)
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
@@ -380,7 +380,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderCreds(r.Context(), orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}
@@ -402,7 +402,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, err := service.Datastore.GetOrderCreds(orderID.UUID(), false)
+		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -458,7 +458,7 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.Datastore.GetOrderCredsByItemID(orderID.UUID(), itemID.UUID(), false)
+		creds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
