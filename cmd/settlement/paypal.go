@@ -1,4 +1,4 @@
-package cmd
+package settlement
 
 import (
 	"context"
@@ -12,11 +12,12 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/settlement/paypal"
 	"github.com/brave-intl/bat-go/utils/closers"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/gocarina/gocsv"
+	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -44,35 +45,35 @@ func init() {
 	// input (required by all)
 	paypalSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
 		"the file or comma delimited list of files that should be utilized")
-	must(viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input")))
-	must(viper.BindEnv("input", "INPUT"))
-	must(paypalSettlementCmd.MarkPersistentFlagRequired("input"))
+	cmd.Must(viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input")))
+	cmd.Must(viper.BindEnv("input", "INPUT"))
+	cmd.Must(paypalSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
 	paypalSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./paypal-settlement",
 		"the location of the file")
-	must(viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out")))
-	must(viper.BindEnv("out", "OUT"))
+	cmd.Must(viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out")))
+	cmd.Must(viper.BindEnv("out", "OUT"))
 
 	// currency (required by transform)
 	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
 		"a currency must be set")
-	must(viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
-	must(viper.BindEnv("currency", "CURRENCY"))
-	must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
+	cmd.Must(viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
+	cmd.Must(viper.BindEnv("currency", "CURRENCY"))
+	cmd.Must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
 
 	// txnID (required by complete)
 	completePaypalSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
-	must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
-	must(viper.BindEnv("txn-id", "TXN_ID"))
-	must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+	cmd.Must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
+	cmd.Must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
 	// rate
 	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
 		"the rate to compute the currency conversion")
-	must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
-	must(viper.BindEnv("rate", "RATE"))
+	cmd.Must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
+	cmd.Must(viper.BindEnv("rate", "RATE"))
 }
 
 // PaypalEmailTemplate performs template replacement of date fields in emails
@@ -147,11 +148,6 @@ var (
 	transformPaypalSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of paypal settlement for mass pay",
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// add flag values to our base context that need to be there
-			ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
-			ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
-		},
 		Run: func(cmd *cobra.Command, args []string) {
 			transformFailed := func(err error) {
 				log.Printf("failed to perform transform: %s\n", err)
@@ -164,6 +160,7 @@ var (
 			}
 
 			if err := PaypalTransformForMassPay(
+				cmd.Context(),
 				payouts,
 				currency,
 				decimal.NewFromFloat(rate),
@@ -229,9 +226,10 @@ func PaypalWriteTransactions(outPath string, metadata *[]settlement.Transaction)
 }
 
 // PaypalWriteMassPayCSV writes a csv for using with Paypal web mass payments
-func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
+func PaypalWriteMassPayCSV(ctx context.Context, outPath string, metadata *[]paypal.Metadata) error {
 	rows := []*paypal.MassPayRow{}
 	total := decimal.NewFromFloat(0)
+	logger := zerolog.Ctx(ctx)
 	currency := ""
 	for _, entry := range *metadata {
 		row := entry.ToMassPayCSVRow()
@@ -242,8 +240,11 @@ func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 	if len(rows) > 5000 {
 		return errors.New("a payout cannot be larger than 5000 lines items long")
 	}
-	fmt.Println("payouts", len(rows))
-	fmt.Println("total", total.String(), currency)
+	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Int("payouts", len(rows)).
+			Str("total", total.String()).
+			Str("currency", currency)
+	})
 
 	data, err := gocsv.MarshalString(&rows)
 	if err != nil {
@@ -263,7 +264,7 @@ func PaypalWriteMassPayCSV(outPath string, metadata *[]paypal.Metadata) error {
 }
 
 // PaypalTransformForMassPay starts the process to transform a settlement into a mass pay csv
-func PaypalTransformForMassPay(payouts *[]settlement.Transaction, currency string, rate decimal.Decimal, out string) error {
+func PaypalTransformForMassPay(ctx context.Context, payouts *[]settlement.Transaction, currency string, rate decimal.Decimal, out string) error {
 	rate, err := paypal.GetRate(ctx, currency, rate)
 	if err != nil {
 		return err
@@ -284,7 +285,7 @@ func PaypalTransformForMassPay(payouts *[]settlement.Transaction, currency strin
 		return err
 	}
 
-	err = PaypalWriteMassPayCSV(out+".csv", metadata)
+	err = PaypalWriteMassPayCSV(ctx, out+".csv", metadata)
 	if err != nil {
 		return err
 	}

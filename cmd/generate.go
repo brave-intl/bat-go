@@ -10,7 +10,6 @@ import (
 
 	"github.com/alecthomas/jsonschema"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -19,34 +18,34 @@ import (
 var overwrite bool
 
 func init() {
-	rootCmd.AddCommand(generateCmd)
-	generateCmd.AddCommand(jsonSchemaCmd)
+	RootCmd.AddCommand(GenerateCmd)
+	GenerateCmd.AddCommand(JSONSchemaCmd)
 
 	// overwrite - defaults to false
-	jsonSchemaCmd.PersistentFlags().BoolVarP(&overwrite, "overwrite", "", false,
+	JSONSchemaCmd.PersistentFlags().BoolVarP(&overwrite, "overwrite", "", false,
 		"overwrite the existing json schema files")
-	must(viper.BindPFlag("overwrite", jsonSchemaCmd.PersistentFlags().Lookup("overwrite")))
-	must(viper.BindEnv("overwrite", "OVERWRITE"))
+	Must(viper.BindPFlag("overwrite", JSONSchemaCmd.PersistentFlags().Lookup("overwrite")))
+	Must(viper.BindEnv("overwrite", "OVERWRITE"))
 }
 
-var generateCmd = &cobra.Command{
+// GenerateCmd is the generate command
+var GenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "entrypoint to generate subcommands",
 }
 
-var jsonSchemaCmd = &cobra.Command{
+// JSONSchemaCmd is the json schema command
+var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
 	Run:   jsonSchemaRun,
 }
 
 // jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand
-func jsonSchemaRun(cmd *cobra.Command, args []string) {
+func jsonSchemaRun(command *cobra.Command, args []string) {
+	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	Must(err)
 	logger.Info().Msg("starting json-schema generation")
 
 	// Wallet Outputs ./wallet/outputs.go

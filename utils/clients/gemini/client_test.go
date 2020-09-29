@@ -65,8 +65,8 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	tx := settlement.Transaction{
 		// use this settlement id to create an ephemeral test
 		SettlementID: uuid.NewV4().String(),
-		Destination: os.Getenv("GEMINI_TEST_DESTINATION_ID"),
-		Channel:     "brave.com",
+		Destination:  os.Getenv("GEMINI_TEST_DESTINATION_ID"),
+		Channel:      "brave.com",
 	}
 	BAT := "BAT"
 	payouts := []PayoutPayload{{
@@ -93,7 +93,6 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		Destination: &tx.Destination,
 		Status:      &pendingStatus,
 	}}
-
 	bulkPayoutRequest = suite.preparePrivateRequest(NewBulkPayoutPayload(
 		accountKey,
 		os.Getenv("GEMINI_CLIENT_ID"),

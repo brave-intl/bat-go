@@ -52,5 +52,5 @@ services:
       - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
-      - "RATIOS_SERVER=https://ratios-staging.mercury.basicattentiontoken.org"
-      - RATIOS_ACCESS_TOKEN
+      - "RATIOS_SERVICE=https://ratios-staging.mercury.basicattentiontoken.org"
+      - RATIOS_TOKEN

@@ -1,57 +1,46 @@
-package main
+package vault
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"io/ioutil"
-	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
-	inputFile  = flag.String("in", "contributions.json", "input file path")
-	provider   = flag.String("provider", "", "wallet provider to settle out to")
-	jpyRate    = flag.Float64("rate", 0.0, "value of BAT in JPY")
-	configPath = flag.String("config", "", "configuration file path")
-	// split into provider / transaction type pairings
-	allProviders []string
-	// use correct vault key pair for each
-	providerType = map[string][]string{
+	// SignSettlementCmd signs a settlement file's transactions
+	SignSettlementCmd = &cobra.Command{
+		Use:   "sign-settlement",
+		Short: "sign settlement files using vault inputs",
+		Run:   cmd.Perform("sign settlement", SignSettlement),
+	}
+	// the combination of provider + transaction type gives you the key
+	// under which the vault secrets are located by default
+	providerTransactionTypes = map[string][]string{
 		"uphold": {"contribution", "referral"},
 		"paypal": {"default"},
 		"gemini": {"contribution", "referral"},
 	}
-	artifactGenerators map[string]func(
-		string,
-		*vaultsigner.WrappedClient,
-		string,
-		[]settlement.Transaction,
-	) error
-)
-
-func init() {
-	// just add to providerType to add to allProviders
-	allProviders = make([]string, 0, len(providerType))
-	for k := range providerType {
-		allProviders = append(allProviders, k)
-	}
-	// let the functions become initialized before creating the map
 	artifactGenerators = map[string]func(
+		context.Context,
 		string,
 		*vaultsigner.WrappedClient,
 		string,
@@ -61,71 +50,84 @@ func init() {
 		"gemini": createGeminiArtifact,
 		"paypal": createPaypalArtifact,
 	}
+)
+
+func init() {
+	VaultCmd.AddCommand(
+		SignSettlementCmd,
+	)
+
+	// in -> the file to parse and sign according to each provider's setup. default: contributions.json
+	SignSettlementCmd.PersistentFlags().String("in", "contributions.json",
+		"input file path")
+	cmd.Must(viper.BindPFlag("in", SignSettlementCmd.PersistentFlags().Lookup("in")))
+
+	providers := []string{}
+	for k := range providerTransactionTypes {
+		providers = append(providers, k)
+	}
+	// providers -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	SignSettlementCmd.PersistentFlags().StringSlice("providers", providers,
+		"providers to parse out of the given input files")
+	cmd.Must(viper.BindPFlag("providers", SignSettlementCmd.PersistentFlags().Lookup("providers")))
+
+	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	SignSettlementCmd.PersistentFlags().Float64("jpyrate", 0.0,
+		"jpyrate to use for paypal payouts")
+	cmd.Must(viper.BindPFlag("jpyrate", SignSettlementCmd.PersistentFlags().Lookup("jpyrate")))
 }
 
-func main() {
-	log.SetFlags(0)
-
-	flag.Usage = func() {
-		log.Printf("Use a wallet backed by vault to sign settlements.\n\n")
-		log.Printf("Usage:\n\n")
-		log.Printf("        %s WALLET_NAME\n\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
+// SignSettlement runs the signing of a settlement
+func SignSettlement(command *cobra.Command, args []string) error {
+	ReadConfig(command)
+	providers := viper.GetStringSlice("providers")
+	inputFile := viper.GetString("in")
 	// append -signed to the filename
-	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-signed.json"
-
-	config, err := settlement.ReadYamlConfig(*configPath)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
+	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-signed.json"
+	logger, err := appctx.GetLogger(command.Context())
+	cmd.Must(err)
 	// all settlements file
-	settlementJSON, err := ioutil.ReadFile(*inputFile)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	settlementJSON, err := ioutil.ReadFile(inputFile)
+	cmd.Must(err)
 
 	var antifraudSettlements []settlement.AntifraudTransaction
 	err = json.Unmarshal(settlementJSON, &antifraudSettlements)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	var providers []string
-	if *provider == "" {
-		// all providers
-		providers = allProviders
-	} else {
-		providers = strings.Split(*provider, ",")
-	}
+	cmd.Must(err)
 
 	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	for _, provider := range providers {
-		for _, txType := range providerType[provider] {
+		for _, txType := range providerTransactionTypes[provider] {
 			walletKey := provider + "-" + txType
 			settlements := settlementsByProviderAndWalletKey[walletKey]
 			if len(settlements) == 0 {
 				continue
 			}
+			output := walletKey + "-" + outputFile
+			secretKey := Config.GetWalletKey(walletKey)
+			sublog := logger.With().
+				Str("output", output).
+				Str("provider", provider).
+				Str("secretkey", secretKey).
+				Int("settlements", len(settlements)).
+				Logger()
 			err := artifactGenerators[provider](
-				walletKey+"-"+outputFile,
+				sublog.WithContext(command.Context()),
+				output,
 				wrappedClient,
-				config.GetWalletKey(walletKey),
+				secretKey,
 				settlements,
 			)
-			if err != nil {
-				log.Fatalln(err)
-			}
+			cmd.Must(err)
+			sublog.Info().Msg("created artifact")
 		}
 	}
+	return nil
 }
 
 func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) map[string][]settlement.Transaction {
@@ -138,7 +140,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 		wallet := tx.Type
 		if provider == "paypal" {
 			// might as well go into one (default)
-			wallet = providerType[provider][0]
+			wallet = providerTransactionTypes[provider][0]
 		}
 		// which secret values to use to sign (paypal-default, uphold-referral, gemini-contribution)
 		walletKey := provider + "-" + wallet
@@ -152,6 +154,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 }
 
 func createUpholdArtifact(
+	ctx context.Context,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -202,6 +205,7 @@ func createUpholdArtifact(
 }
 
 func createGeminiArtifact(
+	ctx context.Context,
 	outputFile string,
 	wrappedClient *vaultsigner.WrappedClient,
 	walletKey string,
@@ -213,7 +217,7 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := cmd.GeminiTransformTransactions(oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := settlementcmd.GeminiTransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -232,7 +236,7 @@ func createGeminiArtifact(
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(outputFile, out, 0600)
+	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
 	}
@@ -294,15 +298,17 @@ func signGeminiRequests(
 }
 
 func createPaypalArtifact(
+	ctx context.Context,
 	outputFile string,
 	client *vaultsigner.WrappedClient,
 	walletKey string,
 	paypalOnlySettlements []settlement.Transaction,
 ) error {
-	return cmd.PaypalTransformForMassPay(
+	return settlementcmd.PaypalTransformForMassPay(
+		ctx,
 		&paypalOnlySettlements,
 		"JPY",
-		decimal.NewFromFloat(*jpyRate),
+		decimal.NewFromFloat(viper.GetFloat64("jpyrate")),
 		outputFile,
 	)
 }
