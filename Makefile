@@ -151,7 +151,7 @@ json-schema:
 	go run main.go generate json-schema --overwrite
 
 test:
-	go test -v -p 1 $(TEST_FLAGS)
+	GODEBUG=x509ignoreCN=0 go test -v -p 1 $(TEST_FLAGS)
 	go run main.go generate json-schema
 
 format:
