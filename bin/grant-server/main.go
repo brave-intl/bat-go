@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	// re-using viper bind-env for wallet env variables
+	_ "github.com/brave-intl/bat-go/cmd/wallets"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"

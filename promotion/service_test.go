@@ -6,8 +6,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brave-intl/bat-go/cmd"
+	// re-using viper bind-env for wallet env variables
+	_ "github.com/brave-intl/bat-go/cmd/wallets"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/suite"
 )
@@ -61,7 +63,7 @@ func TestServiceTestSuite(t *testing.T) {
 func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 	ctx := context.Background()
 	r := chi.NewRouter()
-	r, ctx, walletService := cmd.SetupWalletService(ctx, r)
+	r, ctx, walletService := wallet.SetupService(ctx, r)
 	promotionDB, promotionRODB, err := NewPostgres()
 	suite.Require().NoError(err, "unable connect to promotion db")
 	s, err := InitService(
