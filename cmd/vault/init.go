@@ -34,12 +34,12 @@ func init() {
 	VaultCmd.AddCommand(
 		InitCmd,
 	)
-	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	// key-threshold -> the number of total unseal shares: default 3
 	InitCmd.PersistentFlags().Uint("key-shares", 5,
 		"number of total unseal shares")
 	cmd.Must(viper.BindPFlag("key-shares", InitCmd.PersistentFlags().Lookup("key-shares")))
 
-	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
+	// key-threshold -> the number of shares needed to unseal: default 3
 	InitCmd.PersistentFlags().Uint("key-threshold", 3,
 		"number of shares needed to unseal")
 	cmd.Must(viper.BindPFlag("key-threshold", InitCmd.PersistentFlags().Lookup("key-threshold")))
