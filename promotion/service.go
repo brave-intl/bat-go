@@ -2,14 +2,9 @@ package promotion
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +18,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	w "github.com/brave-intl/bat-go/utils/wallet"
@@ -154,117 +150,6 @@ func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
 
-func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
-	loc := os.Getenv(env)
-	if len(loc) == 0 {
-		if !required {
-			return []byte{}, nil
-		}
-		return []byte{}, errors.New(env + " must be passed")
-	}
-	buf, err := ioutil.ReadFile(loc)
-	if err != nil {
-		return []byte{}, err
-	}
-	return buf, nil
-}
-
-func tlsDialer() (*kafka.Dialer, error) {
-	keyPasswordEnv := "KAFKA_SSL_KEY_PASSWORD"
-	keyPassword := os.Getenv(keyPasswordEnv)
-
-	caPEM, err := readFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
-	if err != nil {
-		return nil, err
-	}
-
-	certEnv := "KAFKA_SSL_CERTIFICATE"
-	certPEM := []byte(os.Getenv(certEnv))
-	if len(certPEM) == 0 {
-		certPEM, err = readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	keyEnv := "KAFKA_SSL_KEY"
-	encryptedKeyPEM := []byte(os.Getenv(keyEnv))
-
-	// Check to see if KAFKA_SSL_CERTIFICATE includes both certificate and key
-	if certPEM[0] == '{' {
-		type Certificate struct {
-			Certificate string `json:"certificate"`
-			Key         string `json:"key"`
-		}
-		var cert Certificate
-		err := json.Unmarshal(certPEM, &cert)
-		if err != nil {
-			return nil, err
-		}
-		certPEM = []byte(cert.Certificate)
-		encryptedKeyPEM = []byte(cert.Key)
-	}
-
-	if len(encryptedKeyPEM) == 0 {
-		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	block, rest := pem.Decode(encryptedKeyPEM)
-	if len(rest) > 0 {
-		return nil, errors.New("Extra data in KAFKA_SSL_KEY")
-	}
-
-	keyPEM := pem.EncodeToMemory(block)
-	if len(keyPassword) != 0 {
-		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
-		if err != nil {
-			return nil, errorutils.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
-		}
-
-		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
-	}
-
-	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
-	if err != nil {
-		return nil, errorutils.Wrap(err, "Could not parse x509 keypair")
-	}
-
-	// Define TLS configuration
-	config := &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-	}
-
-	// Instrument kafka cert expiration information
-	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
-	if err != nil {
-		return nil, errorutils.Wrap(err, "Could not parse certificate")
-	}
-
-	if time.Now().After(x509Cert.NotAfter) {
-		// the certificate has expired, raise error
-		return nil, errorutils.ErrCertificateExpired
-	}
-
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
-
-	if len(caPEM) > 0 {
-		caCertPool := x509.NewCertPool()
-		if ok := caCertPool.AppendCertsFromPEM([]byte(caPEM)); !ok {
-			return nil, errors.New("Could not add custom CA from KAFKA_SSL_CA_LOCATION")
-		}
-		config.RootCAs = caCertPool
-	}
-
-	return &kafka.Dialer{
-		Timeout:   10 * time.Second,
-		DualStack: true,
-		TLS:       config}, nil
-}
-
 // InitCodecs used for Avro encoding / decoding
 func (s *Service) InitCodecs() error {
 	s.codecs = make(map[string]*goavro.Codec)
@@ -282,11 +167,14 @@ func (s *Service) InitKafka() error {
 
 	_, logger := logging.SetupLogger(context.Background())
 
-	dialer, err := tlsDialer()
+	dialer, x509Cert, err := kafkautils.TlsDialer()
 	if err != nil {
 		return err
 	}
 	s.kafkaDialer = dialer
+
+	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
+	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{

@@ -27,6 +27,7 @@ import (
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -525,7 +526,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TlsDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
@@ -1395,7 +1396,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TlsDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
