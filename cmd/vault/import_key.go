@@ -1,12 +1,13 @@
 package vault
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -99,8 +100,9 @@ func ImportKey(command *cobra.Command, args []string) error {
 		case "uphold":
 			if len(ed25519PrivateKey) != 0 && len(ed25519PublicKey) != 0 {
 				err = upholdVaultImportKey(
+					command.Context(),
 					wrappedClient,
-					Config.GetWalletKey(key),
+					key,
 					ed25519PrivateKey,
 					ed25519PublicKey,
 					upholdProviderID,
@@ -112,8 +114,9 @@ func ImportKey(command *cobra.Command, args []string) error {
 		case "gemini":
 			if len(geminiClientSecret) != 0 {
 				err = geminiVaultImportValues(
+					command.Context(),
 					wrappedClient,
-					Config.GetWalletKey(key),
+					key,
 					geminiClientID,
 					geminiClientKey,
 					geminiClientSecret,
@@ -133,12 +136,18 @@ func ImportKey(command *cobra.Command, args []string) error {
 }
 
 func upholdVaultImportKey(
+	ctx context.Context,
 	wrappedClient *vaultsigner.WrappedClient,
-	importName string,
+	key string,
 	ed25519PrivateKey string,
 	ed25519PublicKey string,
 	upholdProviderID string,
 ) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
+	importName := Config.GetWalletKey(key)
 	privKey, err := hex.DecodeString(ed25519PrivateKey)
 	if err != nil {
 		return errors.New("ERROR: Key material must be passed as hex")
@@ -149,8 +158,16 @@ func upholdVaultImportKey(
 		return errors.New("ERROR: Key material must be passed as hex")
 	}
 
-	cmd.Must(wrappedClient.GenerateMounts())
-	fmt.Printf("importing secret for %s\n\tof public length: %d\n\tand private length: %d\n", importName, len(pubKey), len(privKey))
+	if err := wrappedClient.GenerateMounts(); err != nil {
+		return err
+	}
+	logger.Info().
+		Str("provider", "uphold").
+		Str("config-key", key).
+		Str("vault-key", importName).
+		Int("public-length", len(pubKey)).
+		Int("private-length", len(privKey)).
+		Msg("importing secret")
 	_, err = wrappedClient.FromKeypair(privKey, pubKey, importName)
 	if err != nil {
 		return err
@@ -162,15 +179,28 @@ func upholdVaultImportKey(
 }
 
 func geminiVaultImportValues(
+	ctx context.Context,
 	wrappedClient *vaultsigner.WrappedClient,
-	importName string,
+	key string,
 	geminiClientID string,
 	geminiClientKey string,
 	geminiClientSecret string,
 ) error {
-	cmd.Must(wrappedClient.GenerateMounts())
-	fmt.Printf("importing secret for %s\n\tof length: %d\n", importName, len(geminiClientSecret))
-	_, err := wrappedClient.ImportHmacSecret([]byte(geminiClientSecret), importName)
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
+	importName := Config.GetWalletKey(key)
+	if err := wrappedClient.GenerateMounts(); err != nil {
+		return err
+	}
+	logger.Info().
+		Str("provider", "gemini").
+		Str("config-key", key).
+		Str("vault-key", importName).
+		Int("secret-length", len(geminiClientSecret)).
+		Msg("importing secret")
+	_, err = wrappedClient.ImportHmacSecret([]byte(geminiClientSecret), importName)
 	if err != nil {
 		return err
 	}

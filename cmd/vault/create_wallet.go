@@ -116,10 +116,11 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("success, signed registration for wallet \"%s\"\nPlease copy %s to the online machine and re-run",
+			fmt.Printf("success, signed registration for wallet \"%s\"\nPlease copy %s to the online machine and re-run\n",
 				name,
 				logFile,
 			)
+			return nil
 		}
 	}
 
