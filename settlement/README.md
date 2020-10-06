@@ -35,7 +35,7 @@ gpg -d ./share-0.gpg | ./bat-go vault unseal
 First bring up vault as described above.
 
 ```
-./vault-sign-settlement -in <SETTLEMENT_REPORT.JSON> <SETTLEMENT_WALLET_CARD_ID>
+./bat-go vault sign-settlement --config=./config.yaml --in=SETTLEMENT_REPORT.JSON
 ```
 
 Finally seal the vault:
