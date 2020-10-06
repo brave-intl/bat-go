@@ -4,24 +4,44 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
+
+// RouterV2 for promotion endpoints
+func RouterV2(service *Service) chi.Router {
+	r := chi.NewRouter()
+	if os.Getenv("ENV") != "local" {
+		r.Method("POST", "/", middleware.SimpleTokenAuthorizedOnly(CreatePromotion(service)))
+	} else {
+		r.Method("POST", "/", CreatePromotion(service))
+	}
+
+	// version 2 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 2)))
+
+	return r
+}
 
 // Router for promotion endpoints
 func Router(service *Service) chi.Router {
@@ -34,16 +54,40 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{claimType}/grants/summary", middleware.InstrumentHandler("GetClaimSummary", GetClaimSummary(service)))
 	r.Method("GET", "/", middleware.InstrumentHandler("GetAvailablePromotions", GetAvailablePromotions(service)))
-	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service)))
+	// version 1 clobbered claims
+	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	return r
 }
 
 // SuggestionsRouter for suggestions endpoints
-func SuggestionsRouter(service *Service) chi.Router {
+func SuggestionsRouter(service *Service) (chi.Router, error) {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("MakeSuggestion", MakeSuggestion(service)))
+
+	var (
+		enableLinkingDraining bool
+		err                   error
+	)
+	// make sure that we only enable the DrainJob if we have linking/draining enabled
+	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
+		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+		}
+	}
+
+	if enableLinkingDraining {
+		r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
+	}
+	return r, nil
+}
+
+// WalletEventRouter for reporting bat loss events
+func WalletEventRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/{walletId}/events/batloss/{reportId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportWalletEvent", PostReportWalletEvent(service))))
 	return r
 }
 
@@ -51,12 +95,12 @@ func SuggestionsRouter(service *Service) chi.Router {
 func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, errors.Wrap(err, "KeyID format is invalid")
+		return nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
-	wallet, err := service.wallet.GetOrCreateWallet(ctx, walletID)
+	wallet, err := service.wallet.GetWallet(walletID)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error getting wallet")
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	if wallet == nil {
@@ -83,29 +127,23 @@ type PromotionsResponse struct {
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var walletID *uuid.UUID
-		var filter string
+		var (
+			filter   string
+			walletID = new(inputs.ID)
+		)
 		walletIDText := r.URL.Query().Get("paymentId")
 
 		if len(walletIDText) > 0 {
-			if !govalidator.IsUUIDv4(walletIDText) {
-				return &handlers.AppError{
-					Message: "Error validating request query parameter",
-					Code:    http.StatusBadRequest,
-					Data: map[string]interface{}{
-						"validationErrors": map[string]string{
-							"paymentId": "paymentId must be a uuidv4",
-						},
+			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDText); err != nil {
+				return handlers.ValidationError(
+					"Error validating request url parameter",
+					map[string]interface{}{
+						"paymentId": err.Error(),
 					},
-				}
+				)
 			}
 
-			tmp, err := uuid.FromString(walletIDText)
-			if err != nil {
-				panic(err) // Should not be possible
-			}
-			walletID = &tmp
-			logging.AddWalletIDToContext(r.Context(), tmp)
+			logging.AddWalletIDToContext(r.Context(), *walletID.UUID())
 			filter = "walletID"
 		}
 
@@ -116,19 +154,13 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			})
 		}
 
-		legacy := false
-		legacyParam := r.URL.Query().Get("legacy")
-		if legacyParam == "true" {
-			legacy = true
-		}
-
 		migrate := false
 		migrateParam := r.URL.Query().Get("migrate")
 		if migrateParam == "true" {
 			migrate = true
 		}
 
-		promotions, err := service.GetAvailablePromotions(r.Context(), walletID, platform, legacy, migrate)
+		promotions, err := service.GetAvailablePromotions(r.Context(), walletID.UUID(), platform, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -145,7 +177,6 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 		}
 		promotionGetCount.With(prometheus.Labels{
 			"filter":  filter,
-			"legacy":  fmt.Sprint(legacy),
 			"migrate": fmt.Sprint(migrate),
 		}).Inc()
 		for _, promotion := range *promotions {
@@ -189,38 +220,44 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
-			return &handlers.AppError{
-				Message: "Error validating request",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"paymentId": "paymentId must match signature",
-					},
+			return handlers.ValidationError("Error validating request", map[string]string{
+				"paymentId": "paymentId must match signature",
+			})
+		}
+
+		var promotionID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), promotionID, chi.URLParam(r, "promotionId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"promotionId": err.Error(),
 				},
-			}
+			)
 		}
 
-		promotionID := chi.URLParam(r, "promotionId")
-		if promotionID == "" || !govalidator.IsUUIDv4(promotionID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"promotionId": "promotionId must be a uuidv4",
-					},
-				},
-			}
-		}
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), req.WalletID, req.BlindedCreds)
 
-		pID, err := uuid.FromString(promotionID)
 		if err != nil {
-			panic(err) // Should not be possible
-		}
+			var (
+				target *errorutils.ErrorBundle
+				status = http.StatusBadRequest
+			)
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), pID, req.WalletID, req.BlindedCreds)
-		if err != nil {
-			return handlers.WrapError(err, "Error claiming promotion", http.StatusBadRequest)
+			if errors.Is(err, errClaimedDifferentBlindCreds) {
+				status = http.StatusConflict
+			}
+
+			if errors.As(err, &target) {
+				err = target
+				response, ok := target.Data().(clients.HTTPState)
+				if ok {
+					if response.Status != 0 {
+						status = response.Status
+					}
+					err = fmt.Errorf(target.Error())
+				}
+			}
+			return handlers.WrapError(err, "Error claiming promotion", status)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -241,25 +278,17 @@ type GetClaimResponse struct {
 // GetClaim is the handler for checking on a particular claim's status
 func GetClaim(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		claimID := chi.URLParam(r, "claimId")
-		if claimID == "" || !govalidator.IsUUIDv4(claimID) {
-			return &handlers.AppError{
-				Message: "Error validating request url parameter",
-				Code:    http.StatusBadRequest,
-				Data: map[string]interface{}{
-					"validationErrors": map[string]string{
-						"claimId": "claimId must be a uuidv4",
-					},
+		var claimID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), claimID, chi.URLParam(r, "claimId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"claimId": err.Error(),
 				},
-			}
+			)
 		}
 
-		id, err := uuid.FromString(claimID)
-		if err != nil {
-			panic(err) // Should not be possible
-		}
-
-		claim, err := service.datastore.GetClaimCreds(id)
+		claim, err := service.Datastore.GetClaimCreds(*claimID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -313,13 +342,13 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 
 		logging.AddWalletIDToContext(r.Context(), walletID)
 
-		wallet, err := service.ReadableDatastore().GetWallet(walletID)
+		wallet, err := service.wallet.ReadableDatastore().GetWallet(walletID)
 		if err != nil {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
 		}
 
 		if wallet == nil {
-			err := errors.New("wallet not found id: '" + walletID.String() + "'")
+			err := fmt.Errorf("wallet not found id: '%s'", walletID.String())
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
 
@@ -379,6 +408,55 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 	})
 }
 
+// DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
+type DrainSuggestionRequest struct {
+	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// DrainSuggestion is the handler for draining ad suggestions for a verified wallet
+func DrainSuggestion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req DrainSuggestionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logging.AddWalletIDToContext(r.Context(), req.WalletID)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if req.WalletID.String() != keyID {
+			return handlers.ValidationError("request",
+				map[string]string{"paymentId": "paymentId must match signature"})
+		}
+
+		err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME not all remaining errors should be mapped to 400
+				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
 // CreatePromotionRequest includes information needed to create a promotion
 type CreatePromotionRequest struct {
 	Type      string          `json:"type" valid:"in(ads|ugp)"`
@@ -407,13 +485,13 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		promotion, err := service.datastore.CreatePromotion(req.Type, req.NumGrants, req.Value, req.Platform)
+		promotion, err := service.Datastore.CreatePromotion(req.Type, req.NumGrants, req.Value, req.Platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating promotion", http.StatusBadRequest)
 		}
 
 		if req.Active {
-			err = service.datastore.ActivatePromotion(promotion)
+			err = service.Datastore.ActivatePromotion(promotion)
 			if err != nil {
 				return handlers.WrapError(err, "Error marking promotion active", http.StatusBadRequest)
 			}
@@ -438,7 +516,7 @@ type ClobberedClaimsRequest struct {
 }
 
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
-func PostReportClobberedClaims(service *Service) handlers.AppHandler {
+func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -451,12 +529,67 @@ func PostReportClobberedClaims(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs)
+		err = service.Datastore.InsertClobberedClaims(r.Context(), req.ClaimIDs, version)
 		if err != nil {
 			return handlers.WrapError(err, "Error making control issuer", http.StatusInternalServerError)
 		}
 
 		w.WriteHeader(http.StatusOK)
 		return nil
+	})
+}
+
+// BatLossPayload holds the data needed to report that bat has been lost by client bug
+type BatLossPayload struct {
+	Amount decimal.Decimal `json:"amount" valid:"required"`
+}
+
+// PostReportWalletEvent is the handler for reporting bat was lost by client bug
+func PostReportWalletEvent(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req BatLossPayload
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
+		if err != nil {
+			return handlers.ValidationError("query parameter", map[string]string{
+				"paymentId": "must be a uuidv4",
+			})
+		}
+		reportIDParam := chi.URLParam(r, "reportId")
+		reportID, err := strconv.Atoi(reportIDParam)
+		if err != nil {
+			return handlers.ValidationError("report id is not an int", map[string]string{
+				"reportId": "report id (" + reportIDParam + ") must be an integer",
+			})
+		}
+		platform := useragent.ParsePlatform(r.UserAgent())
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		created, err := service.Datastore.InsertBATLossEvent(
+			r.Context(),
+			walletID,
+			reportID,
+			req.Amount,
+			platform,
+		)
+		if err != nil {
+			if errors.Is(err, errorutils.ErrConflictBATLossEvent) {
+				return handlers.WrapError(err, "Error inserting bat loss event", http.StatusConflict)
+			}
+			return handlers.WrapError(err, "Error inserting bat loss event", http.StatusInternalServerError)
+		}
+		status := http.StatusOK
+		if created {
+			status = http.StatusCreated
+		}
+		return handlers.RenderContent(r.Context(), nil, w, status)
 	})
 }

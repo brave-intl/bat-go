@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"flag"
 	"fmt"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/formatters"
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider"
+	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -62,7 +63,7 @@ func main() {
 		ProviderID:  flag.Args()[0],
 		AltCurrency: &walletc,
 	}
-	w, err := provider.GetWallet(info)
+	w, err := provider.GetWallet(context.Background(), info)
 	if err != nil {
 		log.Fatalln(err)
 	}

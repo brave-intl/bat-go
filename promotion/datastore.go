@@ -2,16 +2,22 @@ package promotion
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/wallet"
-	walletservice "github.com/brave-intl/bat-go/wallet/service"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/getsentry/sentry-go"
+	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -22,15 +28,27 @@ var desktopPlatforms = [...]string{"linux", "osx", "windows"}
 type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
 	CreatedAt time.Time `db:"created_at"`
+	Version   int       `db:"version"`
+}
+
+// BATLossEvent holds info about wallet events
+type BATLossEvent struct {
+	ID       uuid.UUID       `db:"id" json:"id"`
+	WalletID uuid.UUID       `db:"wallet_id" json:"walletId"`
+	ReportID int             `db:"report_id" json:"reportId"`
+	Amount   decimal.Decimal `db:"amount" json:"amount"`
+	Platform string          `db:"platform" json:"platform"`
 }
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	walletservice.Datastore
+	grantserver.Datastore
 	// ActivatePromotion marks a particular promotion as active
 	ActivatePromotion(promotion *Promotion) error
+	// DeactivatePromotion marks a particular promotion as inactive
+	DeactivatePromotion(promotion *Promotion) error
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
+	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
 	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
@@ -38,9 +56,11 @@ type Datastore interface {
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// SaveClaimCreds updates the stored claim credentials
@@ -57,7 +77,7 @@ type Datastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
-	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
 	// RunNextClaimJob to sign claim credentials if there is a claim waiting
 	RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error)
 	// InsertSuggestion inserts a transaction awaiting validation
@@ -65,18 +85,37 @@ type Datastore interface {
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
-	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error
+	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
+	// InsertBATLossEvent inserts claims of lost bat
+	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
+	// DrainClaim by marking the claim as drained and inserting a new drain entry
+	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
+	// RunNextDrainJob to process deposits if there is one waiting
+	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
+
+	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
+
+	// GetOrder by ID
+	GetOrder(orderID uuid.UUID) (*Order, error)
+	// UpdateOrder updates an order when it has been paid
+	UpdateOrder(orderID uuid.UUID, status string) error
+	// CreateTransaction creates a transaction
+	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// GetSumForTransactions gets a decimal sum of for transactions for an order
+	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
-	walletservice.ReadOnlyDatastore
+	grantserver.Datastore
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-	GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
-	GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error)
+	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
@@ -89,7 +128,7 @@ type ReadOnlyDatastore interface {
 	GetClaimSummary(walletID uuid.UUID, grantType string) (*ClaimSummary, error)
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
-	GetClaimByWalletAndPromotion(wallet *wallet.Info, promotionID *Promotion) (*Claim, error)
+	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -97,13 +136,45 @@ type Postgres struct {
 	grantserver.Postgres
 }
 
-// NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+// NewDB creates a new Postgres Datastore
+func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
 	if pg != nil {
-		return &Postgres{*pg}, err
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "promotion_datastore",
+		}, err
 	}
 	return nil, err
+}
+
+// NewRODB creates a new Postgres RO Datastore
+func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+	if pg != nil {
+		return &ReadOnlyDatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "promotion_ro_datastore",
+		}, err
+	}
+	return nil, err
+}
+
+// NewPostgres creates new postgres connections
+func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
+	var roPg ReadOnlyDatastore
+	pg, err := NewDB("", true, "promotion_db")
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+	}
+	roDB := os.Getenv("RO_DATABASE_URL")
+	if len(roDB) > 0 {
+		roPg, err = NewRODB(roDB, false, "promotion_read_only_db")
+		if err != nil {
+			sentry.CaptureException(err)
+			log.Error().Err(err).Msg("Could not start reader postgres connection")
+		}
+	}
+	return pg, roPg, err
 }
 
 // CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -114,7 +185,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 	returning *`
 	promotions := []Promotion{}
 	suggestionsPerGrant := value.Div(defaultVoteValue)
-	err := pg.DB.Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
+	err := pg.RawDB().Select(&promotions, statement, promotionType, numGrants, value, suggestionsPerGrant, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +197,7 @@ func (pg *Postgres) CreatePromotion(promotionType string, numGrants int, value d
 func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	statement := "select * from promotions where id = $1"
 	promotions := []Promotion{}
-	err := pg.DB.Select(&promotions, statement, promotionID)
+	err := pg.RawDB().Select(&promotions, statement, promotionID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,14 +210,20 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 }
 
 // InsertClobberedClaims inserts clobbered claims to the db
-func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) error {
-	tx, err := pg.DB.BeginTxx(ctx, nil)
+func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer pg.RollbackTx(tx)
+
+	if version < 2 {
+		// if no version, assume 1
+		version = 1
+	}
+
 	for _, id := range ids {
-		_, err = tx.Exec(`INSERT INTO clobbered_claims (id) values ($1) ON CONFLICT DO NOTHING;`, id)
+		_, err = tx.Exec(`INSERT INTO clobbered_claims (id, version) values ($1, $2) ON CONFLICT DO NOTHING;`, id, version)
 		if err != nil {
 			return err
 		}
@@ -155,9 +232,74 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID) 
 	return err
 }
 
+// InsertBATLossEvent inserts claims of lost bat to db
+func (pg *Postgres) InsertBATLossEvent(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	reportID int,
+	amount decimal.Decimal,
+	platform string,
+) (bool, error) {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer pg.RollbackTx(tx)
+	BATLossEvents := []BATLossEvent{}
+
+	selectStatement := `
+SELECT *
+FROM bat_loss_events
+WHERE wallet_id = $1
+	AND report_id = $2`
+
+	insertBATLossEventStatement := `
+INSERT INTO bat_loss_events (wallet_id, report_id, amount, platform)
+VALUES ($1, $2, $3, $4)`
+
+	err = tx.Select(
+		&BATLossEvents,
+		selectStatement,
+		paymentID.String(),
+		reportID,
+	)
+	if err != nil {
+		return false, err
+	}
+	if len(BATLossEvents) == 0 {
+		_, err = tx.Exec(
+			insertBATLossEventStatement,
+			paymentID.String(),
+			reportID,
+			amount,
+			platform,
+		)
+		if err != nil {
+			return false, err
+		}
+	} else {
+		if !amount.Equal(BATLossEvents[0].Amount) {
+			return false, errorutils.ErrConflictBATLossEvent
+		}
+		return false, nil
+	}
+	err = tx.Commit()
+	return true, err
+}
+
 // ActivatePromotion marks a particular promotion as active
 func (pg *Postgres) ActivatePromotion(promotion *Promotion) error {
-	_, err := pg.DB.Exec("update promotions set active = true where id = $1", promotion.ID)
+	return pg.setPromotionActive(promotion, true)
+}
+
+// DeactivatePromotion marks a particular promotion as not active
+func (pg *Postgres) DeactivatePromotion(promotion *Promotion) error {
+	return pg.setPromotionActive(promotion, false)
+}
+
+// setPromotionActive marks a particular promotion's active value
+func (pg *Postgres) setPromotionActive(promotion *Promotion, active bool) error {
+	_, err := pg.RawDB().Exec("update promotions set active = $2 where id = $1", promotion.ID, active)
 	if err != nil {
 		return err
 	}
@@ -172,7 +314,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	values ($1, $2, $3)
 	returning *`
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
+	err := pg.RawDB().Select(&issuers, statement, issuer.PromotionID, issuer.Cohort, issuer.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +330,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error) {
 	statement := "select * from issuers where promotion_id = $1 and cohort = $2"
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, promotionID.String(), cohort)
+	err := pg.RawDB().Select(&issuers, statement, promotionID.String(), cohort)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +346,7 @@ func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, er
 func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 	statement := "select * from issuers where public_key = $1"
 	issuers := []Issuer{}
-	err := pg.DB.Select(&issuers, statement, publicKey)
+	err := pg.RawDB().Select(&issuers, statement, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +365,7 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 	values ($1, $2, $3, $4)
 	returning *`
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, statement, promotionID, walletID, value, bonus)
+	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +376,7 @@ func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value de
 // GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error) {
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
+	err := pg.RawDB().Select(&claims, "select * from claims where promotion_id = $1 and wallet_id = $2", promotionID.String(), walletID)
 	if err != nil {
 		return nil, err
 	}
@@ -247,29 +389,32 @@ func (pg *Postgres) GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim,
 }
 
 // ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
-func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
+func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	blindedCredsJSON, err := json.Marshal(blindedCreds)
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := pg.DB.Beginx()
+	if promotion.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, errors.New("unable to claim expired promotion")
+	}
+
+	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return nil, err
 	}
+	defer pg.RollbackTx(tx)
 
 	claims := []Claim{}
 
 	// Get legacy claims
 	err = tx.Select(&claims, `select * from claims where legacy_claimed and promotion_id = $1 and wallet_id = $2`, promotion.ID, wallet.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
 	legacyClaimExists := false
 	if len(claims) > 1 {
-		_ = tx.Rollback()
 		panic("impossible number of claims")
 	} else if len(claims) == 1 {
 		legacyClaimExists = true
@@ -277,17 +422,22 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 
 	if !legacyClaimExists {
 		// This will error if remaining_grants is insufficient due to constraint or the promotion is inactive
-		res, err := tx.Exec(`update promotions set remaining_grants = remaining_grants - 1 where id = $1 and active`, promotion.ID)
+		res, err := tx.Exec(`
+			update promotions
+			set remaining_grants = remaining_grants - 1
+			where
+				id = $1 and
+				active and
+				promotions.created_at > NOW() - INTERVAL '3 months'`,
+			promotion.ID)
+
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		}
 		promotionCount, err := res.RowsAffected()
 		if err != nil {
-			_ = tx.Rollback()
 			return nil, err
 		} else if promotionCount != 1 {
-			_ = tx.Rollback()
 			return nil, errors.New("no matching active promotion")
 		}
 	}
@@ -310,10 +460,8 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	}
 
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	} else if len(claims) != 1 {
-		_ = tx.Rollback()
 		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
 	}
 	claim := claims[0]
@@ -321,7 +469,6 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	// This will error if user has already claimed due to uniqueness constraint
 	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 
@@ -334,7 +481,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
-func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -359,7 +506,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 			coalesce(wallet_claims.legacy_claimed, false) as legacy_claimed,
 			true as available
 		from
-		  (
+			(
 				select
 					promotions.*,
 					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
@@ -371,35 +518,19 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			promos.active and wallet_claims.redeemed is distinct from true and
-			( wallet_claims.legacy_claimed is true or
-				( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-				( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+			wallet_claims.redeemed is distinct from true and (
+				wallet_claims.legacy_claimed is true or (
+					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
+						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+					)
+				)
 			)
 		order by promos.created_at;`
 
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available
-		from promotions left join (
-			select * from claims where claims.wallet_id = $1
-		) wallet_claims on promotions.id = wallet_claims.promotion_id
-		where
-			promotions.active and wallet_claims.redeemed is distinct from true and
-			( promotions.platform = '' or promotions.platform = $2) and
-			wallet_claims.legacy_claimed is distinct from true and
-			( ( promotions.promotion_type = 'ugp' and promotions.remaining_grants > 0 ) or
-				( promotions.promotion_type = 'ads' and wallet_claims.id is not null )
-			)
-		order by promotions.created_at;`
-	}
-
 	promotions := []Promotion{}
 
-	err := pg.DB.Select(&promotions, statement, wallet.ID, platform)
+	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
 	if err != nil {
 		return promotions, err
 	}
@@ -408,7 +539,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *wallet.Info, platfor
 }
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
-func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Promotion, error) {
+func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
 		if platform == desktopPlatform {
 			platform = "desktop"
@@ -428,25 +559,9 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 		group by promotions.id
 		order by promotions.created_at;`
 
-	if legacy {
-		statement = `
-		select
-			promotions.*,
-			false as legacy_claimed,
-			true as available,
-			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
-		from
-		promotions left join issuers on promotions.id = issuers.promotion_id
-		where promotions.promotion_type = 'ugp' and promotions.active and
-			promotions.remaining_grants > 0 and
-			( promotions.platform = '' or promotions.platform = $1 )
-		group by promotions.id
-		order by promotions.created_at;`
-	}
-
 	promotions := []Promotion{}
 
-	err := pg.DB.Select(&promotions, statement, platform)
+	err := pg.RawDB().Select(&promotions, statement, platform)
 	if err != nil {
 		return promotions, err
 	}
@@ -454,10 +569,33 @@ func (pg *Postgres) GetAvailablePromotions(platform string, legacy bool) ([]Prom
 	return promotions, nil
 }
 
+// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
+func (pg *Postgres) GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error) {
+	var (
+		resp      = []uuid.UUID{}
+		statement = `
+		select
+			promotions.id
+		from
+			promotions left join issuers
+			on promotions.id = issuers.promotion_id
+		where
+			issuers.public_key is null
+		limit $1`
+	)
+
+	err := pg.RawDB().Select(&resp, statement, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // GetClaimCreds returns the claim credentials for a ClaimID
 func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 	claimCreds := []ClaimCreds{}
-	err := pg.DB.Select(&claimCreds, "select * from claim_creds where claim_id = $1", claimID)
+	err := pg.RawDB().Select(&claimCreds, "select * from claim_creds where claim_id = $1", claimID)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +609,7 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 
 // SaveClaimCreds updates the stored claim credentials
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
-	_, err := pg.DB.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
 }
 
@@ -481,6 +619,7 @@ func (pg *Postgres) GetClaimSummary(walletID uuid.UUID, grantType string) (*Clai
 select
 	max(claims.created_at) as "last_claim",
 	sum(claims.approximate_value - claims.bonus) as earnings,
+	sum(claims.approximate_value - claims.bonus) as amount,
 	promos.promotion_type as type
 from claims, (
 	select
@@ -494,7 +633,7 @@ where claims.wallet_id = $1
 	and claims.promotion_id = promos.id
 group by promos.promotion_type;`
 	summaries := []ClaimSummary{}
-	err := pg.DB.Select(&summaries, statement, walletID, grantType)
+	err := pg.RawDB().Select(&summaries, statement, walletID, grantType)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +647,7 @@ group by promos.promotion_type;`
 // GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 // with the given promotion and returns the grant if so
 func (pg *Postgres) GetClaimByWalletAndPromotion(
-	wallet *wallet.Info,
+	wallet *walletutils.Info,
 	promotion *Promotion,
 ) (*Claim, error) {
 	query := `
@@ -521,7 +660,7 @@ WHERE wallet_id = $1
 ORDER BY created_at DESC
 `
 	claims := []Claim{}
-	err := pg.DB.Select(&claims, query, wallet.ID, promotion.ID)
+	err := pg.RawDB().Select(&claims, query, wallet.ID, promotion.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -534,11 +673,12 @@ ORDER BY created_at DESC
 
 // RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	type SigningJob struct {
 		Issuer
@@ -564,12 +704,10 @@ on claim_cred.issuer_id = issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -579,13 +717,11 @@ on claim_cred.issuer_id = issuers.id`
 	creds, err := worker.SignClaimCreds(ctx, job.ClaimID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
@@ -608,7 +744,7 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 	insert into suggestion_drain (credentials, suggestion_text, suggestion_event)
 	values ($1, $2, $3)
 	returning *`
-	_, err = pg.DB.Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
+	_, err = pg.RawDB().Exec(statement, credentialsJSON, suggestionText, suggestionEvent)
 	if err != nil {
 		return err
 	}
@@ -618,11 +754,13 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
-	tx, err := pg.DB.Beginx()
+
+	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
 		return attempted, err
 	}
+	defer pg.RollbackTx(tx)
 
 	// FIXME
 	type SuggestionJob struct {
@@ -631,6 +769,7 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 		SuggestionText  string    `db:"suggestion_text"`
 		SuggestionEvent []byte    `db:"suggestion_event"`
 		Erred           bool      `db:"erred"`
+		ErrCode         *string   `db:"errcode"`
 	}
 
 	statement := `
@@ -643,12 +782,10 @@ limit 1`
 	jobs := []SuggestionJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
 	if len(jobs) != 1 {
-		_ = tx.Rollback()
 		return attempted, nil
 	}
 
@@ -658,24 +795,195 @@ limit 1`
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
-		_ = tx.Rollback()
 		return attempted, err
 	}
 
-	err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
-	if err != nil {
-		// FIXME only non-retriable errors should set erred
-		_, err = tx.Exec(`update suggestion_drain set erred = true where id = $1`, job.ID)
+	if !worker.IsPaused() {
+		err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 		if err != nil {
-			_ = tx.Rollback()
+			if strings.Contains(err.Error(), "expired") {
+				// set flag to stop this worker from running again
+				worker.PauseWorker(time.Now().Add(30 * time.Minute))
+			}
+			errCode, retriable := errToDrainCode(err)
+
+			if !retriable {
+				if _, err = tx.Exec(
+					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+					err = tx.Commit()
+				}
+				return attempted, err
+			}
 		}
+
+		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		if err != nil {
+			return attempted, err
+		}
+
 		err = tx.Commit()
+		if err != nil {
+			return attempted, err
+		}
+	}
+
+	return attempted, nil
+}
+
+// This code can be deleted once https://github.com/brave-intl/bat-go/issues/263 is addressed.
+
+// GetOrder queries the database and returns an order
+func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
+	statement := "SELECT * FROM orders WHERE id = $1"
+	order := Order{}
+	err := pg.RawDB().Get(&order, statement, orderID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("Failed to get order : %w", err)
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = "SELECT * FROM order_items WHERE order_id = $1"
+	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, nil
+}
+
+// DrainClaim by marking the claim as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	if err != nil {
+		return err
+	}
+
+	statement := `
+	insert into claim_drain (credentials, wallet_id, total)
+	values ($1, $2, $3)
+	returning *`
+	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// errToDrainCode - given a drain related processing error, generate a code and retriable flag
+func errToDrainCode(err error) (string, bool) {
+	var (
+		errCode   string
+		retriable bool
+	)
+	// possible protocol errors
+	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
+		errCode = "marshal_transfer"
+	} else if errors.Is(err, errorutils.ErrCreateTransferRequest) {
+		errCode = "create_transfer"
+	} else if errors.Is(err, errorutils.ErrSignTransferRequest) {
+		errCode = "sign_transfer"
+	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {
+		errCode = "failed_client"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyRead) {
+		errCode = "failed_response_body"
+		retriable = true
+	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
+		errCode = "failed_response_unmarshal"
+		retriable = true
+	} else {
+		if codedErr, ok := err.(uphold.Coded); ok {
+			// possible wallet provider specific errors
+			errCode = codedErr.GetCode()
+		} else {
+			errCode = "unknown"
+		}
+	}
+	return errCode, retriable
+}
+
+// RunNextDrainJob to process deposits if there is one waiting
+func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+	tx, err := pg.RawDB().Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+	defer pg.RollbackTx(tx)
+
+	// FIXME maybe useful to later move definition outside of this method scope
+	type DrainJob struct {
+		ID            uuid.UUID       `db:"id"`
+		Credentials   string          `db:"credentials"`
+		WalletID      uuid.UUID       `db:"wallet_id"`
+		Total         decimal.Decimal `db:"total"`
+		TransactionID *string         `db:"transaction_id"`
+		Erred         bool            `db:"erred"`
+		ErrCode       *string         `db:"errcode"`
+	}
+
+	statement := `
+select *
+from claim_drain
+where not erred and transaction_id is null
+for update skip locked
+limit 1`
+
+	jobs := []DrainJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+	if len(jobs) != 1 {
+		return attempted, nil
+	}
+
+	job := jobs[0]
+	attempted = true
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
-		_ = tx.Rollback()
+		return attempted, err
+	}
+
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
+	if err != nil || txn == nil {
+		errCode, retriable := errToDrainCode(err)
+
+		if !retriable {
+			if _, err := tx.Exec(`update claim_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err != nil {
+				pg.RollbackTx(tx)
+			}
+			_ = tx.Commit()
+		}
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
+	if err != nil {
 		return attempted, err
 	}
 
@@ -685,4 +993,59 @@ limit 1`
 	}
 
 	return attempted, nil
+}
+
+// UpdateOrder updates the orders status.
+//	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
+}
+
+// CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
+func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
+	tx := pg.RawDB().MustBegin()
+	defer pg.RollbackTx(tx)
+
+	var transaction Transaction
+	err := tx.Get(&transaction,
+		`
+			INSERT INTO transactions (order_id, external_transaction_id, status, currency, kind, amount)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING *
+	`, orderID, externalTransactionID, status, currency, kind, amount)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	return &transaction, nil
+}
+
+// GetSumForTransactions returns the calculated sum
+func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error) {
+	var sum decimal.Decimal
+
+	err := pg.RawDB().Get(&sum, `
+		SELECT SUM(amount) as sum
+		FROM transactions
+		WHERE order_id = $1 AND status = 'completed'
+	`, orderID)
+
+	return sum, err
 }

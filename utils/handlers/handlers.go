@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 )
 
@@ -40,8 +43,9 @@ func (e AppError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // WrapError with an additional message as an AppError
 func WrapError(err error, msg string, passedCode int) *AppError {
 	// FIXME err should probably be first
-	appErr, ok := err.(AppError)
-	if !ok {
+	// appErr, ok := err.(*AppError)
+	var appErr *AppError
+	if !errors.As(err, &appErr) {
 		code := passedCode
 		if code == 0 {
 			code = http.StatusBadRequest
@@ -68,6 +72,27 @@ func WrapError(err error, msg string, passedCode int) *AppError {
 	}
 }
 
+// RenderContent based on the header
+func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, status int) *AppError {
+	switch w.Header().Get("content-type") {
+	case "application/json":
+		var b bytes.Buffer
+
+		if err := json.NewEncoder(&b).Encode(v); err != nil {
+			return WrapError(err, "Error encoding JSON", http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(status)
+		_, err := w.Write(b.Bytes())
+		// Should never happen :fingers_crossed:
+		if err != nil {
+			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
+		}
+	}
+
+	return nil
+}
+
 // WrapValidationError from govalidator
 func WrapValidationError(err error) *AppError {
 	return ValidationError("request body", govalidator.ErrorsByField(err))
@@ -89,15 +114,22 @@ type AppHandler func(http.ResponseWriter, *http.Request) *AppError
 
 // ServeHTTP responds via the passed handler and handles returned errors
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("content-type", "application/json")
+	switch r.Header.Get("Accept") {
+	case "application/json", "", "*/*":
+		w.Header().Set("content-type", "application/json")
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		// return a 400 error here as we cannot supply the encoding type the client is asking for
+	}
 
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
-			if e.Cause != nil {
-				raven.CaptureError(errors.Wrap(e.Cause, e.Message), map[string]string{})
-			} else {
-				raven.CaptureMessage(e.Message, map[string]string{})
-			}
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTags(map[string]string{
+					"reqID": requestutils.GetRequestID(r.Context()),
+				})
+				sentry.CaptureException(e)
+			})
 		}
 
 		l := zerolog.Ctx(r.Context())

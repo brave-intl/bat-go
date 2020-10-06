@@ -5,7 +5,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -16,7 +16,7 @@ func ProxyRouter(
 ) http.HandlerFunc {
 	proxyURL, err := url.Parse(reputationServer)
 	if err != nil {
-		raven.CaptureErrorAndWait(err, nil)
+		sentry.CaptureException(err)
 		log.Panic(err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(proxyURL)

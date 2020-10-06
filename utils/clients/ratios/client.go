@@ -2,30 +2,82 @@ package ratios
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
-	uuid "github.com/satori/go.uuid"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	cache "github.com/patrickmn/go-cache"
 	"github.com/shopspring/decimal"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
-	FetchRate(ctx context.Context, id uuid.UUID) error
+	FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error)
 }
 
-// HTTPClient wraps http.Client for interacting with the ledger server
+// HTTPClient wraps http.Client for interacting with the ratios server
 type HTTPClient struct {
-	clients.SimpleHTTPClient
+	client *clients.SimpleHTTPClient
+	cache  *cache.Cache
 }
 
-// New returns a new HTTPClient, retrieving the base URL from the environment
-func New() (*HTTPClient, error) {
-	client, err := clients.New("RATIOS_SERVER", "RATIOS_TOKEN")
+// NewWithContext returns a new HTTPClient, retrieving the base URL from the context
+func NewWithContext(ctx context.Context) (Client, error) {
+	// get the server url from context
+	serverURL, err := appctx.GetStringFromContext(ctx, appctx.RatiosServerCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get RatiosServer from context: %w", err)
+	}
+
+	// get the server access token from context
+	accessToken, err := appctx.GetStringFromContext(ctx, appctx.RatiosAccessTokenCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get RatiosAccessToken from context: %w", err)
+	}
+
+	client, err := clients.New(serverURL, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPClient{*client}, err
+
+	// get default timeout and purge from context
+	expires, err := appctx.GetDurationFromContext(ctx, appctx.RatiosCacheExpiryDurationCTXKey)
+	if err != nil {
+		expires = 5 * time.Second
+	}
+
+	// get default purge and purge from context
+	purge, err := appctx.GetDurationFromContext(ctx, appctx.RatiosCachePurgeDurationCTXKey)
+	if err != nil {
+		purge = 1 * time.Minute
+	}
+
+	return NewClientWithPrometheus(
+		&HTTPClient{
+			client: client,
+			cache:  cache.New(expires, purge),
+		}, "ratios_context_client"), nil
+}
+
+// New returns a new HTTPClient, retrieving the base URL from the environment
+func New() (Client, error) {
+	serverEnvKey := "RATIOS_SERVICE"
+	serverURL := os.Getenv(serverEnvKey)
+	if len(serverURL) == 0 {
+		return nil, errors.New(serverEnvKey + " was empty")
+	}
+	client, err := clients.New(serverURL, os.Getenv("RATIOS_TOKEN"))
+	if err != nil {
+		return nil, err
+	}
+	return NewClientWithPrometheus(
+		&HTTPClient{
+			client: client,
+			cache:  cache.New(5*time.Second, 1*time.Minute),
+		}, "ratios_client"), err
 }
 
 // RateResponse is the response received from ratios
@@ -34,24 +86,34 @@ type RateResponse struct {
 	Payload     map[string]decimal.Decimal `json:"payload"`
 }
 
+// FetchOptions options for fetching rates from ratios
+type FetchOptions struct {
+	Currency string `url:"currency,omitempty"`
+}
+
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
-	req, err := c.NewRequest(ctx, "GET", "/v1/relative/"+base, map[string]string{
-		"currency": currency,
+	var cacheKey = fmt.Sprintf("%s_%s", base, currency)
+	// check cache for this rate
+	if rate, found := c.cache.Get(cacheKey); found {
+		return rate.(*RateResponse), nil
+	}
+
+	url := fmt.Sprintf("/v1/relative/%s", base)
+	req, err := c.client.NewRequest(ctx, "GET", url, &FetchOptions{
+		Currency: currency,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	var body RateResponse
-	resp, err := c.Do(ctx, req, &body)
-
+	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
-		if resp != nil && resp.StatusCode == 404 {
-			return nil, nil
-		}
 		return nil, err
 	}
 
-	return &body, err
+	c.cache.Set(cacheKey, &body, cache.DefaultExpiration)
+
+	return &body, nil
 }

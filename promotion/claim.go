@@ -2,13 +2,17 @@ package promotion
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/middleware"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	raven "github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -25,6 +29,7 @@ type Claim struct {
 	Bonus            decimal.Decimal `db:"bonus"`
 	LegacyClaimed    bool            `db:"legacy_claimed"`
 	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
+	Drained          bool            `db:"drained"`
 }
 
 // SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
@@ -49,6 +54,23 @@ type ClaimCreds struct {
 	PublicKey    *string                    `db:"public_key"`
 }
 
+func blindCredsEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	// a and b must have same values in same order
+	for _, v := range a {
+		for _, vv := range b {
+			if v != vv {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var errClaimedDifferentBlindCreds = errors.New("blinded credentials do not match what was already claimed")
+
 // ClaimPromotionForWallet attempts to claim the promotion on behalf of a wallet and returning the ClaimID
 // It kicks off asynchronous signing of the credentials on success
 func (service *Service) ClaimPromotionForWallet(
@@ -57,28 +79,49 @@ func (service *Service) ClaimPromotionForWallet(
 	walletID uuid.UUID,
 	blindedCreds []string,
 ) (*uuid.UUID, error) {
-	promotion, err := service.datastore.GetPromotion(promotionID)
+	promotion, err := service.Datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
 	}
 	if promotion == nil {
 		return nil, errors.New("promotion did not exist")
 	}
+	if !promotion.Active || promotion.ExpiresAt.Before(time.Now()) || promotion.CreatedAt.Before(time.Now().AddDate(0, -3, 0)) {
+		return nil, &handlers.AppError{
+			Message: "promotion is no longer active",
+			Code:    http.StatusGone,
+		}
+	}
 
-	wallet, err := service.datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(walletID)
 	if err != nil || wallet == nil {
-		return nil, errors.Wrap(err, "Error getting wallet")
+		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
-	claim, err := service.datastore.GetClaimByWalletAndPromotion(wallet, promotion)
+	claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error checking previous claims for wallet")
+		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
-	// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
-	if claim != nil && claim.Redeemed {
-		return &claim.ID, nil
+	if claim != nil {
+		// get the claim credentials to check if these blinded creds were used before
+		claimCreds, err := service.Datastore.GetClaimCreds(claim.ID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
+		}
+
+		// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
+		// and the claim blinded tokens are the same
+		if claim.Redeemed && blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			return &claim.ID, nil
+		}
+
+		// if blinded creds do not match prior attempt, return error
+		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			return nil, errClaimedDifferentBlindCreds
+		}
 	}
+
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
 	if claim == nil || !claim.LegacyClaimed {
 		walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
@@ -87,7 +130,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 
 		if !walletIsReputable {
-			return nil, errors.New("Insufficient wallet reputation for grant claim")
+			return nil, errors.New("insufficient wallet reputation for grant claim")
 		}
 	}
 
@@ -98,7 +141,7 @@ func (service *Service) ClaimPromotionForWallet(
 	}
 
 	if promotion.Type == "ads" {
-		claim, err := service.datastore.GetPreClaim(promotionID, wallet.ID)
+		claim, err := service.Datastore.GetPreClaim(promotionID, wallet.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -120,7 +163,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	claim, err = service.datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
+	claim, err = service.Datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +171,7 @@ func (service *Service) ClaimPromotionForWallet(
 	if claim.LegacyClaimed {
 		err = service.balanceClient.InvalidateBalance(ctx, walletID)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
 		}
 	}
 
@@ -142,9 +185,18 @@ func (service *Service) ClaimPromotionForWallet(
 	countGrantsClaimedBatTotal.With(labels).Add(value)
 
 	go func() {
+		defer middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "ClaimJob",
+			}).Dec()
+
+		middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "ClaimJob",
+			}).Inc()
 		_, err := service.RunNextClaimJob(ctx)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			sentry.CaptureException(err)
 		}
 	}()
 

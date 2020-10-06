@@ -1,6 +1,8 @@
 package context
 
-import "context"
+import (
+	"context"
+)
 
 // wrapper allows for wrapping the values of a context with the cancellation of a new one
 // approach from https://github.com/posener/ctxutil

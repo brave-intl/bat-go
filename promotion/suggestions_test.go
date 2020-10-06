@@ -7,6 +7,39 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestDeduplicateCredentialBindings(t *testing.T) {
+
+	var tokens = []CredentialBinding{
+		{
+			TokenPreimage: "totally_random",
+		},
+		{
+			TokenPreimage: "totally_random_1",
+		},
+		{
+			TokenPreimage: "totally_random",
+		},
+		{
+			TokenPreimage: "totally_random_2",
+		},
+	}
+	var seen = []CredentialBinding{}
+
+	var result = DeduplicateCredentialBindings(tokens...)
+	if len(result) > len(tokens) {
+		t.Error("result should be less than number of tokens")
+	}
+
+	for _, v := range result {
+		for _, vv := range seen {
+			if v == vv {
+				t.Error("Deduplication of tokens didn't work")
+			}
+			seen = append(seen, v)
+		}
+	}
+}
+
 func TestUnmarshalText(t *testing.T) {
 	encoded := "eyJ0eXBlIjogImF1dG8tY29udHJpYnV0ZSIsICJjaGFubmVsIjogImJyYXZlLmNvbSJ9"
 	var expected, d Suggestion

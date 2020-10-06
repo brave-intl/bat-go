@@ -9,9 +9,11 @@ Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://trav
 
 2. [Install GolangCI-Lint](https://github.com/golangci/golangci-lint#install)
 
-3. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+3. `go get -u github.com/hexdigest/gowrap/cmd/gowrap`
 
-4. Build via `make`
+4. Clone this repo via `git clone https://github.com/brave-intl/bat-go`
+
+5. Build via `make`
 
 **Consider adding a pre-commit hook**
 
@@ -50,8 +52,26 @@ Once you are in the Docker container you can run the web server via `go run bin/
 If you want to run tests you can do so via the command `go test --tags=integration -v`
 For example in `promotion` you can run specific tests by running a command similar to `go test --tags=integration -run TestControllersTestSuite/TestCreateOrder`.
 
+### Rapid Iteration dev Environment
+
+On occasion it is desirable to re-run the development environment at will quickly.  To this
+end you can run `make docker-refresh-dev` which will spin up the bat-go services including a
+container named `grant-refresh-dev`.  If you want to recompile this service you merely need to
+perform a `docker restart grant-refresh-dev` and it will recompile and run the service.
+
+A particularly interesting use case is marrying this with utilities such as `fswatch` to watch
+for file changes.  There is an example below which will restart this `grant-refresh-dev` container
+on any file change in the source directory:
+
+```bash
+fswatch . | xargs -I {} sh -c '$(docker ps -f "name=grant-refresh-dev" --format "docker restart {{.ID}}")'
+```
 
 ## Building a prod image using docker
 
 You can build a docker image without installing the go toolchain. Ensure docker
 is installed then run `make docker`.
+
+
+## Build mock files
+`make mock`

@@ -34,7 +34,7 @@ func (service *Service) CreateIssuer(ctx context.Context, promotionID uuid.UUID,
 
 	issuer.PublicKey = resp.PublicKey
 
-	return service.datastore.InsertIssuer(issuer)
+	return service.Datastore.InsertIssuer(issuer)
 }
 
 // Name returns the name of the issuer as known by the challenge bypass server
@@ -44,7 +44,7 @@ func (issuer *Issuer) Name() string {
 
 // GetOrCreateIssuer gets a matching issuer if one exists and otherwise creates one
 func (service *Service) GetOrCreateIssuer(ctx context.Context, promotionID uuid.UUID, cohort string) (*Issuer, error) {
-	issuer, err := service.datastore.GetIssuer(promotionID, cohort)
+	issuer, err := service.Datastore.GetIssuer(promotionID, cohort)
 	if err != nil {
 		return nil, err
 	}

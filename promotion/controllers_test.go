@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"os"
 	"strconv"
 	"strings"
@@ -21,14 +22,15 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
-	mockledger "github.com/brave-intl/bat-go/utils/clients/ledger/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	walletservice "github.com/brave-intl/bat-go/wallet/service"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog/log"
@@ -47,7 +49,7 @@ func TestControllersTestSuite(t *testing.T) {
 }
 
 func (suite *ControllersTestSuite) SetupSuite() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -67,20 +69,31 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) SetupTest() {
+	suite.CleanDB()
+}
+
+func (suite *ControllersTestSuite) TearDownTest() {
+	suite.CleanDB()
+}
+
+func (suite *ControllersTestSuite) CleanDB() {
 	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	for _, table := range tables {
-		_, err = pg.DB.Exec("delete from " + table)
+		_, err = pg.RawDB().Exec("delete from " + table)
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
 
 func (suite *ControllersTestSuite) TestGetPromotions() {
 
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	cbClient, err := cbr.New()
@@ -90,7 +103,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	defer mockCtrl.Finish()
 
 	walletID := uuid.NewV4()
-	wallet := wallet.Info{
+	w := walletutils.Info{
 		ID:          walletID.String(),
 		Provider:    "uphold",
 		ProviderID:  "-",
@@ -99,15 +112,14 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		LastBalance: nil,
 	}
 
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+	err = walletDB.InsertWallet(&w)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  cbClient,
-		wallet: walletservice.Service{
-			Datastore:    pg,
-			LedgerClient: mockLedger,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 	handler := GetAvailablePromotions(service)
@@ -125,7 +137,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"id": "` + promotion.ID.String() + `",
 			"legacyClaimed": ` + strconv.FormatBool(promotion.LegacyClaimed) + `,
 			"platform": "` + promotion.Platform + `",
-			"publicKeys" : [],
+			"publicKeys" : ["1"],
 			"suggestionsPerGrant": ` + strconv.Itoa(promotion.SuggestionsPerGrant) + `,
 			"type": "ugp",
 			"version": 5
@@ -143,7 +155,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqFailure)
-	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 	expectationFailure := `{
 		"code":400,
 		"message": "Error validating request query parameter",
@@ -157,41 +169,59 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
 
-	promotionGeneric, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	promotionGeneric, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
-	promotionDesktop, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
+	promotionDesktop, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedOSX := `{
 		"promotions": [
 		]
 	}`
-	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+	suite.Require().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqAndroid)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedAndroid := `{
 		"promotions": [
 		]
 	}`
 	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
 
-	err = service.datastore.ActivatePromotion(promotionGeneric)
+	err = service.Datastore.ActivatePromotion(promotionGeneric)
 	suite.Require().NoError(err, "Failed to activate promotion")
-	err = service.datastore.ActivatePromotion(promotionDesktop)
+	// promotion needs an issuer
+	_, err = service.Datastore.InsertIssuer(&Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promotionGeneric.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
+	suite.Require().NoError(err, "Failed to insert issuer promotion")
+
+	err = service.Datastore.ActivatePromotion(promotionDesktop)
 	suite.Require().NoError(err, "Failed to activate promotion")
+	// promotion needs an issuer
+	_, err = service.Datastore.InsertIssuer(&Issuer{
+		ID:          uuid.NewV4(),
+		PromotionID: promotionDesktop.ID,
+		Cohort:      "control",
+		PublicKey:   `1`,
+	})
+	suite.Require().NoError(err, "Failed to insert issuer promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
 		"promotions": [
 			` + promotionJSON(true, promotionGeneric) + `,
@@ -202,7 +232,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqAndroid)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedAndroid = `{
 		"promotions": [
 			` + promotionJSON(true, promotionGeneric) + `
@@ -213,12 +243,12 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	statement := `
 	insert into claims (promotion_id, wallet_id, approximate_value, legacy_claimed)
 	values ($1, $2, $3, true)`
-	_, err = pg.DB.Exec(statement, promotionDesktop.ID, wallet.ID, promotionDesktop.ApproximateValue)
+	_, err = pg.RawDB().Exec(statement, promotionDesktop.ID, w.ID, promotionDesktop.ApproximateValue)
 	promotionDesktop.LegacyClaimed = true
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
 		"promotions": [
 			` + promotionJSON(true, promotionGeneric) + `
@@ -232,7 +262,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expectedOSX = `{
 		"promotions": [
 			` + promotionJSON(true, promotionGeneric) + `,
@@ -242,10 +272,18 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.Info, privKey crypto.Signer, promotion *Promotion, blindedCreds []string) GetClaimResponse {
+func (suite *ControllersTestSuite) ClaimGrant(
+	service *Service,
+	w walletutils.Info,
+	privKey crypto.Signer,
+	promotion *Promotion,
+	blindedCreds []string,
+	claimStatus int,
+	// promoActive bool,
+) *uuid.UUID {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
-	walletID, err := uuid.FromString(wallet.ID)
+	walletID, err := uuid.FromString(w.ID)
 	suite.Require().NoError(err)
 
 	claimReq := ClaimRequest{
@@ -256,12 +294,12 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 	body, err := json.Marshal(&claimReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", "/v1/promotion/{promotionId}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
 	s.Algorithm = httpsignature.ED25519
-	s.KeyID = wallet.ID
+	s.KeyID = w.ID
 	s.Headers = []string{"digest", "(request-target)"}
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -273,22 +311,36 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	if claimStatus != 200 {
+		// return early if claim is supposed to fail
+		suite.Require().Equal(rr.Code, claimStatus, string(rr.Body.Bytes()))
+		return nil
+	}
+	// if claim was not supposed to fail, or rr.Code is supposed to be ok following line fails
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	var claimResp ClaimResponse
 	err = json.Unmarshal(rr.Body.Bytes(), &claimResp)
-	suite.Assert().NoError(err)
+	suite.Require().NoError(err)
+	return &claimResp.ClaimID
+}
 
-	handler = GetClaim(service)
+func (suite *ControllersTestSuite) WaitForClaimToPropagate(service *Service, promotion *Promotion, claimID *uuid.UUID) {
+	handler := GetClaim(service)
 
-	req, err = http.NewRequest("GET", "/promotion/{promotionId}/claims/{claimId}", nil)
+	req, err := http.NewRequest("GET", "/promotion/{promotionId}/claims/{claimId}", nil)
 	suite.Require().NoError(err)
 
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("promotionId", promotion.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
 	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
-	rctx.URLParams.Add("claimId", claimResp.ClaimID.String())
+	cID := *claimID
+	rctx.URLParams.Add("claimId", cID.String())
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
 	for rr.Code != http.StatusOK {
@@ -304,19 +356,19 @@ func (suite *ControllersTestSuite) ClaimGrant(service *Service, wallet wallet.In
 			handler.ServeHTTP(rr, req)
 		}
 	}
-	suite.Assert().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
 
 	var getClaimResp GetClaimResponse
 	err = json.Unmarshal(rr.Body.Bytes(), &getClaimResp)
-	suite.Assert().NoError(err)
-
-	suite.Assert().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
-
-	return getClaimResp
+	suite.Require().NoError(err)
+	suite.Require().Equal(promotion.SuggestionsPerGrant, len(getClaimResp.SignedCreds), "Signed credentials should have the same length")
 }
 
 func (suite *ControllersTestSuite) TestClaimGrant() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	cbClient, err := cbr.New()
@@ -330,7 +382,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
-	wallet := wallet.Info{
+	info := walletutils.Info{
 		ID:          walletID.String(),
 		Provider:    "uphold",
 		ProviderID:  "-",
@@ -348,22 +400,19 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  cbClient,
-		wallet: walletservice.Service{
-			Datastore:    pg,
-			LedgerClient: mockLedger,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 	}
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	blindedCreds := make([]string, promotion.SuggestionsPerGrant)
@@ -371,14 +420,18 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	_ = suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
 	req, err := http.NewRequest("GET", fmt.Sprintf("/promotions?paymentId=%s&platform=osx", walletID.String()), nil)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 	expected := `{
 		"promotions": []
 	}`
@@ -393,7 +446,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		nil,
 	)
 
-	promotion, _, claim := suite.setupAdsClaim(service, &wallet, 0)
+	promotion, _, claim := suite.setupAdsClaim(service, &info, 0)
 
 	handler2 := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
@@ -411,7 +464,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	var s httpsignature.Signature
 	s.Algorithm = httpsignature.ED25519
-	s.KeyID = wallet.ID
+	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -423,7 +476,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	rr = httptest.NewRecorder()
 	handler2.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
 
 	mockReputation.EXPECT().IsWalletReputable(
@@ -457,17 +510,23 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 
 	rr = httptest.NewRecorder()
 	handler2.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
 
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
@@ -486,7 +545,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	walletID := uuid.NewV4()
 	bat := altcurrency.BAT
-	wallet := wallet.Info{
+	info := walletutils.Info{
 		ID:          walletID.String(),
 		Provider:    "uphold",
 		ProviderID:  "-",
@@ -504,17 +563,16 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		true,
 		nil,
 	)
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-	mockLedger.EXPECT().GetWallet(gomock.Any(), gomock.Eq(walletID)).Return(&wallet, nil)
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: walletservice.Service{
-			Datastore:    pg,
-			LedgerClient: mockLedger,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 		reputationClient: mockReputation,
 	}
@@ -522,9 +580,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = service.InitKafka()
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
-	promotion, err := service.datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
 	suite.Require().NoError(err, "Failed to create promotion")
-	err = service.datastore.ActivatePromotion(promotion)
+	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
 	issuerName := promotion.ID.String() + ":control"
@@ -545,7 +603,11 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	suite.ClaimGrant(service, wallet, privKey, promotion, blindedCreds)
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
 
@@ -590,12 +652,13 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	codec := service.codecs["suggestion"]
 
 	// :cry:
+
 	err = r.SetOffset(offset)
 	suite.Require().NoError(err)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	suggestionEventBinary, err := r.ReadMessage(context.Background())
 	suite.Require().NoError(err)
@@ -619,6 +682,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		"type": "`+suggestion.Type+`",
 		"channel": "`+suggestion.Channel+`",
 		"totalAmount": "0.25",
+		"orderId": "",
 		"funding": [
 			{
 				"type": "ugp",
@@ -631,16 +695,21 @@ func (suite *ControllersTestSuite) TestSuggest() {
 }
 
 func (suite *ControllersTestSuite) TestGetClaimSummary() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
 	}
 
 	missingWalletID := uuid.NewV4().String()
 	body, code := suite.checkGetClaimSummary(service, missingWalletID, "ads")
-	suite.Assert().Equal(http.StatusNotFound, code, "a 404 is sent back")
+	suite.Require().Equal(http.StatusNotFound, code, "a 404 is sent back")
 	suite.Assert().JSONEq(`{
 		"code": 404,
 		"message": "Error finding wallet: wallet not found id: '`+missingWalletID+`'"
@@ -649,19 +718,19 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 	blindedCreds := jsonutils.JSONStringArray([]string{publicKey})
 	walletID := uuid.NewV4().String()
-	w := &wallet.Info{
+	info := &walletutils.Info{
 		ID:         walletID,
 		Provider:   "uphold",
 		ProviderID: uuid.NewV4().String(),
 		PublicKey:  publicKey,
 	}
-	err = pg.InsertWallet(w)
-	suite.Assert().NoError(err, "the wallet failed to be inserted")
+	err = service.wallet.Datastore.UpsertWallet(info)
+	suite.Require().NoError(err, "the wallet failed to be inserted")
 
 	// no content returns an empty string on protocol level
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
 	suite.Assert().Equal(``, body)
-	suite.Assert().Equal(http.StatusNoContent, code)
+	suite.Require().Equal(http.StatusNoContent, code)
 
 	body, code = suite.checkGetClaimSummary(service, "", "ads")
 	suite.Assert().JSONEq(`{
@@ -673,54 +742,56 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 			}
 		}
 	}`, body, "body should return a payment id validation error")
-	suite.Assert().Equal(http.StatusBadRequest, code)
+	suite.Require().Equal(http.StatusBadRequest, code)
 
 	// not ignored promotion
-	promotion, issuer, claim := suite.setupAdsClaim(service, w, 0)
+	promotion, issuer, claim := suite.setupAdsClaim(service, info, 0)
 
-	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
-	suite.Assert().NoError(err, "apply claim to wallet")
+	_, err = pg.ClaimForWallet(promotion, issuer, info, blindedCreds)
+	suite.Require().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
-	suite.Assert().Equal(http.StatusOK, code)
+	suite.Require().Equal(http.StatusOK, code)
 	suite.Assert().JSONEq(`{
+		"amount": "30",
 		"earnings": "30",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
 	}`, body, "expected a aggregated claim response")
 
 	// not ignored bonus promotion
-	promotion, issuer, claim = suite.setupAdsClaim(service, w, 20)
+	promotion, issuer, claim = suite.setupAdsClaim(service, info, 20)
 
-	_, err = pg.ClaimForWallet(promotion, issuer, w, blindedCreds)
-	suite.Assert().NoError(err, "apply claim to wallet")
+	_, err = pg.ClaimForWallet(promotion, issuer, info, blindedCreds)
+	suite.Require().NoError(err, "apply claim to wallet")
 
 	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
-	suite.Assert().Equal(http.StatusOK, code)
+	suite.Require().Equal(http.StatusOK, code)
 	suite.Assert().JSONEq(`{
+		"amount": "40",
 		"earnings": "40",
 		"lastClaim": "`+claim.CreatedAt.Format(time.RFC3339Nano)+`",
 		"type": "ads"
 	}`, body, "expected a aggregated claim response")
 }
 
-func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *wallet.Info, claimBonus float64) (*Promotion, *Issuer, *Claim) {
+func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *walletutils.Info, claimBonus float64) (*Promotion, *Issuer, *Claim) {
 	// promo amount can be different than individual grant amount
 	promoAmount := decimal.NewFromFloat(25.0)
-	promotion, err := service.datastore.CreatePromotion("ads", 2, promoAmount, "")
-	suite.Assert().NoError(err, "a promotion could not be created")
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, promoAmount, "")
+	suite.Require().NoError(err, "a promotion could not be created")
 
 	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
 	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
-	issuer, err = service.datastore.InsertIssuer(issuer)
-	suite.Assert().NoError(err, "Insert issuer should succeed")
+	issuer, err = service.Datastore.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
 
-	err = service.datastore.ActivatePromotion(promotion)
-	suite.Assert().NoError(err, "a promotion should be activated")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "a promotion should be activated")
 
 	grantAmount := decimal.NewFromFloat(30.0)
-	claim, err := service.datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
-	suite.Assert().NoError(err, "create a claim for a promotion")
+	claim, err := service.Datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	suite.Require().NoError(err, "create a claim for a promotion")
 
 	return promotion, issuer, claim
 }
@@ -740,22 +811,22 @@ func (suite *ControllersTestSuite) checkGetClaimSummary(service *Service, wallet
 }
 
 func (suite *ControllersTestSuite) TestCreatePromotion() {
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 
-	mockLedger := mockledger.NewMockClient(mockCtrl)
-
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore: pg,
+		Datastore: pg,
 		cbClient:  mockCB,
-		wallet: walletservice.Service{
-			Datastore:    pg,
-			LedgerClient: mockLedger,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 	var issuerName string
@@ -791,25 +862,25 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
+	suite.Require().Equal(http.StatusOK, rr.Code, fmt.Sprintf("failure body: %s", rr.Body.String()))
 }
 
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
+		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
 	}
-	handler := PostReportClobberedClaims(service)
+	handler := PostReportClobberedClaims(service, 1)
 	id0 := uuid.NewV4()
 	id1 := uuid.NewV4()
 	id2 := uuid.NewV4()
@@ -837,8 +908,8 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	})
 	suite.Require().Equal(http.StatusOK, code)
 	claims := []ClobberedCreds{}
-	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id0)
+	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
+	suite.Assert().Equal(claims[0].ID, id0)
 
 	code = run([]uuid.UUID{
 		id0,
@@ -847,74 +918,206 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	})
 	suite.Require().Equal(http.StatusOK, code)
 	claims = []ClobberedCreds{}
-	suite.Require().NoError(pg.DB.Select(&claims, `select * from clobbered_claims;`))
-	suite.Require().Equal(claims[0].ID, id0)
-	suite.Require().Equal(claims[1].ID, id1)
-	suite.Require().Equal(claims[2].ID, id2)
+	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
+	suite.Assert().Equal(claims[0].ID, id0)
+	suite.Assert().Equal(claims[1].ID, id1)
+	suite.Assert().Equal(claims[2].ID, id2)
 }
 
-func (suite *ControllersTestSuite) TestClaimCompatability() {
+func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
-	pg, err := NewPostgres("", false)
+	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
-		datastore:        pg,
+		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 		balanceClient:    mockBalance,
-		wallet: walletservice.Service{
-			Datastore: pg,
+	}
+	handler := PostReportWalletEvent(service)
+	walletID1 := uuid.NewV4()
+	walletID2 := uuid.NewV4()
+
+	run := func(walletID uuid.UUID, amount decimal.Decimal, ua string) *httptest.ResponseRecorder {
+		requestPayload := BATLossEvent{
+			Amount: amount,
+		}
+		payload, err := json.Marshal(&requestPayload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v1/wallets/"+walletID.String()+"/events/batloss/1", bytes.NewBuffer([]byte(payload)))
+		suite.Require().NoError(err)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("walletId", walletID.String())
+		rctx.URLParams.Add("reportId", "1")
+		req.Header.Add("User-Agent", ua)
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr
+	}
+	suite.Require().Equal(http.StatusCreated, run(walletID1, decimal.NewFromFloat(10), "").Code)
+	suite.Require().Equal(http.StatusOK, run(walletID1, decimal.NewFromFloat(10), "").Code)
+	suite.Require().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(11), "").Code)
+
+	walletEvents := []BATLossEvent{}
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events`))
+	serializedActual1, err := json.Marshal(&walletEvents)
+	serializedExpected1, err := json.Marshal([]BATLossEvent{{
+		ID:       walletEvents[0].ID,
+		WalletID: walletID1,
+		ReportID: 1,
+		Amount:   decimal.NewFromFloat(10),
+		Platform: "",
+	}})
+	suite.Require().JSONEq(string(serializedExpected1), string(serializedActual1))
+
+	wallet2Loss := decimal.NewFromFloat(29.4902814)
+	macUA := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36"
+	suite.Require().Equal(http.StatusCreated, run(walletID2, decimal.NewFromFloat(29.4902814), macUA).Code)
+
+	walletEvents = []BATLossEvent{}
+	suite.Require().NoError(pg.RawDB().Select(&walletEvents, `select * from bat_loss_events;`))
+	serializedActual2, err := json.Marshal(&walletEvents)
+	serializedExpected2, err := json.Marshal([]BATLossEvent{{
+		ID:       walletEvents[0].ID,
+		WalletID: walletID1,
+		ReportID: 1,
+		Amount:   decimal.NewFromFloat(10),
+		Platform: "",
+	}, {
+		ID:       walletEvents[1].ID,
+		WalletID: walletID2,
+		ReportID: 1,
+		Amount:   wallet2Loss,
+		Platform: "osx",
+	}})
+	suite.Require().JSONEq(string(serializedExpected2), string(serializedActual2))
+}
+
+func (suite *ControllersTestSuite) TestClaimCompatability() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "could not connect to db")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+	mockBalance := mockbalance.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+		balanceClient:    mockBalance,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
 		},
 	}
 
+	now := time.Now().UTC()
+	threeMonthsAgo := now.AddDate(0, -3, 0)
+	later := now.Add(1000 * time.Second)
 	scenarios := []struct {
-		Legacy             bool
-		Redeemed           bool
-		ChecksReputation   bool
-		InvalidatesBalance bool
-		Type               string
+		Legacy             bool      // set the claim as legacy
+		Type               string    // the type of promotion (ugp/ads)
+		PromoActive        bool      // set the promotion to be active
+		CreatedAt          time.Time // set the created at time
+		ExpiresAt          time.Time // set the expiration time
+		ClaimStatus        int       // the claim request status
+		ChecksReputation   bool      // reputation will be checked
+		InvalidatesBalance bool      // the balance will be invalidated
 	}{
 		{
 			Legacy:             false,
-			Redeemed:           false,
+			Type:               "ugp",
+			PromoActive:        true,
+			CreatedAt:          now,
+			ExpiresAt:          later,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
 			Legacy:             false,
-			Redeemed:           true,
-			ChecksReputation:   false,
-			InvalidatesBalance: false,
 			Type:               "ugp",
+			PromoActive:        false,
+			CreatedAt:          now,
+			ExpiresAt:          later,
+			ClaimStatus:        http.StatusGone,
+			ChecksReputation:   true,
+			InvalidatesBalance: false,
 		},
 		{
 			Legacy:             true,
-			Redeemed:           false,
+			Type:               "ugp",
+			PromoActive:        true,
+			CreatedAt:          now,
+			ExpiresAt:          later,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
-			Type:               "ugp",
 		},
 		{
-			Legacy:             true,
-			Redeemed:           true,
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
-			Type:               "ugp",
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   threeMonthsAgo,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
 		},
 	}
 	for _, test := range scenarios {
+		suite.CleanDB()
 		walletID := uuid.NewV4()
 		publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 		suite.Require().NoError(err, "Failed to create wallet keypair")
 		bat := altcurrency.BAT
 		hexPublicKey := hex.EncodeToString(publicKey)
-		w := &wallet.Info{
+		info := walletutils.Info{
 			ID:          walletID.String(),
 			Provider:    "uphold",
 			ProviderID:  "-",
@@ -922,7 +1125,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			PublicKey:   hexPublicKey,
 			LastBalance: nil,
 		}
-		suite.Require().NoError(pg.InsertWallet(w), "could not insert wallet")
+		suite.Require().NoError(service.wallet.Datastore.UpsertWallet(&info), "could not insert wallet")
 
 		blindedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
 		signedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
@@ -934,27 +1137,38 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 
 		issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: hexPublicKey}
 		issuer, err = pg.InsertIssuer(issuer)
-		suite.Assert().NoError(err, "Insert issuer should succeed")
+		suite.Require().NoError(err, "Insert issuer should succeed")
 
 		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+		_, err = pg.RawDB().Exec(
+			"update promotions set expires_at = $2, created_at = $3 where id = $1",
+			promotion.ID,
+			test.ExpiresAt,
+			test.CreatedAt,
+		)
+		suite.Require().NoError(err, "setting the expires_at property shouldn't fail")
+		if !test.PromoActive {
+			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")
+		}
 
 		var claim *Claim
 		if test.Legacy {
-			claim, err = service.datastore.CreateClaim(promotion.ID, w.ID, promotionValue, decimal.NewFromFloat(0.0))
+			claim, err = service.Datastore.CreateClaim(promotion.ID, info.ID, promotionValue, decimal.NewFromFloat(0.0))
 			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
-			_, err = pg.DB.Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
+			_, err = pg.RawDB().Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
 			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
-		mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
-			BatchProof:   batchProof,
-			SignedTokens: signedCreds,
-		}, nil)
+		if test.PromoActive {
+			if test.ClaimStatus == http.StatusOK {
+				mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+					BatchProof:   batchProof,
+					SignedTokens: signedCreds,
+				}, nil)
+			}
 
-		if test.Redeemed {
-			// if redeemed, the mockCB's SignCredentials is used up here
-			// otherwise used up in suite.ClaimGrant below
-			if !test.Legacy {
+			// non legacy pathway
+			if test.ChecksReputation {
 				mockReputation.EXPECT().
 					IsWalletReputable(
 						gomock.Any(),
@@ -965,7 +1179,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 						true,
 						nil,
 					)
-			} else {
+			}
+			// legacy pathway
+			if test.InvalidatesBalance {
 				mockBalance.EXPECT().
 					InvalidateBalance(
 						gomock.Any(),
@@ -973,31 +1189,364 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 					).
 					Return(nil)
 			}
-			_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
 		}
-
-		if test.ChecksReputation {
-			mockReputation.EXPECT().
-				IsWalletReputable(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).
-				Return(
-					true,
-					nil,
-				)
+		claimID := suite.ClaimGrant(
+			service,
+			info,
+			privKey,
+			promotion,
+			blindedCreds,
+			test.ClaimStatus,
+		)
+		if test.ClaimStatus == http.StatusOK && test.PromoActive {
+			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
-		if test.InvalidatesBalance {
-			mockBalance.EXPECT().
-				InvalidateBalance(
-					gomock.Any(),
-					gomock.Eq(walletID),
-				).
-				Return(nil)
-		}
-
-		// if NOT redeemed, the mockCB's SignCredentials will be used up here
-		_ = suite.ClaimGrant(service, *w, privKey, promotion, blindedCreds)
 	}
+}
+
+func (suite *ControllersTestSuite) TestSuggestionDrain() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	ch := make(chan *walletutils.TransactionInfo)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	w := uphold.Wallet{
+		Info:    info,
+		PrivKey: privKey,
+		PubKey:  publicKey,
+	}
+	err = w.Register("drain-card-test")
+	suite.Require().NoError(err, "Failed to register wallet")
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+		reputationClient: mockReputation,
+		drainChannel:     ch,
+	}
+
+	err = service.InitHotWallet(context.Background())
+	suite.Require().NoError(err, "Failed to init hot wallet")
+
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	err = service.wallet.Datastore.UpsertWallet(&info)
+	suite.Require().NoError(err, "the wallet failed to be inserted")
+
+	claimBonus := 0.25
+	grantAmount := decimal.NewFromFloat(0.25)
+	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	suite.Require().NoError(err, "create a claim for a promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(walletID.String())).Return(nil)
+
+	handler := middleware.HTTPSignedOnly(service)(DrainSuggestion(service))
+
+	drainReq := DrainSuggestionRequest{
+		WalletID: walletID,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	body, err := json.Marshal(&drainReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	var s httpsignature.Signature
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = info.ID
+	s.Headers = []string{"digest", "(request-target)"}
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	err = walletDB.InsertWallet(&w.Info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
+
+	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	info.UserDepositDestination = w.ProviderID
+
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	b, _ := httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	tx := <-ch
+	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+
+	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	suite.Require().NoError(err)
+}
+
+// THIS CODE IS A QUICK AND DIRTY HACK
+// WE SHOULD DELETE ALL OF THIS AND MOVE OVER TO THE PAYMENT SERVICE ONCE DEMO IS DONE.
+
+// CreateOrder creates orders given the total price, merchant ID, status and items of the order
+func (suite *ControllersTestSuite) CreateOrder() (string, error) {
+	pg, _, err := NewPostgres()
+	tx := pg.RawDB().MustBegin()
+	defer pg.RollbackTx(tx)
+
+	var id string
+
+	err = tx.Get(&id, `
+			INSERT INTO orders (total_price, merchant_id, status, currency)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`, 0.25, "brave.com", "pending", "BAT")
+
+	err = tx.Commit()
+	if err != nil {
+		return "", err
+	}
+
+	return id, nil
+}
+
+func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres   ")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, _, err := kafkautils.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	err = walletDB.InsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+		reputationClient: mockReputation,
+	}
+
+	err = service.InitKafka()
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	err = walletDB.UpsertWallet(&info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
+
+	handler := MakeSuggestion(service)
+
+	orderID, err := suite.CreateOrder()
+	suite.Require().NoError(err)
+	validOrderID := uuid.Must(uuid.FromString(orderID))
+
+	orderPending, err := service.Datastore.GetOrder(validOrderID)
+	suite.Require().NoError(err)
+	suite.Require().Equal("pending", orderPending.Status)
+
+	suggestion := Suggestion{
+		Type:    "payment",
+		OrderID: &validOrderID,
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	suggestionReq := SuggestionRequest{
+		Suggestion: suggestionPayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(suggestionPayload)).Return(nil)
+
+	body, err := json.Marshal(&suggestionReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:          strings.Split(kafkaBrokers, ","),
+		Topic:            suggestionTopic,
+		Dialer:           service.kafkaDialer,
+		MaxWait:          time.Second,
+		RebalanceTimeout: time.Second,
+		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+
+	// :cry:
+	err = r.SetOffset(offset)
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	codec := service.codecs["suggestion"]
+
+	suggestionEventBinary, err := r.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	suggestionEvent, _, err := codec.NativeFromBinary(suggestionEventBinary.Value)
+	suite.Require().NoError(err)
+	suite.Require().NotNil(suggestionEvent)
+
+	updatedOrder, err := service.Datastore.GetOrder(validOrderID)
+	suite.Require().NoError(err)
+	suite.Assert().Equal("paid", updatedOrder.Status)
 }

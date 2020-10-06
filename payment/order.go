@@ -1,10 +1,12 @@
 package payment
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	macaroon "gopkg.in/macaroon.v2"
@@ -12,27 +14,61 @@ import (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID       `json:"id" db:"id"`
-	CreatedAt  time.Time       `json:"createdAt" db:"created_at"`
-	Currency   string          `json:"currency" db:"currency"`
-	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
-	TotalPrice decimal.Decimal `json:"totalPrice" db:"total_price"`
-	MerchantID string          `json:"merchantId" db:"merchant_id"`
-	Status     string          `json:"status" db:"status"`
-	Items      []OrderItem     `json:"items"`
+	ID         uuid.UUID            `json:"id" db:"id"`
+	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
+	Currency   string               `json:"currency" db:"currency"`
+	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
+	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
+	MerchantID string               `json:"-" db:"merchant_id"`
+	Location   datastore.NullString `json:"location" db:"location"`
+	Status     string               `json:"status" db:"status"`
+	Items      []OrderItem          `json:"items"`
 }
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID          uuid.UUID       `json:"id" db:"id"`
-	OrderID     uuid.UUID       `json:"order_id" db:"order_id"`
-	CreatedAt   *time.Time      `json:"createdAt" db:"created_at"`
-	UpdatedAt   *time.Time      `json:"updatedAt" db:"updated_at"`
-	Currency    string          `json:"currency" db:"currency"`
-	Quantity    int             `json:"quantity" db:"quantity"`
-	Price       decimal.Decimal `json:"price" db:"price"`
-	Subtotal    decimal.Decimal `json:"subtotal"`
-	Description string          `json:"description"`
+	ID          uuid.UUID            `json:"id" db:"id"`
+	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU         string               `json:"sku" db:"sku"`
+	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency    string               `json:"currency" db:"currency"`
+	Quantity    int                  `json:"quantity" db:"quantity"`
+	Price       decimal.Decimal      `json:"price" db:"price"`
+	Subtotal    decimal.Decimal      `json:"subtotal" db:"subtotal"`
+	Location    datastore.NullString `json:"location" db:"location"`
+	Description datastore.NullString `json:"description" db:"description"`
+}
+
+// IsValidSKU checks to see if the token provided is one that we've previously created
+func IsValidSKU(sku string) bool {
+	env := os.Getenv("ENV")
+	if env == "production" {
+		switch sku {
+		case
+			// Production - User Wallet Vote
+			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J",
+			// Production - Anon Card Vote
+			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o=":
+			return true
+		}
+	} else {
+		switch sku {
+		case
+			// Dev - User Wallet Vote
+			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
+			// Dev - Anon Card Vote
+			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
+			// Staging - User Wallet Vote
+			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W",
+			// Staging - Anon Card Vote
+			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=":
+
+			return true
+		}
+	}
+
+	return false
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
@@ -59,6 +95,8 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+	orderItem.Location.String = mac.Location()
+	orderItem.Location.Valid = true
 
 	for i := 0; i < len(caveats); i++ {
 		caveat := mac.Caveats()[i]
@@ -67,21 +105,21 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		value := strings.TrimSpace(values[1])
 
 		switch key {
-		case "id":
-			uuid, err := uuid.FromString(value)
+		case "sku":
+			orderItem.SKU = value
+		case "price", "amount":
+			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
 				return nil, err
 			}
-			orderItem.ID = uuid
-		case "price":
-			orderItem.Price, err = decimal.NewFromString(value)
+		case "description":
+			orderItem.Description.String = value
+			orderItem.Description.Valid = true
 			if err != nil {
 				return nil, err
 			}
 		case "currency":
 			orderItem.Currency = value
-		case "description":
-			orderItem.Description = value
 		}
 	}
 

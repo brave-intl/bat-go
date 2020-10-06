@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,22 +11,30 @@ import (
 	"path/filepath"
 	"strings"
 
+	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/formatters"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	verbose   = flag.Bool("v", false, "verbose output")
-	inputFile = flag.String("in", "./contributions-signed.json", "input file path")
+	logFile    string
+	outputFile string
+
+	verbose             = flag.Bool("v", false, "verbose output")
+	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
+	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
+	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
+	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
 )
 
 func main() {
 	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
-		log.Printf("Submit signed settlements to uphold.\n\n")
+		log.Printf("Submit signed settlements to " + *provider + ".\n\n")
 		log.Printf("Usage:\n\n")
 		log.Printf("        %s\n\n", os.Args[0])
 		flag.PrintDefaults()
@@ -35,10 +44,23 @@ func main() {
 	if *verbose {
 		log.SetLevel(log.DebugLevel)
 	}
+	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
+	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
-	logFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
-	outputFile := strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
+	var err error
+	switch *provider {
+	case "uphold":
+		err = upholdSubmit()
+	case "gemini":
+		ctx := context.Background()
+		err = settlementcmd.GeminiUploadSettlement(ctx, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
+	}
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
 
+func upholdSubmit() error {
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalln(err)
@@ -55,7 +77,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	settlementWallet, err := uphold.FromWalletInfo(settlementState.WalletInfo)
+	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -87,6 +109,10 @@ func main() {
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
+			if errorutils.IsErrInvalidDestination(err) {
+				log.Println(err)
+				continue
+			}
 			log.Fatalln(err)
 		}
 
@@ -154,4 +180,5 @@ func main() {
 	}
 
 	fmt.Println("done!")
+	return nil
 }

@@ -1,64 +1,61 @@
 package grant
 
 import (
+	"context"
+	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"os"
 
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	srv "github.com/brave-intl/bat-go/utils/service"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
+	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/crypto/ed25519"
 )
 
-const (
-	lowerTxLimit = 0.25
-	upperTxLimit = 120.0
-	localEnv     = "local"
-)
+const localEnv = "local"
 
 var (
-	// GrantSignatorPublicKeyHex is the hex encoded public key of the keypair used to sign grants
-	GrantSignatorPublicKeyHex    = os.Getenv("GRANT_SIGNATOR_PUBLIC_KEY")
-	grantWalletPublicKeyHex      = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
-	grantWalletPrivateKeyHex     = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
-	grantWalletCardID            = os.Getenv("GRANT_WALLET_CARD_ID")
-	grantWallet                  *uphold.Wallet
-	refreshBalance               = true  // for testing we can disable balance refresh
-	testSubmit                   = true  // for testing we can disable testing tx submit
-	registerGrantInstrumentation = true  // for testing we can disable grant claim / redeem instrumentation registration
-	safeMode                     = false // if set true disables grant redemption
-	claimedGrantsCounter         = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "claimed_grants_total",
-			Help: "Number of grants claimed since start.",
-		},
-		[]string{},
-	)
-	redeemedGrantsCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "redeemed_grants_total",
-			Help: "Number of grants redeemed since start.",
-		},
-		[]string{"promotionId"},
-	)
+	grantWalletPublicKeyHex  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletCardID        = os.Getenv("GRANT_WALLET_CARD_ID")
+	grantWallet              *uphold.Wallet
 )
 
 // Service contains datastore as well as prometheus metrics
 type Service struct {
-	datastore              Datastore
-	roDatastore            ReadOnlyDatastore
+	Datastore              Datastore
+	RoDatastore            ReadOnlyDatastore
+	wallet                 *wallet.Service
+	promotion              *promotion.Service
 	grantWalletBalanceDesc *prometheus.Desc
+	jobs                   []srv.Job
+}
+
+// Jobs - Implement srv.JobService interface
+func (s *Service) Jobs() []srv.Job {
+	return s.jobs
 }
 
 // InitService initializes the grant service
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(
+	ctx context.Context,
+	datastore Datastore,
+	roDatastore ReadOnlyDatastore,
+	walletService *wallet.Service,
+	promotionService *promotion.Service,
+) (*Service, error) {
 	gs := &Service{
-		datastore:   datastore,
-		roDatastore: roDatastore,
+		Datastore:   datastore,
+		RoDatastore: roDatastore,
+		wallet:      walletService,
+		promotion:   promotionService,
 		grantWalletBalanceDesc: prometheus.NewDesc(
 			"grant_wallet_balance",
 			"A gauge of the grant wallet remaining balance.",
@@ -67,15 +64,11 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		),
 	}
 
-	if os.Getenv("ENV") != localEnv && !refreshBalance {
-		return nil, errors.New("refreshBalance must be true in production")
-	}
-	if os.Getenv("ENV") != localEnv && !testSubmit {
-		return nil, errors.New("testSubmit must be true in production")
-	}
+	// setup runnable jobs
+	gs.jobs = []srv.Job{}
 
 	if len(grantWalletCardID) > 0 {
-		var info wallet.Info
+		var info walletutils.Info
 		info.Provider = "uphold"
 		info.ProviderID = grantWalletCardID
 		{
@@ -89,14 +82,14 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 
 		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPublicKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
 		}
 		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
 		if err != nil {
-			return nil, errors.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+			return nil, errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
-		grantWallet, err = uphold.New(info, privKey, pubKey)
+		grantWallet, err = uphold.New(ctx, info, privKey, pubKey)
 		if err != nil {
 			return nil, err
 		}
@@ -104,45 +97,40 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, errors.New("GRANT_WALLET_CARD_ID must be set in production")
 	}
 
-	if registerGrantInstrumentation {
-		if datastore != nil {
-			prometheus.MustRegister(gs)
-		}
-
-		prometheus.MustRegister(claimedGrantsCounter)
-		prometheus.MustRegister(redeemedGrantsCounter)
+	if datastore != nil {
+		prometheus.MustRegister(gs)
 	}
 
 	return gs, nil
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
-func (service *Service) ReadableDatastore() ReadOnlyDatastore {
-	if service.roDatastore != nil {
-		return service.roDatastore
+func (s *Service) ReadableDatastore() ReadOnlyDatastore {
+	if s.RoDatastore != nil {
+		return s.RoDatastore
 	}
-	return service.datastore
+	return s.Datastore
 }
 
 // Describe returns all descriptions of the collector.
 // We implement this and the Collect function to fulfill the prometheus.Collector interface
-func (service *Service) Describe(ch chan<- *prometheus.Desc) {
-	ch <- service.grantWalletBalanceDesc
+func (s *Service) Describe(ch chan<- *prometheus.Desc) {
+	ch <- s.grantWalletBalanceDesc
 }
 
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
-func (service *Service) Collect(ch chan<- prometheus.Metric) {
+func (s *Service) Collect(ch chan<- prometheus.Metric) {
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
-		raven.CaptureError(err, map[string]string{})
+		sentry.CaptureException(err)
 		return
 	}
 
 	spendable, _ := grantWallet.GetWalletInfo().AltCurrency.FromProbi(balance.SpendableProbi).Float64()
 
 	ch <- prometheus.MustNewConstMetric(
-		service.grantWalletBalanceDesc,
+		s.grantWalletBalanceDesc,
 		prometheus.GaugeValue,
 		spendable,
 	)

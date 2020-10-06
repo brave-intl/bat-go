@@ -18,7 +18,7 @@ var (
 			Name: "promotion_get_count",
 			Help: "a count of the number of times the promotions were collected",
 		},
-		[]string{"filter", "migrate", "legacy"},
+		[]string{"filter", "migrate"},
 	)
 	promotionExposureCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -30,10 +30,21 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(
-		promotionGetCount,
-		promotionExposureCount,
-	)
+	// register our metrics with prometheus
+	err := prometheus.Register(promotionGetCount)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		promotionGetCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(promotionExposureCount)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		promotionExposureCount = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+}
+
+// publicKeyFilter - filter function for dropping promotions with no public key
+func publicKeyFilter(p Promotion) bool {
+	return len(p.PublicKeys) > 0
 }
 
 // Promotion includes information about a particular promotion
@@ -75,13 +86,12 @@ func (service *Service) GetAvailablePromotions(
 	ctx context.Context,
 	walletID *uuid.UUID,
 	platform string,
-	legacy bool,
 	migrate bool,
 ) (*[]Promotion, error) {
 	if walletID != nil {
 		logging.AddWalletIDToContext(ctx, *walletID)
 
-		wallet, err := service.wallet.GetOrCreateWallet(ctx, *walletID)
+		wallet, err := service.wallet.GetWallet(*walletID)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +99,7 @@ func (service *Service) GetAvailablePromotions(
 			return nil, nil
 		}
 
-		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform, legacy)
+		promos, err := service.ReadableDatastore().GetAvailablePromotionsForWallet(wallet, platform)
 		if err != nil {
 			return nil, err
 		}
@@ -102,8 +112,12 @@ func (service *Service) GetAvailablePromotions(
 		if !migrate {
 			promos = Filter(promos, func(p Promotion) bool { return !p.LegacyClaimed })
 		}
+
+		promos = Filter(promos, publicKeyFilter)
+
 		return &promos, nil
 	}
-	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform, legacy)
+	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform)
+	promos = Filter(promos, publicKeyFilter)
 	return &promos, err
 }

@@ -31,17 +31,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
+
+var ipPortRE = regexp.MustCompile(`[0-9]+(?:\.[0-9]+){3}(:[0-9]+)?`)
 
 // RequestLogger logs at the start and stop of incoming HTTP requests as well as recovers from panics
 // Modified version of RequestLogger from github.com/rs/zerolog
@@ -55,25 +57,27 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 			}
 
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			t1 := time.Now()
-			entry := hlog.FromRequest(r)
-			createSubLog(r, 0).
+			t1 := time.Now().UTC()
+			// only need to get logger from context once per request
+			logger := hlog.FromRequest(r)
+			createSubLog(logger, r, 0).
 				Msg("request started")
+
 			defer func() {
-				t2 := time.Now()
+				t2 := time.Now().UTC()
 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
-					entry.Panic().Stack()
+					logger.Panic().Stack().Msg("panic")
+					// consolodate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
+					// any panic that has an ipaddress/port in it
+					m := string(ipPortRE.ReplaceAll(
+						[]byte(fmt.Sprint(rec)), []byte("x.x.x.x:xxxx")))
 
 					// Send panic info to Sentry
-					recStr := fmt.Sprint(rec)
-					packet := raven.NewPacket(
-						recStr,
-						raven.NewException(errors.New(recStr), raven.NewStacktrace(2, 3, nil)),
-						raven.NewHttp(r),
-					)
-					raven.Capture(packet, nil)
+					event := sentry.NewEvent()
+					event.Message = m
+					sentry.CaptureEvent(event)
 
 					handlers.AppError{
 						Message: http.StatusText(http.StatusInternalServerError),
@@ -83,22 +87,21 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 
 				status := ww.Status()
 				// Log the entry, the request is complete.
-				createSubLog(r, status).
+				createSubLog(logger, r, status).
 					Int("status", status).
 					Int("size", ww.BytesWritten()).
 					Dur("duration", t2.Sub(t1)).
 					Msg("request complete")
 			}()
 
-			r = r.WithContext(entry.WithContext(r.Context()))
+			r = r.WithContext(logger.WithContext(r.Context()))
 			next.ServeHTTP(ww, r)
 		}
 		return http.HandlerFunc(fn)
 	}
 }
 
-func createSubLog(r *http.Request, status int) (subLog *zerolog.Event) {
-	logger := hlog.FromRequest(r)
+func createSubLog(logger *zerolog.Logger, r *http.Request, status int) (subLog *zerolog.Event) {
 	if status >= 400 && status <= 499 {
 		subLog = logger.Warn()
 	} else if status >= 500 {

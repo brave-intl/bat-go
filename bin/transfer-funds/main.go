@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"encoding/hex"
 	"flag"
 	"os"
 
@@ -10,9 +12,9 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/passphrase"
 	"github.com/brave-intl/bat-go/utils/prompt"
-	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/wallet/provider"
-	"github.com/brave-intl/bat-go/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ed25519"
@@ -67,7 +69,7 @@ func main() {
 		ProviderID:  *from,
 		AltCurrency: &walletc,
 	}
-	w, err := provider.GetWallet(info)
+	w, err := provider.GetWallet(context.Background(), info)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -97,25 +99,47 @@ func main() {
 
 	switch w := w.(type) {
 	case *uphold.Wallet:
-		log.Println("Enter your recovery phrase:")
-		reader := bufio.NewReader(os.Stdin)
-		recoveryPhrase, err := reader.ReadString('\n')
-		if err != nil {
-			log.Fatalln(err)
-		}
+		var privateKeyHex = os.Getenv("ED25519_PRIVATE_KEY")
+		var publicKeyHex = os.Getenv("ED25519_PUBLIC_KEY")
 
-		seed, err := passphrase.ToBytes32(recoveryPhrase)
-		if err != nil {
-			log.Fatalln(err)
-		}
+		if len(privateKeyHex) == 0 || len(publicKeyHex) == 0 {
+			log.Println("Enter your recovery phrase:")
+			reader := bufio.NewReader(os.Stdin)
+			recoveryPhrase, err := reader.ReadString('\n')
+			if err != nil {
+				log.Fatalln(err)
+			}
 
-		key, err := passphrase.DeriveSigningKeysFromSeed(seed, passphrase.LedgerHKDFSalt)
-		if err != nil {
-			log.Fatalln(err)
-		}
+			seed, err := passphrase.ToBytes32(recoveryPhrase)
+			if err != nil {
+				log.Fatalln(err)
+			}
 
-		w.PrivKey = key
-		w.PubKey = httpsignature.Ed25519PubKey(key.Public().(ed25519.PublicKey))
+			key, err := passphrase.DeriveSigningKeysFromSeed(seed, passphrase.LedgerHKDFSalt)
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			w.PrivKey = key
+			w.PubKey = httpsignature.Ed25519PubKey(key.Public().(ed25519.PublicKey))
+		} else {
+			var pubKey httpsignature.Ed25519PubKey
+			var privKey ed25519.PrivateKey
+			var err error
+
+			privKey, err = hex.DecodeString(privateKeyHex)
+			if err != nil {
+				log.Fatalln("ERROR: Key material must be passed as hex")
+			}
+
+			pubKey, err = hex.DecodeString(publicKeyHex)
+			if err != nil {
+				log.Fatalln("ERROR: Key material must be passed as hex")
+			}
+
+			w.PrivKey = privKey
+			w.PubKey = pubKey
+		}
 
 		signedTx, err := w.PrepareTransaction(altc, valueProbi, *to, *note)
 		if err != nil {

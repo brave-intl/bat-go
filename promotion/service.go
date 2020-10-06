@@ -2,25 +2,35 @@ package promotion
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
-	"io/ioutil"
-	"log"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
-	wallet "github.com/brave-intl/bat-go/wallet/service"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	"github.com/brave-intl/bat-go/utils/logging"
+	srv "github.com/brave-intl/bat-go/utils/service"
+	w "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
+	"golang.org/x/crypto/ed25519"
 )
+
+const localEnv = "local"
 
 var (
 	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
@@ -78,141 +88,74 @@ var (
 	)
 )
 
+// SetSuggestionTopic allows for a new topic to be suggested
+func SetSuggestionTopic(newTopic string) {
+	suggestionTopic = newTopic
+}
+
 func init() {
-	prometheus.MustRegister(
-		countContributionsTotal,
-		countContributionsBatTotal,
-		countGrantsClaimedTotal,
-		countGrantsClaimedBatTotal,
-		kafkaCertNotBefore,
-		kafkaCertNotAfter,
-	)
+
+	// register metrics with prometheus
+	err := prometheus.Register(countGrantsClaimedBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countGrantsClaimedTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(kafkaCertNotAfter)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotAfter = ae.ExistingCollector.(prometheus.Gauge)
+	}
+
+	err = prometheus.Register(kafkaCertNotBefore)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotBefore = ae.ExistingCollector.(prometheus.Gauge)
+	}
 }
 
-// Service contains datastore and challenge bypass / ledger client connections
+// Service contains datastore and challenge bypass client connections
 type Service struct {
-	wallet           wallet.Service
-	datastore        Datastore
-	roDatastore      ReadOnlyDatastore
-	cbClient         cbr.Client
-	reputationClient reputation.Client
-	balanceClient    balance.Client
-	codecs           map[string]*goavro.Codec
-	kafkaWriter      *kafka.Writer
-	kafkaDialer      *kafka.Dialer
+	wallet                  *wallet.Service
+	Datastore               Datastore
+	RoDatastore             ReadOnlyDatastore
+	cbClient                cbr.Client
+	reputationClient        reputation.Client
+	balanceClient           balance.Client
+	codecs                  map[string]*goavro.Codec
+	kafkaWriter             *kafka.Writer
+	kafkaDialer             *kafka.Dialer
+	hotWallet               *uphold.Wallet
+	drainChannel            chan *w.TransactionInfo
+	jobs                    []srv.Job
+	pauseSuggestionsUntil   time.Time
+	pauseSuggestionsUntilMu sync.RWMutex
 }
 
-func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
-	loc := os.Getenv(env)
-	if len(loc) == 0 {
-		if !required {
-			return []byte{}, nil
-		}
-		return []byte{}, errors.New(env + " must be passed")
-	}
-	buf, err := ioutil.ReadFile(loc)
-	if err != nil {
-		return []byte{}, err
-	}
-	return buf, nil
-}
-
-func tlsDialer() (*kafka.Dialer, error) {
-	keyPasswordEnv := "KAFKA_SSL_KEY_PASSWORD"
-	keyPassword := os.Getenv(keyPasswordEnv)
-
-	caPEM, err := readFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
-	if err != nil {
-		return nil, err
-	}
-
-	certEnv := "KAFKA_SSL_CERTIFICATE"
-	certPEM := []byte(os.Getenv(certEnv))
-	if len(certPEM) == 0 {
-		certPEM, err = readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	keyEnv := "KAFKA_SSL_KEY"
-	encryptedKeyPEM := []byte(os.Getenv(keyEnv))
-
-	// Check to see if KAFKA_SSL_CERTIFICATE includes both certificate and key
-	if certPEM[0] == '{' {
-		type Certificate struct {
-			Certificate string `json:"certificate"`
-			Key         string `json:"key"`
-		}
-		var cert Certificate
-		err := json.Unmarshal(certPEM, &cert)
-		if err != nil {
-			return nil, err
-		}
-		certPEM = []byte(cert.Certificate)
-		encryptedKeyPEM = []byte(cert.Key)
-	}
-
-	if len(encryptedKeyPEM) == 0 {
-		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	block, rest := pem.Decode(encryptedKeyPEM)
-	if len(rest) > 0 {
-		return nil, errors.New("Extra data in KAFKA_SSL_KEY")
-	}
-
-	keyPEM := pem.EncodeToMemory(block)
-	if len(keyPassword) != 0 {
-		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
-		if err != nil {
-			return nil, errors.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
-		}
-
-		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
-	}
-
-	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse x509 keypair")
-	}
-
-	// Define TLS configuration
-	config := &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-	}
-
-	// Instrument kafka cert expiration information
-	x509Cert, err := x509.ParseCertificate(certificate.Certificate[0])
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not parse certificate")
-	}
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
-
-	if len(caPEM) > 0 {
-		caCertPool := x509.NewCertPool()
-		if ok := caCertPool.AppendCertsFromPEM([]byte(caPEM)); !ok {
-			return nil, errors.New("Could not add custom CA from KAFKA_SSL_CA_LOCATION")
-		}
-		config.RootCAs = caCertPool
-	}
-
-	return &kafka.Dialer{
-		Timeout:   10 * time.Second,
-		DualStack: true,
-		TLS:       config}, nil
+// Jobs - Implement srv.JobService interface
+func (s *Service) Jobs() []srv.Job {
+	return s.jobs
 }
 
 // InitCodecs used for Avro encoding / decoding
-func (service *Service) InitCodecs() error {
-	service.codecs = make(map[string]*goavro.Codec)
+func (s *Service) InitCodecs() error {
+	s.codecs = make(map[string]*goavro.Codec)
 
 	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
-	service.codecs["suggestion"] = suggestionEventCodec
+	s.codecs["suggestion"] = suggestionEventCodec
 	if err != nil {
 		return err
 	}
@@ -220,12 +163,18 @@ func (service *Service) InitCodecs() error {
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (service *Service) InitKafka() error {
-	dialer, err := tlsDialer()
+func (s *Service) InitKafka() error {
+
+	_, logger := logging.SetupLogger(context.Background())
+
+	dialer, x509Cert, err := kafkautils.TLSDialer()
 	if err != nil {
 		return err
 	}
-	service.kafkaDialer = dialer
+	s.kafkaDialer = dialer
+
+	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
+	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
@@ -234,11 +183,11 @@ func (service *Service) InitKafka() error {
 		Topic:    suggestionTopic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(log.Printf), // FIXME
+		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
-	service.kafkaWriter = kafkaWriter
-	err = service.InitCodecs()
+	s.kafkaWriter = kafkaWriter
+	err = s.InitCodecs()
 	if err != nil {
 		return err
 	}
@@ -246,8 +195,51 @@ func (service *Service) InitKafka() error {
 	return nil
 }
 
+// InitHotWallet by reading the keypair and card id from the environment
+func (s *Service) InitHotWallet(ctx context.Context) error {
+	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
+	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
+	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
+
+	if len(grantWalletCardID) > 0 {
+		var info w.Info
+		info.Provider = "uphold"
+		info.ProviderID = grantWalletCardID
+		{
+			tmp := altcurrency.BAT
+			info.AltCurrency = &tmp
+		}
+
+		var pubKey httpsignature.Ed25519PubKey
+		var privKey ed25519.PrivateKey
+		var err error
+
+		pubKey, err = hex.DecodeString(grantWalletPublicKeyHex)
+		if err != nil {
+			return errorutils.Wrap(err, "grantWalletPublicKeyHex is invalid")
+		}
+		privKey, err = hex.DecodeString(grantWalletPrivateKeyHex)
+		if err != nil {
+			return errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
+		}
+
+		s.hotWallet, err = uphold.New(ctx, info, privKey, pubKey)
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("ENV") != localEnv {
+		return errors.New("GRANT_WALLET_CARD_ID must be set in production")
+	}
+	return nil
+}
+
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
+func InitService(
+	ctx context.Context,
+	promotionDB Datastore,
+	promotionRODB ReadOnlyDatastore,
+	walletService *wallet.Service,
+) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -258,28 +250,68 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 		return nil, err
 	}
 
-	var reputationClient *reputation.HTTPClient
-	if os.Getenv("ENV") != "local" || len(os.Getenv("REPUTATION_SERVER")) > 0 {
+	var reputationClient reputation.Client
+	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
 		reputationClient, err = reputation.New()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	walletService, err := wallet.InitService(datastore, roDatastore)
+	service := &Service{
+		Datastore:               promotionDB,
+		RoDatastore:             promotionRODB,
+		cbClient:                cbClient,
+		reputationClient:        reputationClient,
+		balanceClient:           balanceClient,
+		wallet:                  walletService,
+		pauseSuggestionsUntilMu: sync.RWMutex{},
+	}
+
+	// setup runnable jobs
+	service.jobs = []srv.Job{
+		{
+			Func:    service.RunNextPromotionMissingIssuer,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextClaimJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextSuggestionJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+	}
+
+	var enableLinkingDraining bool
+	// make sure that we only enable the DrainJob if we have linking/draining enabled
+	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
+		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+		if err != nil {
+			// there was an error parsing the environment variable
+			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+		}
+	}
+
+	if enableLinkingDraining {
+		service.jobs = append(service.jobs,
+			srv.Job{
+				Func:    service.RunNextDrainJob,
+				Cadence: 5 * time.Second,
+				Workers: 1,
+			})
+	}
+
+	err = service.InitKafka()
 	if err != nil {
 		return nil, err
 	}
 
-	service := &Service{
-		datastore:        datastore,
-		roDatastore:      roDatastore,
-		cbClient:         cbClient,
-		reputationClient: reputationClient,
-		balanceClient:    balanceClient,
-		wallet:           *walletService,
-	}
-	err = service.InitKafka()
+	err = service.InitHotWallet(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -287,19 +319,47 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, 
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
-func (service *Service) ReadableDatastore() ReadOnlyDatastore {
-	if service.roDatastore != nil {
-		return service.roDatastore
+func (s *Service) ReadableDatastore() ReadOnlyDatastore {
+	if s.RoDatastore != nil {
+		return s.RoDatastore
 	}
-	return service.datastore
+	return s.Datastore
 }
 
 // RunNextClaimJob takes the next claim job and completes it
-func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextClaimJob(ctx, service)
+func (s *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextClaimJob(ctx, s)
 }
 
-// RunNextSuggestionJob takes the next claim job and completes it
-func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
-	return service.datastore.RunNextSuggestionJob(ctx, service)
+// RunNextSuggestionJob takes the next suggestion job and completes it
+func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextSuggestionJob(ctx, s)
+}
+
+// RunNextDrainJob takes the next drain job and completes it
+func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextDrainJob(ctx, s)
+}
+
+// RunNextPromotionMissingIssuer takes the next job and completes it
+func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// create issuer for all of the promotions without an issuer
+	uuids, err := s.RoDatastore.GetPromotionsMissingIssuer(100)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get promotions from datastore")
+		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)
+	}
+
+	for _, uuid := range uuids {
+		if _, err := s.CreateIssuer(ctx, uuid, "control"); err != nil {
+			logger.Error().Err(err).Msg("failed to create issuer")
+		}
+	}
+	return true, nil
 }
