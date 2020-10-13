@@ -6,10 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
-	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,7 +15,9 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -42,8 +41,11 @@ var (
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := GeminiUploadSettlement(cmd.Context(), input, signatureSwitch, allTransactionsFile, out); err != nil {
-				fmt.Printf("failed to perform upload to gemini: %s\n", err)
-				os.Exit(1)
+				logger, lerr := appctx.GetLogger(cmd.Context())
+				if lerr != nil {
+					_, logger = logging.SetupLogger(cmd.Context())
+				}
+				logger.Panic().Err(err).Msg("failed to perform upload to gemini")
 			}
 		},
 	}
@@ -53,8 +55,11 @@ var (
 		Short: "provides transform of gemini settlement for mass pay",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := GeminiTransformForMassPay(cmd.Context(), input, oauthClientID, out); err != nil {
-				log.Printf("failed to perform transform: %s\n", err)
-				os.Exit(1)
+				logger, lerr := appctx.GetLogger(cmd.Context())
+				if lerr != nil {
+					_, logger = logging.SetupLogger(cmd.Context())
+				}
+				logger.Panic().Err(err).Msg("failed to perform gemini transform")
 			}
 		},
 	}
@@ -129,6 +134,11 @@ func geminiSiftThroughResponses(
 
 // GeminiUploadSettlement marks the settlement file as complete
 func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	if outPath == "./gemini-settlement" {
 		// use a file with extension if none is passed
 		outPath = "./gemini-settlement-complete.json"
@@ -137,21 +147,25 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 	bulkPayoutFiles := strings.Split(inPath, ",")
 	geminiClient, err := gemini.New()
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to create new gemini client")
 		return err
 	}
 
 	if allTransactionsFile == "" {
+		logger.Error().Msg("transactions file is empty")
 		return errors.New("unable to upload without a transactions file to check against")
 	}
 
 	bytes, err := ioutil.ReadFile(allTransactionsFile)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to read the transactions file")
 		return err
 	}
 
 	var settlementTransactions []settlement.AntifraudTransaction
 	err = json.Unmarshal(bytes, &settlementTransactions)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to unmarshal the transactions file")
 		return err
 	}
 	// create a map of the request transactions
@@ -159,11 +173,15 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 
 	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
 	// write file for upload to eyeshade
-	fmt.Printf("outputting to %s* files\n", outPath)
+	logger.Info().
+		Str("files", outPath).
+		Msg("outputting files")
+
 	for key, txs := range *submittedTransactions {
 		outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-		err = GeminiWriteTransactions(outputPath, &txs)
+		err = GeminiWriteTransactions(ctx, outputPath, &txs)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to write gemini transactions file")
 			return err
 		}
 	}
@@ -177,16 +195,25 @@ func geminiIterateRequest(
 	bulkPayoutFiles []string,
 	transactionsMap map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
+
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	submittedTransactions := make(map[string][]settlement.Transaction)
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read bulk payout file")
 			return &submittedTransactions, err
 		}
 
 		var geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence
 		err = json.Unmarshal(bytes, &geminiBulkPayoutRequestRequirements)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 			return &submittedTransactions, err
 		}
 
@@ -196,18 +223,30 @@ func geminiIterateRequest(
 			sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
 			decodedSig, err := hex.DecodeString(sig)
 			if err != nil {
+				logger.Error().Err(err).Msg("failed decode signature")
 				return &submittedTransactions, err
 			}
 			base := bulkPayoutRequestRequirements.Base
 			presigner := cryptography.NewPresigner(decodedSig)
 			base.Nonce = base.Nonce + int64(signatureSwitch)
-			fmt.Printf("nonce: %d\n signature switch: %d\n", base.Nonce, int64(signatureSwitch))
+
+			logger.Debug().
+				Int("i", i).
+				Int64("nonce", base.Nonce).
+				Int("signature switch", signatureSwitch).
+				Msg("parameters used")
+
 			serialized, err := json.Marshal(base)
 			if err != nil {
 				return &submittedTransactions, err
 			}
 			payload := base64.StdEncoding.EncodeToString(serialized)
-			fmt.Printf("sending request %d api key: %s with signature: %s\n", i, bulkPayoutRequestRequirements.APIKey, sig)
+
+			logger.Debug().
+				Str("api key", bulkPayoutRequestRequirements.APIKey).
+				Str("signature", sig).
+				Msg("sending request")
+
 			response, err := geminiClient.UploadBulkPayout(
 				ctx,
 				bulkPayoutRequestRequirements.APIKey,
@@ -216,6 +255,7 @@ func geminiIterateRequest(
 			)
 			<-time.After(time.Second)
 			if err != nil {
+				logger.Error().Err(err).Msg("error performing upload")
 				return &submittedTransactions, err
 			}
 			// collect all successful transactions to send to eyeshade
@@ -239,13 +279,20 @@ func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) m
 }
 
 // GeminiWriteTransactions writes settlement transactions to a json file
-func GeminiWriteTransactions(outPath string, metadata *[]settlement.Transaction) error {
+func GeminiWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	if len(*metadata) == 0 {
 		return nil
 	}
-	fmt.Printf("writing %s with %d transactions\n", outPath, len(*metadata))
+
+	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
+		logger.Error().Err(err).Msg("failed writing outputting files")
 		return err
 	}
 	return ioutil.WriteFile(outPath, data, 0600)

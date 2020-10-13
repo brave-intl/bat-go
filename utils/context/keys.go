@@ -32,6 +32,10 @@ const (
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
 	RatiosCachePurgeDurationCTXKey CTXKey = "ratios_client_cache_purge"
+	// DebugLoggingCTXKey - context key for debug logging
+	DebugLoggingCTXKey CTXKey = "debug_logging"
+	// ProgressLoggingCTXKey - context key for progress logging
+	ProgressLoggingCTXKey CTXKey = "progress_logging"
 )
 
 var (

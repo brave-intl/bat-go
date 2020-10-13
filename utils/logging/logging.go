@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -54,9 +55,27 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	// always print out timestamp
 	l := zerolog.New(output).With().Timestamp().Logger()
 
-	debug := os.Getenv("DEBUG")
-	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
+	var (
+		debug bool
+		ok    bool
+	)
+
+	// use context to get debugging flag first, then fall back to env variable
+	if debug, ok = ctx.Value("debug_logging").(bool); !ok {
+		if os.Getenv("DEBUG") == "" {
+			// false, but ParseBool doesn't understand empty string
+			debug = false
+		} else if debug, err = strconv.ParseBool(os.Getenv("DEBUG")); err != nil {
+			// parse error
+			debug = false
+		}
+	}
+
+	if !debug {
+		// if not debug, set log level to info
 		l = l.Level(zerolog.InfoLevel)
+	} else {
+		l = l.Level(zerolog.DebugLevel)
 	}
 
 	return l.WithContext(ctx), &l
