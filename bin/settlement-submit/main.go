@@ -5,18 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/formatters"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 	outputFile string
 
 	verbose             = flag.Bool("v", false, "verbose output")
+	progressDuration    = flag.Duration("p", time.Duration(0), "duration for progress logging")
 	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
 	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
 	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
@@ -31,7 +33,6 @@ var (
 )
 
 func main() {
-	log.SetFormatter(&formatters.CliFormatter{})
 
 	flag.Usage = func() {
 		log.Printf("Submit signed settlements to " + *provider + ".\n\n")
@@ -41,50 +42,62 @@ func main() {
 	}
 	flag.Parse()
 
-	if *verbose {
-		log.SetLevel(log.DebugLevel)
-	}
+	// setup context for logging, debug and progress
+	ctx := context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, verbose)
+
+	// setup progress logging
+	progChan := logging.ReportProgress(ctx, *progressDuration)
+	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
+
+	// setup logger, with the context that has the logger
+	ctx, logger := logging.SetupLogger(ctx)
+
 	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
 	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
 
 	var err error
 	switch *provider {
 	case "uphold":
-		err = upholdSubmit()
+		err = upholdSubmit(ctx)
 	case "gemini":
 		ctx := context.Background()
 		err = settlementcmd.GeminiUploadSettlement(ctx, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
 	}
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("error encountered running settlement-submit")
 	}
 }
 
-func upholdSubmit() error {
+func upholdSubmit(ctx context.Context) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	settlementJSON, err := ioutil.ReadFile(*inputFile)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to read input file")
 	}
 
 	var settlementState settlement.State
 	err = json.Unmarshal(settlementJSON, &settlementState)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to unmarshal input file")
 	}
 
 	err = settlement.CheckForDuplicates(settlementState.Transactions)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed duplicate transaction check")
 	}
 
 	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to make settlement wallet")
 	}
 
 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to create output file")
 	}
 
 	// Read from the transaction log
@@ -93,7 +106,7 @@ func upholdSubmit() error {
 		var tmp settlement.Transaction
 		err = json.Unmarshal(scanner.Bytes(), &tmp)
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to scan the transaction log")
 		}
 		for i := 0; i < len(settlementState.Transactions); i++ {
 			// Only one transaction per channel is allowed per settlement
@@ -103,6 +116,8 @@ func upholdSubmit() error {
 		}
 	}
 
+	var total = len(settlementState.Transactions)
+
 	allComplete := true
 	for i := 0; i < len(settlementState.Transactions); i++ {
 		settlementTransaction := &settlementState.Transactions[i]
@@ -110,57 +125,60 @@ func upholdSubmit() error {
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
 			if errorutils.IsErrInvalidDestination(err) {
-				log.Println(err)
+				logger.Info().Err(err).Msg("invalid destination, skipping")
 				continue
 			}
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("unanticipated error")
 		}
 
 		var out []byte
 		out, err = json.Marshal(settlementTransaction)
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to unmarshal settlement transaction")
 		}
 
 		// Append progress to the log
 		_, err = f.Write(append(out, '\n'))
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to write to output log")
 		}
 		err = f.Sync()
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to sync output log to disk")
 		}
 
 		err = settlement.ConfirmPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
 		}
 
 		out, err = json.Marshal(settlementTransaction)
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to marshal prepared transaction")
 		}
 
 		// Append progress to the log
 		_, err = f.Write(append(out, '\n'))
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to write progress to output log")
 		}
 		err = f.Sync()
 		if err != nil {
-			log.Fatalln(err)
+			logger.Panic().Err(err).Msg("failed to sync output log")
 		}
 
 		if !settlementTransaction.IsComplete() {
 			allComplete = false
 		}
+
+		// perform progress logging
+		logging.SubmitProgress(ctx, i, total)
 	}
 
 	if allComplete {
-		fmt.Println("\nall transactions successfully completed, writing out settlement file")
+		logger.Info().Msg("all transactions successfully completed, writing out settlement file")
 	} else {
-		log.Fatalln("\nnot all transactions successfully completed, rerun to attempt resubmit")
+		logger.Panic().Msg("not all transactions are successfully completed, rerun to resubmit")
 	}
 
 	for i := 0; i < len(settlementState.Transactions); i++ {
@@ -171,14 +189,14 @@ func upholdSubmit() error {
 	// Write out transactions ready to be submitted to eyeshade
 	out, err := json.MarshalIndent(settlementState.Transactions, "", "    ")
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
 	}
 
 	err = ioutil.WriteFile(outputFile, out, 0600)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
 	}
 
-	fmt.Println("done!")
+	logger.Info().Msg("done!")
 	return nil
 }
