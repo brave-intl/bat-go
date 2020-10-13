@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
@@ -24,7 +25,7 @@ var (
 	outputFile string
 
 	verbose             = flag.Bool("v", false, "verbose output")
-	progress            = flag.Bool("p", false, "enable progress logging")
+	progressDuration    = flag.Duration("p", time.Duration(0), "duration for progress logging")
 	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
 	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
 	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
@@ -43,7 +44,10 @@ func main() {
 
 	// setup context for logging, debug and progress
 	ctx := context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, verbose)
-	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progress)
+
+	// setup progress logging
+	progChan := logging.ReportProgress(ctx, *progressDuration)
+	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
 
 	// setup logger, with the context that has the logger
 	ctx, logger := logging.SetupLogger(ctx)
@@ -112,6 +116,8 @@ func upholdSubmit(ctx context.Context) error {
 		}
 	}
 
+	var total = len(settlementState.Transactions)
+
 	allComplete := true
 	for i := 0; i < len(settlementState.Transactions); i++ {
 		settlementTransaction := &settlementState.Transactions[i]
@@ -164,6 +170,9 @@ func upholdSubmit(ctx context.Context) error {
 		if !settlementTransaction.IsComplete() {
 			allComplete = false
 		}
+
+		// perform progress logging
+		logging.SubmitProgress(ctx, i, total)
 	}
 
 	if allComplete {

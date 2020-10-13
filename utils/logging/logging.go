@@ -90,3 +90,52 @@ func AddWalletIDToContext(ctx context.Context, walletID uuid.UUID) {
 		})
 	}
 }
+
+// Progress - type to store the incremental progress of a task
+type Progress struct {
+	Processed int
+	Total     int
+}
+
+// SubmitProgress - helper to log progress
+func SubmitProgress(ctx context.Context, processed, total int) {
+	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan Progress)
+	if progOk {
+		progChan <- Progress{
+			Processed: processed,
+			Total:     total,
+		}
+	}
+}
+
+// ReportProgress - goroutine watching for Progress updates for logging
+func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Progress {
+	// setup logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = SetupLogger(ctx)
+	}
+
+	// we will return the progress channel so the app
+	// can send us progress information as it processes
+	progChan := make(chan Progress)
+	var (
+		last Progress
+	)
+	go func() {
+		for {
+			select {
+			case <-time.After(progressDuration):
+				// output most resent progress information
+				logger.Info().
+					Int("processed", last.Processed).
+					Int("pending", last.Total-last.Processed).
+					Int("total", last.Total).
+					Msg("progress update")
+			case last = <-progChan:
+				continue
+			}
+		}
+	}()
+	return progChan
+}

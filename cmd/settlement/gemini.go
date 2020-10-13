@@ -203,7 +203,7 @@ func geminiIterateRequest(
 
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	for _, bulkPayoutFile := range bulkPayoutFiles {
+	for j, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
@@ -264,6 +264,7 @@ func geminiIterateRequest(
 				submittedTransactions[key] = append(submittedTransactions[key], txs...)
 			}
 		}
+		logging.SubmitProgress(ctx, j, len(bulkPayoutFiles))
 	}
 	return &submittedTransactions, nil
 }
