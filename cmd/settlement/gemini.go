@@ -3,20 +3,17 @@ package settlement
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
@@ -28,7 +25,6 @@ import (
 var (
 	oauthClientID string
 	// uploading
-	signatureSwitch     int
 	allTransactionsFile string
 
 	geminiSettlementCmd = &cobra.Command{
@@ -40,6 +36,7 @@ var (
 		Use:   "upload",
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
+<<<<<<< HEAD
 			if err := GeminiUploadSettlement(
 				cmd.Context(),
 				viper.GetString("input"),
@@ -47,6 +44,9 @@ var (
 				allTransactionsFile,
 				viper.GetString("out"),
 			); err != nil {
+=======
+			if err := GeminiUploadSettlement(cmd.Context(), input, allTransactionsFile, out); err != nil {
+>>>>>>> 1315533... updating loop
 				logger, lerr := appctx.GetLogger(cmd.Context())
 				if lerr != nil {
 					_, logger = logging.SetupLogger(cmd.Context())
@@ -106,38 +106,33 @@ func init() {
 	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 }
 
-func geminiSiftThroughResponses(
+func geminiClassifyResponse(
 	originalTransactions map[string]settlement.Transaction,
-	response *[]gemini.PayoutResult,
-) map[string][]settlement.Transaction {
-	transactions := make(map[string][]settlement.Transaction)
-
-	for _, payout := range *response {
-		original := originalTransactions[payout.TxRef]
-		key := "failed"
-		if payout.Result == "Error" {
-			original.Note = *payout.Reason
-		} else {
-			status := *payout.Status
-			key = "unknown"
-			if *payout.Status == "Pending" {
-				key = "pending"
-			} else if status == "Completed" {
-				key = "complete"
-			}
+	payout *gemini.PayoutResult,
+) (settlement.Transaction, string) {
+	original := originalTransactions[payout.TxRef]
+	key := "failed"
+	if payout.Result == "Error" {
+		original.Note = *payout.Reason
+	} else {
+		status := *payout.Status
+		key = "unknown"
+		if *payout.Status == "Pending" {
+			key = "pending"
+		} else if status == "Completed" {
+			key = "complete"
 		}
-		original.Status = key
-		tmp := altcurrency.BAT
-		original.AltCurrency = &tmp
-		original.Currency = tmp.String()
-		original.ProviderID = payout.TxRef
-		transactions[key] = append(transactions[key], original)
 	}
-	return transactions
+	original.Status = key
+	tmp := altcurrency.BAT
+	original.AltCurrency = &tmp
+	original.Currency = tmp.String()
+	original.ProviderID = payout.TxRef
+	return original, key
 }
 
 // GeminiUploadSettlement marks the settlement file as complete
-func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
+func GeminiUploadSettlement(ctx context.Context, inPath string, allTransactionsFile string, outPath string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -175,13 +170,7 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 	// create a map of the request transactions
 	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
 
-	// submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
-	submittedTransactions, submitErr := geminiCheckTxStatus(
-		ctx,
-		geminiClient,
-		bulkPayoutFiles,
-		transactionsMap,
-	)
+	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, settlementTransactions, transactionsMap)
 	// write file for upload to eyeshade
 	logger.Info().
 		Str("files", outPath).
@@ -198,27 +187,10 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 	return submitErr
 }
 
-func geminiCheckTxStatus(
-	ctx context.Context,
-	geminiClient gemini.Client,
-	bulkPayoutFiles []string,
-	transactionsMap map[string]settlement.Transaction,
-) (*map[string][]settlement.Transaction, error) {
-	submittedTransactions := make(map[string][]settlement.Transaction)
-	for _, bulkPayoutFile := range bulkPayoutFiles {
-		bytes, err := ioutil.ReadFile(bulkPayoutFile)
-		if err != nil {
-			return &submittedTransactions, err
-		}
-	}
-	return submittedTransactions
-}
-
 func geminiIterateRequest(
 	ctx context.Context,
 	geminiClient gemini.Client,
-	signatureSwitch int,
-	bulkPayoutFiles []string,
+	settlementTransactions []settlement.Transaction,
 	transactionsMap map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
 
@@ -229,67 +201,40 @@ func geminiIterateRequest(
 
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	for j, bulkPayoutFile := range bulkPayoutFiles {
-		bytes, err := ioutil.ReadFile(bulkPayoutFile)
+	for j, settlementTransaction := range settlementTransactions {
+		logger.Debug().
+			Int("i", i).
+			Int64("nonce", base.Nonce).
+			Msg("parameters used")
+
+		serialized, err := json.Marshal(base)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
 			return &submittedTransactions, err
 		}
+		payload := base64.StdEncoding.EncodeToString(serialized)
 
-		var geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence
-		err = json.Unmarshal(bytes, &geminiBulkPayoutRequestRequirements)
+		logger.Debug().
+			Str("api key", bulkPayoutRequestRequirements.APIKey).
+			Str("tx_ref", generate(settlementTransaction)).
+			Msg("sending request")
+
+		response, err := geminiClient.CheckTxStatus(
+			ctx,
+			bulkPayoutRequestRequirements.APIKey,
+			presigner,
+			payload,
+		)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
+			logger.Error().Err(err).Msg("error performing upload")
 			return &submittedTransactions, err
 		}
 
-		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
-			// make sure payload is parsable
-			// upload the bulk payout
-			sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
-			decodedSig, err := hex.DecodeString(sig)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed decode signature")
-				return &submittedTransactions, err
-			}
-			base := bulkPayoutRequestRequirements.Base
-			presigner := cryptography.NewPresigner(decodedSig)
-			base.Nonce = base.Nonce + int64(signatureSwitch)
-
-			logger.Debug().
-				Int("i", i).
-				Int64("nonce", base.Nonce).
-				Int("signature switch", signatureSwitch).
-				Msg("parameters used")
-
-			serialized, err := json.Marshal(base)
-			if err != nil {
-				return &submittedTransactions, err
-			}
-			payload := base64.StdEncoding.EncodeToString(serialized)
-
-			logger.Debug().
-				Str("api key", bulkPayoutRequestRequirements.APIKey).
-				Str("signature", sig).
-				Msg("sending request")
-
-			response, err := geminiClient.UploadBulkPayout(
-				ctx,
-				bulkPayoutRequestRequirements.APIKey,
-				presigner,
-				payload,
-			)
-			<-time.After(time.Second)
-			if err != nil {
-				logger.Error().Err(err).Msg("error performing upload")
-				return &submittedTransactions, err
-			}
-			// collect all successful transactions to send to eyeshade
-			submitted := geminiSiftThroughResponses(transactionsMap, response)
-			for key, txs := range submitted {
-				submittedTransactions[key] = append(submittedTransactions[key], txs...)
-			}
-		}
+		tx, key := geminiClassifyResponse(
+			transactionsMap,
+			response,
+		)
+		submittedTransactions[key] = append(submittedTransactions[key], tx)
 		logging.SubmitProgress(ctx, j, len(bulkPayoutFiles))
 	}
 	return &submittedTransactions, nil
