@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -163,6 +164,8 @@ type Client interface {
 	FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to gemini
 	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error)
+	// CheckTxStatus checks the status of a transaction
+	CheckTxStatus(ctx context.Context, APIKEY string, clientID string, txRef string) (*PayoutResult, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -185,25 +188,75 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
 }
 
-func setPrivateRequestHeaders(
+func setHeaders(
 	req *http.Request,
 	APIKey string,
-	signer cryptography.HMACKey,
+	signer *cryptography.HMACKey,
 	payload string,
+	submitType string,
 ) error {
 	req.Header.Set("Content-Type", "text/plain")
 	req.Header.Set("Content-Length", "0")
-	req.Header.Set("X-GEMINI-PAYLOAD", payload)
-	if os.Getenv("GEMINI_SUBMIT_TYPE") != "oauth" {
-		signature, err := signer.HMACSha384([]byte(payload))
+	req.Header.Set("Cache-Control", "no-cache")
+	if payload != "" {
+		req.Header.Set("X-GEMINI-PAYLOAD", payload)
+	}
+	if submitType != "oauth" {
+		// do not send when oauth
+		req.Header.Set("X-GEMINI-APIKEY", APIKey)
+	}
+	return setPrivateRequestHeaders(
+		req,
+		APIKey,
+		signer,
+		payload,
+		submitType,
+	)
+}
+
+func setPrivateRequestHeaders(
+	req *http.Request,
+	APIKey string,
+	signer *cryptography.HMACKey,
+	payload string,
+	submitType string,
+) error {
+	if submitType == "hmac" {
+		signs := *signer
+		// only set if sending an hmac salt
+		signature, err := signs.HMACSha384([]byte(payload))
 		if err != nil {
 			return err
 		}
-		req.Header.Set("X-GEMINI-APIKEY", APIKey)
 		req.Header.Set("X-GEMINI-SIGNATURE", hex.EncodeToString(signature))
 	}
-	req.Header.Set("Cache-Control", "no-cache")
 	return nil
+}
+
+// CheckTxStatus uploads the bulk payout for gemini
+func (c *HTTPClient) CheckTxStatus(
+	ctx context.Context,
+	APIKey string,
+	clientID string,
+	txRef string,
+) (*PayoutResult, error) {
+	urlPath := fmt.Sprintf("/v1/payments/%s/%s", clientID, txRef)
+	req, err := c.client.NewRequest(ctx, "POST", urlPath, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = setHeaders(req, APIKey, nil, "", "api")
+	if err != nil {
+		return nil, err
+	}
+
+	var body PayoutResult
+	_, err = c.client.Do(ctx, req, &body)
+	if err != nil {
+		return nil, err
+	}
+	return &body, err
 }
 
 // UploadBulkPayout uploads the bulk payout for gemini
@@ -217,7 +270,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	if err != nil {
 		return nil, err
 	}
-	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	err = setHeaders(req, APIKey, &signer, payload, os.Getenv("GEMINI_SUBMIT_TYPE"))
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +294,7 @@ func (c *HTTPClient) FetchAccountList(
 	if err != nil {
 		return nil, err
 	}
-	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	err = setHeaders(req, APIKey, &signer, payload, os.Getenv("GEMINI_SUBMIT_TYPE"))
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +318,7 @@ func (c *HTTPClient) FetchBalances(
 	if err != nil {
 		return nil, err
 	}
-	err = setPrivateRequestHeaders(req, APIKey, signer, payload)
+	err = setHeaders(req, APIKey, &signer, payload, os.Getenv("GEMINI_SUBMIT_TYPE"))
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
+// CheckTxStatus implements Client
+func (_d ClientWithPrometheus) CheckTxStatus(ctx context.Context, APIKEY string, clientID string, txRef string) (pp1 *PayoutResult, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckTxStatus", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CheckTxStatus(ctx, APIKEY, clientID, txRef)
+}
+
 // FetchAccountList implements Client
 func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (aap1 *[]Account, err error) {
 	_since := time.Now()

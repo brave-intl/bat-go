@@ -175,7 +175,13 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 	// create a map of the request transactions
 	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
 
-	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
+	// submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
+	submittedTransactions, submitErr := geminiCheckTxStatus(
+		ctx,
+		geminiClient,
+		bulkPayoutFiles,
+		transactionsMap,
+	)
 	// write file for upload to eyeshade
 	logger.Info().
 		Str("files", outPath).
@@ -190,6 +196,22 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, signatureSwitch 
 		}
 	}
 	return submitErr
+}
+
+func geminiCheckTxStatus(
+	ctx context.Context,
+	geminiClient gemini.Client,
+	bulkPayoutFiles []string,
+	transactionsMap map[string]settlement.Transaction,
+) (*map[string][]settlement.Transaction, error) {
+	submittedTransactions := make(map[string][]settlement.Transaction)
+	for _, bulkPayoutFile := range bulkPayoutFiles {
+		bytes, err := ioutil.ReadFile(bulkPayoutFile)
+		if err != nil {
+			return &submittedTransactions, err
+		}
+	}
+	return submittedTransactions
 }
 
 func geminiIterateRequest(
