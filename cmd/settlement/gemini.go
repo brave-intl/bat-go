@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
@@ -318,6 +320,14 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
 func GeminiTransformTransactions(ctx context.Context, oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
 	maxCount := 500
+	maxCountEnv := os.Getenv("GEMINI_MAX_SUBMIT_BLOCK")
+	if maxCountEnv != "" {
+		i, err := strconv.Atoi(maxCountEnv)
+		if err != nil {
+			return nil, err
+		}
+		maxCount = i
+	}
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0
