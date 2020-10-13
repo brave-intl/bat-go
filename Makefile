@@ -130,6 +130,12 @@ settlement-tools:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
+docker-settlement-tools:
+	docker rmi -f brave/settlement-tools:latest
+	docker build -f settlement/Dockerfile --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t brave/settlement-tools:$(GIT_VERSION)$(BUILD_TIME) .
+	docker tag brave/settlement-tools:$(GIT_VERSION)$(BUILD_TIME) brave/settlement-tools:latest
+
 grant-signing-tools:
 	$(eval GOOS?=darwin)
 	$(eval GOARCH?=amd64)
