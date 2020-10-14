@@ -135,6 +135,8 @@ func (service *Service) TryUpgradeSuggestionEvent(suggestion []byte) ([]byte, er
 // SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
 type SuggestionWorker interface {
 	RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
+	PauseWorker(until time.Time)
+	IsPaused() bool
 }
 
 // GetCredentialRedemptions as well as total and funding sources from a list of credential bindings
@@ -285,6 +287,7 @@ func (service *Service) Suggest(ctx context.Context, credentials []CredentialBin
 				prometheus.Labels{
 					"method": "SuggestionJob",
 				}).Inc()
+
 			_, err := service.Datastore.RunNextSuggestionJob(ctx, service)
 			if err != nil {
 				log.Ctx(ctx).
@@ -322,6 +325,20 @@ func (service *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// PauseWorker - pause worker until time specified
+func (service *Service) PauseWorker(until time.Time) {
+	service.pauseSuggestionsUntilMu.Lock()
+	defer service.pauseSuggestionsUntilMu.Unlock()
+	service.pauseSuggestionsUntil = until
+}
+
+// IsPaused - is the worker paused?
+func (service *Service) IsPaused() bool {
+	service.pauseSuggestionsUntilMu.RLock()
+	defer service.pauseSuggestionsUntilMu.RUnlock()
+	return time.Now().Before(service.pauseSuggestionsUntil)
 }
 
 // RedeemAndCreateSuggestionEvent after validating that all the credential bindings

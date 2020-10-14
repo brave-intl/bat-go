@@ -4,6 +4,11 @@ import (
 	"encoding/json"
 )
 
+// Coded - interface for things that have codes, such as errors
+type Coded interface {
+	GetCode() string
+}
+
 type upholdBaseError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -36,6 +41,11 @@ type upholdError struct {
 	Data             json.RawMessage        `json:",omitempty"`
 }
 
+// Code - implement coded interface
+func (uhErr upholdError) GetCode() string {
+	return uhErr.Code
+}
+
 func (uhErr upholdError) NotFoundError() bool {
 	return uhErr.Code == "not_found"
 }
@@ -50,6 +60,14 @@ func (uhErr upholdError) AlreadyExistsError() bool {
 
 func (uhErr upholdError) DenominationError() bool {
 	return uhErr.ValidationError() && uhErr.ValidationErrors.DenominationErrors.Code == "validation_failed"
+}
+
+func (uhErr upholdError) DestinationError() bool {
+	return uhErr.ValidationError() && len(uhErr.ValidationErrors.DestinationErrors) > 0
+}
+
+func (uhErr upholdError) InvalidDestination() bool {
+	return uhErr.DestinationError()
 }
 
 func (uhErr upholdError) AmountError() bool {

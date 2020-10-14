@@ -143,7 +143,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 				)
 			}
 
-			logging.AddWalletIDToContext(r.Context(), walletID.UUID())
+			logging.AddWalletIDToContext(r.Context(), *walletID.UUID())
 			filter = "walletID"
 		}
 
@@ -160,8 +160,7 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 			migrate = true
 		}
 
-		tmp := walletID.UUID()
-		promotions, err := service.GetAvailablePromotions(r.Context(), &tmp, platform, migrate)
+		promotions, err := service.GetAvailablePromotions(r.Context(), walletID.UUID(), platform, migrate)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
 		}
@@ -236,7 +235,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 			)
 		}
 
-		claimID, err := service.ClaimPromotionForWallet(r.Context(), promotionID.UUID(), req.WalletID, req.BlindedCreds)
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), req.WalletID, req.BlindedCreds)
 
 		if err != nil {
 			var (
@@ -289,7 +288,7 @@ func GetClaim(service *Service) handlers.AppHandler {
 			)
 		}
 
-		claim, err := service.Datastore.GetClaimCreds(claimID.UUID())
+		claim, err := service.Datastore.GetClaimCreds(*claimID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}

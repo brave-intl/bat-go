@@ -21,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -385,7 +386,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
 	suite.Require().NoError(err)

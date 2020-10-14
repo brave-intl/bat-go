@@ -1,0 +1,1 @@
+{"$schema":"http://json-schema.org/draft-04/schema#","$ref":"#/definitions/BalanceResponseV3","definitions":{"BalanceResponseV3":{"required":["total","spendable","confirmed","unconfirmed"],"properties":{"total":{"type":"number"},"spendable":{"type":"number"},"confirmed":{"type":"number"},"unconfirmed":{"type":"number"}},"additionalProperties":false,"type":"object"}}}

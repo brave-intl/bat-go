@@ -11,10 +11,11 @@ export VAULT_ADDR=http://127.0.0.1:8200
 ./vault server -config=config.hcl
 
 # initialize
-./vault-init -key-shares=1 -key-threshold=1 GPG_PUB_KEY_FILE...
+./bat-go vault init --key-shares 1 --key-threshold 1 PATH_TO_GPG_PUB_KEY_FILE
 
 # unseal vault
-gpg -d SHARE.GPG | ./vault-unseal
+gpg -d ./share-0.gpg | ./bat-go vault unseal
+# -> prompt for password
 ```
 
 ## Bringing up vault
@@ -26,7 +27,7 @@ On the offline computer, in one window run:
 
 In another run:
 ```
-gpg -d SHARE.GPG | ./vault-unseal
+gpg -d ./share-0.gpg | ./bat-go vault unseal
 ```
 
 ## Running settlement
@@ -34,7 +35,7 @@ gpg -d SHARE.GPG | ./vault-unseal
 First bring up vault as described above.
 
 ```
-./vault-sign-settlement -in <SETTLEMENT_REPORT.JSON> <SETTLEMENT_WALLET_CARD_ID>
+./bat-go vault sign-settlement --config=./config.yaml --in=SETTLEMENT_REPORT.JSON
 ```
 
 Finally seal the vault:
@@ -64,10 +65,10 @@ transactions that were made.
 
 On the offline machine, first bring up vault as described above.
 
-Run vault-create-wallet, this will sign the registration and store it into 
+Run vault-create-wallet, this will sign the registration and store it into
 a local file:
 ```
-vault-create-wallet -offline name-of-new-wallet
+./bat-go vault create-wallet NAME_OF_NEW_WALLET
 ```
 
 Copy the created `name-of-new-wallet-registration.json` file to the online
@@ -78,11 +79,35 @@ Re-run vault-create-wallet, this will submit the pre-signed registration:
 export UPHOLD_ENVIRONMENT=
 export UPHOLD_HTTP_PROXY=
 export UPHOLD_ACCESS_TOKEN=
-vault-create-wallet -offline name-of-new-wallet
+./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
 ```
 
 Finally copy `name-of-new-wallet-registration.json` back to the offline
 machine and run vault-create-wallet to record the provider ID in vault:
 ```
-vault-create-wallet -offline name-of-new-wallet
+./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
+```
+
+## Creating a config
+the `config.example.yaml` should be copied wherever it is easiest to point to. just pass in the path while running a command that interacts with vault (import-key, sign-settlement) etc. be sure to change the values of the wallets to suit your setup if required.
+
+## Importing keys
+
+the following line imports the keys from environment variables
+```bash
+./bat-go vault import-key --config=./config.yaml
+# pass a known key to only import one: --wallet-refs=gemini-referral
+```
+
+## Signing Files
+
+signing the settlement file will split the input files into many output files depending on the contents of the file
+```bash
+./bat-go vault sign-settlement --config=./config.yaml --in=contributions.json
+```
+
+## Uploading files
+running `settlement-submit` with a provider tells the script where to submit the file and the kind of handler to use. the sig=0 flag is for gemini bulk uploads that will need multiple submissions to check future status and create a completed list of transactions.
+```bash
+./settlement-submit -in=gemini-contributions-signed.json -provider=gemini -sig=0 -alltransactions=contributions.json
 ```

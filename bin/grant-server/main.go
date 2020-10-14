@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/controllers"
+	// re-using viper bind-env for wallet env variables
+	_ "github.com/brave-intl/bat-go/cmd/wallets"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
@@ -79,7 +79,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// use cobra configurations for setting up wallet service
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
-	r, ctx, walletService = cmd.SetupWalletService(ctx, r)
+	r, ctx, walletService = wallet.SetupService(ctx, r)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
@@ -119,7 +119,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, promotionService.Jobs()...)
 
-	r.Mount("/v1/grants", controllers.GrantsRouter(grantService))
 	r.Mount("/v1/promotions", promotion.Router(promotionService))
 	r.Mount("/v2/promotions", promotion.RouterV2(promotionService))
 

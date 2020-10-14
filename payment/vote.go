@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -173,6 +174,12 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 		logger.Error().Msg("cancellation envoked in drain vote queue!\n")
 		return false, nil
 	default:
+
+		// make sure we are not paused.
+		if service.IsPaused() {
+			logger.Error().Msg("drain worker is paused!\n")
+			return false, nil
+		}
 		// pull vote from db queue
 		tx, records, err := service.Datastore.GetUncommittedVotesForUpdate(ctx)
 		if err != nil {
@@ -208,6 +215,10 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 					Value: record.VoteEventBinary,
 				},
 			); err != nil {
+				if strings.Contains(err.Error(), "expired") {
+					// pause the worker for 30 minutes, expired cert
+					service.PauseWorker(time.Now().Add(30 * time.Minute))
+				}
 				logger.Error().Err(err).Msg("failed to write message to kafka")
 				return true, rollbackTx(service.Datastore, tx, "failed to write vote to kafka", err)
 			}

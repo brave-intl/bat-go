@@ -16,12 +16,12 @@ var (
 
 // ID - a generic ID type that can be used for common id based things
 type ID struct {
-	uuid uuid.UUID
+	uuid *uuid.UUID
 	raw  string
 }
 
 // UUID - return the UUID representation of the ID
-func (id *ID) UUID() uuid.UUID {
+func (id *ID) UUID() *uuid.UUID {
 	return id.uuid
 }
 
@@ -45,8 +45,10 @@ func (id *ID) Decode(ctx context.Context, input []byte) error {
 	}
 	id.raw = string(input)
 
-	if id.uuid, err = uuid.FromString(id.raw); err != nil {
+	var parsed uuid.UUID
+	if parsed, err = uuid.FromString(id.raw); err != nil {
 		return ErrIDDecodeNotUUID
 	}
+	id.uuid = &parsed
 	return nil
 }

@@ -27,6 +27,7 @@ import (
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -277,7 +278,8 @@ func (suite *ControllersTestSuite) ClaimGrant(
 	privKey crypto.Signer,
 	promotion *Promotion,
 	blindedCreds []string,
-	claimFails bool,
+	claimStatus int,
+	// promoActive bool,
 ) *uuid.UUID {
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
@@ -309,9 +311,9 @@ func (suite *ControllersTestSuite) ClaimGrant(
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	if claimFails {
-		suite.Require().NotEqual(rr.Code, http.StatusOK, string(rr.Body.Bytes()))
+	if claimStatus != 200 {
 		// return early if claim is supposed to fail
+		suite.Require().Equal(rr.Code, claimStatus, string(rr.Body.Bytes()))
 		return nil
 	}
 	// if claim was not supposed to fail, or rr.Code is supposed to be ok following line fails
@@ -421,7 +423,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -524,7 +526,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
@@ -604,7 +606,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1020,60 +1022,92 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		},
 	}
 
-	later := time.Now().UTC().Add(1000 * time.Second)
+	now := time.Now().UTC()
+	threeMonthsAgo := now.AddDate(0, -3, 0)
+	later := now.Add(1000 * time.Second)
 	scenarios := []struct {
 		Legacy             bool      // set the claim as legacy
+		Type               string    // the type of promotion (ugp/ads)
 		PromoActive        bool      // set the promotion to be active
+		CreatedAt          time.Time // set the created at time
 		ExpiresAt          time.Time // set the expiration time
-		FailToClaim        bool      // the claim will be redeemed
+		ClaimStatus        int       // the claim request status
 		ChecksReputation   bool      // reputation will be checked
 		InvalidatesBalance bool      // the balance will be invalidated
-		Type               string    // the type of promotion (ugp/ads)
 	}{
 		{
 			Legacy:             false,
+			Type:               "ugp",
 			PromoActive:        true,
+			CreatedAt:          now,
 			ExpiresAt:          later,
-			FailToClaim:        false,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
 			Legacy:             false,
+			Type:               "ugp",
 			PromoActive:        false,
+			CreatedAt:          now,
 			ExpiresAt:          later,
-			FailToClaim:        true,
+			ClaimStatus:        http.StatusGone,
 			ChecksReputation:   true,
 			InvalidatesBalance: false,
-			Type:               "ugp",
 		},
 		{
 			Legacy:             true,
+			Type:               "ugp",
 			PromoActive:        true,
+			CreatedAt:          now,
 			ExpiresAt:          later,
-			FailToClaim:        false,
+			ClaimStatus:        http.StatusOK,
 			ChecksReputation:   false,
 			InvalidatesBalance: true,
-			Type:               "ugp",
 		},
 		{
-			Legacy:             true,
-			PromoActive:        false,
-			ExpiresAt:          later,
-			FailToClaim:        false,
-			ChecksReputation:   false,
-			InvalidatesBalance: true,
-			Type:               "ugp",
-		},
-		{
-			Legacy:             true,
-			PromoActive:        false,
-			ExpiresAt:          time.Now().UTC(),
-			FailToClaim:        true,
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
 			ChecksReputation:   false,
 			InvalidatesBalance: false,
-			Type:               "ugp",
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: false,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   now,
+			ExpiresAt:   now,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
+		},
+		{
+			Legacy:      true,
+			Type:        "ugp",
+			PromoActive: true,
+			CreatedAt:   threeMonthsAgo,
+			ExpiresAt:   later,
+			ClaimStatus: http.StatusGone,
+			// these are irrelevant if claim is gone
+			ChecksReputation:   false,
+			InvalidatesBalance: false,
 		},
 	}
 	for _, test := range scenarios {
@@ -1106,7 +1140,12 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 		suite.Require().NoError(err, "Insert issuer should succeed")
 
 		suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
-		_, err = pg.RawDB().Exec("update promotions set expires_at = $2 where id = $1", promotion.ID, test.ExpiresAt)
+		_, err = pg.RawDB().Exec(
+			"update promotions set expires_at = $2, created_at = $3 where id = $1",
+			promotion.ID,
+			test.ExpiresAt,
+			test.CreatedAt,
+		)
 		suite.Require().NoError(err, "setting the expires_at property shouldn't fail")
 		if !test.PromoActive {
 			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")
@@ -1120,37 +1159,46 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
-		if !test.FailToClaim {
-			mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
-				BatchProof:   batchProof,
-				SignedTokens: signedCreds,
-			}, nil)
-		}
+		if test.PromoActive {
+			if test.ClaimStatus == http.StatusOK {
+				mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Any(), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+					BatchProof:   batchProof,
+					SignedTokens: signedCreds,
+				}, nil)
+			}
 
-		// non legacy pathway
-		if test.ChecksReputation {
-			mockReputation.EXPECT().
-				IsWalletReputable(
-					gomock.Any(),
-					gomock.Any(),
-					gomock.Any(),
-				).
-				Return(
-					true,
-					nil,
-				)
+			// non legacy pathway
+			if test.ChecksReputation {
+				mockReputation.EXPECT().
+					IsWalletReputable(
+						gomock.Any(),
+						gomock.Any(),
+						gomock.Any(),
+					).
+					Return(
+						true,
+						nil,
+					)
+			}
+			// legacy pathway
+			if test.InvalidatesBalance {
+				mockBalance.EXPECT().
+					InvalidateBalance(
+						gomock.Any(),
+						gomock.Eq(walletID),
+					).
+					Return(nil)
+			}
 		}
-		// legacy pathway
-		if test.InvalidatesBalance {
-			mockBalance.EXPECT().
-				InvalidateBalance(
-					gomock.Any(),
-					gomock.Eq(walletID),
-				).
-				Return(nil)
-		}
-		claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, test.FailToClaim)
-		if !test.FailToClaim {
+		claimID := suite.ClaimGrant(
+			service,
+			info,
+			privKey,
+			promotion,
+			blindedCreds,
+			test.ClaimStatus,
+		)
+		if test.ClaimStatus == http.StatusOK && test.PromoActive {
 			suite.WaitForClaimToPropagate(service, promotion, claimID)
 		}
 	}
@@ -1245,7 +1293,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1341,14 +1389,14 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
 	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
 	pg, _, err := NewPostgres()
-	suite.Require().NoError(err, "Failed to get postgres conn")
+	suite.Require().NoError(err, "Failed to get postgres   ")
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	dialer, err := tlsDialer()
+	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
@@ -1428,7 +1476,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, false)
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)

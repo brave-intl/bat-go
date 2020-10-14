@@ -10,6 +10,24 @@ var (
 	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
 	// ErrWalletNotFound when there is no wallet found
 	ErrWalletNotFound = errors.New("unable to find wallet")
+	// ErrCertificateExpired - a certificate is expired
+	ErrCertificateExpired = errors.New("certificate expired")
+	// ErrMarshalTransferRequest - failed to marshal the transfer request
+	ErrMarshalTransferRequest = errors.New("failed to marshal the transfer request")
+	// ErrCreateTransferRequest - failed to create the transfer request
+	ErrCreateTransferRequest = errors.New("failed to create the transfer request")
+	// ErrSignTransferRequest - failed to sign the transfer request
+	ErrSignTransferRequest = errors.New("failed to sign the transfer request")
+	// ErrFailedClientRequest - failed to perform client request
+	ErrFailedClientRequest = errors.New("failed to perform api request")
+	// ErrFailedBodyRead - failed to read body
+	ErrFailedBodyRead = errors.New("failed to read the transfer response")
+	// ErrFailedBodyUnmarshal - failed to decode body
+	ErrFailedBodyUnmarshal = errors.New("failed to unmarshal the transfer response")
+	// ErrMissingWallet - missing wallet
+	ErrMissingWallet = errors.New("missing wallet")
+	// ErrNoDepositProviderDestination - no linked wallet
+	ErrNoDepositProviderDestination = errors.New("no deposit provider destination for wallet for transfer")
 )
 
 // ErrorBundle creates a new response error

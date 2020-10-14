@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -41,24 +42,40 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	}
 	var output io.Writer
 	if env != "local" {
-		output = os.Stdout
+		// this log writer uses a ring buffer and drops messages that cannot be processed
+		// in a timely manner
+		output = diode.NewWriter(os.Stdout, 1000, time.Duration(20*time.Millisecond), func(missed int) {
+			// add to our counter of lost log messages
+			droppedLogTotal.Add(float64(missed))
+		})
 	} else {
 		output = zerolog.ConsoleWriter{Out: os.Stdout}
 	}
 
-	// this log writer uses a ring buffer and drops messages that cannot be processed
-	// in a timely manner
-	wr := diode.NewWriter(output, 1000, time.Duration(20*time.Millisecond), func(missed int) {
-		// add to our counter of lost log messages
-		droppedLogTotal.Add(float64(missed))
-	})
-
 	// always print out timestamp
-	l := zerolog.New(wr).With().Timestamp().Logger()
+	l := zerolog.New(output).With().Timestamp().Logger()
 
-	debug := os.Getenv("DEBUG")
-	if debug == "" || debug == "f" || debug == "n" || debug == "0" {
+	var (
+		debug bool
+		ok    bool
+	)
+
+	// use context to get debugging flag first, then fall back to env variable
+	if debug, ok = ctx.Value("debug_logging").(bool); !ok {
+		if os.Getenv("DEBUG") == "" {
+			// false, but ParseBool doesn't understand empty string
+			debug = false
+		} else if debug, err = strconv.ParseBool(os.Getenv("DEBUG")); err != nil {
+			// parse error
+			debug = false
+		}
+	}
+
+	if !debug {
+		// if not debug, set log level to info
 		l = l.Level(zerolog.InfoLevel)
+	} else {
+		l = l.Level(zerolog.DebugLevel)
 	}
 
 	return l.WithContext(ctx), &l
@@ -72,4 +89,53 @@ func AddWalletIDToContext(ctx context.Context, walletID uuid.UUID) {
 			return c.Str("walletID", walletID.String())
 		})
 	}
+}
+
+// Progress - type to store the incremental progress of a task
+type Progress struct {
+	Processed int
+	Total     int
+}
+
+// SubmitProgress - helper to log progress
+func SubmitProgress(ctx context.Context, processed, total int) {
+	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan Progress)
+	if progOk {
+		progChan <- Progress{
+			Processed: processed,
+			Total:     total,
+		}
+	}
+}
+
+// ReportProgress - goroutine watching for Progress updates for logging
+func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Progress {
+	// setup logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = SetupLogger(ctx)
+	}
+
+	// we will return the progress channel so the app
+	// can send us progress information as it processes
+	progChan := make(chan Progress)
+	var (
+		last Progress
+	)
+	go func() {
+		for {
+			select {
+			case <-time.After(progressDuration):
+				// output most resent progress information
+				logger.Info().
+					Int("processed", last.Processed).
+					Int("pending", last.Total-last.Processed).
+					Int("total", last.Total).
+					Msg("progress update")
+			case last = <-progChan:
+				continue
+			}
+		}
+	}()
+	return progChan
 }
