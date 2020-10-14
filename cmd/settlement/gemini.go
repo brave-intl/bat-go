@@ -3,19 +3,20 @@ package settlement
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
@@ -27,6 +28,7 @@ import (
 var (
 	oauthClientID string
 	// uploading
+	signatureSwitch     int
 	allTransactionsFile string
 
 	geminiSettlementCmd = &cobra.Command{
@@ -39,6 +41,7 @@ var (
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 			if err := GeminiUploadSettlement(
 				cmd.Context(),
 				viper.GetString("input"),
@@ -49,6 +52,23 @@ var (
 =======
 			if err := GeminiUploadSettlement(cmd.Context(), input, allTransactionsFile, out); err != nil {
 >>>>>>> 1315533... updating loop
+=======
+			if err := GeminiUploadSettlement(cmd.Context(), "upload", input, signatureSwitch, allTransactionsFile, out); err != nil {
+				logger, lerr := appctx.GetLogger(cmd.Context())
+				if lerr != nil {
+					_, logger = logging.SetupLogger(cmd.Context())
+				}
+				logger.Panic().Err(err).Msg("failed to perform upload to gemini")
+			}
+		},
+	}
+
+	checkStatusGeminiSettlementCmd = &cobra.Command{
+		Use:   "checkstatus",
+		Short: "uploads signed gemini transactions",
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := GeminiUploadSettlement(cmd.Context(), "checkstatus", input, signatureSwitch, allTransactionsFile, out); err != nil {
+>>>>>>> 91b9cb1... moved status check to individual endpoint
 				logger, lerr := appctx.GetLogger(cmd.Context())
 				if lerr != nil {
 					_, logger = logging.SetupLogger(cmd.Context())
@@ -82,6 +102,7 @@ func init() {
 	// add complete and transform subcommand
 	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
 	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
+	geminiSettlementCmd.AddCommand(checkStatusGeminiSettlementCmd)
 
 	// add this command as a settlement subcommand
 	SettlementCmd.AddCommand(geminiSettlementCmd)
@@ -108,7 +129,7 @@ func init() {
 	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 }
 
-func geminiClassifyResponse(
+func categorizeResponse(
 	originalTransactions map[string]settlement.Transaction,
 	payout *gemini.PayoutResult,
 ) (settlement.Transaction, string) {
@@ -133,8 +154,24 @@ func geminiClassifyResponse(
 	return original, key
 }
 
+func geminiSiftThroughResponses(
+	originalTransactions map[string]settlement.Transaction,
+	response *[]gemini.PayoutResult,
+) map[string][]settlement.Transaction {
+	transactions := make(map[string][]settlement.Transaction)
+
+	for _, payout := range *response {
+		original, key := categorizeResponse(
+			originalTransactions,
+			&payout,
+		)
+		transactions[key] = append(transactions[key], original)
+	}
+	return transactions
+}
+
 // GeminiUploadSettlement marks the settlement file as complete
-func GeminiUploadSettlement(ctx context.Context, inPath string, allTransactionsFile string, outPath string) error {
+func GeminiUploadSettlement(ctx context.Context, action string, inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -172,7 +209,7 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, allTransactionsF
 	// create a map of the request transactions
 	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
 
-	submittedTransactions, submitErr := geminiIterateRequest(ctx, geminiClient, settlementTransactions, transactionsMap)
+	submittedTransactions, submitErr := geminiIterateRequest(ctx, action, geminiClient, signatureSwitch, bulkPayoutFiles, transactionsMap)
 	// write file for upload to eyeshade
 	logger.Info().
 		Str("files", outPath).
@@ -191,10 +228,13 @@ func GeminiUploadSettlement(ctx context.Context, inPath string, allTransactionsF
 
 func geminiIterateRequest(
 	ctx context.Context,
+	action string,
 	geminiClient gemini.Client,
-	settlementTransactions []settlement.Transaction,
+	signatureSwitch int,
+	bulkPayoutFiles []string,
 	transactionsMap map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
+
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -202,48 +242,152 @@ func geminiIterateRequest(
 
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	for j, settlementTransaction := range settlementTransactions {
-		logger.Debug().
-			Int("i", i).
-			Int64("nonce", base.Nonce).
-			Msg("parameters used")
-
-		serialized, err := json.Marshal(base)
+	for j, bulkPayoutFile := range bulkPayoutFiles {
+		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
 			return &submittedTransactions, err
 		}
-		payload := base64.StdEncoding.EncodeToString(serialized)
 
-		APIKey := bulkPayoutRequestRequirements.APIKey
-		clientID := bulkPayoutRequestRequirements.ClientID
-		txRef := gemini.GenerateTxRef(&settlementTransaction)
+		var geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence
+		err = json.Unmarshal(bytes, &geminiBulkPayoutRequestRequirements)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
+			return &submittedTransactions, err
+		}
+
+		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
+			if action == "upload" {
+				submittedTransactions, err = submitBulkPayoutTransactions(
+					ctx,
+					transactionsMap,
+					submittedTransactions,
+					bulkPayoutRequestRequirements,
+					signatureSwitch,
+					geminiClient,
+					i,
+				)
+			} else if action == "checkstatus" {
+				submittedTransactions, err = checkPayoutTransactionsStatus(
+					ctx,
+					transactionsMap,
+					submittedTransactions,
+					bulkPayoutRequestRequirements,
+					geminiClient,
+					i,
+				)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		logging.SubmitProgress(ctx, j, len(bulkPayoutFiles))
+	}
+	return &submittedTransactions, nil
+}
+
+func checkPayoutTransactionsStatus(
+	ctx context.Context,
+	transactionsMap map[string]settlement.Transaction,
+	submittedTransactions map[string][]settlement.Transaction,
+	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
+	geminiClient gemini.Client,
+	i int,
+) (map[string][]settlement.Transaction, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
+	APIKey := bulkPayoutRequestRequirements.APIKey
+	base := bulkPayoutRequestRequirements.Base
+	for j, payout := range base.Payouts {
+		clientID := base.OauthClientID
+		txRef := payout.TxRef
 
 		logger.Debug().
-			Str("api_key", APIKey).
-			Str("client_id", clientID).
-			Str("tx_ref", txRef).
-			Msg("sending request")
+			Int("block", i).
+			Int("tx_index", j).
+			Msg("parameters used")
 
-		response, err := geminiClient.CheckTxStatus(
+		result, err := geminiClient.CheckTxStatus(
 			ctx,
 			APIKey,
 			clientID,
 			txRef,
 		)
 		if err != nil {
-			logger.Error().Err(err).Msg("error performing upload")
-			return &submittedTransactions, err
+			return nil, err
 		}
-
-		tx, key := geminiClassifyResponse(
+		original, key := categorizeResponse(
 			transactionsMap,
-			response,
+			result,
 		)
-		submittedTransactions[key] = append(submittedTransactions[key], tx)
-		logging.SubmitProgress(ctx, j, len(bulkPayoutFiles))
+		submittedTransactions[key] = append(submittedTransactions[key], original)
 	}
-	return &submittedTransactions, nil
+	return submittedTransactions, err
+}
+
+func submitBulkPayoutTransactions(
+	ctx context.Context,
+	transactionsMap map[string]settlement.Transaction,
+	submittedTransactions map[string][]settlement.Transaction,
+	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
+	signatureSwitch int,
+	geminiClient gemini.Client,
+	i int,
+) (map[string][]settlement.Transaction, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+
+	// make sure payload is parsable
+	// upload the bulk payout
+	sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
+	decodedSig, err := hex.DecodeString(sig)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed decode signature")
+		return submittedTransactions, err
+	}
+	base := bulkPayoutRequestRequirements.Base
+	presigner := cryptography.NewPresigner(decodedSig)
+	base.Nonce = base.Nonce + int64(signatureSwitch)
+
+	logger.Debug().
+		Int("i", i).
+		Int64("nonce", base.Nonce).
+		Int("signature switch", signatureSwitch).
+		Msg("parameters used")
+
+	serialized, err := json.Marshal(base)
+	if err != nil {
+		return submittedTransactions, err
+	}
+	payload := base64.StdEncoding.EncodeToString(serialized)
+
+	logger.Debug().
+		Str("api key", bulkPayoutRequestRequirements.APIKey).
+		Str("signature", sig).
+		Msg("sending request")
+
+	response, err := geminiClient.UploadBulkPayout(
+		ctx,
+		bulkPayoutRequestRequirements.APIKey,
+		presigner,
+		payload,
+	)
+	<-time.After(time.Second)
+	if err != nil {
+		logger.Error().Err(err).Msg("error performing upload")
+		return submittedTransactions, err
+	}
+	// collect all successful transactions to send to eyeshade
+	submitted := geminiSiftThroughResponses(transactionsMap, response)
+	for key, txs := range submitted {
+		submittedTransactions[key] = append(submittedTransactions[key], txs...)
+	}
+	return submittedTransactions, nil
 }
 
 // geminiMapTransactionsToID creates a map of guid's to transactions
@@ -319,15 +463,7 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
 func GeminiTransformTransactions(ctx context.Context, oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
-	maxCount := 500
-	maxCountEnv := os.Getenv("GEMINI_MAX_SUBMIT_BLOCK")
-	if maxCountEnv != "" {
-		i, err := strconv.Atoi(maxCountEnv)
-		if err != nil {
-			return nil, err
-		}
-		maxCount = i
-	}
+	maxCount := 30
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0

@@ -29,6 +29,7 @@ var (
 	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
 	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
 	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
+	action              = flag.String("action", "upload", "the action to be completed")
 	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
 )
 
@@ -61,7 +62,7 @@ func main() {
 		err = upholdSubmit(ctx)
 	case "gemini":
 		ctx := context.Background()
-		err = settlementcmd.GeminiUploadSettlement(ctx, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
+		err = settlementcmd.GeminiUploadSettlement(ctx, *action, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
 	}
 	if err != nil {
 		logger.Panic().Err(err).Msg("error encountered running settlement-submit")
