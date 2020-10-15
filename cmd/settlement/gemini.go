@@ -242,7 +242,7 @@ func geminiIterateRequest(
 
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	for j, bulkPayoutFile := range bulkPayoutFiles {
+	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
@@ -256,6 +256,7 @@ func geminiIterateRequest(
 			return &submittedTransactions, err
 		}
 
+		total := geminiComputeTotal(geminiBulkPayoutRequestRequirements)
 		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
 			if action == "upload" {
 				submittedTransactions, err = submitBulkPayoutTransactions(
@@ -263,8 +264,9 @@ func geminiIterateRequest(
 					transactionsMap,
 					submittedTransactions,
 					bulkPayoutRequestRequirements,
-					signatureSwitch,
 					geminiClient,
+					len(bulkPayoutFiles),
+					signatureSwitch,
 					i,
 				)
 			} else if action == "checkstatus" {
@@ -274,6 +276,7 @@ func geminiIterateRequest(
 					submittedTransactions,
 					bulkPayoutRequestRequirements,
 					geminiClient,
+					total,
 					i,
 				)
 			}
@@ -281,9 +284,23 @@ func geminiIterateRequest(
 				return nil, err
 			}
 		}
-		logging.SubmitProgress(ctx, j, len(bulkPayoutFiles))
 	}
 	return &submittedTransactions, nil
+}
+
+func geminiComputeTotal(geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence) int {
+	if len(geminiBulkPayoutRequestRequirements) == 0 {
+		return 0
+	}
+
+	firstLen := len(geminiBulkPayoutRequestRequirements[0].Base.Payouts)
+	blockLen := len(geminiBulkPayoutRequestRequirements)
+	lastLen := len(geminiBulkPayoutRequestRequirements[blockLen-1].Base.Payouts)
+	total := blockLen * firstLen
+	if blockLen > 1 {
+		total += lastLen
+	}
+	return total
 }
 
 func checkPayoutTransactionsStatus(
@@ -292,6 +309,7 @@ func checkPayoutTransactionsStatus(
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
 	geminiClient gemini.Client,
+	total int,
 	i int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
@@ -301,20 +319,13 @@ func checkPayoutTransactionsStatus(
 
 	APIKey := bulkPayoutRequestRequirements.APIKey
 	base := bulkPayoutRequestRequirements.Base
+	clientID := base.OauthClientID
 	for j, payout := range base.Payouts {
-		clientID := base.OauthClientID
-		txRef := payout.TxRef
-
-		logger.Debug().
-			Int("block", i).
-			Int("tx_index", j).
-			Msg("parameters used")
-
 		result, err := geminiClient.CheckTxStatus(
 			ctx,
 			APIKey,
 			clientID,
-			txRef,
+			payout.TxRef,
 		)
 		if err != nil {
 			return nil, err
@@ -324,6 +335,14 @@ func checkPayoutTransactionsStatus(
 			result,
 		)
 		submittedTransactions[key] = append(submittedTransactions[key], original)
+
+		logger.Debug().
+			Int("total", total).
+			Int("block", i).
+			Int("payout", j).
+			Str("key", key).
+			Str("tx_ref", payout.TxRef).
+			Msg("parameters used")
 	}
 	return submittedTransactions, err
 }
@@ -333,15 +352,16 @@ func submitBulkPayoutTransactions(
 	transactionsMap map[string]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
-	signatureSwitch int,
 	geminiClient gemini.Client,
+	total int,
+	signatureSwitch int,
 	i int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-
+	logging.SubmitProgress(ctx, i, total)
 	// make sure payload is parsable
 	// upload the bulk payout
 	sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
@@ -355,6 +375,7 @@ func submitBulkPayoutTransactions(
 	base.Nonce = base.Nonce + int64(signatureSwitch)
 
 	logger.Debug().
+		Int("total", total).
 		Int("i", i).
 		Int64("nonce", base.Nonce).
 		Int("signature switch", signatureSwitch).
