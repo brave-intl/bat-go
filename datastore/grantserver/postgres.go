@@ -2,6 +2,7 @@ package grantserver
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -83,6 +84,17 @@ func (pg *Postgres) Migrate() error {
 	m, err := pg.NewMigrate()
 	if err != nil {
 		return err
+	}
+
+	v, dirty, err := m.Version()
+	if err != nil {
+		return fmt.Errorf("failed to get migration version: %w", err)
+	}
+
+	if v > currentMigrationVersion || dirty {
+		// dont attempt to migrate if our number is less than what is on the db
+		// or if the migration is in dirty state
+		return nil
 	}
 
 	err = m.Migrate(currentMigrationVersion)
