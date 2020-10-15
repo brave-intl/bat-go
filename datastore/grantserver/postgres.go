@@ -89,12 +89,16 @@ func (pg *Postgres) Migrate() error {
 
 	v, dirty, err := m.Version()
 	if !errors.Is(err, migrate.ErrNilVersion) && err != nil {
+		sentry.CaptureMessage(err.Error())
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
 	if v > currentMigrationVersion || dirty {
 		// dont attempt to migrate if our number is less than what is on the db
 		// or if the migration is in dirty state
+		sentry.CaptureMessage(
+			fmt.Sprintf("migration failed, dirty: %t; code version: %d; db version: %d",
+				dirty, currentMigrationVersion, v))
 		return nil
 	}
 
