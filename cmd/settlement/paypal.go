@@ -29,7 +29,7 @@ func init() {
 	PaypalSettlementCmd.AddCommand(EmailPaypalSettlementCmd)
 
 	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(PaypalSettlementCmd)
+	SettlementCmd.AddCommand(PaypalSettlementCmd)
 
 	// setup the flags
 
@@ -56,7 +56,7 @@ func init() {
 	// txnID (required by complete)
 	CompletePaypalSettlementCmd.PersistentFlags().String("txn-id", "",
 		"the completed mass pay transaction id")
-	cmd.Must(viper.BindPFlag("txn-id", PaypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindPFlag("txn-id", CompletePaypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
 	cmd.Must(CompletePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
@@ -160,13 +160,10 @@ func TransformPaypalSettlement(cmd *cobra.Command, args []string) error {
 
 // CompletePaypalSettlement added complete paypal settlement
 func CompletePaypalSettlement(cmd *cobra.Command, args []string) error {
-	input := viper.GetString("input")
-	out := viper.GetString("out")
-	txnID := viper.GetString("txn-id")
 	return PaypalCompleteSettlement(
-		input,
-		out,
-		txnID,
+		viper.GetString("input"),
+		viper.GetString("out"),
+		viper.GetString("txn-id"),
 	)
 }
 

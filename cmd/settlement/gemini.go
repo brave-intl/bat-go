@@ -82,7 +82,7 @@ func init() {
 	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
 
 	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(geminiSettlementCmd)
+	SettlementCmd.AddCommand(geminiSettlementCmd)
 
 	// setup the flags
 
