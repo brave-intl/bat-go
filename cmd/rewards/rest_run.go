@@ -35,7 +35,6 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	// add our command line params to context
-	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
 	ctx = context.WithValue(ctx, appctx.BaseCurrencyCTXKey, viper.Get("base-currency"))

@@ -45,8 +45,9 @@ func Must(err error) {
 
 // Execute - the main entrypoint for all subcommands in bat-go
 func Execute() {
-	// setup context with logging
+	// setup context with logging, but first we need to setup the environment
 	var logger *zerolog.Logger
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 	ctx, logger = logging.SetupLogger(ctx)
 	// setup ratios service values
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
@@ -67,8 +68,8 @@ func init() {
 	Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
 	Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
 
-	// env - defaults to development
-	RootCmd.PersistentFlags().StringVarP(&env, "environment", "e", "development",
+	// env - defaults to local
+	RootCmd.PersistentFlags().StringVarP(&env, "environment", "e", "local",
 		"the default environment")
 	Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
 	Must(viper.BindEnv("environment", "ENV"))
