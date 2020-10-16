@@ -9,6 +9,7 @@ import (
 
 	"errors"
 
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -37,7 +38,9 @@ var (
 )
 
 func init() {
-	_, logger := logging.SetupLogger(context.Background())
+	// put environment on context before logger setup
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
+	_, logger := logging.SetupLogger(ctx)
 	var err error
 	// gracefully try to register collectors for prom, no need to panic
 	err = prometheus.Register(kafkaCertNotBefore)
