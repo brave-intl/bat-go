@@ -258,6 +258,7 @@ func geminiIterateRequest(
 
 		total := geminiComputeTotal(geminiBulkPayoutRequestRequirements)
 		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
+			blockProgress := geminiComputeTotal(geminiBulkPayoutRequestRequirements[:i+1])
 			if action == "upload" {
 				submittedTransactions, err = submitBulkPayoutTransactions(
 					ctx,
@@ -266,8 +267,8 @@ func geminiIterateRequest(
 					bulkPayoutRequestRequirements,
 					geminiClient,
 					len(bulkPayoutFiles),
+					blockProgress,
 					signatureSwitch,
-					i,
 				)
 			} else if action == "checkstatus" {
 				submittedTransactions, err = checkPayoutTransactionsStatus(
@@ -277,7 +278,7 @@ func geminiIterateRequest(
 					bulkPayoutRequestRequirements,
 					geminiClient,
 					total,
-					i,
+					blockProgress,
 				)
 			}
 			if err != nil {
@@ -310,7 +311,7 @@ func checkPayoutTransactionsStatus(
 	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
 	geminiClient gemini.Client,
 	total int,
-	i int,
+	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -336,10 +337,11 @@ func checkPayoutTransactionsStatus(
 		)
 		submittedTransactions[key] = append(submittedTransactions[key], original)
 
+		prog := blockProgress + j
+		logging.SubmitProgress(ctx, prog, total)
 		logger.Debug().
 			Int("total", total).
-			Int("block", i).
-			Int("payout", j).
+			Int("progress", prog).
 			Str("key", key).
 			Str("tx_ref", payout.TxRef).
 			Msg("parameters used")
@@ -354,14 +356,14 @@ func submitBulkPayoutTransactions(
 	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
 	geminiClient gemini.Client,
 	total int,
+	blockProgress int,
 	signatureSwitch int,
-	i int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	logging.SubmitProgress(ctx, i, total)
+	logging.SubmitProgress(ctx, blockProgress, total)
 	// make sure payload is parsable
 	// upload the bulk payout
 	sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
@@ -376,7 +378,7 @@ func submitBulkPayoutTransactions(
 
 	logger.Debug().
 		Int("total", total).
-		Int("i", i).
+		Int("progress", blockProgress).
 		Int64("nonce", base.Nonce).
 		Int("signature switch", signatureSwitch).
 		Msg("parameters used")
