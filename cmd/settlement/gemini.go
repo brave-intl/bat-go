@@ -27,9 +27,6 @@ import (
 
 var (
 	oauthClientID string
-	// uploading
-	signatureSwitch     int
-	allTransactionsFile string
 
 	geminiSettlementCmd = &cobra.Command{
 		Use:   "gemini",
@@ -39,6 +36,7 @@ var (
 	uploadGeminiSettlementCmd = &cobra.Command{
 		Use:   "upload",
 		Short: "uploads signed gemini transactions",
+<<<<<<< HEAD
 		Run: func(cmd *cobra.Command, args []string) {
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -65,11 +63,15 @@ var (
 				logger.Panic().Err(err).Msg("failed to perform upload to gemini")
 			}
 		},
+=======
+		Run:   cmd.Perform("gemini upload", UploadGeminiSettlement),
+>>>>>>> 93c6fb7... progress
 	}
 
 	checkStatusGeminiSettlementCmd = &cobra.Command{
 		Use:   "checkstatus",
 		Short: "uploads signed gemini transactions",
+<<<<<<< HEAD
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := GeminiUploadSettlement(cmd.Context(), "checkstatus", input, signatureSwitch, allTransactionsFile, out); err != nil {
 >>>>>>> 91b9cb1... moved status check to individual endpoint
@@ -80,18 +82,25 @@ var (
 				logger.Panic().Err(err).Msg("failed to perform upload to gemini")
 			}
 		},
+=======
+		Run:   cmd.Perform("gemini checkstatus", CheckStatusGeminiSettlement),
+>>>>>>> 93c6fb7... progress
 	}
 
 	transformGeminiSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of gemini settlement for mass pay",
 		Run: func(cmd *cobra.Command, args []string) {
+<<<<<<< HEAD
 			if err := GeminiTransformForMassPay(
 				cmd.Context(),
 				viper.GetString("input"),
 				oauthClientID,
 				viper.GetString("out"),
 			); err != nil {
+=======
+			if err := GeminiTransformForMassPay(cmd.Context(), viper.GetString("input"), oauthClientID, out); err != nil {
+>>>>>>> 93c6fb7... progress
 				logger, lerr := appctx.GetLogger(cmd.Context())
 				if lerr != nil {
 					_, logger = logging.SetupLogger(cmd.Context())
@@ -102,6 +111,60 @@ var (
 	}
 )
 
+// UploadGeminiSettlement uploads gemini settlement
+func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
+	input, err := cmd.Flags().GetString("input")
+	if err != nil {
+		return err
+	}
+	sig, err := cmd.Flags().GetInt("sig")
+	if err != nil {
+		return err
+	}
+	allTransactionsFile, err := cmd.Flags().GetString("all-txs-input")
+	if err != nil {
+		return err
+	}
+	out, err := cmd.Flags().GetString("out")
+	if err != nil {
+		return err
+	}
+
+	if out == "" {
+		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
+	}
+	return GeminiUploadSettlement(
+		cmd.Context(),
+		"upload",
+		input,
+		sig,
+		allTransactionsFile,
+		out,
+	)
+}
+
+// CheckStatusGeminiSettlement is the command runner for checking gemini transactions status
+func CheckStatusGeminiSettlement(cmd *cobra.Command, args []string) error {
+	input, err := cmd.Flags().GetString("input")
+	if err != nil {
+		return err
+	}
+	out, err := cmd.Flags().GetString("out")
+	if err != nil {
+		return err
+	}
+	if out == "" {
+		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
+	}
+	return GeminiUploadSettlement(
+		cmd.Context(),
+		"checkstatus",
+		input,
+		viper.GetInt("sig"),
+		viper.GetString("all-txs-input"),
+		out,
+	)
+}
 func init() {
 	// add complete and transform subcommand
 	geminiSettlementCmd.AddCommand(transformGeminiSettlementCmd)
@@ -114,28 +177,75 @@ func init() {
 	// setup the flags
 
 	// input (required by all)
+<<<<<<< HEAD
 	geminiSettlementCmd.PersistentFlags().StringP("input", "i", "",
+=======
+	geminiSettlementCmd.PersistentFlags().String("input", "",
+>>>>>>> 93c6fb7... progress
 		"the file or comma delimited list of files that should be utilized")
 	cmd.Must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
 	cmd.Must(viper.BindEnv("input", "INPUT"))
 	cmd.Must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
+<<<<<<< HEAD
 	geminiSettlementCmd.PersistentFlags().StringP("out", "o", "./gemini-settlement",
+=======
+	geminiSettlementCmd.PersistentFlags().String("out", "./gemini-settlement",
+>>>>>>> 93c6fb7... progress
 		"the location of the file")
 	cmd.Must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
 	cmd.Must(viper.BindEnv("out", "OUT"))
 
+<<<<<<< HEAD
 	transformGeminiSettlementCmd.PersistentFlags().StringP("gemini-client-id", "g", "",
+=======
+	// txnID (required by transform)
+	transformGeminiSettlementCmd.PersistentFlags().String("txn-id", "",
+		"the completed mass pay transaction id")
+	cmd.Must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
+	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+
+	transformGeminiSettlementCmd.PersistentFlags().String("gemini-client-id", "",
+>>>>>>> 93c6fb7... progress
 		"the oauth client id needed to check that the user authorized the payment")
 	cmd.Must(viper.BindPFlag("gemini-client-id", transformGeminiSettlementCmd.PersistentFlags().Lookup("gemini-client-id")))
 	cmd.Must(viper.BindEnv("gemini-client-id", "GEMINI_CLIENT_ID"))
 	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("gemini-client-id"))
 
+	uploadGeminiSettlementCmd.PersistentFlags().String("input", "",
+		"the signed transactions file")
+	cmd.Must(viper.BindPFlag("input", uploadGeminiSettlementCmd.PersistentFlags().Lookup("input")))
+	cmd.Must(uploadGeminiSettlementCmd.MarkPersistentFlagRequired("input"))
+
 	uploadGeminiSettlementCmd.PersistentFlags().String("all-txs-input", "",
 		"the original transactions file")
 	cmd.Must(viper.BindPFlag("all-txs-input", uploadGeminiSettlementCmd.PersistentFlags().Lookup("all-txs-input")))
 	cmd.Must(uploadGeminiSettlementCmd.MarkPersistentFlagRequired("all-txs-input"))
+
+	uploadGeminiSettlementCmd.PersistentFlags().Int("sig", 0,
+		"the original transactions file")
+	cmd.Must(viper.BindPFlag("sig", uploadGeminiSettlementCmd.PersistentFlags().Lookup("sig")))
+
+	// checkStatusGeminiSettlementCmd
+	checkStatusGeminiSettlementCmd.PersistentFlags().String("all-txs-input", "",
+		"the original transactions file")
+	cmd.Must(viper.BindPFlag("all-txs-input", checkStatusGeminiSettlementCmd.PersistentFlags().Lookup("all-txs-input")))
+	cmd.Must(checkStatusGeminiSettlementCmd.MarkPersistentFlagRequired("all-txs-input"))
+
+	checkStatusGeminiSettlementCmd.PersistentFlags().StringP("input", "i", "",
+		"the original transactions file")
+	cmd.Must(viper.BindPFlag("input", checkStatusGeminiSettlementCmd.PersistentFlags().Lookup("input")))
+	cmd.Must(checkStatusGeminiSettlementCmd.MarkPersistentFlagRequired("input"))
+
+	checkStatusGeminiSettlementCmd.Flags().String("out", "",
+		"the output file name")
+	cmd.Must(viper.BindPFlag("out", checkStatusGeminiSettlementCmd.Flags().Lookup("out")))
+
+	checkStatusGeminiSettlementCmd.PersistentFlags().Int("sig", 0,
+		"signature to choose (for bulk endpoint usage)")
+	cmd.Must(viper.BindPFlag("sig", checkStatusGeminiSettlementCmd.PersistentFlags().Lookup("sig")))
 }
 
 func categorizeResponse(
@@ -224,12 +334,14 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 		Str("files", outPath).
 		Msg("outputting files")
 
-	for key, txs := range *submittedTransactions {
-		outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-		err = GeminiWriteTransactions(ctx, outputPath, &txs)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to write gemini transactions file")
-			return err
+	if submittedTransactions != nil {
+		for key, txs := range *submittedTransactions {
+			outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
+			err = GeminiWriteTransactions(ctx, outputPath, &txs)
+			if err != nil {
+				logger.Error().Err(err).Msg("failed to write gemini transactions file")
+				return err
+			}
 		}
 	}
 	return submitErr
