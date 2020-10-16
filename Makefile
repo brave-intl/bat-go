@@ -68,11 +68,6 @@ instrumented:
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 
-microservice-docker:
-	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat_go-microservice:latest -f ./Dockerfile.micro .
-	docker tag bat_go-microservice:latest bat_go-microservice:$(GIT_VERSION)
-
 rewards-docker: microservice-docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) -t rewards-api:latest -f ./rewards/Dockerfile .
