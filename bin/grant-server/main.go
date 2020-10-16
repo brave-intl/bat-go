@@ -83,7 +83,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
-		log.Panic().Err(err).Msg("unable connect to promotion db")
+		logger.Panic().Err(err).Msg("unable connect to promotion db")
 	}
 	promotionService, err := promotion.InitService(
 		ctx,
@@ -93,12 +93,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Promotion service initialization failed")
+		logger.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
 	grantDB, grantRODB, err := grant.NewPostgres()
 	if err != nil {
-		log.Panic().Err(err).Msg("unable connect to grant db")
+		logger.Panic().Err(err).Msg("unable connect to grant db")
 	}
 
 	grantService, err := grant.InitService(
@@ -110,7 +110,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Grant service initialization failed")
+		logger.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
 	// add runnable jobs:
@@ -124,7 +124,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	sRouter, err := promotion.SuggestionsRouter(promotionService)
 	if err != nil {
-		log.Panic().Err(err).Msg("failed to initialize the suggestions router")
+		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
 
 	r.Mount("/v1/suggestions", sRouter)
@@ -134,12 +134,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	paymentPG, err := payment.NewPostgres("", true, "payment_db")
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Payment service initialization failed")
+		logger.Panic().Err(err).Msg("Payment service initialization failed")
 	}
 
 	// add runnable jobs:
@@ -153,12 +153,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(ctx, paymentDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Payment service initialization failed")
+			logger.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
@@ -174,7 +174,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}()
 	}
 
-	log.Info().
+	logger.Info().
 		Str("version", version).
 		Str("commit", commit).
 		Str("buildTime", buildTime).
@@ -187,7 +187,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
 		if env != "local" {
-			log.Panic().Msg("REPUTATION_SERVER is missing in production environment")
+			logger.Panic().Msg("REPUTATION_SERVER is missing in production environment")
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
