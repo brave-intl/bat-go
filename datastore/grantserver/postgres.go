@@ -1,6 +1,7 @@
 package grantserver
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/metrics"
 	"github.com/getsentry/sentry-go"
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -82,13 +85,29 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 
 // Migrate the Postgres instance
 func (pg *Postgres) Migrate() error {
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
+	_, logger := logging.SetupLogger(ctx)
+
+	logger.Info().Msg("attempting database migration")
+
 	m, err := pg.NewMigrate()
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to create a new migration")
 		return err
 	}
 
 	v, dirty, err := m.Version()
+
+	subLogger := logger.With().
+		Bool("dirty", dirty).
+		Int("db_version", int(v)).
+		Int("code_version", currentMigrationVersion).
+		Logger()
+
+	subLogger.Info().Msg("database status")
+
 	if !errors.Is(err, migrate.ErrNilVersion) && err != nil {
+		subLogger.Error().Err(err).Msg("failed to get migration version")
 		sentry.CaptureMessage(err.Error())
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
@@ -96,16 +115,22 @@ func (pg *Postgres) Migrate() error {
 	if v > currentMigrationVersion || dirty {
 		// dont attempt to migrate if our number is less than what is on the db
 		// or if the migration is in dirty state
+		subLogger.Error().Msg("migration not attempted")
+
 		sentry.CaptureMessage(
-			fmt.Sprintf("migration failed, dirty: %t; code version: %d; db version: %d",
+			fmt.Sprintf("migration not attempted, dirty: %t; code version: %d; db version: %d",
 				dirty, currentMigrationVersion, v))
 		return nil
 	}
 
 	err = m.Migrate(currentMigrationVersion)
 	if err != migrate.ErrNoChange && err != nil {
+		subLogger.Error().Err(err).Msg("migration failed")
 		return err
 	}
+
+	subLogger.Info().Msg("database migration finished")
+
 	return nil
 }
 
