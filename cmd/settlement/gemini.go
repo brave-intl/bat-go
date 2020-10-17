@@ -294,7 +294,7 @@ func GeminiConvertTransactionsToGeminiPayouts(transactions *[]settlement.Transac
 
 // GeminiTransformTransactions splits the transactions into appropriately sized blocks for signing
 func GeminiTransformTransactions(ctx context.Context, oauthClientID string, transactions []settlement.Transaction) (*[][]gemini.PayoutPayload, error) {
-	maxCount := 30
+	maxCount := 25
 	blocksCount := (len(transactions) / maxCount) + 1
 	privateRequests := make([][]gemini.PayoutPayload, 0)
 	i := 0
