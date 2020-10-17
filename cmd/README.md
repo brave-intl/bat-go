@@ -20,7 +20,6 @@ Below is the command structure for bat-go microservices using cobra
       - complete
       - email
     - gemini
-      - transform
       - sign
       - submit
   - vault
