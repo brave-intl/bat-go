@@ -169,6 +169,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	orderItems := []OrderItem{}
 	var currency string
 	var location string
+	var status string
 
 	for i := 0; i < len(req.Items); i++ {
 		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
@@ -192,7 +193,14 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", "pending", currency, location, orderItems)
+	// If order consists of free trials, we can consider it paid
+	if totalPrice.IsZero() {
+		status = "paid"
+	} else {
+		status = "pending"
+	}
+
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
 
 	return order, err
 }
