@@ -75,7 +75,7 @@ func init() {
 	Must(viper.BindEnv("environment", "ENV"))
 
 	// ratiosAccessToken (required by all)
-	RootCmd.PersistentFlags().StringP("ratios-token", "t", "",
+	RootCmd.PersistentFlags().String("ratios-token", "",
 		"the ratios service token for this service")
 	Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
 	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))

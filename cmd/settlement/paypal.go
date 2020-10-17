@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"text/template"
@@ -23,56 +22,48 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	input    string
-	currency string
-	txnID    string
-	rate     float64
-	out      string
-)
-
 func init() {
 	// add complete and transform subcommand
-	paypalSettlementCmd.AddCommand(completePaypalSettlementCmd)
-	paypalSettlementCmd.AddCommand(transformPaypalSettlementCmd)
-	paypalSettlementCmd.AddCommand(emailPaypalSettlementCmd)
+	PaypalSettlementCmd.AddCommand(CompletePaypalSettlementCmd)
+	PaypalSettlementCmd.AddCommand(TransformPaypalSettlementCmd)
+	PaypalSettlementCmd.AddCommand(EmailPaypalSettlementCmd)
 
 	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(paypalSettlementCmd)
+	SettlementCmd.AddCommand(PaypalSettlementCmd)
 
 	// setup the flags
 
 	// input (required by all)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
+	PaypalSettlementCmd.PersistentFlags().String("input", "",
 		"the file or comma delimited list of files that should be utilized")
-	cmd.Must(viper.BindPFlag("input", paypalSettlementCmd.PersistentFlags().Lookup("input")))
+	cmd.Must(viper.BindPFlag("input", PaypalSettlementCmd.PersistentFlags().Lookup("input")))
 	cmd.Must(viper.BindEnv("input", "INPUT"))
-	cmd.Must(paypalSettlementCmd.MarkPersistentFlagRequired("input"))
+	cmd.Must(PaypalSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
-	paypalSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./paypal-settlement",
+	PaypalSettlementCmd.PersistentFlags().String("out", "./paypal-settlement",
 		"the location of the file")
-	cmd.Must(viper.BindPFlag("out", paypalSettlementCmd.PersistentFlags().Lookup("out")))
+	cmd.Must(viper.BindPFlag("out", PaypalSettlementCmd.PersistentFlags().Lookup("out")))
 	cmd.Must(viper.BindEnv("out", "OUT"))
 
 	// currency (required by transform)
-	transformPaypalSettlementCmd.PersistentFlags().StringVarP(&currency, "currency", "c", "",
+	TransformPaypalSettlementCmd.PersistentFlags().String("currency", "",
 		"a currency must be set")
-	cmd.Must(viper.BindPFlag("currency", transformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
+	cmd.Must(viper.BindPFlag("currency", TransformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
 	cmd.Must(viper.BindEnv("currency", "CURRENCY"))
-	cmd.Must(transformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
+	cmd.Must(TransformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
 
 	// txnID (required by complete)
-	completePaypalSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
+	CompletePaypalSettlementCmd.PersistentFlags().String("txn-id", "",
 		"the completed mass pay transaction id")
-	cmd.Must(viper.BindPFlag("txn-id", completePaypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindPFlag("txn-id", CompletePaypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
-	cmd.Must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
+	cmd.Must(CompletePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
 	// rate
-	transformPaypalSettlementCmd.PersistentFlags().Float64VarP(&rate, "rate", "r", 0,
+	TransformPaypalSettlementCmd.PersistentFlags().Float64("rate", 0,
 		"the rate to compute the currency conversion")
-	cmd.Must(viper.BindPFlag("rate", transformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
+	cmd.Must(viper.BindPFlag("rate", TransformPaypalSettlementCmd.PersistentFlags().Lookup("rate")))
 	cmd.Must(viper.BindEnv("rate", "RATE"))
 }
 
@@ -118,69 +109,67 @@ func PaypalEmailTemplate(inPath string, outPath string) (err error) {
 }
 
 var (
-	paypalSettlementCmd = &cobra.Command{
+	// PaypalSettlementCmd is the paypal command
+	PaypalSettlementCmd = &cobra.Command{
 		Use:   "paypal",
 		Short: "provides paypal settlement",
 	}
 
-	emailPaypalSettlementCmd = &cobra.Command{
+	// EmailPaypalSettlementCmd provides population of a templated email
+	EmailPaypalSettlementCmd = &cobra.Command{
 		Use:   "email",
 		Short: "provides population of a templated email",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalEmailTemplate(input, out); err != nil {
-				log.Printf("failed to perform email templating: %s\n", err)
-				os.Exit(1)
-			}
-		},
+		Run:   cmd.Perform("email", EmailPaypalSettlement),
 	}
 
-	completePaypalSettlementCmd = &cobra.Command{
+	// CompletePaypalSettlementCmd provides completion of paypal settlement
+	CompletePaypalSettlementCmd = &cobra.Command{
 		Use:   "complete",
 		Short: "provides completion of paypal settlement",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := PaypalCompleteSettlement(input, out, txnID); err != nil {
-				log.Printf("failed to perform complete: %s\n", err)
-				os.Exit(1)
-			}
-		},
+		Run:   cmd.Perform("complete", CompletePaypalSettlement),
 	}
 
-	transformPaypalSettlementCmd = &cobra.Command{
+	// TransformPaypalSettlementCmd provides transform of paypal settlement for mass pay
+	TransformPaypalSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of paypal settlement for mass pay",
-		Run: func(cmd *cobra.Command, args []string) {
-			transformFailed := func(err error) {
-				log.Printf("failed to perform transform: %s\n", err)
-				os.Exit(1)
-			}
-
-			payouts, err := settlement.ReadFiles(strings.Split(input, ","))
-			if err != nil {
-				transformFailed(err)
-			}
-
-			if err := PaypalTransformForMassPay(
-				cmd.Context(),
-				payouts,
-				currency,
-				decimal.NewFromFloat(rate),
-				out,
-			); err != nil {
-				transformFailed(err)
-			}
-		},
+		Run:   cmd.Perform("transform", TransformPaypalSettlement),
 	}
 )
+
+// EmailPaypalSettlement create the email to send to the
+func EmailPaypalSettlement(cmd *cobra.Command, args []string) error {
+	return PaypalEmailTemplate(viper.GetString("input"), viper.GetString("out"))
+}
+
+// TransformPaypalSettlement transforms a paypal settlement
+func TransformPaypalSettlement(cmd *cobra.Command, args []string) error {
+	payouts, err := settlement.ReadFiles(strings.Split(viper.GetString("input"), ","))
+	if err != nil {
+		return err
+	}
+
+	return PaypalTransformForMassPay(
+		cmd.Context(),
+		payouts,
+		viper.GetString("currency"),
+		decimal.NewFromFloat(viper.GetFloat64("rate")),
+		viper.GetString("out"),
+	)
+}
+
+// CompletePaypalSettlement added complete paypal settlement
+func CompletePaypalSettlement(cmd *cobra.Command, args []string) error {
+	return PaypalCompleteSettlement(
+		viper.GetString("input"),
+		viper.GetString("out"),
+		viper.GetString("txn-id"),
+	)
+}
 
 // PaypalCompleteSettlement marks the settlement file as complete
 func PaypalCompleteSettlement(inPath string, outPath string, txnID string) error {
 	fmt.Println("RUNNING: complete")
-	if inPath == "" {
-		return errors.New("the '-i' or '--input' flag must be set")
-	}
-	if txnID == "" {
-		return errors.New("the '-t' or '--txn-id' flag must be set")
-	}
 	if outPath == "./paypal-settlement" {
 		// use a file with extension if none is passed
 		outPath = "./paypal-settlement-complete.json"

@@ -6,10 +6,11 @@ import (
 )
 
 func init() {
-	cmd.RootCmd.AddCommand(settlementCmd)
+	cmd.RootCmd.AddCommand(SettlementCmd)
 }
 
-var settlementCmd = &cobra.Command{
+// SettlementCmd is the settlement command
+var SettlementCmd = &cobra.Command{
 	Use:   "settlement",
 	Short: "provides settlement utilities",
 }

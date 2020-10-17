@@ -40,7 +40,13 @@ var (
 		Use:   "upload",
 		Short: "uploads signed gemini transactions",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := GeminiUploadSettlement(cmd.Context(), input, signatureSwitch, allTransactionsFile, out); err != nil {
+			if err := GeminiUploadSettlement(
+				cmd.Context(),
+				viper.GetString("input"),
+				signatureSwitch,
+				allTransactionsFile,
+				viper.GetString("out"),
+			); err != nil {
 				logger, lerr := appctx.GetLogger(cmd.Context())
 				if lerr != nil {
 					_, logger = logging.SetupLogger(cmd.Context())
@@ -54,7 +60,12 @@ var (
 		Use:   "transform",
 		Short: "provides transform of gemini settlement for mass pay",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := GeminiTransformForMassPay(cmd.Context(), input, oauthClientID, out); err != nil {
+			if err := GeminiTransformForMassPay(
+				cmd.Context(),
+				viper.GetString("input"),
+				oauthClientID,
+				viper.GetString("out"),
+			); err != nil {
 				logger, lerr := appctx.GetLogger(cmd.Context())
 				if lerr != nil {
 					_, logger = logging.SetupLogger(cmd.Context())
@@ -71,31 +82,24 @@ func init() {
 	geminiSettlementCmd.AddCommand(uploadGeminiSettlementCmd)
 
 	// add this command as a settlement subcommand
-	settlementCmd.AddCommand(geminiSettlementCmd)
+	SettlementCmd.AddCommand(geminiSettlementCmd)
 
 	// setup the flags
 
 	// input (required by all)
-	geminiSettlementCmd.PersistentFlags().StringVarP(&input, "input", "i", "",
+	geminiSettlementCmd.PersistentFlags().StringP("input", "i", "",
 		"the file or comma delimited list of files that should be utilized")
 	cmd.Must(viper.BindPFlag("input", geminiSettlementCmd.PersistentFlags().Lookup("input")))
 	cmd.Must(viper.BindEnv("input", "INPUT"))
 	cmd.Must(geminiSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	// out (required by all with default)
-	geminiSettlementCmd.PersistentFlags().StringVarP(&out, "out", "o", "./gemini-settlement",
+	geminiSettlementCmd.PersistentFlags().StringP("out", "o", "./gemini-settlement",
 		"the location of the file")
 	cmd.Must(viper.BindPFlag("out", geminiSettlementCmd.PersistentFlags().Lookup("out")))
 	cmd.Must(viper.BindEnv("out", "OUT"))
 
-	// txnID (required by transform)
-	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
-		"the completed mass pay transaction id")
-	cmd.Must(viper.BindPFlag("txn-id", geminiSettlementCmd.PersistentFlags().Lookup("txn-id")))
-	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
-	cmd.Must(transformGeminiSettlementCmd.MarkPersistentFlagRequired("txn-id"))
-
-	transformGeminiSettlementCmd.PersistentFlags().StringVarP(&oauthClientID, "gemini-client-id", "g", "",
+	transformGeminiSettlementCmd.PersistentFlags().StringP("gemini-client-id", "g", "",
 		"the oauth client id needed to check that the user authorized the payment")
 	cmd.Must(viper.BindPFlag("gemini-client-id", geminiSettlementCmd.PersistentFlags().Lookup("gemini-client-id")))
 	cmd.Must(viper.BindEnv("gemini-client-id", "GEMINI_CLIENT_ID"))
