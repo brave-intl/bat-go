@@ -65,7 +65,7 @@ func init() {
 	// txnID (required by complete)
 	completePaypalSettlementCmd.PersistentFlags().StringVarP(&txnID, "txn-id", "t", "",
 		"the completed mass pay transaction id")
-	cmd.Must(viper.BindPFlag("txn-id", paypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
+	cmd.Must(viper.BindPFlag("txn-id", completePaypalSettlementCmd.PersistentFlags().Lookup("txn-id")))
 	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
 	cmd.Must(completePaypalSettlementCmd.MarkPersistentFlagRequired("txn-id"))
 
