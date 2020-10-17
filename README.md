@@ -72,6 +72,5 @@ fswatch . | xargs -I {} sh -c '$(docker ps -f "name=grant-refresh-dev" --format 
 You can build a docker image without installing the go toolchain. Ensure docker
 is installed then run `make docker`.
 
-
 ## Build mock files
 `make mock`
