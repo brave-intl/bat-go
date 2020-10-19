@@ -117,6 +117,7 @@ func Perform(action string, fn func(cmd *cobra.Command, args []string) error) fu
 				state, ok := httpError.Data().(clients.HTTPState)
 				if ok {
 					log = log.Int("status", state.Status).
+						Str("path", state.Path).
 						Interface("data", state.Body)
 				}
 			}

@@ -100,11 +100,11 @@ func (c *SimpleHTTPClient) request(
 	if err != nil {
 		switch err.(type) {
 		case url.EscapeError:
-			err = NewHTTPError(err, ErrUnableToEscapeURL, http.StatusBadRequest, nil)
+			err = NewHTTPError(err, resolvedURL, ErrUnableToEscapeURL, http.StatusBadRequest, nil)
 		case url.InvalidHostError:
-			err = NewHTTPError(err, ErrInvalidHost, http.StatusBadRequest, nil)
+			err = NewHTTPError(err, resolvedURL, ErrInvalidHost, http.StatusBadRequest, nil)
 		default:
-			err = NewHTTPError(err, ErrMalformedRequest, http.StatusBadRequest, nil)
+			err = NewHTTPError(err, resolvedURL, ErrMalformedRequest, http.StatusBadRequest, nil)
 		}
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (c *SimpleHTTPClient) NewRequest(
 ) (*http.Request, error) {
 	req, status, err := c.newRequest(ctx, method, path, body)
 	if err != nil {
-		return nil, NewHTTPError(err, "request", status, body)
+		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}
 	logOut(ctx, "request", *req.URL, 0, req.Header, body)
 	return req, err
@@ -239,7 +239,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
-		return resp, NewHTTPError(err, "response", code, v)
+		return resp, NewHTTPError(err, req.URL.String(), "response", code, v)
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil
