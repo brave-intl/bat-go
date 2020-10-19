@@ -1,2 +1,2 @@
 FROM bat-go:latest
-CMD["bat-go", "serve", "wallet", "rest"]
+CMD ["bat-go", "serve", "wallet", "rest"]
