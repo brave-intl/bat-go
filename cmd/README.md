@@ -22,6 +22,11 @@ Below is the command structure for bat-go microservices using cobra
     - gemini
       - sign
       - submit
+  - wallet
+    - create
+      example:
+          wallet create \
+            --provider=uphold --name=test
   - vault
     - init
       example:
