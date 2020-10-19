@@ -93,8 +93,14 @@ the `config.example.yaml` should be copied wherever it is easiest to point to. j
 
 ## Importing keys
 
-the following line imports the keys from environment variables
+the following line imports the keys from the following environment variables:
 ```bash
+ED25519_PRIVATE_KEY= \
+ED25519_PUBLIC_KEY= \
+UPHOLD_PROVIDER_ID= \
+GEMINI_CLIENT_ID= \
+GEMINI_CLIENT_KEY= \
+GEMINI_CLIENT_SECRET= \
 ./bat-go vault import-key --config=./config.yaml
 # pass a known key to only import one: --wallet-refs=gemini-referral
 ```
