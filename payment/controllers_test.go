@@ -371,6 +371,8 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 }
 
 func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
+
+	start := time.Now()
 	numVotes := 20
 
 	mockCtrl := gomock.NewController(suite.T())
@@ -409,6 +411,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = service.InitKafka()
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
+	log.Printf("!!! time to startup kafka: %+v\n", time.Now().Sub(start))
+
 	// kick off async goroutine to monitor the vote
 	// queue of uncommitted votes in postgres, and
 	// push the votes through redemption and kafka
@@ -419,7 +423,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 			suite.Require().NoError(err, "Failed to drain vote queue")
 			_, err = service.RunNextOrderJob(ctx)
 			suite.Require().NoError(err, "Failed to drain order queue")
-			<-time.After(1 * time.Second)
+			<-time.After(50 * time.Millisecond)
 		}
 	}()
 	defer cancel()
@@ -434,6 +438,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 			},
 		},
 	}
+
+	log.Printf("!!! time to create order: %+v\n", time.Now().Sub(start))
 
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
@@ -452,6 +458,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	userWallet := generateWallet(suite.T())
 	err = walletDB.UpsertWallet(&userWallet.Info)
 	suite.Require().NoError(err)
+
+	log.Printf("!!! time to generate wallet: %+v\n", time.Now().Sub(start))
 
 	balanceBefore, err := userWallet.GetBalance(true)
 	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
@@ -473,6 +481,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler = CreateAnonCardTransaction(service)
 	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
+
+	log.Printf("!!! time to post anon card transaction: %+v\n", time.Now().Sub(start))
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
@@ -502,6 +512,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	req, err = http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
+	log.Printf("!!! time to create credentials: %+v\n", time.Now().Sub(start))
+
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -524,6 +536,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler = GetOrderCreds(service)
 	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
 	suite.Require().NoError(err)
+	log.Printf("!!! time to get credentials: %+v\n", time.Now().Sub(start))
 
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
@@ -533,7 +546,18 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Assert().Equal(http.StatusAccepted, rr.Code)
 
-	<-time.After(5 * time.Second)
+	for rr.Code != http.StatusOK {
+		if rr.Code == http.StatusAccepted {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				time.Sleep(50 * time.Millisecond)
+				rr = httptest.NewRecorder()
+				handler.ServeHTTP(rr, req)
+			}
+		}
+	}
 
 	// see if we can get our order creds
 	handler = GetOrderCreds(service)
@@ -561,6 +585,9 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 			handler.ServeHTTP(rr, req)
 		}
 	}
+
+	log.Printf("!!! time to finish loop for status ok: %+v\n", time.Now().Sub(start))
+
 	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
 
 	// Test getting the same order by item ID
@@ -617,10 +644,11 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
+	log.Printf("!!! finished vote request: %+v\n", time.Now().Sub(start))
+
 	body, _ = ioutil.ReadAll(rr.Body)
 
 	<-time.After(5 * time.Second)
-
 	// Test the Kafka Event was put into place
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:          strings.Split(kafkaBrokers, ","),
@@ -652,6 +680,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	err = json.Unmarshal(voteEventJSON, ve)
 	suite.Require().NoError(err)
+
+	log.Printf("!!! got vote from kafka: %+v\n", time.Now().Sub(start))
 
 	suite.Assert().Equal(ve.Type, vote.Type)
 	suite.Assert().Equal(ve.Channel, vote.Channel)
