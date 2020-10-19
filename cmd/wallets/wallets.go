@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	walletsCmd = &cobra.Command{
+	WalletsCmd = &cobra.Command{
 		Use:   "wallet",
 		Short: "provides wallets micro-service entrypoint",
 	}
@@ -29,33 +29,33 @@ var (
 
 func init() {
 	// add grpc and rest commands
-	walletsCmd.AddCommand(walletsRestCmd)
+	WalletsCmd.AddCommand(walletsRestCmd)
 
 	// add this command as a serve subcommand
-	cmd.ServeCmd.AddCommand(walletsCmd)
+	cmd.RootCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
 	// datastore - the writable datastore
-	walletsCmd.PersistentFlags().StringVarP(&db, "datastore", "", "",
+	WalletsCmd.PersistentFlags().StringVarP(&db, "datastore", "", "",
 		"the datastore for the wallet system")
-	cmd.Must(viper.BindPFlag("datastore", walletsCmd.PersistentFlags().Lookup("datastore")))
+	cmd.Must(viper.BindPFlag("datastore", WalletsCmd.PersistentFlags().Lookup("datastore")))
 	cmd.Must(viper.BindEnv("datastore", "DATABASE_URL"))
 
 	// walletsFeatureFlag - enable the wallet endpoints through this feature flag
-	walletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", false,
+	WalletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", false,
 		"the feature flag enabling the wallets feature")
-	cmd.Must(viper.BindPFlag("wallets-feature-flag", walletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
+	cmd.Must(viper.BindPFlag("wallets-feature-flag", WalletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
 	cmd.Must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
 
 	// ENABLE_LINKING_DRAINING - enable ability to link wallets and drain wallets
-	walletsCmd.PersistentFlags().BoolVarP(&enableLinkDrainFlag, "enable-link-drain-flag", "", false,
+	WalletsCmd.PersistentFlags().BoolVarP(&enableLinkDrainFlag, "enable-link-drain-flag", "", false,
 		"the in-migration flag disabling the wallets link feature")
-	cmd.Must(viper.BindPFlag("enable-link-drain-flag", walletsCmd.PersistentFlags().Lookup("enable-link-drain-flag")))
+	cmd.Must(viper.BindPFlag("enable-link-drain-flag", WalletsCmd.PersistentFlags().Lookup("enable-link-drain-flag")))
 	cmd.Must(viper.BindEnv("enable-link-drain-flag", "ENABLE_LINKING_DRAINING"))
 
 	// ro-datastore - the writable datastore
-	walletsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
+	WalletsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
 		"the read only datastore for the wallet system")
-	cmd.Must(viper.BindPFlag("ro-datastore", walletsCmd.PersistentFlags().Lookup("ro-datastore")))
+	cmd.Must(viper.BindPFlag("ro-datastore", WalletsCmd.PersistentFlags().Lookup("ro-datastore")))
 	cmd.Must(viper.BindEnv("ro-datastore", "RO_DATABASE_URL"))
 }
