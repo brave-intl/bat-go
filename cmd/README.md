@@ -14,6 +14,9 @@ Below is the command structure for bat-go microservices using cobra
             serve rewards grpc \
               --ratios-token "abc" --ratios-service "123" --environment "local" \
               --base-currency "USD" --address ":4321"
+    - getcertfingerprint
+      example:
+            serve getcertfingerprint api.uphold.com:443
   - settlement
     - paypal
       - transform
