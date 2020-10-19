@@ -68,20 +68,10 @@ instrumented:
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 
-microservice-docker:
+%-docker: docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat_go-microservice:latest -f ./Dockerfile.micro .
-	docker tag bat_go-microservice:latest bat_go-microservice:$(GIT_VERSION)
-
-rewards-docker: microservice-docker
-	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t rewards-api:latest -f ./rewards/Dockerfile .
-	docker tag rewards-api:latest rewards-api:$(GIT_VERSION)
-
-wallets-docker: microservice-docker
-	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) -t wallet-api:latest -f ./wallet/Dockerfile .
-	docker tag wallet-api:latest wallet-api:$(GIT_VERSION)
+		--build-arg BUILD_TIME=$(BUILD_TIME) -t $*-api:latest -f ./$*/Dockerfile .
+	docker tag $*-api:latest $*-api:$(GIT_VERSION)
 
 docker:
 	docker rmi -f bat-go:latest
