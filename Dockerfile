@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o grant-server ./bin/grant-server
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags "-w -s -X cmd.version=${VERSION} -X cmd.buildTime=${BUILD_TIME} -X cmd.commit=${COMMIT}" \
+    -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 
 RUN CGO_ENABLED=0 GOOS=linux go build \

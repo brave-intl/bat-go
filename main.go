@@ -14,6 +14,13 @@ import (
 	_ "github.com/brave-intl/bat-go/cmd/wallets"
 )
 
+var (
+	// variables will be overwritten at build time
+	version   string
+	commit    string
+	buildTime string
+)
+
 func main() {
-	cmd.Execute()
+	cmd.Execute(version, commit, buildTime)
 }
