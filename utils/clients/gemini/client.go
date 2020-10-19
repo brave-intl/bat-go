@@ -222,6 +222,9 @@ func setPrivateRequestHeaders(
 	submitType string,
 ) error {
 	if submitType == "hmac" {
+		if signer == nil {
+			return errors.New("GEMINI_SUBMIT_TYPE set to 'hmac' but no signer provided")
+		}
 		signs := *signer
 		// only set if sending an hmac salt
 		signature, err := signs.HMACSha384([]byte(payload))

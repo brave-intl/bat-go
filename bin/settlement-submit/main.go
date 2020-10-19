@@ -61,7 +61,6 @@ func main() {
 	case "uphold":
 		err = upholdSubmit(ctx)
 	case "gemini":
-		ctx := context.Background()
 		err = settlementcmd.GeminiUploadSettlement(ctx, *action, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
 	}
 	if err != nil {

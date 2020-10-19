@@ -302,6 +302,10 @@ func geminiIterateRequest(
 					blockProgress,
 					signatureSwitch,
 				)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to submit bulk payout transactions")
+					return nil, err
+				}
 			} else if action == "checkstatus" {
 				submittedTransactions, err = checkPayoutTransactionsStatus(
 					ctx,
@@ -312,9 +316,10 @@ func geminiIterateRequest(
 					total,
 					blockProgress,
 				)
-			}
-			if err != nil {
-				return nil, err
+				if err != nil {
+					logger.Error().Err(err).Msg("falied to check payout transactions status")
+					return nil, err
+				}
 			}
 		}
 	}
