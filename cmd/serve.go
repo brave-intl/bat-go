@@ -59,9 +59,9 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 			middleware.RequestLogger(logger))
 
 		logger.Info().
-			Str("version", version).
-			Str("commit", commit).
-			Str("build_time", buildTime).
+			Str("version", ctx.Value(appctx.VersionCTXKey).(string)).
+			Str("commit", ctx.Value(appctx.CommitCTXKey).(string)).
+			Str("build_time", ctx.Value(appctx.BuildTimeCTXKey).(string)).
 			Str("ratios_service", viper.GetString("ratios-service")).
 			Str("address", viper.GetString("address")).
 			Str("environment", viper.GetString("environment")).
@@ -69,6 +69,9 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 	}
 	// we will always have metrics and health-check
 	r.Get("/metrics", middleware.Metrics())
-	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
+	r.Get("/health-check", handlers.HealthCheckHandler(
+		ctx.Value(appctx.VersionCTXKey).(string),
+		ctx.Value(appctx.VersionCTXKey).(string),
+		ctx.Value(appctx.VersionCTXKey).(string)))
 	return r
 }

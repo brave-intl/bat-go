@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -21,11 +22,6 @@ var (
 	}
 	ctx = context.Background()
 
-	// variables will be overwritten at build time
-	version   string
-	commit    string
-	buildTime string
-
 	// top level config items
 	pprofEnabled string
 	env          string
@@ -44,7 +40,7 @@ func Must(err error) {
 }
 
 // Execute - the main entrypoint for all subcommands in bat-go
-func Execute() {
+func Execute(version, commit, buildTime string) {
 	// setup context with logging, but first we need to setup the environment
 	var logger *zerolog.Logger
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
@@ -52,6 +48,10 @@ func Execute() {
 	// setup ratios service values
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
+
+	ctx = context.WithValue(ctx, appctx.VersionCTXKey, version)
+	ctx = context.WithValue(ctx, appctx.CommitCTXKey, commit)
+	ctx = context.WithValue(ctx, appctx.BuildTimeCTXKey, buildTime)
 
 	// execute the root cmd
 	if err := RootCmd.ExecuteContext(ctx); err != nil {
@@ -97,6 +97,25 @@ func init() {
 		"the ratios client cache default purge duration")
 	Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
 	Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
+
+	RootCmd.AddCommand(VersionCmd)
+}
+
+// VersionCmd is the command to get the code's version information
+var VersionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "get the version of this binary",
+	Run:   versionRun,
+}
+
+func versionRun(command *cobra.Command, args []string) {
+	version := command.Context().Value(appctx.VersionCTXKey).(string)
+	commit := command.Context().Value(appctx.CommitCTXKey).(string)
+	buildTime := command.Context().Value(appctx.BuildTimeCTXKey).(string)
+	fmt.Printf("version: %s\ncommit: %s\nbuild time: %s\n",
+		version, commit, buildTime,
+	)
+
 }
 
 // Perform performs a run
