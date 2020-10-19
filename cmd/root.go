@@ -7,7 +7,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -122,7 +124,23 @@ func versionRun(command *cobra.Command, args []string) {
 func Perform(action string, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		if err := fn(cmd, args); err != nil {
-			log.Printf("failed to %s: %s\n", action, err)
+			logger, lerr := appctx.GetLogger(cmd.Context())
+			if lerr != nil {
+				_, logger = logging.SetupLogger(cmd.Context())
+			}
+
+			// var bundle errorutils.ErrorBundle
+			log := logger.Err(err).Str("action", action)
+			httpError, ok := err.(*errorutils.ErrorBundle)
+			if ok {
+				state, ok := httpError.Data().(clients.HTTPState)
+				if ok {
+					log = log.Int("status", state.Status).
+						Str("path", state.Path).
+						Interface("data", state.Body)
+				}
+			}
+			log.Msg("failed")
 			os.Exit(1)
 		}
 	}

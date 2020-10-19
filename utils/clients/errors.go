@@ -22,13 +22,15 @@ var (
 // HTTPState captures the state of the response to be read by lower fns in the stack
 type HTTPState struct {
 	Status int
+	Path   string
 	Body   interface{}
 }
 
 // NewHTTPError creates a new response state
-func NewHTTPError(err error, message string, status int, v interface{}) error {
+func NewHTTPError(err error, path, message string, status int, v interface{}) error {
 	return errorutils.New(err, message, HTTPState{
 		Status: status,
+		Path:   path,
 		Body:   v,
 	})
 }

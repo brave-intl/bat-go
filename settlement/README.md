@@ -107,7 +107,18 @@ signing the settlement file will split the input files into many output files de
 ```
 
 ## Uploading files
-running `settlement-submit` with a provider tells the script where to submit the file and the kind of handler to use. the sig=0 flag is for gemini bulk uploads that will need multiple submissions to check future status and create a completed list of transactions.
+running `settlement-submit` with a provider tells the script where to submit the file and the kind of handler to use.
 ```bash
-./settlement-submit -in=gemini-contributions-signed.json -provider=gemini -sig=0 -alltransactions=contributions.json
+./settlement-submit -in=gemini-contributions-signed.json -provider=uphold
 ```
+
+gemini has a command available to it for uploading transactions and sending
+```bash
+./bat-go settlement gemini submit --input=bulk-signed-transactions.json --all-txs-input=from-antifraud.json
+```
+
+and to check the status of each transaction a `checkstatus` command has been added
+```bash
+./bat-go settlement gemini checkstatus --input=bulk-signed-transactions.json --all-txs-input=from-antifraud.json
+```
+more to be added soon

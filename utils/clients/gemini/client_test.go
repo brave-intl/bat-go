@@ -81,26 +81,28 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		&payouts,
 	))
 
-	_, err = client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
-	suite.Require().NoError(err, "should not error during bulk payout uploading")
-
+	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
 	pendingStatus := "Pending"
-	expectedPayoutResult := []PayoutResult{{
+	expectedPayoutResult := PayoutResult{
 		Result:      "OK",
 		TxRef:       GenerateTxRef(&tx),
 		Amount:      &five,
 		Currency:    &BAT,
 		Destination: &tx.Destination,
 		Status:      &pendingStatus,
-	}}
-	bulkPayoutRequest = suite.preparePrivateRequest(NewBulkPayoutPayload(
-		accountKey,
-		os.Getenv("GEMINI_CLIENT_ID"),
-		&payouts,
-	))
-	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
+	}
+	expectedPayoutResults := []PayoutResult{expectedPayoutResult}
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
-	suite.Require().Equal(&expectedPayoutResult, bulkPayoutResponse, "success response should be predictable")
+	suite.Require().Equal(&expectedPayoutResults, bulkPayoutResponse, "the response should be predictable")
+
+	status, err := client.CheckTxStatus(
+		ctx,
+		suite.apikey,
+		os.Getenv("GEMINI_CLIENT_ID"),
+		GenerateTxRef(&tx),
+	)
+	suite.Require().NoError(err, "should not error during bulk payout uploading")
+	suite.Require().Equal(&expectedPayoutResult, status, "checking the single response should be predictable")
 }
 
 func findBalanceByCurrency(balances *[]Balance, currency string) Balance {
