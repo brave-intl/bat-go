@@ -11,6 +11,7 @@ import (
 )
 
 var (
+	// WalletsCmd root wallets command
 	WalletsCmd = &cobra.Command{
 		Use:   "wallet",
 		Short: "provides wallets micro-service entrypoint",
