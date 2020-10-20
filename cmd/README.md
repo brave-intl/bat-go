@@ -30,6 +30,10 @@ Below is the command structure for bat-go microservices using cobra
       example:
           wallet create \
             --provider=uphold --name=test
+    - transfer-funds
+      example:
+          wallet transfer-funds \
+            --provider=uphold --from=1234567890 --to=1234567890
   - vault
     - init
       example:
