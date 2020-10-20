@@ -65,12 +65,12 @@ func RunMacaroonCreate(command *cobra.Command, args []string) error {
 
 // Generate generates macaroons
 func Generate(ctx context.Context, config, secret string) error {
-	// new config
 	logger, lerr := appctx.GetLogger(ctx)
 	if lerr != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
+	// new config
 	var tc = new(TokenConfig)
 	// parse config file
 	if err := tc.Parse(config); err != nil {
