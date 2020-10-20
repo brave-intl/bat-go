@@ -8,6 +8,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -16,16 +17,31 @@ var (
 		Use:   "macaroon",
 		Short: "macaroon subcommand",
 	}
-	// MacaroonGenerateCmd generates a macaroon
-	MacaroonGenerateCmd = &cobra.Command{
-		Use:   "gen",
-		Short: "generate a macaroon",
-		Run:   cmd.Perform("macaroon generation", RunMacaroonGenerate),
+	// MacaroonCreateCmd generates a macaroon
+	MacaroonCreateCmd = &cobra.Command{
+		Use:   "create",
+		Short: "create a macaroon",
+		Run:   cmd.Perform("macaroon creation", RunMacaroonCreate),
 	}
 )
 
-// RunMacaroonGenerate runs the generate command
-func RunMacaroonGenerate(cmd *cobra.Command, args []string) error {
+func init() {
+	MacaroonCmd.AddCommand(
+		MacaroonCreateCmd,
+	)
+
+	MacaroonCreateCmd.Flags().String("config", "example.yaml",
+		"the location of the config file")
+	cmd.Must(viper.BindPFlag("config", MacaroonCreateCmd.Flags().Lookup("config")))
+
+	MacaroonCreateCmd.Flags().String("secret", "mysecret",
+		"the location of the config file")
+	cmd.Must(viper.BindPFlag("secret", MacaroonCreateCmd.Flags().Lookup("secret")))
+	cmd.Must(viper.BindEnv("secret", "MACAROON_SECRET"))
+}
+
+// RunMacaroonCreate runs the generate command
+func RunMacaroonCreate(cmd *cobra.Command, args []string) error {
 	config, err := cmd.Flags().GetString("config")
 	if err != nil {
 		return err

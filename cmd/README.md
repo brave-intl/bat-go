@@ -2,6 +2,12 @@ Below is the command structure for bat-go microservices using cobra
 
 ```
 ./bat-go
+  - macaroon
+    - create
+      example:
+          macaroon create \
+            --config=config.yaml \
+            --secret=mysecret # MACAROON_SECRET env
   - serve
     - rewards
       - rest
