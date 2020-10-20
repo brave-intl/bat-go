@@ -5,10 +5,12 @@ import (
 	"crypto"
 	"encoding/hex"
 	"errors"
+	"os"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
@@ -121,8 +123,10 @@ func pullRequisiteSecrets(from string, usevault bool) (string, crypto.Signer, er
 	return pullRequisiteSecretsFromEnv(from)
 }
 
-func pullRequisiteSecretsFromEnv(from string) (string, *vaultsigner.Ed25519Signer, error) {
-	return "", nil, nil
+func pullRequisiteSecretsFromEnv(from string) (string, crypto.Signer, error) {
+	publicKey := os.Getenv("ED25519_PUBLIC_KEY")
+	privateKey := os.Getenv("ED25519_PRIVATE_KEY")
+	return publicKey, ed25519.NewKeyFromSeed([]byte(privateKey)), nil
 }
 
 func pullRequisiteSecretsFromVault(from string) (string, *vaultsigner.Ed25519Signer, error) {
@@ -185,7 +189,13 @@ func TransferFunds(
 		info.AltCurrency = &tmp
 	}
 
-	w := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: signer}
+	var pubKey httpsignature.Ed25519PubKey
+	pubKey, err = hex.DecodeString(info.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	w := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: pubKey}
 
 	altc, err := altcurrency.FromString(currency)
 	if err != nil {
