@@ -2,6 +2,8 @@ package vault
 
 import (
 	"context"
+	"crypto"
+	"encoding/hex"
 	"errors"
 
 	"github.com/brave-intl/bat-go/cmd"
@@ -16,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/ed25519"
 )
 
 var (
@@ -60,7 +63,11 @@ func init() {
 
 	TransferFundsCmd.Flags().String("provider", "uphold",
 		"provider for the source wallet")
-	cmd.Must(viper.BindPFlag("value", TransferFundsCmd.Flags().Lookup("value")))
+	cmd.Must(viper.BindPFlag("provider", TransferFundsCmd.Flags().Lookup("provider")))
+
+	TransferFundsCmd.Flags().Bool("usevault", false,
+		"should signer should pull from vault")
+	cmd.Must(viper.BindPFlag("usevault", TransferFundsCmd.Flags().Lookup("usevault")))
 }
 
 // RunTransferFunds moves funds from one wallet to another
@@ -89,6 +96,10 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	usevault, err := command.Flags().GetBool("usevault")
+	if err != nil {
+		return err
+	}
 
 	ctx := command.Context()
 	return TransferFunds(
@@ -99,7 +110,44 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 		currency,
 		note,
 		oneshot,
+		usevault,
 	)
+}
+
+func pullRequisiteSecrets(from string, usevault bool) (string, crypto.Signer, error) {
+	if usevault {
+		return pullRequisiteSecretsFromVault(from)
+	}
+	return pullRequisiteSecretsFromEnv(from)
+}
+
+func pullRequisiteSecretsFromEnv(from string) (string, *vaultsigner.Ed25519Signer, error) {
+	return "", nil, nil
+}
+
+func pullRequisiteSecretsFromVault(from string) (string, *vaultsigner.Ed25519Signer, error) {
+	wrappedClient, err := vaultsigner.Connect()
+	if err != nil {
+		return "", nil, err
+	}
+
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + from)
+	if err != nil {
+		return "", nil, err
+	}
+
+	providerID, ok := response.Data["providerId"]
+	if !ok {
+		return "", nil, errors.New("invalid wallet name")
+	}
+
+	signer, err := wrappedClient.GenerateEd25519Signer(from)
+	if err != nil {
+		return "", signer, err
+	}
+
+	providerIDString := providerID.(string)
+	return providerIDString, signer, nil
 }
 
 // TransferFunds transfers funds to a wallet
@@ -111,6 +159,7 @@ func TransferFunds(
 	currency string,
 	note string,
 	oneshot bool,
+	usevault bool,
 ) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -121,33 +170,16 @@ func TransferFunds(
 		return errors.New("must pass --value greater than 0 or --value=all")
 	}
 
-	wrappedClient, err := vaultsigner.Connect()
+	providerID, signer, err := pullRequisiteSecrets(from, usevault)
 	if err != nil {
 		return err
 	}
-
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + from)
-	if err != nil {
-		return err
-	}
-	logger.Info().Msgf("%#v\n", response)
-
-	providerID, ok := response.Data["providerId"]
-	if !ok {
-		return errors.New("invalid wallet name")
-	}
-
-	signer, err := wrappedClient.GenerateEd25519Signer(from)
-	if err != nil {
-		return err
-	}
-
 	walletc := altcurrency.BAT
 
 	var info wallet.Info
-	info.PublicKey = signer.String()
+	info.PublicKey = hex.EncodeToString(signer.Public().(ed25519.PublicKey))
 	info.Provider = "uphold"
-	info.ProviderID = providerID.(string)
+	info.ProviderID = providerID
 	{
 		tmp := walletc
 		info.AltCurrency = &tmp
@@ -197,9 +229,13 @@ func TransferFunds(
 			break
 		}
 
-		logger.Info().Msgf("Submitted quote for transfer, id: %s\n", submitInfo.ID)
-
-		logger.Info().Msgf("Will transfer %s %s from %s to %s\n", altc.FromProbi(valueProbi).String(), currency, from, to)
+		logger.Info().
+			Str("id", submitInfo.ID).
+			Str("from", from).
+			Str("to", to).
+			Str("currency", currency).
+			Str("amount", altc.FromProbi(valueProbi).String()).
+			Msg("will transfer")
 
 		log.Printf("Continue? ")
 		resp, err := prompt.Bool()
