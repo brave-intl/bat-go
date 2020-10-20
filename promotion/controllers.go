@@ -98,7 +98,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		return nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
-	wallet, err := service.wallet.GetWallet(walletID)
+	wallet, err := service.wallet.GetWallet(ctx, walletID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
@@ -342,7 +342,7 @@ func GetClaimSummary(service *Service) handlers.AppHandler {
 
 		logging.AddWalletIDToContext(r.Context(), walletID)
 
-		wallet, err := service.wallet.ReadableDatastore().GetWallet(walletID)
+		wallet, err := service.wallet.ReadableDatastore().GetWallet(r.Context(), walletID)
 		if err != nil {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusInternalServerError)
 		}

@@ -18,7 +18,7 @@ import (
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
-	wallet, err := service.wallet.Datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
 		return fmt.Errorf("error getting wallet: %w", err)
 	}
@@ -92,7 +92,7 @@ type DrainWorker interface {
 
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
-	wallet, err := service.wallet.Datastore.GetWallet(walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil {
 		return nil, err
 	}
