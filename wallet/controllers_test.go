@@ -253,7 +253,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
 	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
-	linked, err := service.Datastore.GetWallet(uuid.Must(uuid.FromString(w.ID)))
+	linked, err := service.Datastore.GetWallet(context.Background(), uuid.Must(uuid.FromString(w.ID)))
 	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
 	return linked, rr.Body.String()
 }
