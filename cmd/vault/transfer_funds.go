@@ -1,11 +1,13 @@
 package vault
 
 import (
+	"context"
 	"errors"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -21,7 +23,7 @@ var (
 	TransferFundsCmd = &cobra.Command{
 		Use:   "transfer-funds",
 		Short: "transfers funds from one wallet to another",
-		Run:   cmd.Perform("transfer funds", TransferFunds),
+		Run:   cmd.Perform("transfer funds", RunTransferFunds),
 	}
 )
 
@@ -30,51 +32,93 @@ func init() {
 		TransferFundsCmd,
 	)
 
-	TransferFundsCmd.PersistentFlags().String("currency", "BAT",
+	TransferFundsCmd.Flags().String("currency", "BAT",
 		"currency for transfer")
-	cmd.Must(viper.BindPFlag("currency", TransferFundsCmd.PersistentFlags().Lookup("currency")))
+	cmd.Must(viper.BindPFlag("currency", TransferFundsCmd.Flags().Lookup("currency")))
 
-	TransferFundsCmd.PersistentFlags().String("from", "",
+	TransferFundsCmd.Flags().String("from", "",
 		"vault name for the source wallet")
-	cmd.Must(viper.BindPFlag("from", TransferFundsCmd.PersistentFlags().Lookup("from")))
-	cmd.Must(TransferFundsCmd.MarkPersistentFlagRequired("from"))
+	cmd.Must(viper.BindPFlag("from", TransferFundsCmd.Flags().Lookup("from")))
+	cmd.Must(TransferFundsCmd.MarkFlagRequired("from"))
 
-	TransferFundsCmd.PersistentFlags().String("note", "",
+	TransferFundsCmd.Flags().String("note", "",
 		"optional note for the transfer")
-	cmd.Must(viper.BindPFlag("note", TransferFundsCmd.PersistentFlags().Lookup("note")))
+	cmd.Must(viper.BindPFlag("note", TransferFundsCmd.Flags().Lookup("note")))
 
-	TransferFundsCmd.PersistentFlags().Bool("oneshot", false,
+	TransferFundsCmd.Flags().Bool("oneshot", false,
 		"submit and commit without confirming")
-	cmd.Must(viper.BindPFlag("oneshot", TransferFundsCmd.PersistentFlags().Lookup("oneshot")))
+	cmd.Must(viper.BindPFlag("oneshot", TransferFundsCmd.Flags().Lookup("oneshot")))
 
-	TransferFundsCmd.PersistentFlags().String("to", "",
+	TransferFundsCmd.Flags().String("to", "",
 		"destination wallet address")
-	cmd.Must(viper.BindPFlag("to", TransferFundsCmd.PersistentFlags().Lookup("to")))
-	cmd.Must(TransferFundsCmd.MarkPersistentFlagRequired("to"))
+	cmd.Must(viper.BindPFlag("to", TransferFundsCmd.Flags().Lookup("to")))
+	cmd.Must(TransferFundsCmd.MarkFlagRequired("to"))
 
-	TransferFundsCmd.PersistentFlags().String("value", "",
+	TransferFundsCmd.Flags().String("value", "",
 		"amount to transfer [float or all]")
-	cmd.Must(viper.BindPFlag("value", TransferFundsCmd.PersistentFlags().Lookup("value")))
+	cmd.Must(viper.BindPFlag("value", TransferFundsCmd.Flags().Lookup("value")))
+
+	TransferFundsCmd.Flags().String("provider", "uphold",
+		"provider for the source wallet")
+	cmd.Must(viper.BindPFlag("value", TransferFundsCmd.Flags().Lookup("value")))
 }
 
-// TransferFunds moves funds from one wallet to another
-func TransferFunds(command *cobra.Command, args []string) error {
-	value := viper.GetString("value")
-	from := viper.GetString("from")
-	to := viper.GetString("to")
-	currency := viper.GetString("currency")
-	note := viper.GetString("note")
-	oneshot := viper.GetBool("oneshot")
-	logger, err := appctx.GetLogger(command.Context())
-	cmd.Must(err)
-
-	valueDec, err := decimal.NewFromString(value)
-	if value != "all" && (err != nil || valueDec.LessThan(decimal.Zero)) {
-		return errors.New("must pass -value greater than 0 or -value all")
+// RunTransferFunds moves funds from one wallet to another
+func RunTransferFunds(command *cobra.Command, args []string) error {
+	value, err := command.Flags().GetString("value")
+	if err != nil {
+		return err
+	}
+	from, err := command.Flags().GetString("from")
+	if err != nil {
+		return err
+	}
+	to, err := command.Flags().GetString("to")
+	if err != nil {
+		return err
+	}
+	currency, err := command.Flags().GetString("currency")
+	if err != nil {
+		return err
+	}
+	note, err := command.Flags().GetString("note")
+	if err != nil {
+		return err
+	}
+	oneshot, err := command.Flags().GetBool("oneshot")
+	if err != nil {
+		return err
 	}
 
-	if len(from) == 0 || len(to) == 0 {
-		return errors.New("must pass non-empty -from and -to")
+	ctx := command.Context()
+	return TransferFunds(
+		ctx,
+		from,
+		to,
+		value,
+		currency,
+		note,
+		oneshot,
+	)
+}
+
+// TransferFunds transfers funds to a wallet
+func TransferFunds(
+	ctx context.Context,
+	from string,
+	to string,
+	value string,
+	currency string,
+	note string,
+	oneshot bool,
+) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+	valueDec, err := decimal.NewFromString(value)
+	if value != "all" && (err != nil || valueDec.LessThanOrEqual(decimal.Zero)) {
+		return errors.New("must pass --value greater than 0 or --value=all")
 	}
 
 	wrappedClient, err := vaultsigner.Connect()
@@ -168,12 +212,13 @@ func TransferFunds(command *cobra.Command, args []string) error {
 
 		_, err = w.ConfirmTransaction(submitInfo.ID)
 		if err != nil {
-			logger.Info().Msgf("error confirming: %s\n", err)
+			logger.Error().Err(err).Msg("error confirming")
+			return err
 		}
 
 		upholdInfo, err := w.GetTransaction(submitInfo.ID)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
 		if upholdInfo.Status == "completed" {
 			logger.Info().Msg("transfer complete")
