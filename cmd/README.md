@@ -33,7 +33,8 @@ Below is the command structure for bat-go microservices using cobra
     - transfer-funds
       example:
           wallet transfer-funds \
-            --provider=uphold --from=1234567890 --to=1234567890
+            --provider=uphold --from=1234567890 --to=1234567890 --usevault=true \
+            --value=10.5
   - vault
     - init
       example:
