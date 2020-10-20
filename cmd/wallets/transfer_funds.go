@@ -168,7 +168,7 @@ func TransferFunds(
 ) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
+		_, logger = logging.SetupLogger(ctx)
 	}
 	valueDec, err := decimal.NewFromString(value)
 	if value != "all" && (err != nil || valueDec.LessThanOrEqual(decimal.Zero)) {
