@@ -29,6 +29,9 @@ func init() {
 	MacaroonCmd.AddCommand(
 		MacaroonCreateCmd,
 	)
+	cmd.RootCmd.AddCommand(
+		MacaroonCmd,
+	)
 
 	MacaroonCreateCmd.Flags().String("config", "example.yaml",
 		"the location of the config file")
@@ -41,17 +44,20 @@ func init() {
 }
 
 // RunMacaroonCreate runs the generate command
-func RunMacaroonCreate(cmd *cobra.Command, args []string) error {
-	config, err := cmd.Flags().GetString("config")
+func RunMacaroonCreate(command *cobra.Command, args []string) error {
+	config, err := command.Flags().GetString("config")
 	if err != nil {
 		return err
 	}
-	secret, err := cmd.Flags().GetString("secret")
-	if err != nil {
-		return err
+	secret := viper.GetString("secret")
+	if secret == "" {
+		secret, err = command.Flags().GetString("secret")
+		if err != nil {
+			return err
+		}
 	}
 	return Generate(
-		cmd.Context(),
+		command.Context(),
 		config,
 		secret,
 	)
@@ -83,6 +89,7 @@ func Generate(ctx context.Context, config, secret string) error {
 
 		logger.Info().
 			Str("id", token.ID).
+			Int("secret_length", len(secret)).
 			Interface("token", t).
 			Msg("token")
 	}

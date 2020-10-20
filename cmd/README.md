@@ -1,5 +1,9 @@
 Below is the command structure for bat-go microservices using cobra
 
+```bash
+./bat-go macaroon create --config=config.yaml
+```
+
 ```
 ./bat-go
   - macaroon

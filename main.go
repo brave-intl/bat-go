@@ -14,6 +14,8 @@ import (
 	_ "github.com/brave-intl/bat-go/cmd/wallets"
 	// pull in serve module. setup code is in init
 	_ "github.com/brave-intl/bat-go/cmd/serve"
+	// pull in macaroon module. setup code is in init
+	_ "github.com/brave-intl/bat-go/cmd/macaroon"
 )
 
 var (
