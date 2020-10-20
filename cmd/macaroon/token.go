@@ -1,4 +1,4 @@
-package main
+package macaroon
 
 import (
 	"encoding/base64"
