@@ -4,17 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-
-	// _ "net/http/pprof"
 	"os"
 	"time"
 
-	"github.com/asaskevich/govalidator"
-	"github.com/spf13/cobra"
-
+	// needed for profiling
+	_ "net/http/pprof"
 	// re-using viper bind-env for wallet env variables
+	_ "github.com/brave-intl/bat-go/cmd/wallets"
+
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd"
-	// _ "github.com/brave-intl/bat-go/cmd/wallets"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
@@ -31,6 +30,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -47,10 +47,10 @@ func init() {
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
-	buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
-	commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
-	version, _ := ctx.Value(appctx.VersionCTXKey).(string)
-	env, _ := ctx.Value(appctx.EnvironmentCTXKey).(string)
+	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit := ctx.Value(appctx.CommitCTXKey).(string)
+	version := ctx.Value(appctx.VersionCTXKey).(string)
+	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
@@ -250,8 +250,8 @@ func GrantServer(
 
 	sentryDsn := os.Getenv("SENTRY_DSN")
 	if sentryDsn != "" {
-		buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
-		commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
+		buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
+		commit := ctx.Value(appctx.CommitCTXKey).(string)
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:     sentryDsn,
 			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
