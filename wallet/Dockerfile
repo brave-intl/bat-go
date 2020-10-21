@@ -1,2 +1,2 @@
-FROM bat_go-microservice:latest
-CMD["bat-go", "serve", "wallet", "rest"]
+FROM bat-go:latest
+CMD ["bat-go", "serve", "wallet", "rest"]

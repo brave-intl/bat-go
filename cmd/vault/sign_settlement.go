@@ -145,6 +145,9 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 		// which secret values to use to sign (paypal-default, uphold-referral, gemini-contribution)
 		walletKey := provider + "-" + wallet
 		// append to the nested structure
+		if !tx.Amount.GreaterThan(decimal.NewFromFloat(0)) {
+			continue
+		}
 		settlementTransactionsByWallet[walletKey] = append(
 			settlementTransactionsByWallet[walletKey],
 			tx,

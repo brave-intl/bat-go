@@ -8,7 +8,7 @@ import (
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
-	sqlx "github.com/jmoiron/sqlx"
+	"github.com/jmoiron/sqlx"
 	reflect "reflect"
 )
 

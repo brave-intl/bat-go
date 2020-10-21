@@ -12,6 +12,8 @@ require (
 	github.com/containerd/containerd v1.2.9 // indirect
 	github.com/dhui/dktest v0.3.1 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/docker v0.7.3-0.20190817195342-4760db040282
+	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/ethereum/go-ethereum v1.7.2
 	github.com/frankban/quicktest v1.4.2 // indirect

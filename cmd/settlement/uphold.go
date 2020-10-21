@@ -1,82 +1,116 @@
-package main
+package settlement
 
 import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"flag"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
-	logFile    string
-	outputFile string
-
-	verbose             = flag.Bool("v", false, "verbose output")
-	progressDuration    = flag.Duration("p", time.Duration(0), "duration for progress logging")
-	inputFile           = flag.String("in", "./contributions-signed.json", "input file path")
-	allTransactionsFile = flag.String("alltransactions", "contributions.json", "the file that generated the signatures in the first place")
-	provider            = flag.String("provider", "", "the provider that the transactions should be sent to")
-	signatureSwitch     = flag.Int("sig", 0, "the signature and corresponding nonce that should be used")
+	// UpholdCmd uphold subcommand
+	UpholdCmd = &cobra.Command{
+		Use:   "uphold",
+		Short: "uphold sub command",
+	}
+	// UpholdUploadCmd uphold upload subcommand
+	UpholdUploadCmd = &cobra.Command{
+		Use:   "upload",
+		Short: "upload to uphold",
+		Run:   cmd.Perform("upload", RunUpholdUpload),
+	}
 )
 
-func main() {
+func init() {
+	UpholdCmd.AddCommand(
+		UpholdUploadCmd,
+	)
 
-	flag.Usage = func() {
-		log.Printf("Submit signed settlements to " + *provider + ".\n\n")
-		log.Printf("Usage:\n\n")
-		log.Printf("        %s\n\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
+	SettlementCmd.AddCommand(
+		UpholdCmd,
+	)
+	UpholdUploadCmd.Flags().String("input", "",
+		"input file to submit to a given provider")
+	cmd.Must(viper.BindPFlag("input", UpholdUploadCmd.Flags().Lookup("input")))
+	cmd.Must(UpholdUploadCmd.MarkFlagRequired("input"))
 
-	// setup context for logging, debug and progress
-	ctx := context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, verbose)
-
-	// setup progress logging
-	progChan := logging.ReportProgress(ctx, *progressDuration)
-	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
-
-	// setup logger, with the context that has the logger
-	ctx, logger := logging.SetupLogger(ctx)
-
-	logFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-log.json"
-	outputFile = strings.TrimSuffix(*inputFile, filepath.Ext(*inputFile)) + "-finished.json"
-
-	var err error
-	switch *provider {
-	case "uphold":
-		err = upholdSubmit(ctx)
-	case "gemini":
-		ctx := context.Background()
-		err = settlementcmd.GeminiUploadSettlement(ctx, *inputFile, *signatureSwitch, *allTransactionsFile, outputFile)
-	}
-	if err != nil {
-		logger.Panic().Err(err).Msg("error encountered running settlement-submit")
-	}
+	UpholdUploadCmd.Flags().String("progress", "1s",
+		"how often progress should be printed out")
+	cmd.Must(viper.BindPFlag("progress", UpholdUploadCmd.Flags().Lookup("progress")))
 }
 
-func upholdSubmit(ctx context.Context) error {
+// RunUpholdUpload the runner that the uphold upload command calls
+func RunUpholdUpload(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	verbose, err := cmd.Flags().GetBool("verbose")
+	if err != nil {
+		return err
+	}
+	progress, err := cmd.Flags().GetString("progress")
+	if err != nil {
+		return err
+	}
+	inputFile, err := cmd.Flags().GetString("input")
+	if err != nil {
+		return err
+	}
+	// setup context for logging, debug and progress
+	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, verbose)
+
+	// setup progress logging
+	progressDuration, err := time.ParseDuration(progress)
+	if err != nil {
+		return err
+	}
+	progChan := logging.ReportProgress(ctx, progressDuration)
+	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
+
+	logFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-log.json"
+	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-finished.json"
+
+	return UpholdUpload(
+		ctx,
+		inputFile,
+		logFile,
+		outputFile,
+	)
+}
+
+// UpholdUpload uploads transactions to uphold
+func UpholdUpload(
+	ctx context.Context,
+	inputFile string,
+	logFile string,
+	outputFile string,
+) error {
+
+	// setup logger, with the context that has the logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	settlementJSON, err := ioutil.ReadFile(*inputFile)
+	settlementJSON, err := ioutil.ReadFile(inputFile)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to read input file")
+	}
+
+	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
+	if err != nil {
+		logger.Panic().Err(err).Msg("failed to create output file")
 	}
 
 	var settlementState settlement.State
@@ -93,11 +127,6 @@ func upholdSubmit(ctx context.Context) error {
 	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to make settlement wallet")
-	}
-
-	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to create output file")
 	}
 
 	// Read from the transaction log
@@ -119,7 +148,7 @@ func upholdSubmit(ctx context.Context) error {
 	var total = len(settlementState.Transactions)
 
 	allComplete := true
-	for i := 0; i < len(settlementState.Transactions); i++ {
+	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)

@@ -1,16 +1,19 @@
-package main
+package serve
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"time"
 
-	"github.com/asaskevich/govalidator"
+	// needed for profiling
+	_ "net/http/pprof"
 	// re-using viper bind-env for wallet env variables
 	_ "github.com/brave-intl/bat-go/cmd/wallets"
+
+	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
@@ -27,19 +30,27 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
 var (
-	commit    string
-	version   string
-	buildTime string
+	// GrantServerCmd start up the grant server
+	GrantServerCmd = &cobra.Command{
+		Use:   "grant",
+		Short: "subcommand to start up grant server",
+		Run:   cmd.Perform("grant", RunGrantServer),
+	}
 )
 
-func setupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	return logging.SetupLogger(context.WithValue(ctx, appctx.EnvironmentCTXKey, os.Getenv("ENV")))
+func init() {
+	cmd.ServeCmd.AddCommand(GrantServerCmd)
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
+	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit := ctx.Value(appctx.CommitCTXKey).(string)
+	version := ctx.Value(appctx.VersionCTXKey).(string)
+	env := ctx.Value(appctx.EnvironmentCTXKey).(string)
 
 	// runnable jobs for the services created
 	jobs := []srv.Job{}
@@ -83,7 +94,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
-		log.Panic().Err(err).Msg("unable connect to promotion db")
+		logger.Panic().Err(err).Msg("unable connect to promotion db")
 	}
 	promotionService, err := promotion.InitService(
 		ctx,
@@ -93,12 +104,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Promotion service initialization failed")
+		logger.Panic().Err(err).Msg("Promotion service initialization failed")
 	}
 
 	grantDB, grantRODB, err := grant.NewPostgres()
 	if err != nil {
-		log.Panic().Err(err).Msg("unable connect to grant db")
+		logger.Panic().Err(err).Msg("unable connect to grant db")
 	}
 
 	grantService, err := grant.InitService(
@@ -110,7 +121,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Grant service initialization failed")
+		logger.Panic().Err(err).Msg("Grant service initialization failed")
 	}
 
 	// add runnable jobs:
@@ -124,7 +135,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	sRouter, err := promotion.SuggestionsRouter(promotionService)
 	if err != nil {
-		log.Panic().Err(err).Msg("failed to initialize the suggestions router")
+		logger.Panic().Err(err).Msg("failed to initialize the suggestions router")
 	}
 
 	r.Mount("/v1/suggestions", sRouter)
@@ -134,12 +145,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	paymentPG, err := payment.NewPostgres("", true, "payment_db")
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Panic().Err(err).Msg("Payment service initialization failed")
+		logger.Panic().Err(err).Msg("Payment service initialization failed")
 	}
 
 	// add runnable jobs:
@@ -153,12 +164,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
+			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
 		paymentService, err := payment.InitService(ctx, paymentDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
-			log.Panic().Err(err).Msg("Payment service initialization failed")
+			logger.Panic().Err(err).Msg("Payment service initialization failed")
 		}
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
@@ -174,7 +185,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}()
 	}
 
-	log.Info().
+	logger.Info().
 		Str("version", version).
 		Str("commit", commit).
 		Str("buildTime", buildTime).
@@ -182,12 +193,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))
 
-	env := os.Getenv("ENV")
 	reputationServer := os.Getenv("REPUTATION_SERVER")
 	reputationToken := os.Getenv("REPUTATION_TOKEN")
 	if len(reputationServer) == 0 {
 		if env != "local" {
-			log.Panic().Msg("REPUTATION_SERVER is missing in production environment")
+			logger.Panic().Msg("REPUTATION_SERVER is missing in production environment")
 		}
 	} else {
 		proxyRouter := reputation.ProxyRouter(reputationServer, reputationToken)
@@ -202,7 +212,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		ctx, logger = setupLogger(ctx)
+		ctx, logger = logging.SetupLogger(ctx)
 	}
 	for {
 		_, err := job(ctx)
@@ -215,14 +225,33 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 	}
 }
 
-func main() {
-	var (
-		serverCtx, logger = setupLogger(context.Background())
+// RunGrantServer is the runner for starting up the grant server
+func RunGrantServer(cmd *cobra.Command, args []string) error {
+	enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
+	if err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	return GrantServer(
+		ctx,
+		enableJobWorkers,
 	)
+}
 
-	// setup sentry
+// GrantServer runs the grant server
+func GrantServer(
+	ctx context.Context,
+	enableJobWorkers bool,
+) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	sentryDsn := os.Getenv("SENTRY_DSN")
 	if sentryDsn != "" {
+		buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
+		commit := ctx.Value(appctx.CommitCTXKey).(string)
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:     sentryDsn,
 			Release: fmt.Sprintf("bat-go@%s-%s", commit, buildTime),
@@ -232,34 +261,36 @@ func main() {
 			logger.Panic().Err(err).Msg("unable to setup reporting!")
 		}
 	}
-	subLog := logger.Info().Str("prefix", "main")
-	subLog.Msg("Starting server")
+	logger.Info().
+		Str("prefix", "main").
+		Msg("Starting server")
 
-	serverCtx, r, _, jobs := setupRouter(serverCtx, logger)
+	ctx, r, _, jobs := setupRouter(ctx, logger)
 
-	serverCtx, cancel := context.WithCancel(serverCtx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if os.Getenv("ENABLE_JOB_WORKERS") != "" {
+	if enableJobWorkers {
 		for _, job := range jobs {
 			// iterate over jobs
 			for i := 0; i < job.Workers; i++ {
 				// spin up a job worker for each worker
 				logger.Debug().Msg("starting job worker")
-				go jobWorker(serverCtx, job.Func, job.Cadence)
+				go jobWorker(ctx, job.Func, job.Cadence)
 			}
 		}
 	}
 
 	srv := http.Server{
 		Addr:         ":3333",
-		Handler:      chi.ServerBaseContext(serverCtx, r),
+		Handler:      chi.ServerBaseContext(ctx, r),
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("HTTP server start failed!")
 	}
+	return nil
 }

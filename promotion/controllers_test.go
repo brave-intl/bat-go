@@ -1546,7 +1546,12 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	suite.Require().NoError(err)
 	suite.Require().NotNil(suggestionEvent)
 
-	updatedOrder, err := service.Datastore.GetOrder(validOrderID)
-	suite.Require().NoError(err)
-	suite.Assert().Equal("paid", updatedOrder.Status)
+	for {
+		updatedOrder, err := service.Datastore.GetOrder(validOrderID)
+		suite.Require().NoError(err)
+		if updatedOrder.Status == "paid" {
+			break
+		}
+		<-time.After(10 * time.Millisecond)
+	}
 }
