@@ -2,33 +2,19 @@ GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
-_BINS := $(wildcard bin/*)
-
-ifdef GOOS
-	BINS := $(_BINS:bin/%=target/$(GOOS)_$(GOARCH)/%)
-else
-	BINS := $(_BINS:bin/%=target/release/%)
-endif
-
 TEST_PKG?=./...
 TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all bins docker test lint clean
-all: test bins
+.PHONY: all buildcmd docker test lint clean
+all: test buildcmd
 
-bins: clean $(BINS) buildcmd
-
-.DEFAULT:
-	go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" ./bin/$@
+.DEFAULT: buildcmd
 
 buildcmd:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o bat-go main.go
-
-target/%:
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o $@ ./bin/$(notdir $@)
 
 mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
@@ -81,7 +67,7 @@ docker:
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
-		-f docker-compose.yml -f docker-compose.dev.yml up -d
+		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
 docker-up-dev-rep:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
@@ -100,9 +86,6 @@ docker-dev:
 docker-refresh-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
-
-mac:
-	GOOS=darwin GOARCH=amd64 make bins
 
 settlement-tools:
 	$(eval GOOS?=darwin)
@@ -157,6 +140,3 @@ format-lint:
 	make format && make lint
 lint:
 	golangci-lint run -E gofmt -E golint --exclude-use-default=false
-
-clean:
-	rm -f $(BINS)
