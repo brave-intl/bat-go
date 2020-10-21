@@ -81,6 +81,8 @@ func SuggestionsRouter(service *Service) (chi.Router, error) {
 	if enableLinkingDraining {
 		r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestion", DrainSuggestion(service))))
 	}
+
+	r.Method("POST", "/transfer", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("TransferSuggestion", TransferSuggestion(service))))
 	return r, nil
 }
 
@@ -403,6 +405,54 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 			}
 		}
 
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+}
+
+// TransferSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
+type TransferSuggestionRequest struct {
+	To          uuid.UUID           `json:"to" valid:"-"`
+	From        uuid.UUID           `json:"from" valid:"-"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// TransferSuggestion is the handler for draining ad suggestions for a verified wallet
+func TransferSuggestion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req TransferSuggestionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logging.AddWalletIDToContext(r.Context(), req.From)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if req.From.String() != keyID {
+			return handlers.ValidationError("request",
+				map[string]string{"paymentId": "paymentId must match signature"})
+		}
+		err = service.Transfer(r.Context(), req.Credentials, req.From, req.To)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME not all remaining errors should be mapped to 400
+				return handlers.WrapError(err, "Error transferring", http.StatusBadRequest)
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 		return nil
 	})

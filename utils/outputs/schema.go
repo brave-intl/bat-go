@@ -3,6 +3,7 @@ package outputs
 import (
 	"reflect"
 
+	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/rewards"
 	"github.com/brave-intl/bat-go/wallet"
 )
@@ -14,5 +15,6 @@ var (
 		reflect.TypeOf(wallet.ResponseV3{}),
 		reflect.TypeOf(wallet.BalanceResponseV3{}),
 		reflect.TypeOf(rewards.ParametersV1{}),
+		reflect.TypeOf(promotion.TransferSuggestionRequest{}),
 	}
 )

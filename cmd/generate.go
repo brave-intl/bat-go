@@ -48,7 +48,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) {
 	Must(err)
 	logger.Info().Msg("starting json-schema generation")
 
-	// Wallet Outputs ./wallet/outputs.go
+	// Outputs ./utils/outputs/schema.go
 	for _, t := range outputs.APIResponseTypes {
 
 		logger.Info().Str("path", t.PkgPath()).Str("name", t.Name()).Str("str", t.String()).Msg("type being processed")

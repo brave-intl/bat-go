@@ -16,6 +16,23 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// Transfer ad suggestions into another wallet
+func (service *Service) Transfer(ctx context.Context, credentials []CredentialBinding, from, to uuid.UUID) error {
+	fromWallet, err := service.wallet.Datastore.GetWallet(from)
+	if err != nil || fromWallet == nil {
+		return fmt.Errorf("error getting wallet: %w", err)
+	}
+	toWallet, err := service.wallet.Datastore.GetWallet(to)
+	if err != nil || toWallet == nil {
+		return fmt.Errorf("error getting wallet: %w", err)
+	}
+	// TODO: fill out
+	// check reputation
+	// redeem credentials
+	// mint new credentials to
+	return nil
+}
+
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
 	wallet, err := service.wallet.Datastore.GetWallet(walletID)
