@@ -45,6 +45,57 @@ type result struct{}
 func (r result) LastInsertId() (int64, error) { return 1, nil }
 func (r result) RowsAffected() (int64, error) { return 1, nil }
 
+func TestLinkBraveWalletV3(t *testing.T) {
+	var (
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		// add the datastore to the context
+		ctx = context.Background()
+		r   = httptest.NewRequest(
+			"POST",
+			"/v3/wallet/brave/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
+			bytes.NewBufferString(`
+				{
+					"paymentId": "adef9cda-6a14-4fa1-be86-43da80e56d2c"
+				}`),
+		)
+		handler = wallet.LinkBraveDepositAccountV3(&wallet.Service{})
+		w       = httptest.NewRecorder()
+		id, _   = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
+		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+			AddRow(id, "brave", "", "12345", id, id)
+	)
+
+	mock.ExpectQuery("^select (.+)").WithArgs(id).WillReturnRows(rows)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/brave/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
+	}
+}
+
 func TestCreateBraveWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
