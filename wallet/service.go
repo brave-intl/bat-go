@@ -211,6 +211,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+				r.Post("/brave/{paymentID}/claim", middleware.InstrumentHandlerFunc(
+					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s)))
 			}
 
 			// get wallet routes
@@ -225,4 +227,10 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		})
 	}
 	return r, ctx, s
+}
+
+// LinkBraveWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
+	// TODO: fill in
+	return nil
 }

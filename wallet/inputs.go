@@ -191,3 +191,49 @@ func (ludar *LinkUpholdDepositAccountRequest) HandleErrors(err error) *handlers.
 	}
 	return handlers.ValidationError("brave create wallet request validation errors", issues)
 }
+
+// LinkBraveDepositAccountRequest - the structure for a linking request for uphold deposit account
+type LinkBraveDepositAccountRequest struct {
+	PaymentID string `json:"paymentId"`
+}
+
+// Validate - implementation of validatable interface
+func (lbdar *LinkBraveDepositAccountRequest) Validate(ctx context.Context) error {
+	var merr = new(errorutils.MultiError)
+	if lbdar.PaymentID != "" && !govalidator.IsUUID(lbdar.PaymentID) {
+		merr.Append(errors.New("failed to validate 'paymentId': must be uuid"))
+	}
+	if merr.Count() > 0 {
+		return merr
+	}
+	return nil
+}
+
+// Decode - implementation of  decodable interface
+func (lbdar *LinkBraveDepositAccountRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, lbdar); err != nil {
+		return fmt.Errorf("failed to decode json: %w", err)
+	}
+	return nil
+}
+
+// HandleErrors - handle any errors from this request
+func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.AppError {
+	issues := map[string]string{}
+	if errors.Is(err, ErrInvalidJSON) {
+		issues["invalidJSON"] = err.Error()
+	}
+
+	var merr *errorutils.MultiError
+	if errors.As(err, &merr) {
+		for _, e := range merr.Errs {
+			if strings.Contains(e.Error(), "failed decoding") {
+				issues["decoding"] = e.Error()
+			}
+			if strings.Contains(e.Error(), "failed validation") {
+				issues["validation"] = e.Error()
+			}
+		}
+	}
+	return handlers.ValidationError("brave link wallet request validation errors", issues)
+}

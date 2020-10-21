@@ -389,3 +389,49 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	// format the response and render
 	return handlers.RenderContent(ctx, balanceToResponseV3(*result), w, http.StatusOK)
 }
+
+// LinkBraveDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of brave wallets
+func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx = r.Context()
+			id  = new(inputs.ID)
+			lbw = new(LinkBraveDepositAccountRequest)
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		// get payment id
+		if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// read post body
+		if err := inputs.DecodeAndValidateReader(r.Context(), lbw, r.Body); err != nil {
+			return lbw.HandleErrors(err)
+		}
+
+		linkedPaymentID, err := uuid.FromString(lbw.PaymentID)
+		if err != nil {
+			return handlers.WrapError(err, "error parsing anonymous address", http.StatusBadRequest)
+		}
+
+		err = s.LinkBraveWallet(r.Context(), *id.UUID(), linkedPaymentID)
+		if err != nil {
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+		}
+
+		// render the wallet
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
