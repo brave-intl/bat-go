@@ -18,4 +18,4 @@ RUN apk add --update ca-certificates # Certificates for SSL
 COPY --from=builder /src/bat-go /bin/
 COPY --from=builder /src/migrations/ /migrations/
 EXPOSE 3333
-CMD ["./bat-go serve grant --enable-job-workers=true"]
+CMD ["bat-go", "serve", "grant", "--enable-job-workers", "true"]
