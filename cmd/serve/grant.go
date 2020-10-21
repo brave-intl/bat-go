@@ -31,6 +31,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -44,6 +45,10 @@ var (
 
 func init() {
 	cmd.ServeCmd.AddCommand(GrantServerCmd)
+
+	GrantServerCmd.PersistentFlags().Bool("enable-job-workers", true, "enable job workers (defaults true)")
+	cmd.Must(viper.BindPFlag("enable-job-workers", GrantServerCmd.PersistentFlags().Lookup("enable-job-workers")))
+	cmd.Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {

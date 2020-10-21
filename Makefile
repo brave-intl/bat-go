@@ -67,7 +67,7 @@ docker:
 
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
-		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
+		-f docker-compose.yml -f docker-compose.dev.yml up -d
 
 docker-up-dev-rep:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
