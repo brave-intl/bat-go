@@ -85,7 +85,7 @@ with output option
 
 ```bash
 ./bat-go settlement gemini upload \
-  --input "gemini-contribution-4ae996f5-679b-46c6-9aea-9892f763ffe6-signed.json" \
+  --input "gemini-contribution-signed.json" \
   --all-txs-input "4ae996f5-679b-46c6-9aea-9892f763ffe6" \
   --sig 0
 ```
@@ -93,17 +93,17 @@ with output option
 with output
 ```bash
 ./bat-go settlement gemini upload \
-  --input "gemini-contribution-4ae996f5-679b-46c6-9aea-9892f763ffe6-signed.json" \
+  --input "gemini-contribution-signed.json" \
   --all-txs-input "4ae996f5-679b-46c6-9aea-9892f763ffe6" \
   --sig 0 \
-  --out "gemini-contribution-4ae996f5-679b-46c6-9aea-9892f763ffe6-signed-completed.json"
+  --out "gemini-contribution-signed-completed.json"
 ```
 
 ### checkstatus
 
 ```bash
 ./bat-go settlement gemini checkstatus \
-  --input "gemini-contribution-4ae996f5-679b-46c6-9aea-9892f763ffe6-signed.json" \
+  --input "gemini-contribution-signed.json" \
   --all-txs-input "4ae996f5-679b-46c6-9aea-9892f763ffe6"
 ```
 
@@ -176,7 +176,7 @@ only import a subset of the keys with `--wallet-refs`
 ```bash
 ./bat-go vault import-key \
   --config "config.yaml" \
-  --wallet-refs gemini-referral
+  --wallet-refs "gemini-referral"
 ```
 
 ### sign settlement
