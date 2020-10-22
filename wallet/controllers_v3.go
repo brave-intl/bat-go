@@ -423,7 +423,7 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 
 		linkedPaymentID, err := uuid.FromString(lbw.DepositDestination)
 		if err != nil {
-			return handlers.WrapError(err, "error parsing anonymous address", http.StatusBadRequest)
+			return handlers.WrapError(err, "error parsing depositDestination", http.StatusBadRequest)
 		}
 
 		err = s.LinkBraveWallet(r.Context(), *id.UUID(), linkedPaymentID)

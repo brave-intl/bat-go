@@ -67,7 +67,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 			"/v3/wallet/brave/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
 			bytes.NewBufferString(`
 				{
-					"paymentId": "adef9cda-6a14-4fa1-be86-43da80e56d2c"
+					"depositDestination": "adef9cda-6a14-4fa1-be86-43da80e56d2c"
 				}`),
 		)
 		handler = wallet.LinkBraveDepositAccountV3(&wallet.Service{})
