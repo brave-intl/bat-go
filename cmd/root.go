@@ -117,7 +117,6 @@ func versionRun(command *cobra.Command, args []string) {
 	fmt.Printf("version: %s\ncommit: %s\nbuild time: %s\n",
 		version, commit, buildTime,
 	)
-
 }
 
 // Perform performs a run
