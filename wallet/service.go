@@ -195,7 +195,6 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
-
 	// if feature is enabled, setup the routes
 	if viper.GetBool("wallets-feature-flag") {
 		// setup our wallet routes
