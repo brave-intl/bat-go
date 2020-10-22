@@ -194,14 +194,14 @@ func (ludar *LinkUpholdDepositAccountRequest) HandleErrors(err error) *handlers.
 
 // LinkBraveDepositAccountRequest - the structure for a linking request for uphold deposit account
 type LinkBraveDepositAccountRequest struct {
-	PaymentID string `json:"paymentId"`
+	DepositDestination string `json:"depositDestination"`
 }
 
 // Validate - implementation of validatable interface
 func (lbdar *LinkBraveDepositAccountRequest) Validate(ctx context.Context) error {
 	var merr = new(errorutils.MultiError)
-	if lbdar.PaymentID != "" && !govalidator.IsUUID(lbdar.PaymentID) {
-		merr.Append(errors.New("failed to validate 'paymentId': must be uuid"))
+	if lbdar.DepositDestination != "" && !govalidator.IsUUID(lbdar.DepositDestination) {
+		merr.Append(errors.New("failed to validate 'depositDestination': must be uuid"))
 	}
 	if merr.Count() > 0 {
 		return merr

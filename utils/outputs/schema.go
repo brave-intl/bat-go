@@ -13,6 +13,7 @@ var (
 	APIResponseTypes = []reflect.Type{
 		reflect.TypeOf(wallet.ResponseV3{}),
 		reflect.TypeOf(wallet.BalanceResponseV3{}),
+		reflect.TypeOf(wallet.LinkBraveDepositAccountRequest{}),
 		reflect.TypeOf(rewards.ParametersV1{}),
 	}
 )
