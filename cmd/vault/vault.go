@@ -22,7 +22,7 @@ func init() {
 	cmd.RootCmd.AddCommand(VaultCmd)
 
 	// config - defaults to config.yaml
-	VaultCmd.PersistentFlags().StringP("config", "c", "config.yaml",
+	VaultCmd.PersistentFlags().String("config", "config.yaml",
 		"the default path to a configuration file")
 	cmd.Must(viper.BindPFlag("config", VaultCmd.PersistentFlags().Lookup("config")))
 	cmd.Must(viper.BindEnv("config", "CONFIG"))

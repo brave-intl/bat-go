@@ -174,6 +174,9 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
 		}
 	}
+	if roPg == nil {
+		roPg = pg
+	}
 	return pg, roPg, err
 }
 

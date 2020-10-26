@@ -36,6 +36,13 @@ const (
 	DebugLoggingCTXKey CTXKey = "debug_logging"
 	// ProgressLoggingCTXKey - context key for progress logging
 	ProgressLoggingCTXKey CTXKey = "progress_logging"
+
+	// VersionCTXKey - context key for version of code
+	VersionCTXKey CTXKey = "version"
+	// CommitCTXKey - context key for the commit of the code
+	CommitCTXKey CTXKey = "commit"
+	// BuildTimeCTXKey - context key for the build time of code
+	BuildTimeCTXKey CTXKey = "build_time"
 )
 
 var (

@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -20,11 +23,6 @@ var (
 		Short: "bat-go provides go based services and processes for BAT",
 	}
 	ctx = context.Background()
-
-	// variables will be overwritten at build time
-	version   string
-	commit    string
-	buildTime string
 
 	// top level config items
 	pprofEnabled string
@@ -44,7 +42,7 @@ func Must(err error) {
 }
 
 // Execute - the main entrypoint for all subcommands in bat-go
-func Execute() {
+func Execute(version, commit, buildTime string) {
 	// setup context with logging, but first we need to setup the environment
 	var logger *zerolog.Logger
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
@@ -52,6 +50,10 @@ func Execute() {
 	// setup ratios service values
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
 	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
+
+	ctx = context.WithValue(ctx, appctx.VersionCTXKey, version)
+	ctx = context.WithValue(ctx, appctx.CommitCTXKey, commit)
+	ctx = context.WithValue(ctx, appctx.BuildTimeCTXKey, buildTime)
 
 	// execute the root cmd
 	if err := RootCmd.ExecuteContext(ctx); err != nil {
@@ -75,7 +77,7 @@ func init() {
 	Must(viper.BindEnv("environment", "ENV"))
 
 	// ratiosAccessToken (required by all)
-	RootCmd.PersistentFlags().StringP("ratios-token", "t", "",
+	RootCmd.PersistentFlags().String("ratios-token", "",
 		"the ratios service token for this service")
 	Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
 	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
@@ -97,13 +99,47 @@ func init() {
 		"the ratios client cache default purge duration")
 	Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
 	Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
+
+	RootCmd.AddCommand(VersionCmd)
+}
+
+// VersionCmd is the command to get the code's version information
+var VersionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "get the version of this binary",
+	Run:   versionRun,
+}
+
+func versionRun(command *cobra.Command, args []string) {
+	version := command.Context().Value(appctx.VersionCTXKey).(string)
+	commit := command.Context().Value(appctx.CommitCTXKey).(string)
+	buildTime := command.Context().Value(appctx.BuildTimeCTXKey).(string)
+	fmt.Printf("version: %s\ncommit: %s\nbuild time: %s\n",
+		version, commit, buildTime,
+	)
 }
 
 // Perform performs a run
 func Perform(action string, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		if err := fn(cmd, args); err != nil {
-			log.Printf("failed to %s: %s\n", action, err)
+			logger, lerr := appctx.GetLogger(cmd.Context())
+			if lerr != nil {
+				_, logger = logging.SetupLogger(cmd.Context())
+			}
+
+			// var bundle errorutils.ErrorBundle
+			log := logger.Err(err).Str("action", action)
+			httpError, ok := err.(*errorutils.ErrorBundle)
+			if ok {
+				state, ok := httpError.Data().(clients.HTTPState)
+				if ok {
+					log = log.Int("status", state.Status).
+						Str("path", state.Path).
+						Interface("data", state.Body)
+				}
+			}
+			log.Msg("failed")
 			os.Exit(1)
 		}
 	}
