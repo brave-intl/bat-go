@@ -1,0 +1,10 @@
+tokens:
+  - id: "brave free-trial sku token v1"
+    version: 1
+    location: "brave.com"
+    first_party_caveats:
+      - sku: "free-trial"
+      - price: 0
+      - currency: "BAT"
+      - description: "Grants recipient one free trial"
+      - credential_type: "single-use"
