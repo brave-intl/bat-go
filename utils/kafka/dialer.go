@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/linkedin/goavro"
 	kafka "github.com/segmentio/kafka-go"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -155,4 +157,19 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 	})
 
 	return kafkaWriter, dialer, nil
+}
+
+// GenerateCodecs - create a map of codec name to the avro codec
+func GenerateCodecs(codecs map[string]string) (map[string]*goavro.Codec, error) {
+	var (
+		res = make(map[string]*goavro.Codec)
+		err error
+	)
+	for k, v := range codecs {
+		res[k], err = goavro.NewCodec(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate codec: %w", err)
+		}
+	}
+	return res, nil
 }

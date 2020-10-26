@@ -99,18 +99,6 @@ func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
 
-// InitCodecs used for Avro encoding / decoding
-func (s *Service) InitCodecs() error {
-	s.codecs = make(map[string]*goavro.Codec)
-
-	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
-	s.codecs["suggestion"] = suggestionEventCodec
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // InitKafka by creating a kafka writer and creating local copies of codecs
 func (s *Service) InitKafka(ctx context.Context) error {
 
@@ -123,9 +111,12 @@ func (s *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
-	err = s.InitCodecs()
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"suggestion": suggestionEventSchema,
+	})
+
 	if err != nil {
-		return fmt.Errorf("failed to initialize kafka: %w", err)
+		return fmt.Errorf("failed to generate codecs kafka: %w", err)
 	}
 	return nil
 }
