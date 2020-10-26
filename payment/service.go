@@ -9,7 +9,6 @@ import (
 
 	"errors"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -36,22 +35,6 @@ var (
 		Help: "Date when the kafka certificate expires.",
 	})
 )
-
-func init() {
-	// put environment on context before logger setup
-	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
-	_, logger := logging.SetupLogger(ctx)
-	var err error
-	// gracefully try to register collectors for prom, no need to panic
-	err = prometheus.Register(kafkaCertNotBefore)
-	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		logger.Warn().Err(err).Msg("already registered kafkaCertNotBefore collector")
-	}
-	err = prometheus.Register(kafkaCertNotAfter)
-	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		logger.Warn().Err(err).Msg("already registered kafkaCertNotAfter collector")
-	}
-}
 
 // Service contains datastore
 type Service struct {
@@ -101,6 +84,17 @@ func (s *Service) InitCodecs() error {
 func (s *Service) InitKafka() error {
 
 	_, logger := logging.SetupLogger(context.Background())
+
+	var err error
+	// gracefully try to register collectors for prom, no need to panic
+	err = prometheus.Register(kafkaCertNotBefore)
+	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		logger.Warn().Err(err).Msg("already registered kafkaCertNotBefore collector")
+	}
+	err = prometheus.Register(kafkaCertNotAfter)
+	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		logger.Warn().Err(err).Msg("already registered kafkaCertNotAfter collector")
+	}
 
 	dialer, x509Cert, err := kafkautils.TLSDialer()
 	if err != nil {

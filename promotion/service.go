@@ -93,40 +93,6 @@ func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
-func init() {
-
-	// register metrics with prometheus
-	err := prometheus.Register(countGrantsClaimedBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countGrantsClaimedTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(kafkaCertNotAfter)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		kafkaCertNotAfter = ae.ExistingCollector.(prometheus.Gauge)
-	}
-
-	err = prometheus.Register(kafkaCertNotBefore)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		kafkaCertNotBefore = ae.ExistingCollector.(prometheus.Gauge)
-	}
-}
-
 // Service contains datastore and challenge bypass client connections
 type Service struct {
 	wallet                  *wallet.Service
@@ -166,6 +132,16 @@ func (s *Service) InitCodecs() error {
 func (s *Service) InitKafka() error {
 
 	_, logger := logging.SetupLogger(context.Background())
+
+	err := prometheus.Register(kafkaCertNotAfter)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotAfter = ae.ExistingCollector.(prometheus.Gauge)
+	}
+
+	err = prometheus.Register(kafkaCertNotBefore)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		kafkaCertNotBefore = ae.ExistingCollector.(prometheus.Gauge)
+	}
 
 	dialer, x509Cert, err := kafkautils.TLSDialer()
 	if err != nil {
@@ -240,6 +216,28 @@ func InitService(
 	promotionRODB ReadOnlyDatastore,
 	walletService *wallet.Service,
 ) (*Service, error) {
+
+	// register metrics with prometheus
+	err := prometheus.Register(countGrantsClaimedBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countGrantsClaimedTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
