@@ -101,6 +101,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if err != nil {
 		logger.Panic().Err(err).Msg("unable connect to promotion db")
 	}
+
 	promotionService, err := promotion.InitService(
 		ctx,
 		promotionDB,
