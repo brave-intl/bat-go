@@ -3,6 +3,7 @@ package reputation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
@@ -108,17 +109,14 @@ func (c *HTTPClient) IsWalletOnPlatform(
 ) (bool, error) {
 
 	var body IsWalletOnPlatformOpts
-	if platform != "" {
-		// pass in query string "platform" into our request
-		body = IsWalletOnPlatformOpts{
-			Platform: platform,
-		}
+	if platform == "" {
+		return false, errors.New("need to specify the platform")
 	}
 
 	req, err := c.client.NewRequest(
 		ctx,
 		"GET",
-		"v1/on-platform/"+paymentID.String(),
+		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
 		body,
 	)
 	if err != nil {
