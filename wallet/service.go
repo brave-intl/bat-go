@@ -3,9 +3,11 @@ package wallet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -27,6 +29,7 @@ var (
 type Service struct {
 	Datastore   Datastore
 	RoDatastore ReadOnlyDatastore
+	repClient   reputation.Client
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -195,6 +198,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
+
+	// setup reputation client
+	s.repClient, err = reputation.New()
+	if err != nil {
+		logger.Panic().Err(err).Msg("unable to attach a reputation client")
+	}
+
 	// if feature is enabled, setup the routes
 	if viper.GetBool("wallets-feature-flag") {
 		// setup our wallet routes
@@ -230,6 +240,47 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 // LinkBraveWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
-	// TODO: fill in
+
+	// is this from wallet reputable as an iOS device?
+	fromRep, err := service.repClient.IsWalletReputable(ctx, from, "ios")
+	if err != nil {
+		return fmt.Errorf("failed to get reputation of wallet: %w", err)
+	}
+
+	// is this to wallet reputable?
+	toRep, err := service.repClient.IsWalletReputable(ctx, to, "")
+	if err != nil {
+		return fmt.Errorf("failed to get reputation of wallet: %w", err)
+	}
+
+	if !fromRep && !toRep {
+		// wallet is not reputable, decline
+		return fmt.Errorf("unable to link wallet: invalid device")
+	}
+
+	// get the to wallet from the database
+	toInfo, err := service.GetWallet(to)
+	if err != nil {
+		return fmt.Errorf("failed to get to wallet: %w", err)
+	}
+
+	// link the wallet in our datastore, provider linking id will be on the deposit wallet
+	providerLinkingID := uuid.NewV5(walletClaimNamespace, to.String())
+
+	if toInfo.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*toInfo.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	}
+	// "to" will be stored as UserDepositDestination in the wallet info upon linking
+	if err := service.Datastore.LinkWallet(from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrTooManyCardsLinked {
+			status = http.StatusConflict
+		}
+		return handlers.WrapError(err, "unable to link wallets", status)
+	}
+
 	return nil
 }
