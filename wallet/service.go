@@ -242,18 +242,12 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
 
 	// is this from wallet reputable as an iOS device?
-	fromRep, err := service.repClient.IsWalletReputable(ctx, from, "ios")
+	isFromOnPlatform, err := service.repClient.IsWalletOnPlatform(ctx, from, "ios")
 	if err != nil {
-		return fmt.Errorf("failed to get reputation of wallet: %w", err)
+		return fmt.Errorf("invalid device: %w", err)
 	}
 
-	// is this to wallet reputable?
-	toRep, err := service.repClient.IsWalletReputable(ctx, to, "")
-	if err != nil {
-		return fmt.Errorf("failed to get reputation of wallet: %w", err)
-	}
-
-	if !fromRep && !toRep {
+	if !isFromOnPlatform {
 		// wallet is not reputable, decline
 		return fmt.Errorf("unable to link wallet: invalid device")
 	}

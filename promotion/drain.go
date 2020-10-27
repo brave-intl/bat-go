@@ -106,17 +106,31 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	if wallet.UserDepositDestination == "" {
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
+	if wallet.UserDepositAccountProvider == nil {
+		return nil, errorutils.ErrNoDepositProviderDestination
+	}
 
 	// failed to redeem credentials
 	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
-	// FIXME should use idempotency key
-	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
-	if err != nil {
-		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	switch *wallet.UserDepositAccountProvider {
+	case "uphold":
+		// FIXME should use idempotency key
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
+		if err != nil {
+			return nil, fmt.Errorf("failed to transfer funds: %w", err)
+		}
+	case "brave":
+		// TODO: vg transfer
+	default:
+		return nil, fmt.Errorf(
+			"failed to transfer funds: user_deposit_account_provider unknown: %s",
+			*wallet.UserDepositAccountProvider)
+
 	}
+
 	if service.drainChannel != nil {
 		service.drainChannel <- tx
 	}

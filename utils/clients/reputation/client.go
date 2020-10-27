@@ -12,6 +12,7 @@ import (
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -85,4 +86,50 @@ func (c *HTTPClient) IsWalletReputable(
 	}
 
 	return resp.IsReputable, nil
+}
+
+// IsWalletOnPlatformResposne is what the reputation server
+// will send back when we ask if a wallet is on a given platform
+type IsWalletOnPlatformResponse struct {
+	IsOnPlatform bool `json:"isOnPlatform"`
+}
+
+// IsWalletOnPlatformOpts - the query string options for the is reputable api call
+type IsWalletOnPlatformOpts struct {
+	Platform string `url:"platform"`
+}
+
+// IsWalletOnPlatform makes the request to the reputation server
+// and returns whether a paymentId is on a given platform
+func (c *HTTPClient) IsWalletOnPlatform(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	platform string,
+) (bool, error) {
+
+	var body IsWalletOnPlatformOpts
+	if platform != "" {
+		// pass in query string "platform" into our request
+		body = IsWalletOnPlatformOpts{
+			Platform: platform,
+		}
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v1/on-platform/"+paymentID.String(),
+		body,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IsWalletOnPlatformResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, err
+	}
+
+	return resp.IsOnPlatform, nil
 }
