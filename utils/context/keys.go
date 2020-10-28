@@ -49,6 +49,8 @@ const (
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code
 	KafkaBrokersCTXKey CTXKey = "kafka_brokers"
+	// BraveTransferPromotionIDCTXKey - context key for the build time of code
+	BraveTransferPromotionIDCTXKey CTXKey = "brave_transfer_promotion_id"
 )
 
 var (
