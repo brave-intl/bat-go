@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -34,22 +33,6 @@ const localEnv = "local"
 
 var (
 	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
-
-	// kafkaCertNotAfter checks when the kafka certificate becomes valid
-	kafkaCertNotBefore = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "kafka_cert_not_before",
-			Help: "Date when the kafka certificate becomes valid.",
-		},
-	)
-
-	// kafkaCertNotAfter checks when the kafka certificate expires
-	kafkaCertNotAfter = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "kafka_cert_not_after",
-			Help: "Date when the kafka certificate expires.",
-		},
-	)
 
 	// countContributionsTotal counts the number of contributions made broken down by funding and type
 	countContributionsTotal = prometheus.NewCounterVec(
@@ -93,40 +76,6 @@ func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
-func init() {
-
-	// register metrics with prometheus
-	err := prometheus.Register(countGrantsClaimedBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countGrantsClaimedTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsBatTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(countContributionsTotal)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
-	}
-
-	err = prometheus.Register(kafkaCertNotAfter)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		kafkaCertNotAfter = ae.ExistingCollector.(prometheus.Gauge)
-	}
-
-	err = prometheus.Register(kafkaCertNotBefore)
-	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		kafkaCertNotBefore = ae.ExistingCollector.(prometheus.Gauge)
-	}
-}
-
 // Service contains datastore and challenge bypass client connections
 type Service struct {
 	wallet                  *wallet.Service
@@ -150,48 +99,25 @@ func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
 
-// InitCodecs used for Avro encoding / decoding
-func (s *Service) InitCodecs() error {
-	s.codecs = make(map[string]*goavro.Codec)
-
-	suggestionEventCodec, err := goavro.NewCodec(string(suggestionEventSchema))
-	s.codecs["suggestion"] = suggestionEventCodec
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (s *Service) InitKafka() error {
+func (s *Service) InitKafka(ctx context.Context) error {
 
-	_, logger := logging.SetupLogger(context.Background())
+	// TODO: eventually as cobra/viper
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
 
-	dialer, x509Cert, err := kafkautils.TLSDialer()
+	var err error
+	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, suggestionTopic)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
-	s.kafkaDialer = dialer
 
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
-
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		// by default we are waitng for acks from all nodes
-		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    suggestionTopic,
-		Balancer: &kafka.LeastBytes{},
-		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"suggestion": suggestionEventSchema,
 	})
 
-	s.kafkaWriter = kafkaWriter
-	err = s.InitCodecs()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate codecs kafka: %w", err)
 	}
-
 	return nil
 }
 
@@ -240,6 +166,28 @@ func InitService(
 	promotionRODB ReadOnlyDatastore,
 	walletService *wallet.Service,
 ) (*Service, error) {
+
+	// register metrics with prometheus
+	err := prometheus.Register(countGrantsClaimedBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countGrantsClaimedTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countGrantsClaimedTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsBatTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
+	err = prometheus.Register(countContributionsTotal)
+	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		countContributionsTotal = ae.ExistingCollector.(*prometheus.CounterVec)
+	}
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
@@ -306,7 +254,7 @@ func InitService(
 			})
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -52,8 +53,15 @@ func TestUnmarshalText(t *testing.T) {
 }
 
 func TestTryUpgradeSuggestionEvent(t *testing.T) {
-	var service Service
-	err := service.InitCodecs()
+	var (
+		service Service
+		err     error
+	)
+
+	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"suggestion": suggestionEventSchema,
+	})
+
 	assert.NoError(t, err, "Failed to initialize codecs")
 
 	suggestion := `{"id":"d6e6f7f2-8975-4105-8fef-2ad89e299add","type":"oneoff-tip","channel":"3zsistemi.si","totalAmount":"10","funding":[{"type":"ugp","amount":"10","cohort":"control","promotion":"1d54793b-e8e7-4e96-890f-a1836cab9533"}]}`
