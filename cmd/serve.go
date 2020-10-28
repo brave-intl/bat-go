@@ -21,7 +21,7 @@ const (
 func init() {
 	RootCmd.AddCommand(ServeCmd)
 
-	// env - defaults to development
+	// address - sets the address of the server to be started
 	ServeCmd.PersistentFlags().String("address", ":8080",
 		"the default address to bind to")
 	Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
