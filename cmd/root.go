@@ -122,7 +122,8 @@ func versionRun(command *cobra.Command, args []string) {
 // Perform performs a run
 func Perform(action string, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
-		if err := fn(cmd, args); err != nil {
+		err := fn(cmd, args)
+		if err != nil {
 			logger, lerr := appctx.GetLogger(cmd.Context())
 			if lerr != nil {
 				_, logger = logging.SetupLogger(cmd.Context())
@@ -140,6 +141,9 @@ func Perform(action string, fn func(cmd *cobra.Command, args []string) error) fu
 				}
 			}
 			log.Msg("failed")
+		}
+		<-time.After(10 * time.Millisecond)
+		if err != nil {
 			os.Exit(1)
 		}
 	}
