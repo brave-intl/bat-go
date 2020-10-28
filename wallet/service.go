@@ -205,6 +205,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		logger.Panic().Err(err).Msg("unable to attach a reputation client")
 	}
 
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
+
 	// if feature is enabled, setup the routes
 	if viper.GetBool("wallets-feature-flag") {
 		// setup our wallet routes
@@ -241,8 +243,14 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 // LinkBraveWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
 
+	// get reputation client from context
+	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+	if !ok {
+		return fmt.Errorf("server misconfigured: no reputation client")
+	}
+
 	// is this from wallet reputable as an iOS device?
-	isFromOnPlatform, err := service.repClient.IsWalletOnPlatform(ctx, from, "ios")
+	isFromOnPlatform, err := repClient.IsWalletOnPlatform(ctx, from, "ios")
 	if err != nil {
 		return fmt.Errorf("invalid device: %w", err)
 	}

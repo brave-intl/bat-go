@@ -7,7 +7,7 @@ package mock_balance
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	go_uuid "github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	reflect "reflect"
 )
 
@@ -35,7 +35,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // InvalidateBalance mocks base method
-func (m *MockClient) InvalidateBalance(ctx context.Context, id go_uuid.UUID) error {
+func (m *MockClient) InvalidateBalance(ctx context.Context, id uuid.UUID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InvalidateBalance", ctx, id)
 	ret0, _ := ret[0].(error)

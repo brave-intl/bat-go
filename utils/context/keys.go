@@ -43,6 +43,8 @@ const (
 	CommitCTXKey CTXKey = "commit"
 	// BuildTimeCTXKey - context key for the build time of code
 	BuildTimeCTXKey CTXKey = "build_time"
+	// ReputationClientCTXKey - context key for the build time of code
+	ReputationClientCTXKey CTXKey = "reputation_client"
 )
 
 var (
