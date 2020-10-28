@@ -89,8 +89,7 @@ func (c *HTTPClient) IsWalletReputable(
 	return resp.IsReputable, nil
 }
 
-// IsWalletOnPlatformResposne is what the reputation server
-// will send back when we ask if a wallet is on a given platform
+// IsWalletOnPlatformResponse - will send back indication if wallet is on said platform
 type IsWalletOnPlatformResponse struct {
 	IsOnPlatform bool `json:"isOnPlatform"`
 }
