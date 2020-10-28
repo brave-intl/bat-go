@@ -13,6 +13,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 )
 
 type BytesContains []byte
@@ -47,9 +48,13 @@ func TestVoteAnonCard(t *testing.T) {
 		}
 		oldGenerateCredentialRedemptions = generateCredentialRedemptions
 		db, mock, _                      = sqlmock.New()
+		err                              error
 	)
 	// avro codecs
-	if err := s.InitCodecs(); err != nil {
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"vote": voteSchema,
+	})
+	if err != nil {
 		t.Error("failed to initialize avro codecs for test: ", err)
 	}
 	s.Datastore = Datastore(
@@ -77,7 +82,7 @@ func TestVoteAnonCard(t *testing.T) {
 		generateCredentialRedemptions = oldGenerateCredentialRedemptions
 	}()
 
-	err := s.Vote(
+	err = s.Vote(
 		context.Background(), []CredentialBinding{}, voteText)
 	if err != nil {
 		t.Error("encountered an error in Vote call: ", err.Error())
@@ -97,9 +102,13 @@ func TestVoteUnknownSKU(t *testing.T) {
 			}, nil
 		}
 		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+		err                              error
 	)
 	// avro codecs
-	if err := s.InitCodecs(); err != nil {
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"vote": voteSchema,
+	})
+	if err != nil {
 		t.Error("failed to initialize avro codecs for test: ", err)
 	}
 	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
@@ -109,7 +118,7 @@ func TestVoteUnknownSKU(t *testing.T) {
 		generateCredentialRedemptions = oldGenerateCredentialRedemptions
 	}()
 
-	err := s.Vote(
+	err = s.Vote(
 		context.Background(), []CredentialBinding{}, voteText)
 	if err == nil {
 		t.Error("should have encountered an error in Vote call: ")
@@ -132,9 +141,13 @@ func TestVoteUnknownBadMerch(t *testing.T) {
 			}, nil
 		}
 		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+		err                              error
 	)
 	// avro codecs
-	if err := s.InitCodecs(); err != nil {
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"vote": voteSchema,
+	})
+	if err != nil {
 		t.Error("failed to initialize avro codecs for test: ", err)
 	}
 	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
@@ -144,7 +157,7 @@ func TestVoteUnknownBadMerch(t *testing.T) {
 		generateCredentialRedemptions = oldGenerateCredentialRedemptions
 	}()
 
-	err := s.Vote(
+	err = s.Vote(
 		context.Background(), []CredentialBinding{}, voteText)
 	if err == nil {
 		t.Error("should have encountered an error in Vote call: ")
@@ -171,9 +184,13 @@ func TestVoteGoodAndBadSKU(t *testing.T) {
 			}, nil
 		}
 		oldGenerateCredentialRedemptions = generateCredentialRedemptions
+		err                              error
 	)
 	// avro codecs
-	if err := s.InitCodecs(); err != nil {
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"vote": voteSchema,
+	})
+	if err != nil {
 		t.Error("failed to initialize avro codecs for test: ", err)
 	}
 	voteText := base64.StdEncoding.EncodeToString([]byte(`{"channel":"brave.com", "type":"auto-contribute"}`))
@@ -183,7 +200,7 @@ func TestVoteGoodAndBadSKU(t *testing.T) {
 		generateCredentialRedemptions = oldGenerateCredentialRedemptions
 	}()
 
-	err := s.Vote(
+	err = s.Vote(
 		context.Background(), []CredentialBinding{}, voteText)
 	if err == nil {
 		t.Error("should have encountered an error in Vote call: ")

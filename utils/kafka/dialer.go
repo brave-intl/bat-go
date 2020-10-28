@@ -1,17 +1,24 @@
 package kafka
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	kafka "github.com/segmentio/kafka-go"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/linkedin/goavro"
+	kafka "github.com/segmentio/kafka-go"
+
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires
@@ -125,4 +132,44 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 		return []byte{}, err
 	}
 	return buf, nil
+}
+
+// InitKafkaWriter - create a kafka writer given a topic
+func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.Dialer, error) {
+	_, logger := logging.SetupLogger(ctx)
+
+	dialer, x509Cert, err := TLSDialer()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// throw the cert on the context, instrument kafka
+	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
+
+	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+
+	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
+		Brokers:  strings.Split(kafkaBrokers, ","),
+		Topic:    topic,
+		Balancer: &kafka.LeastBytes{},
+		Dialer:   dialer,
+		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
+	})
+
+	return kafkaWriter, dialer, nil
+}
+
+// GenerateCodecs - create a map of codec name to the avro codec
+func GenerateCodecs(codecs map[string]string) (map[string]*goavro.Codec, error) {
+	var (
+		res = make(map[string]*goavro.Codec)
+		err error
+	)
+	for k, v := range codecs {
+		res[k], err = goavro.NewCodec(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate codec: %w", err)
+		}
+	}
+	return res, nil
 }

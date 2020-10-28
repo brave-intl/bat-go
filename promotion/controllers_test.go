@@ -577,7 +577,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		reputationClient: mockReputation,
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(context.Background())
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
 	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
@@ -1447,7 +1447,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		reputationClient: mockReputation,
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(context.Background())
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
 	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")

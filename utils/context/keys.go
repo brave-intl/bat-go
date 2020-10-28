@@ -43,6 +43,10 @@ const (
 	CommitCTXKey CTXKey = "commit"
 	// BuildTimeCTXKey - context key for the build time of code
 	BuildTimeCTXKey CTXKey = "build_time"
+	// Kafka509CertCTXKey - context key for the build time of code
+	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
+	// KafkaBrokersCTXKey - context key for the build time of code
+	KafkaBrokersCTXKey CTXKey = "kafka_brokers"
 )
 
 var (
