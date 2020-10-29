@@ -364,7 +364,6 @@ func (pg *Postgres) LinkWallet(ID string, userDepositDestination string, provide
 
 	err = pg.TxLinkWalletInfo(tx, ID, userDepositDestination, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
-		fmt.Println("!!!! err: ", err)
 		return errorutils.Wrap(err, "unable to set an anonymous address")
 	}
 

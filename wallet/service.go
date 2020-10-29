@@ -201,13 +201,10 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	}
 
 	// setup reputation client
-	var reputationClient reputation.Client
-	if os.Getenv("ENV") != "local" || len(os.Getenv("REPUTATION_SERVER")) > 0 {
-		reputationClient, err = reputation.New()
-		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to initialize wallet service")
-		}
-		s.repClient = reputationClient
+	s.repClient, err = reputation.New()
+	// its okay to not fatally fail if this environment is local and we cant make a rep client
+	if err != nil && os.Getenv("ENV") != "local" {
+		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)

@@ -198,12 +198,10 @@ func InitService(
 		return nil, err
 	}
 
-	var reputationClient reputation.Client
-	if os.Getenv("ENV") != localEnv || len(os.Getenv("REPUTATION_SERVER")) > 0 {
-		reputationClient, err = reputation.New()
-		if err != nil {
-			return nil, err
-		}
+	reputationClient, err := reputation.New()
+	// okay to fail to make a reputation client if the environment is local
+	if err != nil && os.Getenv("ENV") != localEnv {
+		return nil, err
 	}
 
 	service := &Service{
