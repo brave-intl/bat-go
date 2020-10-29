@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
@@ -200,9 +201,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	}
 
 	// setup reputation client
-	s.repClient, err = reputation.New()
-	if err != nil {
-		logger.Panic().Err(err).Msg("unable to attach a reputation client")
+	var reputationClient reputation.Client
+	if os.Getenv("ENV") != "local" || len(os.Getenv("REPUTATION_SERVER")) > 0 {
+		reputationClient, err = reputation.New()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+		}
+		s.repClient = reputationClient
 	}
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
