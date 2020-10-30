@@ -405,7 +405,7 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 		}
 
 		// get payment id
-		if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
@@ -416,7 +416,7 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 		}
 
 		// read post body
-		if err := inputs.DecodeAndValidateReader(r.Context(), lbw, r.Body); err != nil {
+		if err := inputs.DecodeAndValidateReader(ctx, lbw, r.Body); err != nil {
 			return lbw.HandleErrors(err)
 		}
 
