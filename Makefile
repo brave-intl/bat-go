@@ -121,6 +121,9 @@ download-vault:
 	cd target/settlement-tools && grep $(GOOS)_$(GOARCH) vault_$(VAULT_VERSION)_SHA256SUMS | shasum -a 256 -c
 	cd target/settlement-tools && unzip -o vault_$(VAULT_VERSION)_$(GOOS)_$(GOARCH).zip vault && rm vault_$(VAULT_VERSION)_*
 
+vault:
+	./target/settlement-tools/vault server -config=./target/settlement-tools/config.hcl
+
 json-schema:
 	go run main.go generate json-schema --overwrite
 

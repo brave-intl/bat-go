@@ -38,14 +38,17 @@ func init() {
 		CreateWalletCmd,
 	)
 
-	CreateWalletCmd.PersistentFlags().Bool("offline", false,
+	CreateWalletCmd.Flags().Bool("offline", false,
 		"operate in multi-step offline mode")
-	cmd.Must(viper.BindPFlag("offline", CreateWalletCmd.PersistentFlags().Lookup("offline")))
+	cmd.Must(viper.BindPFlag("offline", CreateWalletCmd.Flags().Lookup("offline")))
 }
 
 // CreateWallet creates a wallet
 func CreateWallet(command *cobra.Command, args []string) error {
-	offline := viper.GetBool("offline")
+	offline, err := command.Flags().GetBool("offline")
+	if err != nil {
+		return err
+	}
 	logger, err := appctx.GetLogger(command.Context())
 	if err != nil {
 		return err
@@ -116,10 +119,10 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("success, signed registration for wallet \"%s\"\nPlease copy %s to the online machine and re-run\n",
-				name,
-				logFile,
-			)
+			logger.Info().
+				Str("name", name).
+				Str("logfile", logFile).
+				Msg("success, signed registration for wallet.\nPlease copy logfile to the online machine and re-run")
 			return nil
 		}
 	}
@@ -137,15 +140,22 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			return err
 		}
 
-		logger.Info().Msgf("Success, registered new keypair and wallet \"%s\"", name)
-		logger.Info().Msgf("Uphold card ID %s", wallet.Info.ProviderID)
+		logger.Info().
+			Str("name", name).
+			Msg("success, registered new keypair and wallet")
+		logger.Info().
+			Str("card_id", wallet.Info.ProviderID).
+			Msg("uphold")
 		state.WalletInfo.ProviderID = wallet.Info.ProviderID
 
 		depositAddr, err := wallet.CreateCardAddress("ethereum")
 		if err != nil {
 			return err
 		}
-		logger.Info().Msgf("ETH deposit addr: %s", depositAddr)
+		logger.Info().
+			Str("address", depositAddr).
+			Str("currency", "ETH").
+			Msg("created deposit addr")
 
 		if offline {
 			err = enc.Encode(state)
