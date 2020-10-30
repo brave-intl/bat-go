@@ -57,7 +57,7 @@ func (service *Service) SubmitAnonCardTransaction(
 	transaction string,
 	destination string,
 ) (*walletutils.TransactionInfo, error) {
-	info, err := service.Datastore.GetWallet(walletID)
+	info, err := service.Datastore.GetWallet(ctx, walletID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
@@ -65,8 +65,8 @@ func (service *Service) SubmitAnonCardTransaction(
 }
 
 // GetWallet - get a wallet by id
-func (service *Service) GetWallet(ID uuid.UUID) (*walletutils.Info, error) {
-	return service.Datastore.GetWallet(ID)
+func (service *Service) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error) {
+	return service.Datastore.GetWallet(ctx, ID)
 }
 
 // SubmitCommitableAnonCardTransaction submits a transaction
@@ -151,7 +151,7 @@ func (service *Service) LinkWallet(
 		}
 	} else {
 		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+		err := service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {

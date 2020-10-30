@@ -456,7 +456,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	userWallet := generateWallet(suite.T())
-	err = walletDB.UpsertWallet(&userWallet.Info)
+	err = walletDB.UpsertWallet(ctx, &userWallet.Info)
 	suite.Require().NoError(err)
 
 	log.Printf("!!! time to generate wallet: %+v\n", time.Now().Sub(start))

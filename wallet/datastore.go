@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -38,29 +39,29 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
-	LinkWallet(ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
+	TxLinkWalletInfo(ctx context.Context, tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
+	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	// GetByProviderLinkingID gets the wallet by provider linking id
-	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
+	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
-	GetWallet(ID uuid.UUID) (*walletutils.Info, error)
+	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
 	// GetWalletByPublicKey by ID
-	GetWalletByPublicKey(string) (*walletutils.Info, error)
+	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// InsertWallet inserts the given wallet
-	InsertWallet(wallet *walletutils.Info) error
+	InsertWallet(ctx context.Context, wallet *walletutils.Info) error
 	// UpsertWallets inserts a wallet if it does not already exist
-	UpsertWallet(wallet *walletutils.Info) error
+	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
 	grantserver.Datastore
 	// GetByProviderLinkingID gets a wallet by provider linking id
-	GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
+	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
-	GetWallet(ID uuid.UUID) (*walletutils.Info, error)
+	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
 	// GetWalletByPublicKey
-	GetWalletByPublicKey(string) (*walletutils.Info, error)
+	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -117,7 +118,7 @@ var (
 )
 
 // UpsertWallet upserts the given wallet
-func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
+func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *wallet.Info) error {
 	statement := `
 	insert into wallets
 		(
@@ -135,7 +136,7 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 		user_deposit_account_provider = $7,
 		user_deposit_destination = $8
 	returning *`
-	_, err := pg.RawDB().Exec(statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress, wallet.UserDepositAccountProvider, wallet.UserDepositDestination)
+	_, err := pg.RawDB().ExecContext(ctx, statement, wallet.ID, wallet.Provider, wallet.ProviderID, wallet.PublicKey, wallet.ProviderLinkingID, wallet.AnonymousAddress, wallet.UserDepositAccountProvider, wallet.UserDepositDestination)
 	if err != nil {
 		return err
 	}
@@ -144,7 +145,7 @@ func (pg *Postgres) UpsertWallet(wallet *wallet.Info) error {
 }
 
 // GetWallet by ID
-func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
+func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*wallet.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -154,7 +155,7 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 	where
 		id = $1`
 	wallets := []wallet.Info{}
-	err := pg.RawDB().Select(&wallets, statement, ID)
+	err := pg.RawDB().SelectContext(ctx, &wallets, statement, ID)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +173,7 @@ func (pg *Postgres) GetWallet(ID uuid.UUID) (*wallet.Info, error) {
 }
 
 // txGetWallet by ID
-func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
+func (pg *Postgres) txHasDestination(ctx context.Context, tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 	statement := `
 	select
 		true
@@ -183,7 +184,7 @@ func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 		user_deposit_destination != '' and
 		id = $1`
 	var result bool
-	err := tx.Get(&result, statement, ID)
+	err := tx.GetContext(ctx, &result, statement, ID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -195,7 +196,7 @@ func (pg *Postgres) txHasDestination(tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
 }
 
 // GetWalletByPublicKey gets a wallet by a public key
-func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
+func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walletutils.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -205,12 +206,12 @@ func (pg *Postgres) GetWalletByPublicKey(pk string) (*walletutils.Info, error) {
 	WHERE public_key = $1
 	`
 	var wallet walletutils.Info
-	err := pg.RawDB().Get(&wallet, statement, pk)
+	err := pg.RawDB().GetContext(ctx, &wallet, statement, pk)
 	return &wallet, err
 }
 
 // GetByProviderLinkingID gets a wallet by a provider address
-func (pg *Postgres) GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
+func (pg *Postgres) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -220,18 +221,18 @@ func (pg *Postgres) GetByProviderLinkingID(providerLinkingID uuid.UUID) (*[]wall
 	WHERE provider_linking_id = $1
 	`
 	var wallets []walletutils.Info
-	err := pg.RawDB().Select(&wallets, statement, providerLinkingID)
+	err := pg.RawDB().SelectContext(ctx, &wallets, statement, providerLinkingID)
 	return &wallets, err
 }
 
 // InsertWallet inserts the given wallet
-func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
+func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) error {
 	// NOTE on conflict do nothing because none of the wallet information is updateable
 	statement := `
 	INSERT INTO wallets (id, provider, provider_id, public_key)
 	VALUES ($1, $2, $3, $4)
 	ON CONFLICT DO NOTHING`
-	_, err := pg.RawDB().Exec(
+	_, err := pg.RawDB().ExecContext(ctx,
 		statement,
 		wallet.ID,
 		wallet.Provider,
@@ -247,6 +248,7 @@ func (pg *Postgres) InsertWallet(wallet *walletutils.Info) error {
 
 // TxLinkWalletInfo pass a tx to set the anonymous address
 func (pg *Postgres) TxLinkWalletInfo(
+	ctx context.Context,
 	tx *sqlx.Tx,
 	ID string,
 	userDepositDestination string,
@@ -265,7 +267,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 		return err
 	}
 
-	if ok, err := pg.txHasDestination(tx, id); err != nil {
+	if ok, err := pg.txHasDestination(ctx, tx, id); err != nil {
 		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
 	} else if ok {
 		statement = `
@@ -274,7 +276,8 @@ func (pg *Postgres) TxLinkWalletInfo(
 				provider_linking_id = $2,
 				user_deposit_account_provider = $3,
 			WHERE id = $1;`
-		r, sqlErr = tx.Exec(
+		r, sqlErr = tx.ExecContext(
+			ctx,
 			statement,
 			ID,
 			providerLinkingID,
@@ -289,7 +292,8 @@ func (pg *Postgres) TxLinkWalletInfo(
 					user_deposit_account_provider = $4,
 					user_deposit_destination = $5
 			WHERE id = $1;`
-		r, sqlErr = tx.Exec(
+		r, sqlErr = tx.ExecContext(
+			ctx,
 			statement,
 			ID,
 			providerLinkingID,
@@ -311,7 +315,7 @@ func (pg *Postgres) TxLinkWalletInfo(
 	return nil
 }
 
-func txGetByProviderLinkingID(tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
+func txGetByProviderLinkingID(ctx context.Context, tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -321,7 +325,7 @@ func txGetByProviderLinkingID(tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]wall
 	WHERE provider_linking_id = $1
 	`
 	var wallets []walletutils.Info
-	err := tx.Select(&wallets, statement, providerLinkingID)
+	err := tx.SelectContext(ctx, &wallets, statement, providerLinkingID)
 	return &wallets, err
 }
 
@@ -333,14 +337,14 @@ func getEnvMaxCards() int {
 }
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
 	}
 	defer pg.RollbackTx(tx)
 
-	walletsMatchingProviderLinkingID, err := txGetByProviderLinkingID(tx, providerLinkingID)
+	walletsMatchingProviderLinkingID, err := txGetByProviderLinkingID(ctx, tx, providerLinkingID)
 	if err != nil {
 		return errorutils.Wrap(err, "error looking up wallets by provider id")
 	}
@@ -362,7 +366,7 @@ func (pg *Postgres) LinkWallet(ID string, userDepositDestination string, provide
 		return ErrTooManyCardsLinked
 	}
 
-	err = pg.TxLinkWalletInfo(tx, ID, userDepositDestination, providerLinkingID, anonymousAddress, depositProvider)
+	err = pg.TxLinkWalletInfo(ctx, tx, ID, userDepositDestination, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		return errorutils.Wrap(err, "unable to set an anonymous address")
 	}

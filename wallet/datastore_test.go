@@ -3,6 +3,7 @@
 package wallet
 
 import (
+	"context"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -64,7 +65,7 @@ func (suite *WalletPostgresTestSuite) TestInsertWallet() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 
 	wallet := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
-	suite.Require().NoError(pg.InsertWallet(wallet), "Save wallet should succeed")
+	suite.Require().NoError(pg.InsertWallet(context.Background(), wallet), "Save wallet should succeed")
 }
 
 func (suite *WalletPostgresTestSuite) TestUpsertWallet() {
@@ -74,7 +75,7 @@ func (suite *WalletPostgresTestSuite) TestUpsertWallet() {
 	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
 
 	wallet := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
-	suite.Require().NoError(pg.UpsertWallet(wallet), "Save wallet should succeed")
+	suite.Require().NoError(pg.UpsertWallet(context.Background(), wallet), "Save wallet should succeed")
 }
 
 func (suite *WalletPostgresTestSuite) TestGetWallet() {
@@ -86,9 +87,9 @@ func (suite *WalletPostgresTestSuite) TestGetWallet() {
 
 	tmp := altcurrency.BAT
 	origWallet := &walletutils.Info{ID: id.String(), Provider: "uphold", AltCurrency: &tmp, ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
-	suite.Require().NoError(pg.UpsertWallet(origWallet), "Save wallet should succeed")
+	suite.Require().NoError(pg.UpsertWallet(context.Background(), origWallet), "Save wallet should succeed")
 
-	wallet, err := pg.GetWallet(id)
+	wallet, err := pg.GetWallet(context.Background(), id)
 	suite.Require().NoError(err, "Get wallet should succeed")
 	suite.Assert().Equal(origWallet, wallet)
 }
