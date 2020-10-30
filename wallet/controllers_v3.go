@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"context"
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"

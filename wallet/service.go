@@ -263,7 +263,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	}
 
 	// get the to wallet from the database
-	toInfo, err := service.GetWallet(to)
+	toInfo, err := service.GetWallet(ctx, to)
 	if err != nil {
 		return fmt.Errorf("failed to get to wallet: %w", err)
 	}
@@ -278,7 +278,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		}
 	}
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
 			status = http.StatusConflict
