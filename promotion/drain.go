@@ -8,6 +8,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
@@ -106,20 +107,41 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	if wallet.UserDepositDestination == "" {
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
+	if wallet.UserDepositAccountProvider == nil {
+		return nil, errorutils.ErrNoDepositProviderDestination
+	}
 
 	// failed to redeem credentials
 	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
-	// FIXME should use idempotency key
-	tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
-	if err != nil {
-		return nil, fmt.Errorf("failed to transfer funds: %w", err)
-	}
-	if service.drainChannel != nil {
-		service.drainChannel <- tx
+	if *wallet.UserDepositAccountProvider == "brave" {
+		// get and parse the correct transfer promotion id to create claims on
+		braveTransferPromotionID, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).(string)
+		if !ok {
+			return nil, errors.New("missing configuration: BraveTransferPromotionID")
+		}
+		pID, err := uuid.FromString(braveTransferPromotionID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid configuration, unable to parse BraveTransferPromotionID: %w", err)
+		}
+		// create a new claim for the wallet deposit account for total
+		_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero)
+		return nil, err
+	} else if *wallet.UserDepositAccountProvider == "uphold" {
+		// FIXME should use idempotency key
+		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
+		if err != nil {
+			return nil, fmt.Errorf("failed to transfer funds: %w", err)
+		}
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
+		return tx, err
 	}
 
-	return tx, err
+	return nil, fmt.Errorf(
+		"failed to transfer funds: user_deposit_account_provider unknown: %s",
+		*wallet.UserDepositAccountProvider)
 }

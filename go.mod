@@ -22,9 +22,10 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.6.2
-	github.com/golang/mock v1.4.3
+	github.com/golang/mock v1.4.4
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.0.0
+	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
@@ -72,4 +73,5 @@ require (
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
 	gopkg.in/yaml.v2 v2.2.4
 	gotest.tools v2.2.0+incompatible
+	rsc.io/quote/v3 v3.1.0 // indirect
 )

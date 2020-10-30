@@ -1342,6 +1342,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	suite.Require().NoError(err)
 
 	info.UserDepositDestination = w.ProviderID
+	info.UserDepositAccountProvider = new(string)
+	*info.UserDepositAccountProvider = "uphold"
 
 	err = walletDB.UpsertWallet(&info)
 	suite.Require().NoError(err, "Failed to insert wallet")
