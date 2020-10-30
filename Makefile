@@ -124,6 +124,9 @@ download-vault:
 vault:
 	./target/settlement-tools/vault server -config=./target/settlement-tools/config.hcl
 
+vault-clean:
+	rm -rf share-0.gpg target/settlement-tools/vault-data vault-data
+
 json-schema:
 	go run main.go generate json-schema --overwrite
 
