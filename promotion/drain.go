@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -36,11 +37,21 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 
 	for k, v := range fundingSources {
-		if v.Type != "ads" {
-			return errors.New("Only ads suggestions can be drained")
+		var (
+			promotion       = promotions[k]
+			depositProvider string
+		)
+
+		if wallet.UserDepositAccountProvider != nil {
+			depositProvider = *wallet.UserDepositAccountProvider
 		}
 
-		promotion := promotions[k]
+		// if the type is not ads
+		// except in the case the promotion is for ios and deposit provider is a brave wallet
+		if v.Type != "ads" &&
+			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
+			return errors.New("Only ads suggestions can be drained")
+		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
