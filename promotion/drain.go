@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -77,7 +79,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 				return fmt.Errorf("error draining claim: %w", err)
 			}
 
+			// the original request context will be cancelled as soon as the dialer closes the connection.
+			// this will setup a new context with the same values and a minute timeout
+			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+			ctx = contextutil.Wrap(ctx, asyncCtx)
+
 			go func() {
+				defer asyncCancel()
 				defer middleware.ConcurrentGoRoutines.With(
 					prometheus.Labels{
 						"method": "NextDrainJob",
@@ -87,6 +95,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 					prometheus.Labels{
 						"method": "NextDrainJob",
 					}).Inc()
+
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
 					sentry.CaptureException(err)
