@@ -11,7 +11,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/logging"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
@@ -99,47 +100,74 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 // DrainWorker attempts to work on a drain job by redeeming the credentials and transferring funds
 type DrainWorker interface {
-	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error)
+	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error)
 }
 
 // RedeemAndTransferFunds after validating that all the credential bindings
-func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
+func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error) {
+
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil {
+		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to get wallet")
 		return nil, err
 	}
 
 	// no wallet on record
 	if wallet == nil {
+		logger.Error().Msg("RedeemAndTransferFunds: missing wallet")
 		return nil, errorutils.ErrMissingWallet
 	}
 
 	// wallet not linked to deposit destination, if absent fail redeem and transfer
 	if wallet.UserDepositDestination == "" {
+		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider destination")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
 	if wallet.UserDepositAccountProvider == nil {
+		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
 
 	// failed to redeem credentials
 	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
+		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
 	if *wallet.UserDepositAccountProvider == "brave" {
+		logger.Debug().Msg("RedeemAndTransferFunds: account provider to linked wallet is brave")
 		// get and parse the correct transfer promotion id to create claims on
 		braveTransferPromotionID, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).(string)
 		if !ok {
+			logger.Error().Msg("RedeemAndTransferFunds: missing transfer promotion id")
 			return nil, errors.New("missing configuration: BraveTransferPromotionID")
 		}
 		pID, err := uuid.FromString(braveTransferPromotionID)
 		if err != nil {
+			logger.Error().Msg("RedeemAndTransferFunds: invalid transfer promotion id")
 			return nil, fmt.Errorf("invalid configuration, unable to parse BraveTransferPromotionID: %w", err)
 		}
+		logger.Debug().Msg("RedeemAndTransferFunds: creating the claim to destination")
 		// create a new claim for the wallet deposit account for total
 		_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero)
-		return nil, err
+		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to create a new claim to destination")
+
+		tx := &walletutils.TransactionInfo{
+			ID: uuid.NewV4().String(),
+		}
+
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
+
+		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
@@ -152,6 +180,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return tx, err
 	}
 
+	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
 	return nil, fmt.Errorf(
 		"failed to transfer funds: user_deposit_account_provider unknown: %s",
 		*wallet.UserDepositAccountProvider)
