@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -34,6 +36,13 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
+	return r
+}
+
+// CredentialRouter handles calls relating to credentials
+func CredentialRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentials", VerifyCredentials(service)))
 	return r
 }
 
@@ -579,5 +588,44 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		}
 
 		return nil
+	})
+}
+
+// VerifyCredentialsRequest includes an opaque subscription credential blob
+type VerifyCredentialsRequest struct {
+	OrderID     uuid.UUID                  `json:"orderId" valid:"-"`
+	Credentials []cbr.CredentialRedemption `json:"credentials" valid:"-"`
+}
+
+// VerifyCredentials is the handler for verifying subscription credentials
+func VerifyCredentials(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req VerifyCredentialsRequest
+		var orderId = req.OrderID.String()
+
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+		if len(req.Credentials) == 0 {
+			return handlers.ValidationError(
+				"Error validating request body",
+				map[string]interface{}{
+					"items": "array must contain at least one item",
+				},
+			)
+		}
+
+		err = service.cbClient.RedeemCredentials(r.Context(), req.Credentials, orderId)
+		if err != nil {
+			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
 	})
 }
