@@ -93,7 +93,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// now we have middlewares we want included in logging
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
-	r.Use(middleware.RateLimiter(ctx))
+	r.Use(middleware.RateLimiter(ctx, 180))
 
 	var walletService *wallet.Service
 	// use cobra configurations for setting up wallet service

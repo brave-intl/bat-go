@@ -12,7 +12,7 @@ import (
 
 // RateLimiter rate limits the number of requests a
 // user from a single IP address can make
-func RateLimiter(ctx context.Context) func(next http.Handler) http.Handler {
+func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.Handler {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -24,7 +24,7 @@ func RateLimiter(ctx context.Context) func(next http.Handler) http.Handler {
 			logger.Fatal().Err(err)
 		}
 		quota := throttled.RateQuota{
-			MaxRate: throttled.PerMin(180),
+			MaxRate: throttled.PerMin(perMin),
 		}
 		rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
 		if err != nil {

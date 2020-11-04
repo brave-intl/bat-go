@@ -213,6 +213,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if viper.GetBool("wallets-feature-flag") {
 		// setup our wallet routes
 		r.Route("/v3/wallet", func(r chi.Router) {
+			// rate limited to 2 per minute...
+			r.Use(middleware.RateLimiter(ctx, 2))
 			// create wallet routes for our wallet providers
 			r.Post("/uphold", middleware.InstrumentHandlerFunc(
 				"CreateUpholdWallet", CreateUpholdWalletV3))
