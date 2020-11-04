@@ -591,7 +591,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-// VerifyCredentialsRequest includes an opaque subscription credential blob
+// VerifyCredentialsRequest includes an order id and opaque subscription credential blob
 type VerifyCredentialsRequest struct {
 	OrderID     uuid.UUID                  `json:"orderId" valid:"-"`
 	Credentials []cbr.CredentialRedemption `json:"credentials" valid:"-"`
