@@ -601,7 +601,7 @@ type VerifyCredentialsRequest struct {
 func VerifyCredentials(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req VerifyCredentialsRequest
-		var orderId = req.OrderID.String()
+		var orderID = req.OrderID.String()
 
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -621,7 +621,7 @@ func VerifyCredentials(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err = service.cbClient.RedeemCredentials(r.Context(), req.Credentials, orderId)
+		err = service.cbClient.RedeemCredentials(r.Context(), req.Credentials, orderID)
 		if err != nil {
 			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 		}
