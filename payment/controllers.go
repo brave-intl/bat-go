@@ -610,14 +610,20 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
-			return handlers.WrapValidationError(err)
+			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
 		var bytes []byte
 		bytes, err = base64.StdEncoding.DecodeString(req.Credential)
+		if err != nil {
+			return handlers.WrapError(err, "Error in decoding credential", http.StatusBadRequest)
+		}
 
 		var decodedCredential cbr.CredentialRedemption
-		json.Unmarshal(bytes, &decodedCredential)
+		err = json.Unmarshal(bytes, &decodedCredential)
+		if err != nil {
+			return handlers.WrapError(err, "Error in decoded credential formatting", http.StatusBadRequest)
+		}
 
 		err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
 		if err != nil {
