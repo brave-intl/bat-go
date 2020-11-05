@@ -2,6 +2,8 @@ package payment
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -42,7 +44,7 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredentials", VerifyCredentials(service)))
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
 	return r
 }
 
@@ -591,17 +593,15 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-// VerifyCredentialsRequest includes an order id and opaque subscription credential blob
-type VerifyCredentialsRequest struct {
-	OrderID     uuid.UUID                  `json:"orderId" valid:"-"`
-	Credentials []cbr.CredentialRedemption `json:"credentials" valid:"-"`
+// VerifyCredentialRequest includes an opaque subscription credential blob
+type VerifyCredentialRequest struct {
+	Credential string `json:"credential" valid:"base64"`
 }
 
-// VerifyCredentials is the handler for verifying subscription credentials
-func VerifyCredentials(service *Service) handlers.AppHandler {
+// VerifyCredential is the handler for verifying subscription credentials
+func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req VerifyCredentialsRequest
-		var orderID = req.OrderID.String()
+		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -612,16 +612,14 @@ func VerifyCredentials(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
-		if len(req.Credentials) == 0 {
-			return handlers.ValidationError(
-				"Error validating request body",
-				map[string]interface{}{
-					"items": "array must contain at least one item",
-				},
-			)
-		}
 
-		err = service.cbClient.RedeemCredentials(r.Context(), req.Credentials, orderID)
+		var bytes []byte
+		bytes, err = base64.StdEncoding.DecodeString(req.Credential)
+
+		var decodedCredential cbr.CredentialRedemption
+		json.Unmarshal(bytes, &decodedCredential)
+
+		err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
 		if err != nil {
 			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 		}
