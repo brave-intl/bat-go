@@ -22,6 +22,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
@@ -131,13 +133,15 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 	// no wallet on record
 	if wallet == nil {
-		logger.Error().Msg("RedeemAndTransferFunds: missing wallet")
+		logger.Error().Err(errorutils.ErrMissingWallet).
+			Msg("RedeemAndTransferFunds: missing wallet")
 		return nil, errorutils.ErrMissingWallet
 	}
 
 	// wallet not linked to deposit destination, if absent fail redeem and transfer
 	if wallet.UserDepositDestination == "" {
-		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider destination")
+		logger.Error().Err(errorutils.ErrNoDepositProviderDestination).
+			Msg("RedeemAndTransferFunds: no deposit provider destination")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
 	if wallet.UserDepositAccountProvider == nil {
@@ -156,8 +160,9 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		// get and parse the correct transfer promotion id to create claims on
 		braveTransferPromotionIDs, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).([]string)
 		if !ok {
-			logger.Error().Msg("RedeemAndTransferFunds: missing transfer promotion id")
-			return nil, errors.New("missing configuration: BraveTransferPromotionID")
+			logger.Error().Err(errMissingTransferPromotion).
+				Msg("RedeemAndTransferFunds: missing transfer promotion id")
+			return nil, errMissingTransferPromotion
 		}
 		// for all of the promotion ids (limit of 4 wallets can be linked)
 		// attempt to create a claim.  If we run into a unique key constraint, this means that
@@ -167,7 +172,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			// convert string promo id to uuid
 			pID, err := uuid.FromString(promoID)
 			if err != nil {
-				logger.Error().Msg("RedeemAndTransferFunds: invalid transfer promotion id")
+				logger.Error().Err(err).Msg("RedeemAndTransferFunds: invalid transfer promotion id")
 				return nil, fmt.Errorf("invalid configuration, unable to parse BraveTransferPromotionID: %w", err)
 			}
 			logger.Debug().Msg("RedeemAndTransferFunds: creating the claim to destination")
