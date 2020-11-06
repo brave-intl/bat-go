@@ -51,6 +51,8 @@ const (
 	KafkaBrokersCTXKey CTXKey = "kafka_brokers"
 	// BraveTransferPromotionIDCTXKey - context key for the build time of code
 	BraveTransferPromotionIDCTXKey CTXKey = "brave_transfer_promotion_id"
+	// WalletOnPlatformPriorToCTXKey - context key for the build time of code
+	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
 )
 
 var (
