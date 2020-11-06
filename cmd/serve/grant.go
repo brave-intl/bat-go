@@ -50,9 +50,9 @@ func init() {
 	cmd.Must(viper.BindPFlag("enable-job-workers", GrantServerCmd.PersistentFlags().Lookup("enable-job-workers")))
 	cmd.Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
 
-	GrantServerCmd.PersistentFlags().String("brave-transfer-promotion-id", "", "brave vg deposit destination promotion id")
-	cmd.Must(viper.BindPFlag("brave-transfer-promotion-id", GrantServerCmd.PersistentFlags().Lookup("brave-transfer-promotion-id")))
-	cmd.Must(viper.BindEnv("brave-transfer-promotion-id", "BRAVE_TRANSFER_PROMOTION_ID"))
+	GrantServerCmd.PersistentFlags().StringSlice("brave-transfer-promotion-ids", []string{""}, "brave vg deposit destination promotion id")
+	cmd.Must(viper.BindPFlag("brave-transfer-promotion-ids", GrantServerCmd.PersistentFlags().Lookup("brave-transfer-promotion-ids")))
+	cmd.Must(viper.BindEnv("brave-transfer-promotion-ids", "BRAVE_TRANSFER_PROMOTION_IDS"))
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -276,7 +276,7 @@ func GrantServer(
 		Msg("Starting server")
 
 	// add flags to context
-	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetString("brave-transfer-promotion-id"))
+	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetString("brave-transfer-promotion-ids"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

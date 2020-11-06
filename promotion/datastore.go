@@ -12,8 +12,10 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
@@ -928,6 +930,14 @@ func errToDrainCode(err error) (string, bool) {
 
 // RunNextDrainJob to process deposits if there is one waiting
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
@@ -974,6 +984,8 @@ limit 1`
 
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
+		// log the error from redeem and transfer
+		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
 		errCode, retriable := errToDrainCode(err)
 
 		if !retriable {

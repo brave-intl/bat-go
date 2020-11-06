@@ -225,8 +225,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
-				r.Post("/brave/{paymentID}/claim", middleware.InstrumentHandlerFunc(
-					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s)))
+				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}
 
 			// get wallet routes
