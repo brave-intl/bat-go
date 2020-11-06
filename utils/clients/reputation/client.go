@@ -97,8 +97,7 @@ type IsWalletOnPlatformResponse struct {
 
 // IsWalletOnPlatformOpts - the query string options for the is reputable api call
 type IsWalletOnPlatformOpts struct {
-	Platform string `url:"platform"`
-	PriorTo  string `url:"priorTo"`
+	PriorTo string `url:"priorTo"`
 }
 
 // IsWalletOnPlatform makes the request to the reputation server
