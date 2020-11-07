@@ -2,10 +2,14 @@ package payment
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -34,6 +38,13 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
+	return r
+}
+
+// CredentialRouter handles calls relating to credentials
+func CredentialRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
 	return r
 }
 
@@ -579,5 +590,46 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		}
 
 		return nil
+	})
+}
+
+// VerifyCredentialRequest includes an opaque subscription credential blob
+type VerifyCredentialRequest struct {
+	Credential string `json:"credential" valid:"base64"`
+}
+
+// VerifyCredential is the handler for verifying subscription credentials
+func VerifyCredential(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req VerifyCredentialRequest
+
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
+		}
+
+		var bytes []byte
+		bytes, err = base64.StdEncoding.DecodeString(req.Credential)
+		if err != nil {
+			return handlers.WrapError(err, "Error in decoding credential", http.StatusBadRequest)
+		}
+
+		var decodedCredential cbr.CredentialRedemption
+		err = json.Unmarshal(bytes, &decodedCredential)
+		if err != nil {
+			return handlers.WrapError(err, "Error in decoded credential formatting", http.StatusBadRequest)
+		}
+
+		err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+		if err != nil {
+			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
 	})
 }

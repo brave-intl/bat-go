@@ -166,6 +166,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, paymentService.Jobs()...)
 
+	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
