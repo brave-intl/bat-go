@@ -44,7 +44,9 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
+	if os.Getenv("ENV") != "production" {
+		r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
+	}
 	return r
 }
 
