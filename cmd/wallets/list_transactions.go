@@ -43,7 +43,6 @@ func init() {
 	ListTransactionsCmd.Flags().Bool("verbose", false,
 		"how verbose logging should be")
 	cmd.Must(viper.BindPFlag("verbose", ListTransactionsCmd.Flags().Lookup("verbose")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("verbose"))
 
 	ListTransactionsCmd.Flags().Bool("csv", false,
 		"the output file should be csv")
