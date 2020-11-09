@@ -177,7 +177,8 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			}
 			logger.Debug().Msg("RedeemAndTransferFunds: creating the claim to destination")
 			// create a new claim for the wallet deposit account for total
-			_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero)
+			// this is a legacy claimed claim
+			_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero, true)
 			if err != nil {
 				var pgErr *pq.Error
 				if errors.As(err, &pgErr) {

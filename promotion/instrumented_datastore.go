@@ -74,7 +74,7 @@ func (_d DatastoreWithPrometheus) ClaimForWallet(promotion *Promotion, issuer *I
 }
 
 // CreateClaim implements Datastore
-func (_d DatastoreWithPrometheus) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (cp1 *Claim, err error) {
+func (_d DatastoreWithPrometheus) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal, legacy bool) (cp1 *Claim, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -84,7 +84,7 @@ func (_d DatastoreWithPrometheus) CreateClaim(promotionID uuid.UUID, walletID st
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateClaim", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateClaim(promotionID, walletID, value, bonus)
+	return _d.base.CreateClaim(promotionID, walletID, value, bonus, legacy)
 }
 
 // CreatePromotion implements Datastore

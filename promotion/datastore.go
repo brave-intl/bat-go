@@ -52,7 +52,7 @@ type Datastore interface {
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal, legacy bool) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -364,13 +364,13 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 }
 
 // CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error) {
+func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal, legacy bool) (*Claim, error) {
 	statement := `
-	insert into claims (promotion_id, wallet_id, approximate_value, bonus)
-	values ($1, $2, $3, $4)
+	insert into claims (promotion_id, wallet_id, approximate_value, bonus, legacy_claimed)
+	values ($1, $2, $3, $4, $5)
 	returning *`
 	claims := []Claim{}
-	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus)
+	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus, legacy)
 	if err != nil {
 		return nil, err
 	}
