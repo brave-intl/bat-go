@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -96,7 +97,7 @@ type IsWalletOnPlatformResponse struct {
 
 // IsWalletOnPlatformOpts - the query string options for the is reputable api call
 type IsWalletOnPlatformOpts struct {
-	Platform string `url:"platform"`
+	PriorTo string `url:"priorTo"`
 }
 
 // IsWalletOnPlatform makes the request to the reputation server
@@ -107,7 +108,6 @@ func (c *HTTPClient) IsWalletOnPlatform(
 	platform string,
 ) (bool, error) {
 
-	var body IsWalletOnPlatformOpts
 	if platform == "" {
 		return false, errors.New("need to specify the platform")
 	}
@@ -116,7 +116,9 @@ func (c *HTTPClient) IsWalletOnPlatform(
 		ctx,
 		"GET",
 		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
-		body,
+		IsWalletOnPlatformOpts{
+			PriorTo: ctx.Value(appctx.WalletOnPlatformPriorToCTXKey).(string),
+		},
 	)
 	if err != nil {
 		return false, err
