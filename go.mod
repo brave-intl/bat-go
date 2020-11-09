@@ -24,14 +24,10 @@ require (
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.0.0
 	github.com/gorilla/mux v1.7.3 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
-	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
 	github.com/hashicorp/go-plugin v1.0.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.5.3 // indirect
-	github.com/hashicorp/go-rootcerts v1.0.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
-	github.com/hashicorp/go-uuid v1.0.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
@@ -39,7 +35,6 @@ require (
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
-	github.com/mitchellh/go-testing-interface v1.0.0 // indirect
 	github.com/mssola/user_agent v0.5.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
@@ -52,8 +47,8 @@ require (
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
 	github.com/sirupsen/logrus v1.4.2
-	github.com/spf13/cobra v1.0.0
-	github.com/spf13/viper v1.4.0
+	github.com/spf13/cobra v1.1.1
+	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.4.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
@@ -62,12 +57,11 @@ require (
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
-	google.golang.org/genproto v0.0.0-20190905072037-92dd089d5514 // indirect
 	google.golang.org/grpc v1.27.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.3.1 // indirect
-	gopkg.in/yaml.v2 v2.2.4
+	gopkg.in/yaml.v2 v2.2.8
 	gotest.tools v2.2.0+incompatible
 )
