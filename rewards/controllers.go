@@ -51,11 +51,11 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 		}
 
-		parameters, err = service.GetParameters(r.Context(), currency)
+		parameters, err = service.GetParameters(ctx, currency)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get reward parameters")
 			return handlers.WrapError(err, "failed to get parameters", http.StatusInternalServerError)
 		}
-		return handlers.RenderContent(r.Context(), parameters, w, http.StatusOK)
+		return handlers.RenderContent(ctx, parameters, w, http.StatusOK)
 	})
 }

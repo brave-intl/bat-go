@@ -3,9 +3,12 @@ package wallet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -27,6 +30,7 @@ var (
 type Service struct {
 	Datastore   Datastore
 	RoDatastore ReadOnlyDatastore
+	repClient   reputation.Client
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -53,7 +57,7 @@ func (service *Service) SubmitAnonCardTransaction(
 	transaction string,
 	destination string,
 ) (*walletutils.TransactionInfo, error) {
-	info, err := service.Datastore.GetWallet(walletID)
+	info, err := service.Datastore.GetWallet(ctx, walletID)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error getting wallet")
 	}
@@ -61,8 +65,8 @@ func (service *Service) SubmitAnonCardTransaction(
 }
 
 // GetWallet - get a wallet by id
-func (service *Service) GetWallet(ID uuid.UUID) (*walletutils.Info, error) {
-	return service.Datastore.GetWallet(ID)
+func (service *Service) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error) {
+	return service.Datastore.GetWallet(ctx, ID)
 }
 
 // SubmitCommitableAnonCardTransaction submits a transaction
@@ -147,7 +151,7 @@ func (service *Service) LinkWallet(
 		}
 	} else {
 		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+		err := service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {
@@ -196,21 +200,33 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
 	}
 
+	// setup reputation client
+	s.repClient, err = reputation.New()
+	// its okay to not fatally fail if this environment is local and we cant make a rep client
+	if err != nil && os.Getenv("ENV") != "local" {
+		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+	}
+
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
+
 	// if feature is enabled, setup the routes
 	if viper.GetBool("wallets-feature-flag") {
 		// setup our wallet routes
 		r.Route("/v3/wallet", func(r chi.Router) {
+			// rate limited to 2 per minute...
 			// create wallet routes for our wallet providers
-			r.Post("/uphold", middleware.InstrumentHandlerFunc(
-				"CreateUpholdWallet", CreateUpholdWalletV3))
-			r.Post("/brave", middleware.InstrumentHandlerFunc(
-				"CreateBraveWallet", CreateBraveWalletV3))
+			r.Post("/uphold", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
+				"CreateUpholdWallet", CreateUpholdWalletV3)).ServeHTTP)
+			r.Post("/brave", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
+				"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
 
 			// if wallets are being migrated we do not want to over claim, we might go over the limit
 			if viper.GetBool("enable-link-drain-flag") {
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}
 
 			// get wallet routes
@@ -225,4 +241,51 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		})
 	}
 	return r, ctx, s
+}
+
+// LinkBraveWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
+
+	// get reputation client from context
+	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
+	if !ok {
+		return fmt.Errorf("server misconfigured: no reputation client")
+	}
+
+	// is this from wallet reputable as an iOS device?
+	isFromOnPlatform, err := repClient.IsWalletOnPlatform(ctx, from, "ios")
+	if err != nil {
+		return fmt.Errorf("invalid device: %w", err)
+	}
+
+	if !isFromOnPlatform {
+		// wallet is not reputable, decline
+		return fmt.Errorf("unable to link wallet: invalid device")
+	}
+
+	// get the to wallet from the database
+	toInfo, err := service.GetWallet(ctx, to)
+	if err != nil {
+		return fmt.Errorf("failed to get to wallet: %w", err)
+	}
+
+	// link the wallet in our datastore, provider linking id will be on the deposit wallet
+	providerLinkingID := uuid.NewV5(walletClaimNamespace, to.String())
+
+	if toInfo.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*toInfo.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	}
+	// "to" will be stored as UserDepositDestination in the wallet info upon linking
+	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrTooManyCardsLinked {
+			status = http.StatusConflict
+		}
+		return handlers.WrapError(err, "unable to link wallets", status)
+	}
+
+	return nil
 }

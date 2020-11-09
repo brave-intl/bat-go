@@ -112,7 +112,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 		LastBalance: nil,
 	}
 
-	err = walletDB.InsertWallet(&w)
+	err = walletDB.InsertWallet(context.Background(), &w)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	service := &Service{
@@ -420,7 +420,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 		blindedCreds[i] = "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
 	}
 
-	err = walletDB.UpsertWallet(&info)
+	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
@@ -563,7 +563,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		true,
 		nil,
 	)
-	err = walletDB.UpsertWallet(&info)
+	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
@@ -577,7 +577,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		reputationClient: mockReputation,
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(context.Background())
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
 	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
@@ -603,7 +603,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	err = walletDB.UpsertWallet(&info)
+	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
@@ -724,7 +724,7 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		ProviderID: uuid.NewV4().String(),
 		PublicKey:  publicKey,
 	}
-	err = service.wallet.Datastore.UpsertWallet(info)
+	err = service.wallet.Datastore.UpsertWallet(context.Background(), info)
 	suite.Require().NoError(err, "the wallet failed to be inserted")
 
 	// no content returns an empty string on protocol level
@@ -1125,7 +1125,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			PublicKey:   hexPublicKey,
 			LastBalance: nil,
 		}
-		suite.Require().NoError(service.wallet.Datastore.UpsertWallet(&info), "could not insert wallet")
+		suite.Require().NoError(service.wallet.Datastore.UpsertWallet(context.Background(), &info), "could not insert wallet")
 
 		blindedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
 		signedCreds := []string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="}
@@ -1267,7 +1267,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = service.Datastore.ActivatePromotion(promotion)
 	suite.Require().NoError(err, "Failed to activate promotion")
 
-	err = service.wallet.Datastore.UpsertWallet(&info)
+	err = service.wallet.Datastore.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "the wallet failed to be inserted")
 
 	claimBonus := 0.25
@@ -1327,7 +1327,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	suite.Require().NoError(err)
 
-	err = walletDB.InsertWallet(&w.Info)
+	err = walletDB.InsertWallet(context.Background(), &w.Info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	rr := httptest.NewRecorder()
@@ -1342,8 +1342,10 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	suite.Require().NoError(err)
 
 	info.UserDepositDestination = w.ProviderID
+	info.UserDepositAccountProvider = new(string)
+	*info.UserDepositAccountProvider = "uphold"
 
-	err = walletDB.UpsertWallet(&info)
+	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	rr = httptest.NewRecorder()
@@ -1433,7 +1435,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		true,
 		nil,
 	)
-	err = walletDB.InsertWallet(&info)
+	err = walletDB.InsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	mockCB := mockcb.NewMockClient(mockCtrl)
@@ -1447,7 +1449,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		reputationClient: mockReputation,
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(context.Background())
 	suite.Require().NoError(err, "Failed to initialize kafka")
 
 	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
@@ -1473,7 +1475,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	err = walletDB.UpsertWallet(&info)
+	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
