@@ -161,7 +161,7 @@ func (suite *PostgresTestSuite) TestCreateClaim() {
 	w := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(walletDB.UpsertWallet(context.Background(), w), "Save wallet should succeed")
 
-	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
+	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 }
 
@@ -181,7 +181,7 @@ func (suite *PostgresTestSuite) TestGetPreClaim() {
 	w := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(walletDB.UpsertWallet(context.Background(), w), "Save wallet should succeed")
 
-	expectedClaim, err := pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
+	expectedClaim, err := pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	claim, err := pg.GetPreClaim(promotion.ID, w.ID)
@@ -236,7 +236,7 @@ func (suite *PostgresTestSuite) TestClaimForWallet() {
 	w = &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
 	suite.Require().NoError(walletDB.UpsertWallet(context.Background(), w), "Save wallet should succeed")
 
-	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
+	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	w2 := &walletutils.Info{ID: uuid.NewV4().String(), Provider: "uphold", ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
@@ -295,7 +295,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	// 30.7 * 4 = 122.8 => test differences in rounding
 	adClaimValue := decimal.NewFromFloat(30.7)
-	claim, err := pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
+	claim, err := pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 	adSuggestionsPerGrant, err := claim.SuggestionsNeeded(promotion)
 	suite.Require().NoError(err)
@@ -314,7 +314,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	// test when claim is for less than the value of one vote
 	adClaimValue = decimal.NewFromFloat(0.05)
-	claim, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0))
+	claim, err = pg.CreateClaim(promotion.ID, w.ID, adClaimValue, decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 	adSuggestionsPerGrant, err = claim.SuggestionsNeeded(promotion)
 	suite.Require().NoError(err)
@@ -504,7 +504,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	suite.Assert().True(promotions[0].Available)
 
 	// Simulate legacy claim
-	claim, err := pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(25.0), decimal.NewFromFloat(0))
+	claim, err := pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(25.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating claim should succeed")
 	_, err = pg.RawDB().Exec("update claims set legacy_claimed = true where claims.id = $1", claim.ID)
 	suite.Require().NoError(err, "Setting legacy_claimed should succeed")
@@ -530,7 +530,7 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	suite.Assert().Equal(1, len(promotions), "Unavailable ads promo should not appear")
 
 	// Create pre-registered ads claim
-	claim, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
+	claim, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
@@ -639,7 +639,7 @@ func (suite *PostgresTestSuite) TestGetClaimByWalletAndPromotion() {
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
 
-	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0))
+	_, err = pg.CreateClaim(promotion.ID, w.ID, decimal.NewFromFloat(30.0), decimal.NewFromFloat(0), false)
 	suite.Require().NoError(err, "Creating pre-registered claim should succeed")
 
 	// A preregistered claim should not exist
