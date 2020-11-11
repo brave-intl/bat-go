@@ -23,13 +23,6 @@ var (
 		Short: "bat-go provides go based services and processes for BAT",
 	}
 	ctx = context.Background()
-
-	// top level config items
-	pprofEnabled string
-	env          string
-
-	ratiosClientPurge  time.Duration
-	ratiosClientExpiry time.Duration
 )
 
 // Must helper to make sure there is no errors
@@ -65,13 +58,13 @@ func Execute(version, commit, buildTime string) {
 func init() {
 
 	// pprof-enabled - defaults to ""
-	RootCmd.PersistentFlags().StringVarP(&pprofEnabled, "pprof-enabled", "", "",
+	RootCmd.PersistentFlags().String("pprof-enabled", "",
 		"pprof enablement")
 	Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
 	Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
 
 	// env - defaults to local
-	RootCmd.PersistentFlags().StringVarP(&env, "environment", "e", "local",
+	RootCmd.PersistentFlags().String("environment", "local",
 		"the default environment")
 	Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
 	Must(viper.BindEnv("environment", "ENV"))
@@ -83,19 +76,19 @@ func init() {
 	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
 
 	// ratiosService (required by all)
-	RootCmd.PersistentFlags().StringP("ratios-service", "r", "",
+	RootCmd.PersistentFlags().String("ratios-service", "",
 		"the ratios service address")
 	Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
 	Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
 
 	// ratiosClientExpiry
-	RootCmd.PersistentFlags().DurationVarP(&ratiosClientExpiry, "ratios-client-cache-expiry", "", 5*time.Second,
+	RootCmd.PersistentFlags().Duration("ratios-client-cache-expiry", 5*time.Second,
 		"the ratios client cache default eviction duration")
 	Must(viper.BindPFlag("ratios-client-cache-expiry", RootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
 	Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
 
 	// ratiosClientPurge
-	RootCmd.PersistentFlags().DurationVarP(&ratiosClientPurge, "ratios-client-cache-purge", "", 1*time.Minute,
+	RootCmd.PersistentFlags().Duration("ratios-client-cache-purge", 1*time.Minute,
 		"the ratios client cache default purge duration")
 	Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
 	Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
@@ -122,7 +115,8 @@ func versionRun(command *cobra.Command, args []string) {
 // Perform performs a run
 func Perform(action string, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
-		if err := fn(cmd, args); err != nil {
+		err := fn(cmd, args)
+		if err != nil {
 			logger, lerr := appctx.GetLogger(cmd.Context())
 			if lerr != nil {
 				_, logger = logging.SetupLogger(cmd.Context())
@@ -140,6 +134,9 @@ func Perform(action string, fn func(cmd *cobra.Command, args []string) error) fu
 				}
 			}
 			log.Msg("failed")
+		}
+		<-time.After(10 * time.Millisecond)
+		if err != nil {
 			os.Exit(1)
 		}
 	}
