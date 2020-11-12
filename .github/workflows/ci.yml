@@ -56,17 +56,16 @@ jobs:
 
     - name: Get dependencies
       run: |
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.26.0/install.sh |
-        sh -s -- -b $(go env GOPATH)/bin v1.26.0
-        go mod download
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.26.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.26.0;
+        go mod download;
 
     - name: Lint
       run: make lint
 
     - name: Test
       run: |
-        docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault
-        sleep 3
+        docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
+        sleep 3;
         VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d
-          ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm
+          ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm;
           dev make
