@@ -6,6 +6,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/checkout/session"
 )
 
 // Delete this file once the issue is completed
@@ -42,6 +44,45 @@ type OrderItem struct {
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
 	return order.Status == "paid"
+}
+
+// IsStripePayable returns true if every sku is payable by Stripe
+func (order Order) IsStripePayable() bool {
+	return true
+}
+
+type CreateCheckoutSessionResponse struct {
+	SessionID string `json:"id"`
+}
+
+func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{
+			"card",
+		}),
+		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			&stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String("usd"),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String("T-shirt"),
+					},
+					UnitAmount: stripe.Int64(2000),
+				},
+				Quantity: stripe.Int64(1),
+			},
+		},
+		SuccessURL: stripe.String("https://example.com/success"),
+		CancelURL:  stripe.String("https://example.com/cancel"),
+	}
+
+	session, _ := session.New(params)
+
+	data := CreateCheckoutSessionResponse{
+		SessionID: session.ID,
+	}
+	return data
 }
 
 // Transaction includes information about a particular order. Status can be pending, failure, completed, or error.

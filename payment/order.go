@@ -9,6 +9,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/checkout/session"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
@@ -139,4 +141,53 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
 	return order.Status == "paid"
+}
+
+// IsStripePayable returns true if every sku is payable by Stripe
+func (order Order) IsStripePayable() bool {
+	return true
+}
+
+type CreateCheckoutSessionResponse struct {
+	SessionID string `json:"id"`
+}
+
+func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
+	stripe.Key = stripe.Key = os.Getenv("STRIPE_KEY")
+
+	quantity := int64(len(order.Items))
+	n, err := decimal.NewFromString("100")
+	if err != nil {
+	}
+	price := order.TotalPrice.Mul(n).IntPart()
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{
+			"card",
+		}),
+		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			&stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String("usd"),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String("Brave Together Paid Subscription"),
+					},
+					UnitAmount: stripe.Int64(price),
+				},
+				Quantity: stripe.Int64(quantity),
+			},
+		},
+		PaymentIntentData: &stripe.CheckoutSessionPaymentIntentDataParams{
+			Metadata: map[string]string{"orderID": order.ID.String()},
+		},
+		SuccessURL: stripe.String("https://example.com/success"),
+		CancelURL:  stripe.String("https://example.com/cancel"),
+	}
+
+	session, _ := session.New(params)
+
+	data := CreateCheckoutSessionResponse{
+		SessionID: session.ID,
+	}
+	return data
 }

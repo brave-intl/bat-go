@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -21,6 +21,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/webhook"
 )
 
 // Router for order endpoints
@@ -47,6 +49,13 @@ func CredentialRouter(service *Service) chi.Router {
 	if os.Getenv("ENV") != "production" {
 		r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
 	}
+	return r
+}
+
+// PaymentRouter handles calls relating to payments
+func PaymentRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/stripe/webhooks", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	return r
 }
 
@@ -246,6 +255,12 @@ func GetOrder(service *Service) handlers.AppHandler {
 		if order == nil {
 			status = http.StatusNotFound
 		}
+
+		if !order.IsPaid() && order.IsStripePayable() {
+			data := order.CreateCheckoutSession()
+			return handlers.RenderContent(r.Context(), data, w, status)
+		}
+
 		return handlers.RenderContent(r.Context(), order, w, status)
 	})
 }
@@ -589,6 +604,46 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		// render response
 		if err := response.Render(ctx, w, http.StatusOK); err != nil {
 			return handlers.WrapError(err, "error rendering response", http.StatusInternalServerError)
+		}
+
+		return nil
+	})
+}
+
+// HandleStripeWebhook is the handler for stripe checkout session webhooks
+func HandleStripeWebhook(service *Service) handlers.AppHandler {
+
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
+		const MaxBodyBytes = int64(65536)
+		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
+
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading request body: %v\n", err)
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+
+		// Pass the request body and Stripe-Signature header to ConstructEvent, along with the webhook signing key
+		// You can find your endpoint's secret in your webhook settings
+		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
+		event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), endpointSecret)
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
+			w.WriteHeader(http.StatusBadRequest) // Return a 400 error on a bad signature
+		}
+
+		// Handle the checkout.session.completed event
+		if event.Type == "checkout.session.completed" {
+			var session stripe.CheckoutSession
+			err := json.Unmarshal(event.Data.Raw, &session)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
+				w.WriteHeader(http.StatusBadRequest)
+			}
+
+			return handlers.RenderContent(r.Context(), "Checkout successful!", w, http.StatusOK)
 		}
 
 		return nil
