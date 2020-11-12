@@ -22,7 +22,7 @@ do
 	# Create keystores
 	keytool -genkey -noprompt \
 				 -alias $i \
-				 -dname "CN=$i.test.confluent.io, OU=TEST, O=CONFLUENT, L=PaloAlto, S=Ca, C=US" \
+				 -dname "CN=kafka, OU=TEST, O=CONFLUENT, L=PaloAlto, S=Ca, C=US" \
 				 -keystore kafka.$i.keystore.jks \
 				 -keyalg RSA \
 				 -storepass confluent \
