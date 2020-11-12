@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
@@ -44,6 +45,85 @@ type result struct{}
 
 func (r result) LastInsertId() (int64, error) { return 1, nil }
 func (r result) RowsAffected() (int64, error) { return 1, nil }
+
+func TestLinkBraveWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var (
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		// add the datastore to the context
+		ctx = context.Background()
+		r   = httptest.NewRequest(
+			"POST",
+			"/v3/wallet/brave/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
+			bytes.NewBufferString(`
+				{
+					"depositDestination": "adef9cda-6a14-4fa1-be86-43da80e56d2c"
+				}`),
+		)
+		mockReputation = mockreputation.NewMockClient(mockCtrl)
+		handler        = wallet.LinkBraveDepositAccountV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+
+		walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
+		idTo, _              = uuid.FromString("adef9cda-6a14-4fa1-be86-43da80e56d2c")
+		idFrom, _            = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
+		rows                 = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+					AddRow(idFrom, "brave", "", "12345", uuid.NewV5(walletClaimNamespace, idTo.String()), idTo)
+	)
+
+	mockReputation.EXPECT().IsWalletOnPlatform(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mock.ExpectQuery("^select (.+)").WithArgs(idTo).WillReturnRows(rows)
+	//mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(walletClaimNamespace, idTo.String())).WillReturnRows(rows)
+
+	// txHasDestination
+	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
+
+	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, uuid.NewV5(walletClaimNamespace, idTo.String()), "brave").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/brave/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
+	}
+}
 
 func TestCreateBraveWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)

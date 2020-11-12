@@ -3,15 +3,18 @@ package reputation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	uuid "github.com/satori/go.uuid"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the reputation server
@@ -46,6 +49,11 @@ type IsWalletReputableResponse struct {
 	IsReputable bool `json:"isReputable"`
 }
 
+// IsReputableOpts - the query string options for the is reputable api call
+type IsReputableOpts struct {
+	Platform string `url:"platform"`
+}
+
 // IsWalletReputable makes the request to the reputation server
 // and reutrns whether a paymentId has enough reputation
 // to claim a grant
@@ -54,11 +62,20 @@ func (c *HTTPClient) IsWalletReputable(
 	paymentID uuid.UUID,
 	platform string,
 ) (bool, error) {
+
+	var body IsReputableOpts
+	if platform != "" {
+		// pass in query string "platform" into our request
+		body = IsReputableOpts{
+			Platform: platform,
+		}
+	}
+
 	req, err := c.client.NewRequest(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String(),
-		nil,
+		body,
 	)
 	if err != nil {
 		return false, err
@@ -71,4 +88,47 @@ func (c *HTTPClient) IsWalletReputable(
 	}
 
 	return resp.IsReputable, nil
+}
+
+// IsWalletOnPlatformResponse - will send back indication if wallet is on said platform
+type IsWalletOnPlatformResponse struct {
+	IsOnPlatform bool `json:"isOnPlatform"`
+}
+
+// IsWalletOnPlatformOpts - the query string options for the is reputable api call
+type IsWalletOnPlatformOpts struct {
+	PriorTo string `url:"priorTo"`
+}
+
+// IsWalletOnPlatform makes the request to the reputation server
+// and returns whether a paymentId is on a given platform
+func (c *HTTPClient) IsWalletOnPlatform(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	platform string,
+) (bool, error) {
+
+	if platform == "" {
+		return false, errors.New("need to specify the platform")
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
+		IsWalletOnPlatformOpts{
+			PriorTo: ctx.Value(appctx.WalletOnPlatformPriorToCTXKey).(string),
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IsWalletOnPlatformResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, err
+	}
+
+	return resp.IsOnPlatform, nil
 }

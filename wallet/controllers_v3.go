@@ -1,7 +1,6 @@
 package wallet
 
 import (
-	"context"
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
@@ -48,7 +47,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	var publicKey = ucReq.PublicKey
 
 	// no more uphold wallets in the wild please
-	if env, ok := r.Context().Value(appctx.EnvironmentCTXKey).(string); ok && env == "local" {
+	if env, ok := ctx.Value(appctx.EnvironmentCTXKey).(string); ok && env == "local" {
 		return handlers.WrapError(
 			errors.New("uphold wallet creation needs to be in an environment not local"),
 			"failed to create wallet", http.StatusBadRequest)
@@ -85,7 +84,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	info.ProviderID = uwallet.GetWalletInfo().ProviderID
 
 	// get wallet from datastore
-	err = db.InsertWallet(info)
+	err = db.InsertWallet(ctx, info)
 	if err != nil {
 		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create brave wallet")
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
@@ -114,7 +113,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	if err := inputs.DecodeAndValidateReader(r.Context(), bcr, r.Body); err != nil {
+	if err := inputs.DecodeAndValidateReader(ctx, bcr, r.Body); err != nil {
 		return bcr.HandleErrors(err)
 	}
 
@@ -139,7 +138,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	}
 
 	// get wallet from datastore
-	err = db.InsertWallet(info)
+	err = db.InsertWallet(ctx, info)
 	if err != nil {
 		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create brave wallet")
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
@@ -164,7 +163,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// get payment id
-		if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",
@@ -175,12 +174,12 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// read post body
-		if err := inputs.DecodeAndValidateReader(r.Context(), cuw, r.Body); err != nil {
+		if err := inputs.DecodeAndValidateReader(ctx, cuw, r.Body); err != nil {
 			return cuw.HandleErrors(err)
 		}
 
 		// get the wallet
-		wallet, err := s.GetWallet(*id.UUID())
+		wallet, err := s.GetWallet(ctx, *id.UUID())
 		if err != nil {
 			if strings.Contains(err.Error(), "looking up wallet") {
 				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
@@ -210,7 +209,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		err = s.LinkWallet(r.Context(), uwallet, cuw.SignedLinkingRequest, &aa)
+		err = s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -231,7 +230,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	}
 
 	var id = new(inputs.ID)
-	if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 		logger.Warn().Str("paymentId", err.Error()).Msg("failed to decode and validate paymentID from url")
 		return handlers.ValidationError(
 			"Error validating paymentID url parameter",
@@ -252,7 +251,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	}
 
 	// get wallet from datastore
-	info, err := roDB.GetWallet(*id.UUID())
+	info, err := roDB.GetWallet(ctx, *id.UUID())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
@@ -281,7 +280,7 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 	}
 
 	var pk = new(inputs.PublicKey)
-	if err := inputs.DecodeAndValidateString(context.Background(), pk, chi.URLParam(r, "publicKey")); err != nil {
+	if err := inputs.DecodeAndValidateString(ctx, pk, chi.URLParam(r, "publicKey")); err != nil {
 		logger.Warn().Str("publicKey", err.Error()).Msg("failed to decode and validate publicKey from url")
 		return handlers.ValidationError(
 			"Error validating publicKey url parameter",
@@ -302,7 +301,7 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 	}
 
 	// get wallet from datastore
-	info, err := roDB.GetWalletByPublicKey(pk.String())
+	info, err := roDB.GetWalletByPublicKey(ctx, pk.String())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Info().Err(err).Str("pk", pk.String()).Msg("wallet not found")
@@ -331,7 +330,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	}
 	// get the payment id from the URL request
 	var id = new(inputs.ID)
-	if err := inputs.DecodeAndValidateString(context.Background(), id, chi.URLParam(r, "paymentID")); err != nil {
+	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 		logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate payment id from url")
 		return handlers.ValidationError(
 			"Error validating paymentID url parameter",
@@ -352,7 +351,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	}
 
 	// get wallet from datastore
-	info, err := roDB.GetWallet(*id.UUID())
+	info, err := roDB.GetWallet(ctx, *id.UUID())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			logger.Info().Err(err).Str("id", id.String()).Msg("wallet not found")
@@ -388,4 +387,50 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 
 	// format the response and render
 	return handlers.RenderContent(ctx, balanceToResponseV3(*result), w, http.StatusOK)
+}
+
+// LinkBraveDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of brave wallets
+func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx = r.Context()
+			id  = new(inputs.ID)
+			lbw = new(LinkBraveDepositAccountRequest)
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		// get payment id
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// read post body
+		if err := inputs.DecodeAndValidateReader(ctx, lbw, r.Body); err != nil {
+			return lbw.HandleErrors(err)
+		}
+
+		linkedPaymentID, err := uuid.FromString(lbw.DepositDestination)
+		if err != nil {
+			return handlers.WrapError(err, "error parsing depositDestination", http.StatusBadRequest)
+		}
+
+		err = s.LinkBraveWallet(r.Context(), *id.UUID(), linkedPaymentID)
+		if err != nil {
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+		}
+
+		// render the wallet
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
 }

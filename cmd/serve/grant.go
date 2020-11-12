@@ -49,6 +49,14 @@ func init() {
 	GrantServerCmd.PersistentFlags().Bool("enable-job-workers", true, "enable job workers (defaults true)")
 	cmd.Must(viper.BindPFlag("enable-job-workers", GrantServerCmd.PersistentFlags().Lookup("enable-job-workers")))
 	cmd.Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
+
+	GrantServerCmd.PersistentFlags().StringSlice("brave-transfer-promotion-ids", []string{""}, "brave vg deposit destination promotion id")
+	cmd.Must(viper.BindPFlag("brave-transfer-promotion-ids", GrantServerCmd.PersistentFlags().Lookup("brave-transfer-promotion-ids")))
+	cmd.Must(viper.BindEnv("brave-transfer-promotion-ids", "BRAVE_TRANSFER_PROMOTION_IDS"))
+
+	GrantServerCmd.PersistentFlags().StringSlice("wallet-on-platform-prior-to", []string{""}, "wallet on platform prior to for transfer")
+	cmd.Must(viper.BindPFlag("wallet-on-platform-prior-to", GrantServerCmd.PersistentFlags().Lookup("wallet-on-platform-prior-to")))
+	cmd.Must(viper.BindEnv("wallet-on-platform-prior-to", "WALLET_ON_PLATFORM_PRIOR_TO"))
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -89,7 +97,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// now we have middlewares we want included in logging
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
-	r.Use(middleware.RateLimiter(ctx))
+	r.Use(middleware.RateLimiter(ctx, 180))
 
 	var walletService *wallet.Service
 	// use cobra configurations for setting up wallet service
@@ -162,6 +170,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, paymentService.Jobs()...)
 
+	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
@@ -270,6 +279,10 @@ func GrantServer(
 	logger.Info().
 		Str("prefix", "main").
 		Msg("Starting server")
+
+	// add flags to context
+	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
+	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

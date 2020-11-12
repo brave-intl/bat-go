@@ -21,14 +21,12 @@ const (
 func init() {
 	RootCmd.AddCommand(ServeCmd)
 
-	// env - defaults to development
-	ServeCmd.PersistentFlags().StringVarP(&address, "address", "a", ":8080",
+	// address - sets the address of the server to be started
+	ServeCmd.PersistentFlags().String("address", ":8080",
 		"the default address to bind to")
 	Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
 	Must(viper.BindEnv("address", "ADDR"))
 }
-
-var address string
 
 // ServeCmd the serve command
 var ServeCmd = &cobra.Command{
@@ -48,7 +46,7 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 		chiware.Heartbeat("/"),
 		chiware.Timeout(timeout),
 		middleware.BearerToken,
-		middleware.RateLimiter(ctx),
+		middleware.RateLimiter(ctx, 180),
 		middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery

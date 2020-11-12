@@ -1,7 +1,6 @@
 # pass "go" and collect 200 BAT
 
-[![Build
-Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://travis-ci.org/brave-intl/bat-go)
+[![Build Status](https://travis-ci.org/brave-intl/bat-go.svg?branch=master)](https://travis-ci.org/brave-intl/bat-go)
 
 ## Developer Setup
 

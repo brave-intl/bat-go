@@ -7,6 +7,7 @@ package wallet
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_datastore.go
 
 import (
+	"context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -42,7 +43,7 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 }
 
 // GetByProviderLinkingID implements Datastore
-func (_d DatastoreWithPrometheus) GetByProviderLinkingID(providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
+func (_d DatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -52,11 +53,11 @@ func (_d DatastoreWithPrometheus) GetByProviderLinkingID(providerLinkingID uuid.
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetByProviderLinkingID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetByProviderLinkingID(providerLinkingID)
+	return _d.base.GetByProviderLinkingID(ctx, providerLinkingID)
 }
 
 // GetWallet implements Datastore
-func (_d DatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletutils.Info, err error) {
+func (_d DatastoreWithPrometheus) GetWallet(ctx context.Context, ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -66,11 +67,11 @@ func (_d DatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletutils.Info
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWallet(ID)
+	return _d.base.GetWallet(ctx, ID)
 }
 
 // GetWalletByPublicKey implements Datastore
-func (_d DatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *walletutils.Info, err error) {
+func (_d DatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Context, s1 string) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -80,11 +81,11 @@ func (_d DatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *walletut
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWalletByPublicKey", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWalletByPublicKey(s1)
+	return _d.base.GetWalletByPublicKey(ctx, s1)
 }
 
 // InsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) InsertWallet(wallet *walletutils.Info) (err error) {
+func (_d DatastoreWithPrometheus) InsertWallet(ctx context.Context, wallet *walletutils.Info) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -94,11 +95,11 @@ func (_d DatastoreWithPrometheus) InsertWallet(wallet *walletutils.Info) (err er
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertWallet(wallet)
+	return _d.base.InsertWallet(ctx, wallet)
 }
 
 // LinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) (err error) {
+func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -108,7 +109,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ID string, providerID string, provi
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.LinkWallet(ID, providerID, providerLinkingID, anonymousAddress, depositProvider)
+	return _d.base.LinkWallet(ctx, ID, providerID, providerLinkingID, anonymousAddress, depositProvider)
 }
 
 // Migrate implements Datastore
@@ -175,7 +176,7 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 }
 
 // TxLinkWalletInfo implements Datastore
-func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) (err error) {
+func (_d DatastoreWithPrometheus) TxLinkWalletInfo(ctx context.Context, tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -185,11 +186,11 @@ func (_d DatastoreWithPrometheus) TxLinkWalletInfo(tx *sqlx.Tx, ID string, provi
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "TxLinkWalletInfo", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.TxLinkWalletInfo(tx, ID, providerID, providerLinkingID, anonymousAddress, pda)
+	return _d.base.TxLinkWalletInfo(ctx, tx, ID, providerID, providerLinkingID, anonymousAddress, pda)
 }
 
 // UpsertWallet implements Datastore
-func (_d DatastoreWithPrometheus) UpsertWallet(wallet *walletutils.Info) (err error) {
+func (_d DatastoreWithPrometheus) UpsertWallet(ctx context.Context, wallet *walletutils.Info) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -199,5 +200,5 @@ func (_d DatastoreWithPrometheus) UpsertWallet(wallet *walletutils.Info) (err er
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UpsertWallet(wallet)
+	return _d.base.UpsertWallet(ctx, wallet)
 }

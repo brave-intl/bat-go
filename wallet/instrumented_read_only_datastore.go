@@ -7,6 +7,7 @@ package wallet
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
 
 import (
+	"context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -42,7 +43,7 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 }
 
 // GetByProviderLinkingID implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetByProviderLinkingID(providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -52,11 +53,11 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetByProviderLinkingID(providerLinking
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetByProviderLinkingID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetByProviderLinkingID(providerLinkingID)
+	return _d.base.GetByProviderLinkingID(ctx, providerLinkingID)
 }
 
 // GetWallet implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletutils.Info, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ctx context.Context, ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -66,11 +67,11 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ID uuid.UUID) (ip1 *walletut
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWallet(ID)
+	return _d.base.GetWallet(ctx, ID)
 }
 
 // GetWalletByPublicKey implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *walletutils.Info, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Context, s1 string) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -80,7 +81,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetWalletByPublicKey(s1 string) (ip1 *
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWalletByPublicKey", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetWalletByPublicKey(s1)
+	return _d.base.GetWalletByPublicKey(ctx, s1)
 }
 
 // Migrate implements ReadOnlyDatastore

@@ -2,22 +2,20 @@ package payment
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"errors"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	uuid "github.com/satori/go.uuid"
@@ -26,32 +24,8 @@ import (
 )
 
 var (
-	voteTopic          = os.Getenv("ENV") + ".payment.vote"
-	kafkaCertNotBefore = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_before",
-		Help: "Date when the kafka certificate becomes valid.",
-	})
-	kafkaCertNotAfter = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kafka_cert_not_after",
-		Help: "Date when the kafka certificate expires.",
-	})
+	voteTopic = os.Getenv("ENV") + ".payment.vote"
 )
-
-func init() {
-	// put environment on context before logger setup
-	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
-	_, logger := logging.SetupLogger(ctx)
-	var err error
-	// gracefully try to register collectors for prom, no need to panic
-	err = prometheus.Register(kafkaCertNotBefore)
-	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		logger.Warn().Err(err).Msg("already registered kafkaCertNotBefore collector")
-	}
-	err = prometheus.Register(kafkaCertNotAfter)
-	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-		logger.Warn().Err(err).Msg("already registered kafkaCertNotAfter collector")
-	}
-}
 
 // Service contains datastore
 type Service struct {
@@ -85,48 +59,25 @@ func (s *Service) Jobs() []srv.Job {
 	return s.jobs
 }
 
-// InitCodecs used for Avro encoding / decoding
-func (s *Service) InitCodecs() error {
-	s.codecs = make(map[string]*goavro.Codec)
-
-	voteEventCodec, err := goavro.NewCodec(string(voteSchema))
-	s.codecs["vote"] = voteEventCodec
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (s *Service) InitKafka() error {
+func (s *Service) InitKafka(ctx context.Context) error {
 
-	_, logger := logging.SetupLogger(context.Background())
+	// TODO: eventually as cobra/viper
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
 
-	dialer, x509Cert, err := kafkautils.TLSDialer()
+	var err error
+	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, voteTopic)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
-	s.kafkaDialer = dialer
 
-	kafkaCertNotBefore.Set(float64(x509Cert.NotBefore.Unix()))
-	kafkaCertNotAfter.Set(float64(x509Cert.NotAfter.Unix()))
-
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		// by default we are waitng for acks from all nodes
-		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    voteTopic,
-		Balancer: &kafka.LeastBytes{},
-		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
+	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"vote": voteSchema,
 	})
 
-	s.kafkaWriter = kafkaWriter
-	err = s.InitCodecs()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate codecs kafka: %w", err)
 	}
-
 	return nil
 }
 
@@ -158,7 +109,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		},
 	}
 
-	err = service.InitKafka()
+	err = service.InitKafka(ctx)
 	if err != nil {
 		return nil, err
 	}

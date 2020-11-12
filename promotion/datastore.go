@@ -12,8 +12,10 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
@@ -50,7 +52,7 @@ type Datastore interface {
 	// ClaimForWallet is used to either create a new claim or convert a preregistered claim for a particular promotion
 	ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error)
 	// CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error)
+	CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal, legacy bool) (*Claim, error)
 	// GetPreClaim is used to fetch a "pre-registered" claim for a particular wallet
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// CreatePromotion given the promotion type, initial number of grants and the desired value of those grants
@@ -362,13 +364,13 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 }
 
 // CreateClaim is used to "pre-register" an unredeemed claim for a particular wallet
-func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal) (*Claim, error) {
+func (pg *Postgres) CreateClaim(promotionID uuid.UUID, walletID string, value decimal.Decimal, bonus decimal.Decimal, legacy bool) (*Claim, error) {
 	statement := `
-	insert into claims (promotion_id, wallet_id, approximate_value, bonus)
-	values ($1, $2, $3, $4)
+	insert into claims (promotion_id, wallet_id, approximate_value, bonus, legacy_claimed)
+	values ($1, $2, $3, $4, $5)
 	returning *`
 	claims := []Claim{}
-	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus)
+	err := pg.RawDB().Select(&claims, statement, promotionID, walletID, value, bonus, legacy)
 	if err != nil {
 		return nil, err
 	}
@@ -928,6 +930,14 @@ func errToDrainCode(err error) (string, bool) {
 
 // RunNextDrainJob to process deposits if there is one waiting
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
+
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
@@ -974,6 +984,8 @@ limit 1`
 
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
+		// log the error from redeem and transfer
+		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
 		errCode, retriable := errToDrainCode(err)
 
 		if !retriable {
