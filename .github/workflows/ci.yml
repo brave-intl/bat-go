@@ -24,7 +24,6 @@ jobs:
         goversion:
         - 1.14
         - 1.15
-        - latest
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
