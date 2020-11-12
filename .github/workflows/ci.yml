@@ -62,10 +62,12 @@ jobs:
     - name: Lint
       run: make lint
 
-    - name: Test
+    - name: Vault
       run: |
         docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d vault;
         sleep 3;
-        VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d
-          ' ' -f 3 ) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm;
-          dev make
+
+    - name: Test
+      run: |
+        export VAULT_TOKEN=$(docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 );
+        docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make;
