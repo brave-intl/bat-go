@@ -34,7 +34,6 @@ jobs:
     strategy:
       matrix:
         goversion:
-        - 1.14
         - 1.15
     steps:
     - name: Check out code into the Go module directory
