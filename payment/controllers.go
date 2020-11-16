@@ -624,8 +624,8 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
-		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
+		stripe.Key = os.Getenv("STRIPE_SECRET")
+		endpointSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 
 		const MaxBodyBytes = int64(65536)
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)

@@ -155,7 +155,7 @@ type CreateCheckoutSessionResponse struct {
 
 // Create a Stripe Checkout Session for an Order
 func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
-	stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
+	stripe.Key = os.Getenv("STRIPE_SECRET")
 
 	// Prepare checkout line items
 	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
