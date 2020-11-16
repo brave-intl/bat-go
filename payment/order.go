@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -149,39 +150,40 @@ func (order Order) IsStripePayable() bool {
 }
 
 type CreateCheckoutSessionResponse struct {
-	SessionID string `json:"id"`
+	SessionID string `json:"checkoutSessionId"`
 }
 
+// Create a Stripe Checkout Session for an Order
 func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
-	stripe.Key = stripe.Key = os.Getenv("STRIPE_KEY")
+	stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
 
-	quantity := int64(len(order.Items))
-	n, err := decimal.NewFromString("100")
-	if err != nil {
+	// Prepare checkout line items
+	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
+	for i := 0; i < len(order.Items); i++ {
+		price := ConvertPriceToUnitAmount(order.Items[i].Price)
+		quantity := int64(order.Items[i].Quantity)
+		name := order.Items[i].SKU
+		lineItems[i] = &stripe.CheckoutSessionLineItemParams{
+			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+				Currency: stripe.String("usd"),
+				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+					Name: stripe.String(name),
+				},
+				UnitAmountDecimal: stripe.Float64(price),
+			},
+			Quantity: stripe.Int64(quantity),
+		}
 	}
-	price := order.TotalPrice.Mul(n).IntPart()
+
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
-		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			&stripe.CheckoutSessionLineItemParams{
-				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					Currency: stripe.String("usd"),
-					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String("Brave Together Paid Subscription"),
-					},
-					UnitAmount: stripe.Int64(price),
-				},
-				Quantity: stripe.Int64(quantity),
-			},
-		},
-		PaymentIntentData: &stripe.CheckoutSessionPaymentIntentDataParams{
-			Metadata: map[string]string{"orderID": order.ID.String()},
-		},
-		SuccessURL: stripe.String("https://example.com/success"),
-		CancelURL:  stripe.String("https://example.com/cancel"),
+		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
+		LineItems:         lineItems,
+		ClientReferenceID: stripe.String(order.ID.String()),
+		SuccessURL:        stripe.String("https://example.com/success"),
+		CancelURL:         stripe.String("https://example.com/cancel"),
 	}
 
 	session, _ := session.New(params)
@@ -190,4 +192,12 @@ func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
 		SessionID: session.ID,
 	}
 	return data
+}
+
+func ConvertPriceToUnitAmount(price decimal.Decimal) float64 {
+	n, exact := price.Float64()
+	if !exact {
+		fmt.Println("Error typecasting price")
+	}
+	return n * float64(100.00)
 }

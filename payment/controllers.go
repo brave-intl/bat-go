@@ -251,14 +251,25 @@ func GetOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
+		// If order is pending and is stripe payable, return a checkout session
+		if !order.IsPaid() && order.IsStripePayable() {
+			type OrderWithCheckoutSession struct {
+				*Order
+				CheckoutSession CreateCheckoutSessionResponse
+			}
+
+			checkoutSession := order.CreateCheckoutSession()
+			orderWithCheckoutSession := OrderWithCheckoutSession{
+				Order:           order,
+				CheckoutSession: checkoutSession,
+			}
+
+			return handlers.RenderContent(r.Context(), orderWithCheckoutSession, w, http.StatusOK)
+		}
+
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
-		}
-
-		if !order.IsPaid() && order.IsStripePayable() {
-			data := order.CreateCheckoutSession()
-			return handlers.RenderContent(r.Context(), data, w, status)
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, status)
@@ -612,41 +623,42 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
-
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
+		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
+
 		const MaxBodyBytes = int64(65536)
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
 
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading request body: %v\n", err)
-			w.WriteHeader(http.StatusServiceUnavailable)
+			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
-		// Pass the request body and Stripe-Signature header to ConstructEvent, along with the webhook signing key
-		// You can find your endpoint's secret in your webhook settings
-		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
 		event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), endpointSecret)
-
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error verifying webhook signature: %v\n", err)
-			w.WriteHeader(http.StatusBadRequest) // Return a 400 error on a bad signature
+			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		// Handle the checkout.session.completed event
+		// Fulfill order only if checkout session completed
 		if event.Type == "checkout.session.completed" {
 			var session stripe.CheckoutSession
 			err := json.Unmarshal(event.Data.Raw, &session)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing webhook JSON: %v\n", err)
-				w.WriteHeader(http.StatusBadRequest)
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
-
-			return handlers.RenderContent(r.Context(), "Checkout successful!", w, http.StatusOK)
+			orderID, err := uuid.FromString(session.ClientReferenceID)
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving client reference ID", http.StatusBadRequest)
+			}
+			err = service.Datastore.UpdateOrder(orderID, "paid")
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "checkout successful", w, http.StatusOK)
 		}
 
-		return nil
+		return handlers.RenderContent(r.Context(), "error in checkout session", w, http.StatusBadRequest)
 	})
 }
 
