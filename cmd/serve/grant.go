@@ -282,7 +282,7 @@ func GrantServer(
 		Msg("Starting server")
 
 	// add flags to context
-	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetString("brave-transfer-promotion-ids"))
+	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)

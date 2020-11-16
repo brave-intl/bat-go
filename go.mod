@@ -16,7 +16,7 @@ require (
 	github.com/ethereum/go-ethereum v1.7.2
 	github.com/frankban/quicktest v1.4.2 // indirect
 	github.com/getsentry/sentry-go v0.5.1
-	github.com/go-chi/chi v4.0.2+incompatible
+	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.6.2
@@ -49,7 +49,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/viper v1.7.0
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	github.com/stripe/stripe-go v70.15.0+incompatible
 	github.com/stripe/stripe-go/v71 v71.48.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5

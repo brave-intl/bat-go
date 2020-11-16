@@ -30,7 +30,9 @@ func init() {
 
 // ReadConfig sets up the config flag
 func ReadConfig(command *cobra.Command) *settlement.Config {
-	config, err := settlement.ReadYamlConfig(viper.GetString("config"))
+	configPath, err := command.Flags().GetString("config")
+	cmd.Must(err)
+	config, err := settlement.ReadYamlConfig(configPath)
 	cmd.Must(err)
 	Config = config
 	return config

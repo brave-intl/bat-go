@@ -124,12 +124,6 @@ func init() {
 	cmd.Must(viper.BindPFlag("out", GeminiSettlementCmd.PersistentFlags().Lookup("out")))
 	cmd.Must(viper.BindEnv("out", "OUT"))
 
-	// txnID (required by transform)
-	UploadGeminiSettlementCmd.PersistentFlags().String("input", "",
-		"the signed transactions file")
-	cmd.Must(viper.BindPFlag("input", UploadGeminiSettlementCmd.PersistentFlags().Lookup("input")))
-	cmd.Must(UploadGeminiSettlementCmd.MarkPersistentFlagRequired("input"))
-
 	UploadGeminiSettlementCmd.PersistentFlags().String("all-txs-input", "",
 		"the original transactions file")
 	cmd.Must(viper.BindPFlag("all-txs-input", UploadGeminiSettlementCmd.PersistentFlags().Lookup("all-txs-input")))
@@ -144,11 +138,6 @@ func init() {
 		"the original transactions file")
 	cmd.Must(viper.BindPFlag("all-txs-input", CheckStatusGeminiSettlementCmd.PersistentFlags().Lookup("all-txs-input")))
 	cmd.Must(CheckStatusGeminiSettlementCmd.MarkPersistentFlagRequired("all-txs-input"))
-
-	CheckStatusGeminiSettlementCmd.PersistentFlags().StringP("input", "i", "",
-		"the original transactions file")
-	cmd.Must(viper.BindPFlag("input", CheckStatusGeminiSettlementCmd.PersistentFlags().Lookup("input")))
-	cmd.Must(CheckStatusGeminiSettlementCmd.MarkPersistentFlagRequired("input"))
 
 	CheckStatusGeminiSettlementCmd.Flags().String("out", "",
 		"the output file name")
