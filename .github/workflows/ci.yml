@@ -42,15 +42,15 @@ jobs:
         - 1.14
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
+      uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
 
     - name: Set up Go 1.x
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@37335c7bb261b353407cff977110895fa0b4f7d8
       with:
         go-version: ${{matrix.goversion}}
 
     - name: Docker Compose Install
-      uses: KengoTODA/actions-setup-docker-compose@main
+      uses: KengoTODA/actions-setup-docker-compose@18153c6e0425d2c1b2371d94f4c9c2942dd5e514
       with:
         version: '1.25.4'
 
@@ -62,7 +62,7 @@ jobs:
           ${{ runner.os }}-go-
 
     - run: docker-compose pull
-    - uses: satackey/action-docker-layer-caching@v0.0.8
+    - uses: satackey/action-docker-layer-caching@fa1b3bc6ce1aa62eb156144f9c8aacb336c40f0a
       # Ignore the failure of a step and avoid terminating the job.
       continue-on-error: true
       with:
