@@ -55,7 +55,7 @@ jobs:
         version: '1.25.4'
 
     - name: Cache Docker Images
-      uses: satackey/action-docker-layer-caching@fa1b3bc6ce1aa62eb156144f9c8aacb336c40f0a
+      uses: satackey/action-docker-layer-caching@da67a6cd88114ce3e232893dc6d946efa225aefb
       # Ignore the failure of a step and avoid terminating the job.
       continue-on-error: true
       with:
