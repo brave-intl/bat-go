@@ -50,7 +50,7 @@ jobs:
         go-version: ${{matrix.goversion}}
 
     - name: Docker Compose Install
-      uses: KengoTODA/actions-setup-docker-compose@18153c6e0425d2c1b2371d94f4c9c2942dd5e514
+      uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
       with:
         version: '1.25.4'
 
