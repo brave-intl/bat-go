@@ -63,7 +63,8 @@ jobs:
         restore-keys: |
           docker-cache-
 
-    - uses: actions/cache@0781355a23dac32fd3bac414512f4b903437991a
+    - name: Cache Go Modules
+      uses: actions/cache@0781355a23dac32fd3bac414512f4b903437991a
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
