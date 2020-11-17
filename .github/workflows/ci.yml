@@ -54,7 +54,16 @@ jobs:
       with:
         version: '1.25.4'
 
-    - uses: actions/cache@v2
+    - name: Cache Docker Images
+      uses: satackey/action-docker-layer-caching@fa1b3bc6ce1aa62eb156144f9c8aacb336c40f0a
+      # Ignore the failure of a step and avoid terminating the job.
+      continue-on-error: true
+      with:
+        key: docker-cache-{hash}
+        restore-keys: |
+          docker-cache-
+
+    - uses: actions/cache@0781355a23dac32fd3bac414512f4b903437991a
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
