@@ -50,7 +50,7 @@ jobs:
         go-version: ${{matrix.goversion}}
 
     - name: Docker Compose Install
-      uses: KengoTODA/actions-setup-docker-compose@18153c6e0425d2c1b2371d94f4c9c2942dd5e514
+      uses: KengoTODA/actions-setup-docker-compose@ffb7bc6a5a354e791732e398b4ceb9ede9a8e803
       with:
         version: '1.25.4'
 
@@ -62,13 +62,6 @@ jobs:
           ${{ runner.os }}-go-
 
     - run: docker-compose pull
-    - uses: satackey/action-docker-layer-caching@fa1b3bc6ce1aa62eb156144f9c8aacb336c40f0a
-      # Ignore the failure of a step and avoid terminating the job.
-      continue-on-error: true
-      with:
-        key: docker-cache-{hash}
-        restore-keys: |
-          docker-cache-
 
     - name: Vault
       run: |
