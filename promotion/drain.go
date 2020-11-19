@@ -93,8 +93,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		if !claim.Drained {
 			// the original request context will be cancelled as soon as the dialer closes the connection.
 			// this will setup a new context with the same values and a minute timeout
-			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
-			ctx = contextutil.Wrap(ctx, asyncCtx)
 			if len(v.Credentials) != len(clampedCredentials) {
 				// put extra suggestions into table
 				extraCredentials := v.Credentials[suggestionsExpected:]
@@ -104,6 +102,8 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 				}
 			}
 
+			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+			ctx = contextutil.Wrap(ctx, asyncCtx)
 			go func() {
 				defer asyncCancel()
 				defer middleware.ConcurrentGoRoutines.With(

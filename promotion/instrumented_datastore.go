@@ -12,6 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
