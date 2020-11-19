@@ -2,8 +2,6 @@ package vault
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -14,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
+	geminisettlement "github.com/brave-intl/bat-go/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -58,41 +57,54 @@ func init() {
 	)
 
 	// in -> the file to parse and sign according to each provider's setup. default: contributions.json
-	SignSettlementCmd.PersistentFlags().String("in", "contributions.json",
+	SignSettlementCmd.Flags().String("in", "contributions.json",
 		"input file path")
-	cmd.Must(viper.BindPFlag("in", SignSettlementCmd.PersistentFlags().Lookup("in")))
+	cmd.Must(viper.BindPFlag("in", SignSettlementCmd.Flags().Lookup("in")))
 
 	providers := []string{}
 	for k := range providerTransactionTypes {
 		providers = append(providers, k)
 	}
 	// providers -> the providers to parse out of the file and parse. default: uphold paypal gemini
-	SignSettlementCmd.PersistentFlags().StringSlice("providers", providers,
+	SignSettlementCmd.Flags().StringSlice("providers", providers,
 		"providers to parse out of the given input files")
-	cmd.Must(viper.BindPFlag("providers", SignSettlementCmd.PersistentFlags().Lookup("providers")))
+	cmd.Must(viper.BindPFlag("providers", SignSettlementCmd.Flags().Lookup("providers")))
 
 	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
-	SignSettlementCmd.PersistentFlags().Float64("jpyrate", 0.0,
+	SignSettlementCmd.Flags().Float64("jpyrate", 0.0,
 		"jpyrate to use for paypal payouts")
-	cmd.Must(viper.BindPFlag("jpyrate", SignSettlementCmd.PersistentFlags().Lookup("jpyrate")))
+	cmd.Must(viper.BindPFlag("jpyrate", SignSettlementCmd.Flags().Lookup("jpyrate")))
 }
 
 // SignSettlement runs the signing of a settlement
 func SignSettlement(command *cobra.Command, args []string) error {
 	ReadConfig(command)
-	providers := viper.GetStringSlice("providers")
-	inputFile := viper.GetString("in")
+	providers, err := command.Flags().GetStringSlice("providers")
+	if err != nil {
+		return err
+	}
+	inputFile, err := command.Flags().GetString("in")
+	if err != nil {
+		return err
+	}
 	// append -signed to the filename
 	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-signed.json"
 	logger, err := appctx.GetLogger(command.Context())
-	cmd.Must(err)
+	if err != nil {
+		return err
+	}
+
 	// all settlements file
 	settlementJSON, err := ioutil.ReadFile(inputFile)
-	cmd.Must(err)
+	if err != nil {
+		return err
+	}
 
 	var antifraudSettlements []settlement.AntifraudTransaction
 	err = json.Unmarshal(settlementJSON, &antifraudSettlements)
-	cmd.Must(err)
+	if err != nil {
+		return err
+	}
 
 	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
 
@@ -123,7 +135,9 @@ func SignSettlement(command *cobra.Command, args []string) error {
 				secretKey,
 				settlements,
 			)
-			cmd.Must(err)
+			if err != nil {
+				return err
+			}
 			sublog.Info().Msg("created artifact")
 		}
 	}
@@ -220,7 +234,7 @@ func createGeminiArtifact(
 	}
 	oauthClientID := response.Data["clientid"].(string)
 	// group transactions (500 at a time)
-	privatePayloads, err := settlementcmd.GeminiTransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
+	privatePayloads, err := geminisettlement.TransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -261,43 +275,12 @@ func signGeminiRequests(
 	if err != nil {
 		return nil, err
 	}
-
-	privateRequestSequences := make([]gemini.PrivateRequestSequence, 0)
-	// sign each request
-	for _, privateRequestRequirements := range *privateRequests {
-		base := gemini.NewBulkPayoutPayload(
-			nil,
-			clientID,
-			&privateRequestRequirements,
-		)
-		signatures := []string{}
-		// store the original nonce
-		originalNonce := base.Nonce
-		for i := 0; i < 10; i++ {
-			// increment the nonce to correspond to each signature
-			base.Nonce = originalNonce + int64(i)
-			marshalled, err := json.Marshal(base)
-			if err != nil {
-				return nil, err
-			}
-			serializedPayload := base64.StdEncoding.EncodeToString(marshalled)
-			sig, err := hmacSecret.HMACSha384(
-				[]byte(serializedPayload),
-			)
-			if err != nil {
-				return nil, err
-			}
-			signatures = append(signatures, hex.EncodeToString(sig))
-		}
-		base.Nonce = originalNonce
-		requestSequence := gemini.PrivateRequestSequence{
-			Signatures: signatures,
-			Base:       base,
-			APIKey:     clientKey,
-		}
-		privateRequestSequences = append(privateRequestSequences, requestSequence)
-	}
-	return &privateRequestSequences, nil
+	return geminisettlement.SignRequests(
+		clientID,
+		clientKey,
+		hmacSecret,
+		privateRequests,
+	)
 }
 
 func createPaypalArtifact(
