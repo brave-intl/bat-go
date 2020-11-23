@@ -790,7 +790,7 @@ func (suite *ControllersTestSuite) setupAdsClaim(service *Service, w *walletutil
 	suite.Require().NoError(err, "a promotion should be activated")
 
 	grantAmount := decimal.NewFromFloat(30.0)
-	claim, err := service.Datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	claim, err := service.Datastore.CreateClaim(promotion.ID, w.ID, grantAmount, decimal.NewFromFloat(claimBonus), false)
 	suite.Require().NoError(err, "create a claim for a promotion")
 
 	return promotion, issuer, claim
@@ -1151,12 +1151,9 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			suite.Require().NoError(pg.DeactivatePromotion(promotion), "deactivating a promotion should succeed")
 		}
 
-		var claim *Claim
 		if test.Legacy {
-			claim, err = service.Datastore.CreateClaim(promotion.ID, info.ID, promotionValue, decimal.NewFromFloat(0.0))
+			_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, promotionValue, decimal.NewFromFloat(0.0), test.Legacy)
 			suite.Require().NoError(err, "an error occurred when creating a claim for wallet")
-			_, err = pg.RawDB().Exec(`update claims set legacy_claimed = $2 where id = $1`, claim.ID.String(), test.Legacy)
-			suite.Require().NoError(err, "an error occurred when setting legacy or redeemed")
 		}
 
 		if test.PromoActive {
@@ -1272,7 +1269,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	claimBonus := 0.25
 	grantAmount := decimal.NewFromFloat(0.25)
-	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus))
+	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus), false)
 	suite.Require().NoError(err, "create a claim for a promotion")
 
 	issuerName := promotion.ID.String() + ":control"

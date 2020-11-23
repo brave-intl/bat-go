@@ -177,7 +177,8 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			}
 			logger.Debug().Msg("RedeemAndTransferFunds: creating the claim to destination")
 			// create a new claim for the wallet deposit account for total
-			_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero)
+			// this is a legacy claimed claim
+			_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero, true)
 			if err != nil {
 				var pgErr *pq.Error
 				if errors.As(err, &pgErr) {
@@ -191,6 +192,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to create a new claim to destination")
 				return nil, err
 			}
+			break
 		}
 		if attempts >= len(braveTransferPromotionIDs) {
 			return nil, errors.New("limit of draining 4 wallets to brave wallet exceeded")
