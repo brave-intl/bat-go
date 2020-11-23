@@ -183,6 +183,20 @@ func (_d DatastoreWithPrometheus) GetOrderCreds(orderID uuid.UUID, isSigned bool
 	return _d.base.GetOrderCreds(orderID, isSigned)
 }
 
+// DeleteOrderCreds implements Datastore
+func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteOrderCreds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DeleteOrderCreds(orderID, isSigned)
+}
+
 // GetOrderCredsByItemID implements Datastore
 func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (op1 *OrderCreds, err error) {
 	_since := time.Now()

@@ -30,6 +30,7 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+	r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", GetOrder(service)))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -38,6 +39,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+	r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
 	return r
@@ -55,7 +57,7 @@ func CredentialRouter(service *Service) chi.Router {
 // PaymentRouter handles calls relating to payments
 func PaymentRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/stripe/webhooks", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/webhooks/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	return r
 }
 
@@ -276,6 +278,28 @@ func GetOrder(service *Service) handlers.AppHandler {
 	})
 }
 
+// CancelOrder is the handler for cancelling an order
+func CancelOrder(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		err := service.Datastore.UpdateOrder(*orderID.UUID(), "cancelled")
+		if err != nil {
+			return handlers.WrapError(err, "error cancelling order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), "Order successfully cancelled", w, http.StatusOK)
+	})
+}
+
 // GetTransactions is the handler for listing the transactions for an order
 func GetTransactions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -466,6 +490,28 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	})
 }
 
+// DeleteOrderCreds is the handler for deleting order credentials
+func DeleteOrderCreds(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), false)
+		if err != nil {
+			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
+	})
+}
+
 // GetOrderCredsByID is the handler for fetching order credentials by an item id
 func GetOrderCredsByID(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -641,7 +687,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Fulfill order only if checkout session completed
-		if event.Type == "checkout.session.completed" {
+		if event.Type == "invoice.paid" {
 			var session stripe.CheckoutSession
 			err := json.Unmarshal(event.Data.Raw, &session)
 			if err != nil {
@@ -655,10 +701,25 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			if err != nil {
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
-			return handlers.RenderContent(r.Context(), "checkout successful", w, http.StatusOK)
+			return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+		} else if event.Type == "invoice.payment_failed" {
+			var session stripe.CheckoutSession
+			err := json.Unmarshal(event.Data.Raw, &session)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+			orderID, err := uuid.FromString(session.ClientReferenceID)
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving client reference ID", http.StatusBadRequest)
+			}
+			err = service.Datastore.UpdateOrder(orderID, "payment_failed")
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "payment_failed", w, http.StatusOK)
 		}
 
-		return handlers.RenderContent(r.Context(), "error in checkout session", w, http.StatusBadRequest)
+		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
 	})
 }
 

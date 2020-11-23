@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
@@ -43,35 +44,44 @@ type OrderItem struct {
 	Description datastore.NullString `json:"description" db:"description"`
 }
 
+const (
+	PROD_USER_WALLET_VOTE       = "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J"
+	PROD_ANON_CARD_VOTE         = "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o="
+	PROD_BRAVE_TOGETHER_FREE    = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlILeuqgF6G9nPczv/CLyEtAQB/evX8RGFqXAxjga4++3HCg=="
+	PROD_BRAVE_TOGETHER_PAID    = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDM2aWRlbnRpZmllciBicmF2ZSBicmF2ZS10b2dldGhlci1wYWlkIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS10b2dldGhlci1wYWlkCjAwMTBjaWQgcHJpY2U9NQowMDE1Y2lkIGN1cnJlbmN5PVVTRAowMDM5Y2lkIGRlc2NyaXB0aW9uPXBhaWQgc3Vic2NyaXB0aW9uIGZvciBicmF2ZSB0b2dldGhlcgowMDIzY2lkIGNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlCjAwMmZzaWduYXR1cmUgod5rH3D4XQsvXHz65EZGLGv7HQFNtN4SJBzaWdAocdkK"
+	STAGING_USER_WALLET_VOTE    = "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W"
+	STAGING_ANON_CARD_VOTE      = "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M="
+	STAGING_BRAVE_TOGETHER_FREE = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg=="
+	STAGING_BRAVE_TOGETHER_PAID = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDM2aWRlbnRpZmllciBicmF2ZSBicmF2ZS10b2dldGhlci1wYWlkIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS10b2dldGhlci1wYWlkCjAwMTBjaWQgcHJpY2U9NQowMDE1Y2lkIGN1cnJlbmN5PVVTRAowMDM5Y2lkIGRlc2NyaXB0aW9uPXBhaWQgc3Vic2NyaXB0aW9uIGZvciBicmF2ZSB0b2dldGhlcgowMDIzY2lkIGNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlCjAwMmZzaWduYXR1cmUgks5MSsT0v9cpb0MamU5blzHb+CxRO3WYAENbSkZ3bDAK"
+	DEV_USER_WALLET_VOTE        = "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M"
+	DEV_ANON_CARD_VOTE          = "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ="
+	DEV_BRAVE_TOGETHER_FREE     = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIAs+/paWWm0Kxm/do/8bPGga5ETPVRx1w6J8SPq0mzBFCg=="
+	DEV_BRAVE_TOGETHER_PAID     = "MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDM2aWRlbnRpZmllciBicmF2ZSBicmF2ZS10b2dldGhlci1wYWlkIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS10b2dldGhlci1wYWlkCjAwMTBjaWQgcHJpY2U9NQowMDE1Y2lkIGN1cnJlbmN5PVVTRAowMDM5Y2lkIGRlc2NyaXB0aW9uPXBhaWQgc3Vic2NyaXB0aW9uIGZvciBicmF2ZSB0b2dldGhlcgowMDIzY2lkIGNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlCjAwMmZzaWduYXR1cmUgpkP6KyaaKg6UmrqtbuRR16xtQ3TyQcDY6G33GmNLWAsK"
+)
+
 // IsValidSKU checks to see if the token provided is one that we've previously created
 func IsValidSKU(sku string) bool {
 	env := os.Getenv("ENV")
 	if env == "production" {
 		switch sku {
 		case
-			// Production - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J",
-			// Production - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o=",
-			// Production - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlILeuqgF6G9nPczv/CLyEtAQB/evX8RGFqXAxjga4++3HCg==":
+			PROD_USER_WALLET_VOTE,
+			PROD_ANON_CARD_VOTE,
+			PROD_BRAVE_TOGETHER_FREE,
+			PROD_BRAVE_TOGETHER_PAID:
 			return true
 		}
 	} else {
 		switch sku {
 		case
-			// Dev - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
-			// Dev - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
-			// Dev - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIAs+/paWWm0Kxm/do/8bPGga5ETPVRx1w6J8SPq0mzBFCg==",
-			// Staging - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W",
-			// Staging - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
-			// Staging - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
+			STAGING_USER_WALLET_VOTE,
+			STAGING_ANON_CARD_VOTE,
+			STAGING_BRAVE_TOGETHER_FREE,
+			STAGING_BRAVE_TOGETHER_PAID,
+			DEV_USER_WALLET_VOTE,
+			DEV_ANON_CARD_VOTE,
+			DEV_BRAVE_TOGETHER_FREE,
+			DEV_BRAVE_TOGETHER_PAID:
 			return true
 		}
 	}
@@ -145,7 +155,13 @@ func (order Order) IsPaid() bool {
 }
 
 // IsStripePayable returns true if every sku is payable by Stripe
+// Noticed that Items.SKU is not the macaroon hash, but rather friendly name of SKU
 func (order Order) IsStripePayable() bool {
+	for i := 0; i < len(order.Items); i++ {
+		if order.Items[i].SKU != "brave-together-paid" {
+			return false
+		}
+	}
 	return true
 }
 
@@ -157,33 +173,35 @@ type CreateCheckoutSessionResponse struct {
 func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
 	stripe.Key = os.Getenv("STRIPE_SECRET")
 
-	// Prepare checkout line items
-	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
-	for i := 0; i < len(order.Items); i++ {
-		price := ConvertPriceToUnitAmount(order.Items[i].Price)
-		quantity := int64(order.Items[i].Quantity)
-		name := order.Items[i].SKU
-		lineItems[i] = &stripe.CheckoutSessionLineItemParams{
-			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-				Currency: stripe.String("usd"),
-				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-					Name: stripe.String(name),
-				},
-				UnitAmountDecimal: stripe.Float64(price),
-			},
-			Quantity: stripe.Int64(quantity),
-		}
+	// Create Stripe customer if one doesn't already exist
+	// TODO - Email should be passed with create order request
+	customerParams := &stripe.CustomerParams{
+		// Email: stripe.String(email),
 	}
+	customer, _ := customer.New(customerParams)
 
+	metadata := make(map[string]string)
+	metadata["orderID"] = order.ID.String()
+
+	// TODO - Match SKUs to Stripe Price Objects
 	params := &stripe.CheckoutSessionParams{
+		Customer: stripe.String(customer.ID),
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
-		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
-		LineItems:         lineItems,
-		ClientReferenceID: stripe.String(order.ID.String()),
+		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		SuccessURL:        stripe.String("https://example.com/success"),
 		CancelURL:         stripe.String("https://example.com/cancel"),
+		ClientReferenceID: stripe.String(order.ID.String()),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			&stripe.CheckoutSessionLineItemParams{
+				Price:    stripe.String("price_1Hpg8nHof20bphG6X4eQ6Dit"),
+				Quantity: stripe.Int64(1),
+			},
+		},
+		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
+			Metadata: metadata,
+		},
 	}
 
 	session, _ := session.New(params)
