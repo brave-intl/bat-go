@@ -3,7 +3,7 @@ module github.com/brave-intl/bat-go
 go 1.14
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.4.1
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
