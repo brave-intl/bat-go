@@ -10,7 +10,7 @@ require (
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/ethereum/go-ethereum v1.7.2
 	github.com/frankban/quicktest v1.4.2 // indirect
-	github.com/getsentry/sentry-go v0.5.1
+	github.com/getsentry/sentry-go v0.8.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/golang-migrate/migrate/v4 v4.14.1
