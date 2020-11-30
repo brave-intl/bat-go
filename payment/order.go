@@ -1,7 +1,6 @@
 package payment
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -154,11 +153,10 @@ func (order Order) IsPaid() bool {
 	return order.Status == "paid"
 }
 
-// IsStripePayable returns true if every sku is payable by Stripe
-// Noticed that Items.SKU is not the macaroon hash, but rather friendly name of SKU
+// IsStripePayable returns true if every item is payable by Stripe
 func (order Order) IsStripePayable() bool {
-	for i := 0; i < len(order.Items); i++ {
-		if order.Items[i].SKU != "brave-together-paid" {
+	for _, item := range order.Items {
+		if item.SKU != "brave-together-paid" {
 			return false
 		}
 	}
@@ -171,12 +169,12 @@ type CreateCheckoutSessionResponse struct {
 
 // Create a Stripe Checkout Session for an Order
 func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
-	stripe.Key = os.Getenv("STRIPE_SECRET")
+	stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
 
 	// Create Stripe customer if one doesn't already exist
-	// TODO - Email should be passed with create order request
+	// TODO - Email should be stored on Order at creation time.
 	customerParams := &stripe.CustomerParams{
-		// Email: stripe.String(email),
+		Email: stripe.String("danlipeles@icloud.com"),
 	}
 	customer, _ := customer.New(customerParams)
 
@@ -199,10 +197,10 @@ func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
 				Quantity: stripe.Int64(1),
 			},
 		},
-		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
-			Metadata: metadata,
-		},
+		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{},
 	}
+
+	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
 
 	session, _ := session.New(params)
 
@@ -210,12 +208,4 @@ func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
 		SessionID: session.ID,
 	}
 	return data
-}
-
-func ConvertPriceToUnitAmount(price decimal.Decimal) float64 {
-	n, exact := price.Float64()
-	if !exact {
-		fmt.Println("Error typecasting price")
-	}
-	return n * float64(100.00)
 }

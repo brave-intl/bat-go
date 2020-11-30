@@ -21,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stripe/stripe-go/client"
 	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/webhook"
 )
@@ -670,8 +671,8 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		stripe.Key = os.Getenv("STRIPE_SECRET")
-		endpointSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+		stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
+		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
 
 		const MaxBodyBytes = int64(65536)
 		r.Body = http.MaxBytesReader(w, r.Body, MaxBodyBytes)
@@ -686,37 +687,43 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
-		// Fulfill order only if checkout session completed
-		if event.Type == "invoice.paid" {
-			var session stripe.CheckoutSession
-			err := json.Unmarshal(event.Data.Raw, &session)
+		// Handle invoice events
+		if event.Type == "invoice.updated" {
+
+			// Retrieve invoice from update events
+			var invoice stripe.Invoice
+			err := json.Unmarshal(event.Data.Raw, &invoice)
 			if err != nil {
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
-			orderID, err := uuid.FromString(session.ClientReferenceID)
+
+			// Get the subscription and orderID connected to this invoice
+			sc := &client.API{}
+			sc.Init("sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo", nil)
+			subscription, err := sc.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
-				return handlers.WrapError(err, "error retrieving client reference ID", http.StatusBadRequest)
+				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
-			err = service.Datastore.UpdateOrder(orderID, "paid")
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-			return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
-		} else if event.Type == "invoice.payment_failed" {
-			var session stripe.CheckoutSession
-			err := json.Unmarshal(event.Data.Raw, &session)
-			if err != nil {
-				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+
+			// If the invoice is paid set order status to paid, otherwise
+			if invoice.Paid {
+				err = service.Datastore.UpdateOrder(orderID, "paid")
+				if err != nil {
+					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				}
+				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+			} else {
+				err = service.Datastore.UpdateOrder(orderID, "payment_failed")
+				if err != nil {
+					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				}
+				return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
 			}
-			orderID, err := uuid.FromString(session.ClientReferenceID)
-			if err != nil {
-				return handlers.WrapError(err, "error retrieving client reference ID", http.StatusBadRequest)
-			}
-			err = service.Datastore.UpdateOrder(orderID, "payment_failed")
-			if err != nil {
-				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
-			}
-			return handlers.RenderContent(r.Context(), "payment_failed", w, http.StatusOK)
+
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)

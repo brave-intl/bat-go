@@ -46,7 +46,6 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 		chiware.Heartbeat("/"),
 		chiware.Timeout(timeout),
 		middleware.BearerToken,
-		middleware.RateLimiter(ctx, 180),
 		middleware.RequestIDTransfer)
 	if logger != nil {
 		// Also handles panic recovery
