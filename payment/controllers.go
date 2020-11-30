@@ -29,15 +29,17 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	// TODO - Scope down CORS to origins / methods we'll need.
 	if os.Getenv("ENV") != "production" {
-		cors := cors.New(cors.Options{
-			AllowedOrigins:   []string{"*"},
+		r.Use(cors.Handler(cors.Options{
+			Debug:          true,
+			AllowedOrigins: []string{"http://localhost:8080"}, // Use this to allow specific origin hosts
+			//AllowedOrigins: []string{"*"},
+			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"X-PINGOTHER", "Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
 			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: true,
+			AllowCredentials: false,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
-		})
-		r.Use(cors.Handler)
+		}))
 	}
 
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
