@@ -31,7 +31,7 @@ func Router(service *Service) chi.Router {
 	if os.Getenv("ENV") != "production" {
 		r.Use(cors.Handler(cors.Options{
 			Debug:          true,
-			AllowedOrigins: []string{"http://localhost:8080"}, // Use this to allow specific origin hosts
+			AllowedOrigins: []string{"https://confab.bsg.brave.software"}, // Use this to allow specific origin hosts
 			//AllowedOrigins: []string{"*"},
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
