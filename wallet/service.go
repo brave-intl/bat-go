@@ -282,7 +282,9 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
-			status = http.StatusConflict
+			// we are not allowing draining to wallets that exceed the linking limits
+			// this will cause an error in the client prior to attempting draining
+			status = http.StatusTeapot
 		}
 		return handlers.WrapError(err, "unable to link wallets", status)
 	}
