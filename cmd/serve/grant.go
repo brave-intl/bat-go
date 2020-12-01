@@ -80,8 +80,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.
-	// (e.g. with header "X-Forwarded-For: client, proxy1, proxy2" it would yield "client" as the real IP.)
-	// The grant server is only accessed by the ledger service, so headers are semi-trusted.
 	// Consequently we should consider the request IP as primarily "informational".
 	r.Use(chiware.RealIP)
 

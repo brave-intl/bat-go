@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/clients/balance"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -83,7 +82,6 @@ type Service struct {
 	RoDatastore             ReadOnlyDatastore
 	cbClient                cbr.Client
 	reputationClient        reputation.Client
-	balanceClient           balance.Client
 	codecs                  map[string]*goavro.Codec
 	kafkaWriter             *kafka.Writer
 	kafkaDialer             *kafka.Dialer
@@ -193,11 +191,6 @@ func InitService(
 		return nil, err
 	}
 
-	balanceClient, err := balance.New()
-	if err != nil {
-		return nil, err
-	}
-
 	reputationClient, err := reputation.New()
 	// okay to fail to make a reputation client if the environment is local
 	if err != nil && os.Getenv("ENV") != localEnv {
@@ -209,7 +202,6 @@ func InitService(
 		RoDatastore:             promotionRODB,
 		cbClient:                cbClient,
 		reputationClient:        reputationClient,
-		balanceClient:           balanceClient,
 		wallet:                  walletService,
 		pauseSuggestionsUntilMu: sync.RWMutex{},
 	}

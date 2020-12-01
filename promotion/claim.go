@@ -168,13 +168,6 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, err
 	}
 
-	if claim.LegacyClaimed {
-		err = service.balanceClient.InvalidateBalance(ctx, walletID)
-		if err != nil {
-			sentry.CaptureException(err)
-		}
-	}
-
 	value, _ := claim.ApproximateValue.Float64()
 	labels := prometheus.Labels{
 		"platform": promotion.Platform,
