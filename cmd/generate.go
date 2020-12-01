@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/jsonschema"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -15,17 +14,14 @@ import (
 	"github.com/spf13/viper"
 )
 
-var overwrite bool
-
 func init() {
 	RootCmd.AddCommand(GenerateCmd)
 	GenerateCmd.AddCommand(JSONSchemaCmd)
 
 	// overwrite - defaults to false
-	JSONSchemaCmd.PersistentFlags().BoolVarP(&overwrite, "overwrite", "", false,
+	JSONSchemaCmd.Flags().Bool("overwrite", false,
 		"overwrite the existing json schema files")
-	Must(viper.BindPFlag("overwrite", JSONSchemaCmd.PersistentFlags().Lookup("overwrite")))
-	Must(viper.BindEnv("overwrite", "OVERWRITE"))
+	Must(viper.BindPFlag("overwrite", JSONSchemaCmd.Flags().Lookup("overwrite")))
 }
 
 // GenerateCmd is the generate command
@@ -38,14 +34,20 @@ var GenerateCmd = &cobra.Command{
 var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
-	Run:   jsonSchemaRun,
+	Run:   Perform("generate json schema", jsonSchemaRun),
 }
 
 // jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand
-func jsonSchemaRun(command *cobra.Command, args []string) {
+func jsonSchemaRun(command *cobra.Command, args []string) error {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	Must(err)
+	if err != nil {
+		return err
+	}
+	overwrite, err := command.Flags().GetBool("overwrite")
+	if err != nil {
+		return err
+	}
 	logger.Info().Msg("starting json-schema generation")
 
 	// Wallet Outputs ./wallet/outputs.go
@@ -55,9 +57,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) {
 
 		schema, err := jsonschema.ReflectFromType(t).MarshalJSON()
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to generate json schema")
-			<-time.After(1 * time.Second)
-			os.Exit(1)
+			return fmt.Errorf("failed to generate json schema: %w", err)
 		}
 
 		parts := strings.Split(t.String(), ".")
@@ -70,12 +70,10 @@ func jsonSchemaRun(command *cobra.Command, args []string) {
 		} else {
 			// test equality of schema file with what we just generated
 			if !bytes.Equal(existingSchema, schema) {
-				if viper.GetBool("overwrite") {
+				if overwrite {
 					logger.Warn().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
 				} else {
-					logger.Error().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
-					<-time.After(1 * time.Second)
-					os.Exit(1)
+					return fmt.Errorf("Schema has changed: %s.%s", parts[0], parts[1])
 				}
 			}
 		}
@@ -84,14 +82,12 @@ func jsonSchemaRun(command *cobra.Command, args []string) {
 			fmt.Sprintf("./schema/%s/%s", parts[0], parts[1]),
 			schema, 0644)
 		if err != nil {
-			logger.Error().Err(err).Msg("failed to generate json schema")
-			<-time.After(1 * time.Second)
-			os.Exit(1)
+			return fmt.Errorf("failed to generate json schema: %w", err)
 		}
 
 		fmt.Fprintf(os.Stdout, "%s\n", schema)
 	}
 
 	logger.Info().Msg("completed json-schema generation")
-	<-time.After(1 * time.Second)
+	return nil
 }

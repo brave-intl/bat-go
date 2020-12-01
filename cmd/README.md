@@ -195,3 +195,16 @@ unseals vault
 ```bash
 gpg -d ./share-0.gpg | ./bat-go vault unseal
 ```
+
+## generate
+
+### json-schema
+
+generates json schemas
+```bash
+go run main.go generate json-schema
+```
+with override
+```bash
+go run main.go generate json-schema --overwrite
+```

@@ -42,6 +42,11 @@ func init() {
 	SettlementCmd.AddCommand(
 		UpholdCmd,
 	)
+
+	UpholdUploadCmd.Flags().Bool("verbose", false,
+		"how verbose logging should be")
+	cmd.Must(viper.BindPFlag("verbose", UpholdUploadCmd.Flags().Lookup("verbose")))
+
 	UpholdUploadCmd.Flags().String("input", "",
 		"input file to submit to a given provider")
 	cmd.Must(viper.BindPFlag("input", UpholdUploadCmd.Flags().Lookup("input")))

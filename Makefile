@@ -94,8 +94,7 @@ settlement-tools:
 	mkdir -p target/settlement-tools
 	cp settlement/config.hcl target/settlement-tools/
 	cp settlement/README.md target/settlement-tools/
-	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/settlement-submit
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o target/settlement-tools/bat-cli
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 docker-settlement-tools:
@@ -120,6 +119,12 @@ download-vault:
 	cd target/settlement-tools && gpg --verify vault_$(VAULT_VERSION)_SHA256SUMS.sig vault_$(VAULT_VERSION)_SHA256SUMS
 	cd target/settlement-tools && grep $(GOOS)_$(GOARCH) vault_$(VAULT_VERSION)_SHA256SUMS | shasum -a 256 -c
 	cd target/settlement-tools && unzip -o vault_$(VAULT_VERSION)_$(GOOS)_$(GOARCH).zip vault && rm vault_$(VAULT_VERSION)_*
+
+vault:
+	./target/settlement-tools/vault server -config=./target/settlement-tools/config.hcl
+
+vault-clean:
+	rm -rf share-0.gpg target/settlement-tools/vault-data vault-data
 
 json-schema:
 	go run main.go generate json-schema --overwrite
