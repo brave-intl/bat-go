@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
@@ -18,6 +19,11 @@ func SignRequests(
 ) (*[]gemini.PrivateRequestSequence, error) {
 	privateRequestSequences := make([]gemini.PrivateRequestSequence, 0)
 	// sign each request
+
+	if len(clientID) == 0 {
+		return nil, errors.New("a client id was missing during the gemini settlement signing process")
+	}
+
 	for _, privateRequestRequirements := range *privateRequests {
 		base := gemini.NewBulkPayoutPayload(
 			nil,

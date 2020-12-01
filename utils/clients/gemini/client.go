@@ -93,6 +93,9 @@ func GenerateTxRef(tx *settlement.Transaction) string {
 
 // NewBulkPayoutPayload generate a new bulk payout payload
 func NewBulkPayoutPayload(account *string, oauthClientID string, payouts *[]PayoutPayload) BulkPayoutPayload {
+	if oauthClientID == "" {
+		panic("unable to sign a payload without an oauth client id (GEMINI_CLIENT_ID)")
+	}
 	return BulkPayoutPayload{
 		Account:       account,
 		OauthClientID: oauthClientID,
