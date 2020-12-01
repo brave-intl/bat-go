@@ -21,7 +21,6 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	mockbalance "github.com/brave-intl/bat-go/utils/clients/balance/mock"
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
@@ -872,7 +871,6 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
-	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
 		Datastore:        pg,
