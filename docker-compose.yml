@@ -53,6 +53,8 @@ services:
       - GEMINI_CLIENT_SECRET
       - GEMINI_CLIENT_ID
       - GEMINI_TEST_DESTINATION_ID
+      - STRIPE_SECRET
+      - STRIPE_WEBHOOK_SECRET
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -114,6 +116,8 @@ services:
       - GEMINI_CLIENT_SECRET
       - GEMINI_CLIENT_ID
       - GEMINI_TEST_DESTINATION_ID
+      - STRIPE_SECRET
+      - STRIPE_WEBHOOK_SECRET
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

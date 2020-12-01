@@ -217,8 +217,9 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			// create wallet routes for our wallet providers
 			r.Post("/uphold", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
 				"CreateUpholdWallet", CreateUpholdWalletV3)).ServeHTTP)
-			r.Post("/brave", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
-				"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
+			//r.Post("/brave", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
+			//"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
+			r.Post("/brave", middleware.InstrumentHandlerFunc("CreateBraveWallet", CreateBraveWalletV3))
 
 			// if wallets are being migrated we do not want to over claim, we might go over the limit
 			if viper.GetBool("enable-link-drain-flag") {

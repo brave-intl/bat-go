@@ -21,13 +21,14 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go/v71"
+	stripe "github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/webhook"
 )
 
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 
@@ -255,7 +256,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 		if !order.IsPaid() && order.IsStripePayable() {
 			type OrderWithCheckoutSession struct {
 				*Order
-				CheckoutSession CreateCheckoutSessionResponse
+				CheckoutSession CreateCheckoutSessionResponse `json:"checkoutSession"`
 			}
 
 			checkoutSession := order.CreateCheckoutSession()

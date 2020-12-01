@@ -43,7 +43,7 @@ func init() {
 	cmd.Must(viper.BindEnv("datastore", "DATABASE_URL"))
 
 	// walletsFeatureFlag - enable the wallet endpoints through this feature flag
-	WalletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", false,
+	WalletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", true,
 		"the feature flag enabling the wallets feature")
 	cmd.Must(viper.BindPFlag("wallets-feature-flag", WalletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
 	cmd.Must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
