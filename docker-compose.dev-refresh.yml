@@ -50,7 +50,6 @@ services:
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
-      - "BALANCE_SERVER=https://balance-staging.mercury.basicattentiontoken.org"
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "RATIOS_SERVICE=https://ratios-staging.mercury.basicattentiontoken.org"

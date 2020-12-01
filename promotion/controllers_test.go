@@ -878,7 +878,6 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
-		balanceClient:    mockBalance,
 	}
 	handler := PostReportClobberedClaims(service, 1)
 	id0 := uuid.NewV4()
@@ -931,13 +930,11 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
-	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
 		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
-		balanceClient:    mockBalance,
 	}
 	handler := PostReportWalletEvent(service)
 	walletID1 := uuid.NewV4()
@@ -1010,13 +1007,11 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 	suite.Require().NoError(err, "could not connect to db")
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
-	mockBalance := mockbalance.NewMockClient(mockCtrl)
 
 	service := &Service{
 		Datastore:        pg,
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
-		balanceClient:    mockBalance,
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
@@ -1026,44 +1021,40 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 	threeMonthsAgo := now.AddDate(0, -3, 0)
 	later := now.Add(1000 * time.Second)
 	scenarios := []struct {
-		Legacy             bool      // set the claim as legacy
-		Type               string    // the type of promotion (ugp/ads)
-		PromoActive        bool      // set the promotion to be active
-		CreatedAt          time.Time // set the created at time
-		ExpiresAt          time.Time // set the expiration time
-		ClaimStatus        int       // the claim request status
-		ChecksReputation   bool      // reputation will be checked
-		InvalidatesBalance bool      // the balance will be invalidated
+		Legacy           bool      // set the claim as legacy
+		Type             string    // the type of promotion (ugp/ads)
+		PromoActive      bool      // set the promotion to be active
+		CreatedAt        time.Time // set the created at time
+		ExpiresAt        time.Time // set the expiration time
+		ClaimStatus      int       // the claim request status
+		ChecksReputation bool      // reputation will be checked
 	}{
 		{
-			Legacy:             false,
-			Type:               "ugp",
-			PromoActive:        true,
-			CreatedAt:          now,
-			ExpiresAt:          later,
-			ClaimStatus:        http.StatusOK,
-			ChecksReputation:   true,
-			InvalidatesBalance: false,
+			Legacy:           false,
+			Type:             "ugp",
+			PromoActive:      true,
+			CreatedAt:        now,
+			ExpiresAt:        later,
+			ClaimStatus:      http.StatusOK,
+			ChecksReputation: true,
 		},
 		{
-			Legacy:             false,
-			Type:               "ugp",
-			PromoActive:        false,
-			CreatedAt:          now,
-			ExpiresAt:          later,
-			ClaimStatus:        http.StatusGone,
-			ChecksReputation:   true,
-			InvalidatesBalance: false,
+			Legacy:           false,
+			Type:             "ugp",
+			PromoActive:      false,
+			CreatedAt:        now,
+			ExpiresAt:        later,
+			ClaimStatus:      http.StatusGone,
+			ChecksReputation: true,
 		},
 		{
-			Legacy:             true,
-			Type:               "ugp",
-			PromoActive:        true,
-			CreatedAt:          now,
-			ExpiresAt:          later,
-			ClaimStatus:        http.StatusOK,
-			ChecksReputation:   false,
-			InvalidatesBalance: true,
+			Legacy:           true,
+			Type:             "ugp",
+			PromoActive:      true,
+			CreatedAt:        now,
+			ExpiresAt:        later,
+			ClaimStatus:      http.StatusOK,
+			ChecksReputation: false,
 		},
 		{
 			Legacy:      true,
@@ -1073,8 +1064,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			ExpiresAt:   later,
 			ClaimStatus: http.StatusGone,
 			// these are irrelevant if claim is gone
-			ChecksReputation:   false,
-			InvalidatesBalance: false,
+			ChecksReputation: false,
 		},
 		{
 			Legacy:      true,
@@ -1084,8 +1074,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			ExpiresAt:   now,
 			ClaimStatus: http.StatusGone,
 			// these are irrelevant if claim is gone
-			ChecksReputation:   false,
-			InvalidatesBalance: false,
+			ChecksReputation: false,
 		},
 		{
 			Legacy:      true,
@@ -1095,8 +1084,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			ExpiresAt:   now,
 			ClaimStatus: http.StatusGone,
 			// these are irrelevant if claim is gone
-			ChecksReputation:   false,
-			InvalidatesBalance: false,
+			ChecksReputation: false,
 		},
 		{
 			Legacy:      true,
@@ -1106,8 +1094,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			ExpiresAt:   later,
 			ClaimStatus: http.StatusGone,
 			// these are irrelevant if claim is gone
-			ChecksReputation:   false,
-			InvalidatesBalance: false,
+			ChecksReputation: false,
 		},
 	}
 	for _, test := range scenarios {
@@ -1176,15 +1163,6 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 						true,
 						nil,
 					)
-			}
-			// legacy pathway
-			if test.InvalidatesBalance {
-				mockBalance.EXPECT().
-					InvalidateBalance(
-						gomock.Any(),
-						gomock.Eq(walletID),
-					).
-					Return(nil)
 			}
 		}
 		claimID := suite.ClaimGrant(
