@@ -31,7 +31,7 @@ func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
-	r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", GetOrder(service)))
+	r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(service)))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
