@@ -298,7 +298,7 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err := service.Datastore.UpdateOrder(*orderID.UUID(), "cancelled")
+		err := service.Datastore.UpdateOrder(*orderID.UUID(), "canceled")
 		if err != nil {
 			return handlers.WrapError(err, "error cancelling order", http.StatusInternalServerError)
 		}
