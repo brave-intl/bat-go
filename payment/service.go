@@ -156,6 +156,14 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 
 	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
 
+	if !order.IsPaid() && order.IsStripePayable() {
+		checkoutSession := order.CreateStripeCheckoutSession(req.Email)
+		err := s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return order, err
 }
 
@@ -178,6 +186,15 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 		}
 	}
 
+	return nil
+}
+
+// UpdateOrderStatus checks to see if an order has been paid and updates it if so
+func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

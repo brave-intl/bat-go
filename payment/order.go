@@ -168,13 +168,12 @@ type CreateCheckoutSessionResponse struct {
 }
 
 // Create a Stripe Checkout Session for an Order
-func (order Order) CreateCheckoutSession() CreateCheckoutSessionResponse {
+func (order Order) CreateStripeCheckoutSession(email string) CreateCheckoutSessionResponse {
 	stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
 
-	// Create Stripe customer if one doesn't already exist
-	// TODO - Email should be stored on Order at creation time.
+	// https://stackoverflow.com/a/26411833/7274272
 	customerParams := &stripe.CustomerParams{
-		Email: stripe.String("danlipeles@icloud.com"),
+		Email: stripe.String(email),
 	}
 	customer, _ := customer.New(customerParams)
 

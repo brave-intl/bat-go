@@ -30,6 +30,10 @@ type Datastore interface {
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
+	// GetOrderMetadata adds a key value pair to an order's metadata
+	GetOrderMetadata(orderID uuid.UUID, key string) (string, error)
+	// UpdateOrderMetadata adds a key value pair to an order's metadata
+	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetTransaction returns a transaction given an external transaction id
@@ -342,6 +346,39 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 	}
 
 	return nil
+}
+
+// InsertOrderMetadata adds a key value pair to an order's metadata
+func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+
+	// TODO - Would be safer to use native prepared statement
+	query := `UPDATE orders set metadata = coalesce(metadata, '{}') || '{"` + key + `":"` + value + `"}', updated_at = CURRENT_TIMESTAMP where id ='` + orderID.String() + `';`
+	result, err := pg.RawDB().Exec(query)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
+}
+
+// InsertOrderMetadata gets a value from a key in the order's metadata
+func (pg *Postgres) GetOrderMetadata(orderID uuid.UUID, key string) (string, error) {
+
+	var value string
+
+	err := pg.RawDB().Get(&value, `SELECT metadata -> $2 as value FROM orders WHERE id= $1`, orderID, key)
+
+	if err != nil {
+		return "", err
+	}
+
+	return value, err
 }
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction

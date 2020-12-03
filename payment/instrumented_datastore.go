@@ -427,3 +427,31 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 	}()
 	return _d.base.UpdateOrder(orderID, status)
 }
+
+// UpdateOrderMetadata implements Datastore
+func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrderMetadata", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateOrderMetadata(orderID, key, value)
+}
+
+// GetOrderMetadata implements Datastore
+func (_d DatastoreWithPrometheus) GetOrderMetadata(orderID uuid.UUID, key string) (value string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderMetadata", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetOrderMetadata(orderID, key)
+}

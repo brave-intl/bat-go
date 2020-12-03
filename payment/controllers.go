@@ -195,6 +195,7 @@ type OrderItemRequest struct {
 // CreateOrderRequest includes information needed to create an order
 type CreateOrderRequest struct {
 	Items []OrderItemRequest `json:"items" valid:"-"`
+	Email string             `json:"email" valid:"-"`
 }
 
 // CreateOrder is the handler for creating a new order
@@ -254,25 +255,30 @@ func GetOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
 
-		// If order is pending and is stripe payable, return a checkout session
-		if !order.IsPaid() && order.IsStripePayable() {
-			type OrderWithCheckoutSession struct {
-				*Order
-				CheckoutSession CreateCheckoutSessionResponse
-			}
-
-			checkoutSession := order.CreateCheckoutSession()
-			orderWithCheckoutSession := OrderWithCheckoutSession{
-				Order:           order,
-				CheckoutSession: checkoutSession,
-			}
-
-			return handlers.RenderContent(r.Context(), orderWithCheckoutSession, w, http.StatusOK)
-		}
-
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
+		}
+
+		if !order.IsPaid() && order.IsStripePayable() {
+			type OrderWithStripeCheckoutSessionId struct {
+				*Order
+				StripeCheckoutSessionId string `json:"stripeCheckoutSessionId"`
+			}
+
+			s, err := service.Datastore.GetOrderMetadata(*orderID.UUID(), "stripeCheckoutSessionId")
+			stripeCheckoutSessionId := s[1 : len(s)-1]
+
+			if err != nil {
+				return handlers.WrapError(err, "Error retrieving stripeCheckoutSessionId", http.StatusInternalServerError)
+			}
+
+			orderWithStripeCheckoutSessionId := OrderWithStripeCheckoutSessionId{
+				Order:                   order,
+				StripeCheckoutSessionId: stripeCheckoutSessionId,
+			}
+
+			return handlers.RenderContent(r.Context(), orderWithStripeCheckoutSessionId, w, http.StatusOK)
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, status)
