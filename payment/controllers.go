@@ -300,10 +300,10 @@ func CancelOrder(service *Service) handlers.AppHandler {
 
 		err := service.Datastore.UpdateOrder(*orderID.UUID(), "canceled")
 		if err != nil {
-			return handlers.WrapError(err, "error cancelling order", http.StatusInternalServerError)
+			return handlers.WrapError(err, "error canceling order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), "Order successfully cancelled", w, http.StatusOK)
+		return handlers.RenderContent(r.Context(), "Order successfully canceled", w, http.StatusOK)
 	})
 }
 
@@ -721,11 +721,19 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				if err != nil {
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
+				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				if err != nil {
+					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+				}
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 			} else {
 				err = service.Datastore.UpdateOrder(orderID, "payment_failed")
 				if err != nil {
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				}
+				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				if err != nil {
+					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
 				return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
 			}
