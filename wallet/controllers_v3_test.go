@@ -94,8 +94,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		true,
 		nil,
 	)
-	mock.ExpectQuery("^select (.+)").WithArgs(idTo).WillReturnRows(rows)
-	//mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(walletClaimNamespace, idTo.String())).WillReturnRows(rows)
