@@ -265,7 +265,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 
 	// get the from wallet from the database, so that we can check that the fromInfo.ProviderLinkingID matches
 	// if it is not null later
-	fromInfo, err := service.GetWallet(ctx, to)
+	fromInfo, err := service.GetWallet(ctx, from)
 	if err != nil {
 		return fmt.Errorf("failed to get to wallet: %w", err)
 	}
