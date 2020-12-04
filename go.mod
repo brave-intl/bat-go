@@ -25,7 +25,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/hashicorp/vault v1.1.1
 	github.com/jmoiron/sqlx v1.2.0
-	github.com/lib/pq v1.8.0
+	github.com/lib/pq v1.9.0
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
