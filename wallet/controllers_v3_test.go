@@ -12,19 +12,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/go-chi/chi"
-	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
-
-	"github.com/DATA-DOG/go-sqlmock"
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/go-chi/chi"
+	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
 )
 
 func must(t *testing.T, msg string, err error) {
@@ -46,7 +45,7 @@ type result struct{}
 func (r result) LastInsertId() (int64, error) { return 1, nil }
 func (r result) RowsAffected() (int64, error) { return 1, nil }
 
-func TestLinkBraveWalletV3(t *testing.T) {
+func TestLinkBraveWalletV4(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	var (
@@ -74,7 +73,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 				}`),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		handler        = wallet.LinkBraveDepositAccountV3(&wallet.Service{
+		handler        = wallet.LinkBraveDepositAccountV4(&wallet.Service{
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
