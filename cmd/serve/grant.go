@@ -72,7 +72,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
-
+	//test
 	if os.Getenv("ENV") != "production" {
 		r.Use(cors.Handler(cors.Options{
 			Debug:            true,
