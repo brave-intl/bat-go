@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
@@ -46,8 +47,12 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 		chiware.Heartbeat("/"),
 		chiware.Timeout(timeout),
 		middleware.BearerToken,
-		middleware.RateLimiter(ctx, 180),
+
 		middleware.RequestIDTransfer)
+
+	if os.Getenv("ENV") == "production" {
+		r.Use(middleware.RateLimiter(ctx, 180))
+	}
 	if logger != nil {
 		// Also handles panic recovery
 		r.Use(
