@@ -42,6 +42,12 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		return err
 	}
 
+	var (
+		claims = []*Claim{}
+		total  = decimal.Zero
+		creds  = []cbr.CredentialRedemption{}
+	)
+
 	for k, v := range fundingSources {
 		var (
 			promotion       = promotions[k]
@@ -77,35 +83,39 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
-			if err != nil {
-				return fmt.Errorf("error draining claim: %w", err)
-			}
-
-			// the original request context will be cancelled as soon as the dialer closes the connection.
-			// this will setup a new context with the same values and a minute timeout
-			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
-			ctx = contextutil.Wrap(ctx, asyncCtx)
-
-			go func() {
-				defer asyncCancel()
-				defer middleware.ConcurrentGoRoutines.With(
-					prometheus.Labels{
-						"method": "NextDrainJob",
-					}).Dec()
-
-				middleware.ConcurrentGoRoutines.With(
-					prometheus.Labels{
-						"method": "NextDrainJob",
-					}).Inc()
-
-				_, err := service.RunNextDrainJob(ctx)
-				if err != nil {
-					sentry.CaptureException(err)
-				}
-			}()
+			claims = append(claims, claim)
+			total = total.Add(v.Amount)
+			creds = append(creds, v.Credentials...)
 		}
 	}
+
+	err = service.Datastore.DrainClaims(claims, creds, wallet, total)
+	if err != nil {
+		return fmt.Errorf("error draining claim: %w", err)
+	}
+
+	// the original request context will be cancelled as soon as the dialer closes the connection.
+	// this will setup a new context with the same values and a minute timeout
+	asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx = contextutil.Wrap(ctx, asyncCtx)
+
+	go func() {
+		defer asyncCancel()
+		defer middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "NextDrainJob",
+			}).Dec()
+
+		middleware.ConcurrentGoRoutines.With(
+			prometheus.Labels{
+				"method": "NextDrainJob",
+			}).Inc()
+
+		_, err := service.RunNextDrainJob(ctx)
+		if err != nil {
+			sentry.CaptureException(err)
+		}
+	}()
 
 	return nil
 }
