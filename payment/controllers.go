@@ -26,7 +26,7 @@ import (
 	"github.com/stripe/stripe-go/webhook"
 )
 
-// Router for order endpoints
+// Router for order endpoints test
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
