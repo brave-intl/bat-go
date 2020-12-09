@@ -50,7 +50,7 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 
 		middleware.RequestIDTransfer)
 
-	if os.Getenv("ENV") != "production" {
+	if os.Getenv("ENV") == "production" {
 		r.Use(middleware.RateLimiter(ctx, 180))
 	}
 	if logger != nil {

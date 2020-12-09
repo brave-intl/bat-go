@@ -108,7 +108,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// now we have middlewares we want included in logging
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
-	if os.Getenv("ENV") != "production" {
+	if os.Getenv("ENV") == "production" {
 		r.Use(middleware.RateLimiter(ctx, 180))
 	}
 
