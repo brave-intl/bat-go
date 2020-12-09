@@ -76,7 +76,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	if os.Getenv("ENV") != "production" {
 		r.Use(cors.Handler(cors.Options{
 			Debug:            true,
-			AllowedOrigins:   []string{"https://confab.bsg.brave.software"},
+			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software"},
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
 			ExposedHeaders:   []string{"Link"},
