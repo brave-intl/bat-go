@@ -94,8 +94,7 @@ settlement-tools:
 	mkdir -p target/settlement-tools
 	cp settlement/config.hcl target/settlement-tools/
 	cp settlement/README.md target/settlement-tools/
-	GOOS=$(GOOS) GOARCH=$(GOARCH) make target/settlement-tools/settlement-submit
-	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o target/settlement-tools/bat-cli
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o target/settlement-tools/bat-cli
 	GOOS=$(GOOS) GOARCH=$(GOARCH) make download-vault
 
 docker-settlement-tools:

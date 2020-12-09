@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go/client"
 	"github.com/stripe/stripe-go/v71"
@@ -29,6 +30,21 @@ import (
 // Router for order endpoints test
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	// TODO - Scope down CORS to origins / methods we'll need.
+	if os.Getenv("ENV") != "production" {
+		r.Use(cors.Handler(cors.Options{
+			Debug:          true,
+			AllowedOrigins: []string{"https://confab.bsg.brave.software"}, // Use this to allow specific origin hosts
+			//AllowedOrigins: []string{"*"},
+			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: false,
+			MaxAge:           300, // Maximum value not ignored by any of major browsers
+		}))
+	}
+
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
 	r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(service)))

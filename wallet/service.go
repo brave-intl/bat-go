@@ -263,18 +263,19 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		return fmt.Errorf("unable to link wallet: invalid device")
 	}
 
-	// get the to wallet from the database
-	toInfo, err := service.GetWallet(ctx, to)
+	// get the from wallet from the database, so that we can check that the fromInfo.ProviderLinkingID matches
+	// if it is not null later
+	fromInfo, err := service.GetWallet(ctx, from)
 	if err != nil {
 		return fmt.Errorf("failed to get to wallet: %w", err)
 	}
 
-	// link the wallet in our datastore, provider linking id will be on the deposit wallet
+	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
 	providerLinkingID := uuid.NewV5(walletClaimNamespace, to.String())
 
-	if toInfo.ProviderLinkingID != nil {
-		// check if the member matches the associated member
-		if !uuid.Equal(*toInfo.ProviderLinkingID, providerLinkingID) {
+	if fromInfo.ProviderLinkingID != nil { // if the from wallet already has a provider linking id
+		if !uuid.Equal(*fromInfo.ProviderLinkingID, providerLinkingID) {
+			// make sure that the providerLinking id from the database matches.
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	}
@@ -282,7 +283,9 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
-			status = http.StatusConflict
+			// we are not allowing draining to wallets that exceed the linking limits
+			// this will cause an error in the client prior to attempting draining
+			status = http.StatusTeapot
 		}
 		return handlers.WrapError(err, "unable to link wallets", status)
 	}
