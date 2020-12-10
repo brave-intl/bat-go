@@ -20,10 +20,9 @@ type FlagBuilder struct {
 
 // Bind runs the BindPFlag function
 func (fb *FlagBuilder) Bind(key string) *FlagBuilder {
-	fb.loopCommands(func(command *cobra.Command) {
+	return fb.loopCommands(func(command *cobra.Command) {
 		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
 	})
-	return fb
 }
 
 // SetKey sets the key to be shared across methods
