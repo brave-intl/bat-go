@@ -113,8 +113,6 @@ func init() {
 	// setup the flags
 	uploadBuilder := cmd.NewFlagBuilder(UploadGeminiSettlementCmd)
 	statusBuilder := cmd.NewFlagBuilder(CheckStatusGeminiSettlementCmd)
-
-	// comboBuilder := cmd.NewFlagBuilder(nil)
 	comboBuilder := uploadBuilder.Concat(statusBuilder)
 
 	comboBuilder.String("input", "",
