@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -24,48 +26,52 @@ func (fb *FlagBuilder) Bind(key string) *FlagBuilder {
 	return fb
 }
 
+// SetKey sets the key to be shared across methods
+func (fb *FlagBuilder) SetKey(key string) *FlagBuilder {
+	if fb.key != "" {
+		Must(fmt.Errorf("key has already been set to '%s' cannot set to '%s'", fb.key, key))
+	}
+	fb.key = key
+	return fb
+}
+
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
-	fb.key = key
-	fb.loopCommands(func(command *cobra.Command) {
-		command.Flags().String(key, defaultValue, description)
-	})
-	return fb
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().String(key, defaultValue, description)
+		})
 }
 
 // Int attaches an int flag to the command
 func (fb *FlagBuilder) Int(key string, defaultValue int, description string) *FlagBuilder {
-	fb.key = key
-	fb.loopCommands(func(command *cobra.Command) {
-		command.Flags().Int(key, defaultValue, description)
-	})
-	return fb
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().Int(key, defaultValue, description)
+		})
 }
 
 // Float64 attaches a float64 type flag to the command
 func (fb *FlagBuilder) Float64(key string, defaultValue float64, description string) *FlagBuilder {
-	fb.key = key
-	fb.loopCommands(func(command *cobra.Command) {
-		command.Flags().Float64(key, defaultValue, description)
-	})
-	return fb
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().Float64(key, defaultValue, description)
+		})
 }
 
 // Bool attaches a bool flag to the command
 func (fb *FlagBuilder) Bool(key string, defaultValue bool, description string) *FlagBuilder {
-	fb.key = key
-	fb.loopCommands(func(command *cobra.Command) {
-		command.Flags().Bool(key, defaultValue, description)
-	})
-	return fb
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().Bool(key, defaultValue, description)
+		})
 }
 
 // Require requires the flag
 func (fb *FlagBuilder) Require() *FlagBuilder {
-	fb.loopCommands(func(command *cobra.Command) {
+	return fb.loopCommands(func(command *cobra.Command) {
 		Must(command.MarkFlagRequired(fb.key))
 	})
-	return fb
 }
 
 // Env attaches an env
@@ -101,8 +107,9 @@ func (fb *FlagBuilder) Concat(builders ...*FlagBuilder) *FlagBuilder {
 	return newBuilder
 }
 
-func (fb *FlagBuilder) loopCommands(iterator func(*cobra.Command)) {
+func (fb *FlagBuilder) loopCommands(iterator func(*cobra.Command)) *FlagBuilder {
 	for _, command := range fb.commands {
 		iterator(command)
 	}
+	return fb
 }
