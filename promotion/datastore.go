@@ -875,11 +875,15 @@ func (pg *Postgres) DrainClaims(claims []*Claim, credentials []cbr.CredentialRed
 	}
 	defer pg.RollbackTx(tx)
 
+	var claimIDs []interface{}
+
 	for _, claim := range claims {
-		_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
-		if err != nil {
-			return err
-		}
+		claimIDs = append(claimIDs, claim.ID)
+	}
+
+	_, err = tx.Exec(`update claims set drained = true where id in ($1::uuid[]) and not drained`, claimIDs)
+	if err != nil {
+		return err
 	}
 
 	statement := `
