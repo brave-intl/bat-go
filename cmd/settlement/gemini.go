@@ -130,9 +130,6 @@ func init() {
 
 	uploadBuilder.Int("sig", 0,
 		"signature to choose when uploading transactions (for bulk endpoint usage)")
-
-	comboBuilder.String("out", "./gemini-settlement",
-		"the file to output to")
 }
 
 // GeminiUploadSettlement marks the settlement file as complete
