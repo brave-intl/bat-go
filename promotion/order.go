@@ -22,6 +22,7 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
+	Metadata   string               `json:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
