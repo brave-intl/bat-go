@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -21,9 +19,6 @@ type FlagBuilder struct {
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	fb.key = key
-	fb.loopCommands(func(command *cobra.Command) {
-		fmt.Println(fb.id, len(fb.commands), command.UseLine(), key)
-	})
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().String(key, defaultValue, description)
 		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
