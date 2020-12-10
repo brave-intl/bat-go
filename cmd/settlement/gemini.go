@@ -114,20 +114,20 @@ func init() {
 	comboBuilder := cmd.NewFlagBuilder(UploadGeminiSettlementCmd).
 		AddCommand(CheckStatusGeminiSettlementCmd)
 
-	comboBuilder.String("input", "",
+	comboBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Require().
 		Env("INPUT")
 
-	comboBuilder.String("out", "./gemini-settlement",
+	comboBuilder.Flag().String("out", "./gemini-settlement",
 		"the location of the file").
 		Env("OUT")
 
-	comboBuilder.String("all-txs-input", "",
+	comboBuilder.Flag().String("all-txs-input", "",
 		"the original transactions file").
 		Require()
 
-	comboBuilder.Int("sig", 0,
+	comboBuilder.Flag().Int("sig", 0,
 		"signature to choose when uploading transactions (for bulk endpoint usage)")
 }
 

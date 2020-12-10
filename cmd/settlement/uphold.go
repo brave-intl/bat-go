@@ -44,14 +44,14 @@ func init() {
 
 	uploadBuilder := cmd.NewFlagBuilder(UpholdUploadCmd)
 
-	uploadBuilder.Bool("verbose", false,
+	uploadBuilder.Flag().Bool("verbose", false,
 		"how verbose logging should be")
 
-	uploadBuilder.String("input", "",
+	uploadBuilder.Flag().String("input", "",
 		"input file to submit to a given provider").
 		Require()
 
-	uploadBuilder.String("progress", "1s",
+	uploadBuilder.Flag().String("progress", "1s",
 		"how often progress should be printed out")
 }
 

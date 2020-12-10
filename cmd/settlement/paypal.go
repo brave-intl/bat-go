@@ -36,27 +36,27 @@ func init() {
 	emailBuilder := cmd.NewFlagBuilder(EmailPaypalSettlementCmd)
 	comboBuilder := completeBuilder.Concat(transformBuilder, emailBuilder)
 
-	comboBuilder.String("input", "",
+	comboBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Env("INPUT").
 		Require()
 
-	comboBuilder.String("out", "./paypal-settlement",
+	comboBuilder.Flag().String("out", "./paypal-settlement",
 		"the location of the file to write out").
 		Env("INPUT").
 		Require()
 
-	transformBuilder.String("currency", "",
+	transformBuilder.Flag().String("currency", "",
 		"a currency must be set (usually JPY)").
 		Env("CURRENCY").
 		Require()
 
-	completeBuilder.String("txn-id", "",
+	completeBuilder.Flag().String("txn-id", "",
 		"the completed mass pay transaction id").
 		Env("TXN_ID").
 		Require()
 
-	transformBuilder.Float64("rate", 0,
+	transformBuilder.Flag().Float64("rate", 0,
 		"a currency must be set (usually JPY)").
 		Env("RATE")
 }

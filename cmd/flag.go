@@ -34,6 +34,12 @@ func (fb *FlagBuilder) SetKey(key string) *FlagBuilder {
 	return fb
 }
 
+// Flag resets the builder to allow for chaining
+func (fb *FlagBuilder) Flag() *FlagBuilder {
+	fb.key = ""
+	return fb
+}
+
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	return fb.SetKey(key).
