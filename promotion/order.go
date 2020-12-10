@@ -1,6 +1,7 @@
 package promotion
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
@@ -22,10 +23,7 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
-	Metadata   struct {
-		StripeCheckoutSessionID string `json:"stripeCheckoutSessionId,omitempty"`
-		StripeSubscriptionID    string `json:"stripeSubscriptionId,omitempty"`
-	} `json:"metadata,omitempty" db:"metadata"`
+	Metadata   sql.NullString       `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
