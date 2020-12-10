@@ -111,9 +111,8 @@ func init() {
 	SettlementCmd.AddCommand(GeminiSettlementCmd)
 
 	// setup the flags
-	uploadBuilder := cmd.NewFlagBuilder(UploadGeminiSettlementCmd)
-	statusBuilder := cmd.NewFlagBuilder(CheckStatusGeminiSettlementCmd)
-	comboBuilder := uploadBuilder.Concat(statusBuilder)
+	comboBuilder := cmd.NewFlagBuilder(UploadGeminiSettlementCmd).
+		AddCommand(CheckStatusGeminiSettlementCmd)
 
 	comboBuilder.String("input", "",
 		"the file or comma delimited list of files that should be utilized").
@@ -128,7 +127,7 @@ func init() {
 		"the original transactions file").
 		Require()
 
-	uploadBuilder.Int("sig", 0,
+	comboBuilder.Int("sig", 0,
 		"signature to choose when uploading transactions (for bulk endpoint usage)")
 }
 

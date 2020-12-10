@@ -1,12 +1,19 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+var (
+	id int = 0
+)
+
 // FlagBuilder creates a flag builder
 type FlagBuilder struct {
+	id       int
 	commands []*cobra.Command
 	key      string
 }
@@ -14,6 +21,9 @@ type FlagBuilder struct {
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	fb.key = key
+	fb.loopCommands(func(command *cobra.Command) {
+		fmt.Println(fb.id, len(fb.commands), command.UseLine(), key)
+	})
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().String(key, defaultValue, description)
 		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
@@ -67,7 +77,9 @@ func (fb *FlagBuilder) Env(env string) *FlagBuilder {
 
 // NewFlagBuilder creates a new FlagBuilder from one command
 func NewFlagBuilder(command *cobra.Command) *FlagBuilder {
-	fb := FlagBuilder{}
+	id++
+	commands := []*cobra.Command{}
+	fb := FlagBuilder{id, commands, ""}
 	if command != nil {
 		fb.AddCommand(command)
 	}
@@ -85,7 +97,7 @@ func (fb *FlagBuilder) Concat(builders ...*FlagBuilder) *FlagBuilder {
 	newBuilder := NewFlagBuilder(nil)
 	allBuilders := append([]*FlagBuilder{fb}, builders...)
 	for _, builder := range allBuilders {
-		fb.commands = append(fb.commands, builder.commands...)
+		newBuilder.commands = append(newBuilder.commands, builder.commands...)
 	}
 	return newBuilder
 }
