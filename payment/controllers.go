@@ -76,10 +76,10 @@ func CredentialRouter(service *Service) chi.Router {
 	return r
 }
 
-// PaymentRouter handles calls relating to payments
-func PaymentRouter(service *Service) chi.Router {
+// WebhookRouter handles calls relating to payments
+func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/webhooks/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
 	return r
 }
 
@@ -281,25 +281,25 @@ func GetOrder(service *Service) handlers.AppHandler {
 			status = http.StatusNotFound
 		}
 
-		if !order.IsPaid() && order.IsStripePayable() {
-			type OrderWithStripeCheckoutSessionId struct {
+		if order != nil && !order.IsPaid() && order.IsStripePayable() {
+			type OrderWithStripeCheckoutSessionID struct {
 				*Order
-				StripeCheckoutSessionId string `json:"stripeCheckoutSessionId"`
+				StripeCheckoutSessionID string `json:"stripeCheckoutSessionId"`
 			}
 
 			s, err := service.Datastore.GetOrderMetadata(*orderID.UUID(), "stripeCheckoutSessionId")
-			stripeCheckoutSessionId := s[1 : len(s)-1]
+			stripeCheckoutSessionID := s[1 : len(s)-1]
 
 			if err != nil {
 				return handlers.WrapError(err, "Error retrieving stripeCheckoutSessionId", http.StatusInternalServerError)
 			}
 
-			orderWithStripeCheckoutSessionId := OrderWithStripeCheckoutSessionId{
+			orderWithStripeCheckoutSessionID := OrderWithStripeCheckoutSessionID{
 				Order:                   order,
-				StripeCheckoutSessionId: stripeCheckoutSessionId,
+				StripeCheckoutSessionID: stripeCheckoutSessionID,
 			}
 
-			return handlers.RenderContent(r.Context(), orderWithStripeCheckoutSessionId, w, http.StatusOK)
+			return handlers.RenderContent(r.Context(), orderWithStripeCheckoutSessionID, w, http.StatusOK)
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, status)
@@ -319,14 +319,14 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		stripeSubscriptionId, _ := service.Datastore.GetOrderMetadata(*orderID.UUID(), "stripeSubscriptionId")
+		stripeSubscriptionID, _ := service.Datastore.GetOrderMetadata(*orderID.UUID(), "stripeSubscriptionId")
 
-		if stripeSubscriptionId != "" {
-			stripeSubscriptionId = stripeSubscriptionId[1 : len(stripeSubscriptionId)-1]
+		if stripeSubscriptionID != "" {
+			stripeSubscriptionID = stripeSubscriptionID[1 : len(stripeSubscriptionID)-1]
 			sc := &client.API{}
 			// os.Getenv("STRIPE_SECRET")
 			sc.Init("sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo", nil)
-			subscription, err := sc.Subscriptions.Update(stripeSubscriptionId, &stripe.SubscriptionParams{
+			subscription, err := sc.Subscriptions.Update(stripeSubscriptionID, &stripe.SubscriptionParams{
 				CancelAtPeriodEnd: stripe.Bool(true),
 			})
 			if err != nil {

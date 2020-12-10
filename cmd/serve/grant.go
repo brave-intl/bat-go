@@ -185,7 +185,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
-	r.Mount("/v1/payments", payment.PaymentRouter(paymentService))
+	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
