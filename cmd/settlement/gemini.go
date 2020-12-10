@@ -15,7 +15,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -112,53 +111,30 @@ func init() {
 	SettlementCmd.AddCommand(GeminiSettlementCmd)
 
 	// setup the flags
+	uploadBuilder := cmd.NewFlagBuilder(UploadGeminiSettlementCmd)
+	statusBuilder := cmd.NewFlagBuilder(CheckStatusGeminiSettlementCmd)
 
-	// input (required by all)
-	GeminiSettlementCmd.Flags().String("input", "",
-		"the file or comma delimited list of files that should be utilized")
-	cmd.Must(viper.BindPFlag("input", GeminiSettlementCmd.Flags().Lookup("input")))
-	cmd.Must(viper.BindEnv("input", "INPUT"))
-	cmd.Must(GeminiSettlementCmd.MarkFlagRequired("input"))
+	// comboBuilder := cmd.NewFlagBuilder(nil)
+	comboBuilder := uploadBuilder.Concat(statusBuilder)
 
-	// out (required by all with default)
-	GeminiSettlementCmd.Flags().String("out", "./gemini-settlement",
-		"the location of the file")
-	cmd.Must(viper.BindPFlag("out", GeminiSettlementCmd.Flags().Lookup("out")))
-	cmd.Must(viper.BindEnv("out", "OUT"))
+	comboBuilder.String("input", "",
+		"the file or comma delimited list of files that should be utilized").
+		Require().
+		Env("INPUT")
 
-	// txnID (required by transform)
-	UploadGeminiSettlementCmd.Flags().String("input", "",
-		"the signed transactions file")
-	cmd.Must(viper.BindPFlag("input", UploadGeminiSettlementCmd.Flags().Lookup("input")))
-	cmd.Must(UploadGeminiSettlementCmd.MarkFlagRequired("input"))
+	comboBuilder.String("out", "./gemini-settlement",
+		"the location of the file").
+		Env("OUT")
 
-	UploadGeminiSettlementCmd.Flags().String("all-txs-input", "",
-		"the original transactions file")
-	cmd.Must(viper.BindPFlag("all-txs-input", UploadGeminiSettlementCmd.Flags().Lookup("all-txs-input")))
-	cmd.Must(UploadGeminiSettlementCmd.MarkFlagRequired("all-txs-input"))
+	comboBuilder.String("all-txs-input", "",
+		"the original transactions file").
+		Require()
 
-	UploadGeminiSettlementCmd.Flags().Int("sig", 0,
-		"the original transactions file")
-	cmd.Must(viper.BindPFlag("sig", UploadGeminiSettlementCmd.Flags().Lookup("sig")))
+	uploadBuilder.Int("sig", 0,
+		"signature to choose when uploading transactions (for bulk endpoint usage)")
 
-	// CheckStatusGeminiSettlementCmd
-	CheckStatusGeminiSettlementCmd.Flags().String("all-txs-input", "",
-		"the original transactions file")
-	cmd.Must(viper.BindPFlag("all-txs-input", CheckStatusGeminiSettlementCmd.Flags().Lookup("all-txs-input")))
-	cmd.Must(CheckStatusGeminiSettlementCmd.MarkFlagRequired("all-txs-input"))
-
-	CheckStatusGeminiSettlementCmd.Flags().StringP("input", "i", "",
-		"the original transactions file")
-	cmd.Must(viper.BindPFlag("input", CheckStatusGeminiSettlementCmd.Flags().Lookup("input")))
-	cmd.Must(CheckStatusGeminiSettlementCmd.MarkFlagRequired("input"))
-
-	CheckStatusGeminiSettlementCmd.Flags().String("out", "",
-		"the output file name")
-	cmd.Must(viper.BindPFlag("out", CheckStatusGeminiSettlementCmd.Flags().Lookup("out")))
-
-	CheckStatusGeminiSettlementCmd.Flags().Int("sig", 0,
-		"signature to choose (for bulk endpoint usage)")
-	cmd.Must(viper.BindPFlag("sig", CheckStatusGeminiSettlementCmd.Flags().Lookup("sig")))
+	comboBuilder.String("out", "./gemini-settlement",
+		"the file to output to")
 }
 
 // GeminiUploadSettlement marks the settlement file as complete
