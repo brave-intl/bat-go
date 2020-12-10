@@ -47,7 +47,10 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
-	r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(service)))
+
+	if os.Getenv("ENV") != "production" {
+		r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(service)))
+	}
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -56,7 +59,9 @@ func Router(service *Service) chi.Router {
 
 	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-	r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(service)))
+	if os.Getenv("ENV") != "production" {
+		r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(service)))
+	}
 	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 
 	return r
