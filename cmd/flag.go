@@ -16,12 +16,19 @@ type FlagBuilder struct {
 	key      string
 }
 
+// Bind runs the BindPFlag function
+func (fb *FlagBuilder) Bind(key string) *FlagBuilder {
+	fb.loopCommands(func(command *cobra.Command) {
+		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
+	})
+	return fb
+}
+
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	fb.key = key
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().String(key, defaultValue, description)
-		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
 	})
 	return fb
 }
@@ -31,7 +38,6 @@ func (fb *FlagBuilder) Int(key string, defaultValue int, description string) *Fl
 	fb.key = key
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().Int(key, defaultValue, description)
-		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
 	})
 	return fb
 }
@@ -41,7 +47,6 @@ func (fb *FlagBuilder) Float64(key string, defaultValue float64, description str
 	fb.key = key
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().Float64(key, defaultValue, description)
-		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
 	})
 	return fb
 }
@@ -51,7 +56,6 @@ func (fb *FlagBuilder) Bool(key string, defaultValue bool, description string) *
 	fb.key = key
 	fb.loopCommands(func(command *cobra.Command) {
 		command.Flags().Bool(key, defaultValue, description)
-		Must(viper.BindPFlag(key, command.Flags().Lookup(key)))
 	})
 	return fb
 }
