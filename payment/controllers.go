@@ -22,8 +22,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stripe/stripe-go"
 	"github.com/stripe/stripe-go/client"
-	"github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/webhook"
 )
 
@@ -312,6 +312,22 @@ func CancelOrder(service *Service) handlers.AppHandler {
 					"orderID": err.Error(),
 				},
 			)
+		}
+
+		stripeSubscriptionId, _ := service.Datastore.GetOrderMetadata(*orderID.UUID(), "stripeSubscriptionId")
+
+		if stripeSubscriptionId != "" {
+			stripeSubscriptionId = stripeSubscriptionId[1 : len(stripeSubscriptionId)-1]
+			sc := &client.API{}
+			// os.Getenv("STRIPE_SECRET")
+			sc.Init("sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo", nil)
+			subscription, err := sc.Subscriptions.Update(stripeSubscriptionId, &stripe.SubscriptionParams{
+				CancelAtPeriodEnd: stripe.Bool(true),
+			})
+			if err != nil {
+				return handlers.WrapError(err, "error canceling subscription", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "Subscription "+subscription.ID+" successfully canceled", w, http.StatusOK)
 		}
 
 		err := service.Datastore.UpdateOrder(*orderID.UUID(), "canceled")
@@ -693,7 +709,9 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 // HandleStripeWebhook is the handler for stripe checkout session webhooks
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// os.Getenv("STRIPE_SECRET")
 		stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
+		// os.Getenv("STRIPE_WEBHOOK_SECRET")
 		endpointSecret := "whsec_Nm4yLVIpnG2cW5fW3kHQHxXBAJCL9dUj"
 
 		const MaxBodyBytes = int64(65536)
@@ -721,6 +739,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 			// Get the subscription and orderID connected to this invoice
 			sc := &client.API{}
+			// os.Getenv("STRIPE_SECRET")
 			sc.Init("sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo", nil)
 			subscription, err := sc.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
@@ -743,7 +762,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 			} else {
-				err = service.Datastore.UpdateOrder(orderID, "payment_failed")
+				err = service.Datastore.UpdateOrder(orderID, "pending")
 				if err != nil {
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
@@ -754,6 +773,24 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
 			}
 
+		}
+
+		// Handle subscription cancellations
+		if event.Type == "customer.subscription.deleted" {
+			var subscription stripe.Subscription
+			err := json.Unmarshal(event.Data.Raw, &subscription)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+			}
+			err = service.Datastore.UpdateOrder(orderID, "canceled")
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "subscription canceled", w, http.StatusOK)
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)

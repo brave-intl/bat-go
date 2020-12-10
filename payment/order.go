@@ -169,34 +169,45 @@ type CreateCheckoutSessionResponse struct {
 
 // Create a Stripe Checkout Session for an Order
 func (order Order) CreateStripeCheckoutSession(email string) CreateCheckoutSessionResponse {
+	// os.Getenv("STRIPE_SECRET")
 	stripe.Key = "sk_test_51HlmudHof20bphG6m8eJi9BvbPMLkMX4HPqLIiHmjdKAX21oJeO3S6izMrYTmiJm3NORBzUK1oM8STqClDRT3xQ700vyUyabNo"
 
-	// https://stackoverflow.com/a/26411833/7274272
-	customerParams := &stripe.CustomerParams{
+	// Create customer if not already created
+	i := customer.List(&stripe.CustomerListParams{
 		Email: stripe.String(email),
+	})
+
+	matchingCustomers := 0
+	for i.Next() {
+		matchingCustomers++
 	}
-	customer, _ := customer.New(customerParams)
 
-	metadata := make(map[string]string)
-	metadata["orderID"] = order.ID.String()
+	var customerID string
+	if matchingCustomers > 0 {
+		customerID = i.Customer().ID
+	} else {
+		customer, _ := customer.New(&stripe.CustomerParams{
+			Email: stripe.String(email),
+		})
+		customerID = customer.ID
+	}
 
-	// TODO - Match SKUs to Stripe Price Objects
+	// os.Getenv("STRIPE_SUCCESS_URL")
+	successUrl := stripe.String("https://together.bsg.brave.software/")
+	// os.Getenv("STRIPE_CANCEL_URL")
+	cancelUrl := stripe.String("https://together.bsg.brave.software/")
+
 	params := &stripe.CheckoutSessionParams{
-		Customer: stripe.String(customer.ID),
+		Customer: stripe.String(customerID),
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
 		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL:        stripe.String("https://example.com/success"),
-		CancelURL:         stripe.String("https://example.com/cancel"),
+		SuccessURL:        successUrl,
+		CancelURL:         cancelUrl,
 		ClientReferenceID: stripe.String(order.ID.String()),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			&stripe.CheckoutSessionLineItemParams{
-				Price:    stripe.String("price_1Hpg8nHof20bphG6X4eQ6Dit"),
-				Quantity: stripe.Int64(1),
-			},
-		},
-		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{},
+		SubscriptionData:  &stripe.CheckoutSessionSubscriptionDataParams{},
+		LineItems:         order.CreateStripeLineItems(),
 	}
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
@@ -207,4 +218,21 @@ func (order Order) CreateStripeCheckoutSession(email string) CreateCheckoutSessi
 		SessionID: session.ID,
 	}
 	return data
+}
+
+func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
+	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
+	for index, item := range order.Items {
+
+		var stripeProduct string
+		if item.SKU == "brave-together-paid" {
+			stripeProduct = "price_1Hpg8nHof20bphG6X4eQ6Dit"
+		}
+
+		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
+			Price:    stripe.String(stripeProduct),
+			Quantity: stripe.Int64(int64(item.Quantity)),
+		}
+	}
+	return lineItems
 }
