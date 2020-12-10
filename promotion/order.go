@@ -22,7 +22,10 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
-	Metadata   string               `json:"metadata"`
+	Metadata   struct {
+		StripeCheckoutSessionID string `json:"stripeCheckoutSessionId,omitempty"`
+		StripeSubscriptionID    string `json:"stripeSubscriptionId,omitempty"`
+	} `json:"metadata,omitempty" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
