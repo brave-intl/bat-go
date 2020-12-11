@@ -1157,8 +1157,31 @@ limit 1`
 	}
 
 	attempted = true
+	// mint the grant to the wallet's deposit destination
+	statement = `
+select
+	user_deposit_destination
+from
+	wallets
+where
+	id = $1
+`
+	var depositDestination string
+	err = tx.Get(&depositDestination, statement, job.WalletID)
+	if err != nil {
+		return attempted, err
+	}
 
-	err = worker.MintGrant(ctx, job.WalletID, job.Total, promoIDs...)
+	if depositDestination == "" {
+		return attempted, errors.New("Wallet is not verified")
+	}
+
+	depositDestinationUUID, err := uuid.FromString(depositDestination)
+	if err != nil {
+		return attempted, errors.New("destination invalid wallet id")
+	}
+
+	err = worker.MintGrant(ctx, depositDestinationUUID, job.Total, promoIDs...)
 	if err != nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to mint grants")
