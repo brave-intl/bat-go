@@ -223,6 +223,11 @@ func InitService(
 			Cadence: 5 * time.Second,
 			Workers: 1,
 		},
+		{
+			Func:    service.RunNextMintDrainJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
 	}
 
 	var enableLinkingDraining bool
@@ -262,6 +267,11 @@ func (s *Service) ReadableDatastore() ReadOnlyDatastore {
 		return s.RoDatastore
 	}
 	return s.Datastore
+}
+
+// RunNextMintDrainJob takes the next mint job and completes it
+func (s *Service) RunNextMintDrainJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextMintDrainJob(ctx, s)
 }
 
 // RunNextClaimJob takes the next claim job and completes it
