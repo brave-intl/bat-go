@@ -12,7 +12,7 @@ import (
 // Delete this file once the issue is completed
 // https://github.com/brave-intl/bat-go/issues/263
 
-// Order includes information about a particular order
+// Order includes information about a particular order test
 type Order struct {
 	ID         uuid.UUID            `json:"id" db:"id"`
 	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
