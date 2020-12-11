@@ -1125,16 +1125,15 @@ limit 1`
 
 	statement = `
 select
-	true
+	bool_and(c.drained)
 from
 	mint_drain_promotion mdp
 	join claims c
 		on (c.promotion_id=mdp.promotion_id)
 where
 	mdp.mint_drain_id = $1
-	and c.drained = false
 	and c.wallet_id= $2
-limit 1`
+`
 	var drained bool
 	err = tx.Get(&drained, statement, job.ID, job.WalletID)
 	if err != nil {
