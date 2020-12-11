@@ -1123,8 +1123,6 @@ limit 1`
 	}
 	// are all of the claims associated with all of the promotions drained?
 
-	fmt.Println("!!! here, about to check the promotions")
-
 	statement = `
 select
 	true
@@ -1145,7 +1143,6 @@ limit 1`
 		}
 		return attempted, err
 	}
-	fmt.Println("!!! drained=", drained)
 
 	if !drained {
 		return attempted, nil

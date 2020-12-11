@@ -149,7 +149,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 					"method": "NextMintDrainJob",
 				}).Inc()
 
-			fmt.Println("!!!! running mint job")
 			_, err := service.RunNextMintDrainJob(ctx)
 			if err != nil {
 				sentry.CaptureException(err)
