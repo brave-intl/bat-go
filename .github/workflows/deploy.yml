@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - sandbox
+      - brave-together-dev
 
 name: Payments Service Deployments
 jobs:
