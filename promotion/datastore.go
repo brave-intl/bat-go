@@ -19,6 +19,7 @@ import (
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -876,10 +877,12 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 	var mintDrainJob = MintDrainJob{}
 
 	statement := `
-	insert into mint_drain (wallet_id)
-	values ($1)
+	insert into mint_drain (wallet_id, total)
+	values ($1, (
+		select sum(approximate_value) from claims where wallet_id=$1 and promotion_id = any($2)
+	))
 	returning *`
-	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID)
+	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID, pq.Array(promotionIDs))
 	if err != nil {
 		return err
 	}
@@ -1120,6 +1123,8 @@ limit 1`
 	}
 	// are all of the claims associated with all of the promotions drained?
 
+	fmt.Println("!!! here, about to check the promotions")
+
 	statement = `
 select
 	true
@@ -1140,6 +1145,7 @@ limit 1`
 		}
 		return attempted, err
 	}
+	fmt.Println("!!! drained=", drained)
 
 	if !drained {
 		return attempted, nil

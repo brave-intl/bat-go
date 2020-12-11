@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	w "github.com/brave-intl/bat-go/utils/wallet"
+
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -147,6 +149,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 					"method": "NextMintDrainJob",
 				}).Inc()
 
+			fmt.Println("!!!! running mint job")
 			_, err := service.RunNextMintDrainJob(ctx)
 			if err != nil {
 				sentry.CaptureException(err)
@@ -217,6 +220,9 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			service.drainChannel <- tx
 		}
 		return tx, err
+	} else if *wallet.UserDepositAccountProvider == "brave" {
+		// this will be handled by the mint drain job
+		return new(w.TransactionInfo), nil
 	}
 
 	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
@@ -233,6 +239,8 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		// no logger, setup
 		_, logger = logging.SetupLogger(ctx)
 	}
+
+	logger.Warn().Msg("here, in mintgrant!")
 
 	// for all of the promotion ids (limit of 4 wallets can be linked)
 	// attempt to create a claim.  If we run into a unique key constraint, this means that
