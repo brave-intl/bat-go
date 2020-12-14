@@ -514,6 +514,20 @@ func (_d DatastoreWithPrometheus) SaveClaimCreds(claimCreds *ClaimCreds) (err er
 	return _d.base.SaveClaimCreds(claimCreds)
 }
 
+// SetMintDrainPromotionTotal implements Datastore
+func (_d DatastoreWithPrometheus) SetMintDrainPromotionTotal(ctx context.Context, walletID uuid.UUID, promotionID uuid.UUID, total decimal.Decimal) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetMintDrainPromotionTotal", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetMintDrainPromotionTotal(ctx, walletID, promotionID, total)
+}
+
 // UpdateOrder implements Datastore
 func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) (err error) {
 	_since := time.Now()

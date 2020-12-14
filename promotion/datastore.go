@@ -19,7 +19,6 @@ import (
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
-	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -98,6 +97,10 @@ type Datastore interface {
 
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
+
+	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
+	SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error
+
 	// RunNextMintDrainJob to create new grants from the mint queue
 	RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error)
 
@@ -866,6 +869,32 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	return &order, nil
 }
 
+// SetMintDrainPromotionTotal - set the total number of redemptions for this drain job
+func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	statement := `
+update mint_drain_promotion set total = $1, done = true where
+mint_drain_id=(select mint_drain_id where wallet_id=$2) and
+promotion_id=$3`
+
+	_, err = tx.ExecContext(ctx, statement, total, walletID, promotionID)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error {
 	tx, err := pg.RawDB().Beginx()
@@ -877,12 +906,10 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 	var mintDrainJob = MintDrainJob{}
 
 	statement := `
-	insert into mint_drain (wallet_id, total)
-	values ($1, (
-		select sum(approximate_value) from claims where wallet_id=$1 and promotion_id = any($2)
-	))
+	insert into mint_drain (wallet_id)
+	values ($1)
 	returning *`
-	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID, pq.Array(promotionIDs))
+	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID)
 	if err != nil {
 		return err
 	}
@@ -1074,6 +1101,8 @@ type MintDrainPromotion struct {
 const (
 	// MintDrainJobPending - pending status for the mint_drain job
 	MintDrainJobPending = "pending"
+	// MintDrainJobReady - pending status for the mint_drain job
+	MintDrainJobReady = "ready"
 	// MintDrainJobFailed - failed status for the mint_drain job
 	MintDrainJobFailed = "failed"
 	// MintDrainJobComplete - complete status for the mint_drain job
@@ -1105,16 +1134,17 @@ func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) 
 	}
 	defer pg.RollbackTx(tx)
 
-	// get the mint job.
+	// get the mint job. only the ones that have finished all the promotion totals
 	statement := `
-select *
-from mint_drain
-where not erred and status = 'pending'
+select md.*, sum(mdp.total) as total
+from mint_drain as md join mint_drain_promotion as mdp on (md.id = mdp.mint_drain_id)
+where not md.erred and md.status = $1 and
+bool_and(mdp.done) = true
 for update skip locked
 limit 1`
 
 	job := MintDrainJob{}
-	err = tx.Get(&job, statement)
+	err = tx.Get(&job, statement, MintDrainJobReady)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return attempted, nil

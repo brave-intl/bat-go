@@ -220,7 +220,30 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		}
 		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "brave" {
-		// this will be handled by the mint drain job
+		// update the mint job for this walletID
+
+		promoTotal := map[string]decimal.Decimal{}
+		// iterate through the credentials
+		// get a total count per promotion
+		for _, cred := range credentials {
+			v, ok := promoTotal[cred.Issuer]
+			if ok {
+				promoTotal[cred.Issuer] = total.Add(v)
+			} else {
+				promoTotal[cred.Issuer] = decimal.Zero
+			}
+		}
+		for k, v := range promoTotal {
+			promotionID, err := uuid.FromString(k)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get promotion id as uuid: %w", err)
+			}
+			// update the mint_drain_promotion table with the corresponding total redeemed
+			err = service.Datastore.SetMintDrainPromotionTotal(ctx, walletID, promotionID, v)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set append total funds: %w", err)
+			}
+		}
 		return new(w.TransactionInfo), nil
 	}
 
