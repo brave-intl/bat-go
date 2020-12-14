@@ -229,9 +229,10 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			promotionID := strings.TrimSuffix(cred.Issuer, ":control")
 			v, ok := promoTotal[promotionID]
 			if ok {
-				promoTotal[promotionID] = total.Add(v)
+				// each credential is 0.25
+				promoTotal[promotionID] = v.Add(decimal.NewFromFloat(0.25))
 			} else {
-				promoTotal[promotionID] = decimal.Zero
+				promoTotal[promotionID] = decimal.NewFromFloat(0.25)
 			}
 		}
 		for k, v := range promoTotal {
