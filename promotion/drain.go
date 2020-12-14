@@ -226,11 +226,12 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		// iterate through the credentials
 		// get a total count per promotion
 		for _, cred := range credentials {
-			v, ok := promoTotal[cred.Issuer]
+			promotionID := strings.TrimSuffix(cred.Issuer, ":control")
+			v, ok := promoTotal[promotionID]
 			if ok {
-				promoTotal[cred.Issuer] = total.Add(v)
+				promoTotal[promotionID] = total.Add(v)
 			} else {
-				promoTotal[cred.Issuer] = decimal.Zero
+				promoTotal[promotionID] = decimal.Zero
 			}
 		}
 		for k, v := range promoTotal {

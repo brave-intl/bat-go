@@ -1088,21 +1088,22 @@ type MintDrainJob struct {
 	ID       uuid.UUID       `db:"id"`
 	WalletID uuid.UUID       `db:"wallet_id"`
 	Total    decimal.Decimal `db:"total"`
+	Done     bool            `db:"done"`
 	Status   string          `db:"status"`
 	Erred    bool            `db:"erred"`
 }
 
 // MintDrainPromotion - a list of promotions associated with a mint job
 type MintDrainPromotion struct {
-	MintJobID   uuid.UUID `db:"mint_drain_id"`
-	PromotionID uuid.UUID `db:"promotion_id"`
+	MintJobID   uuid.UUID       `db:"mint_drain_id"`
+	PromotionID uuid.UUID       `db:"promotion_id"`
+	Done        bool            `db:"done"`
+	Total       decimal.Decimal `db:"total"`
 }
 
 const (
 	// MintDrainJobPending - pending status for the mint_drain job
 	MintDrainJobPending = "pending"
-	// MintDrainJobReady - pending status for the mint_drain job
-	MintDrainJobReady = "ready"
 	// MintDrainJobFailed - failed status for the mint_drain job
 	MintDrainJobFailed = "failed"
 	// MintDrainJobComplete - complete status for the mint_drain job
@@ -1136,15 +1137,18 @@ func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) 
 
 	// get the mint job. only the ones that have finished all the promotion totals
 	statement := `
-select md.*, sum(mdp.total) as total
-from mint_drain as md join mint_drain_promotion as mdp on (md.id = mdp.mint_drain_id)
-where not md.erred and md.status = $1 and
-bool_and(mdp.done) = true
-for update skip locked
-limit 1`
+select md.*,
+	(select sum(mdp.total) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as total,
+	(select bool_and(mdp.done) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as done
+from mint_drain as md
+where not md.erred and md.status = 'pending' and
+(select bool_and(done) from mint_drain_promotion where mint_drain_id=md.id)
+for update of md skip locked
+limit 1;
+`
 
 	job := MintDrainJob{}
-	err = tx.Get(&job, statement, MintDrainJobReady)
+	err = tx.Get(&job, statement)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return attempted, nil
