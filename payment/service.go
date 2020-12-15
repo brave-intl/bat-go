@@ -117,7 +117,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	return service, nil
 }
 
-// CreateOrderFromRequest creates an order from the request test test test test
+// CreateOrderFromRequest creates an order from the request test test test test test
 func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
