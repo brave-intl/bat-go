@@ -1227,6 +1227,14 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 		true,
 		nil,
 	)
+	mockReputation.EXPECT().IsWalletOnPlatform(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
 	service := &Service{
