@@ -12,7 +12,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -816,7 +815,10 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 // VerifyCredentialRequest includes an opaque subscription credential blob
 type VerifyCredentialRequest struct {
-	Credential string `json:"credential" valid:"base64"`
+	Type         string  `json:"type"`
+	Version      float64 `json:"version"`
+	SKU          string  `json:"sku"`
+	Presentation string  `json:"presentation" valid:"base64"`
 }
 
 // VerifyCredential is the handler for verifying subscription credentials
@@ -834,22 +836,39 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
-		var bytes []byte
-		bytes, err = base64.StdEncoding.DecodeString(req.Credential)
-		if err != nil {
-			return handlers.WrapError(err, "Error in decoding credential", http.StatusBadRequest)
+		if req.Type == "time-limited" {
+
+			// Presentation includes a token and token metadata
+			type Presentation struct {
+				IssuedAt  string `json:"issued_at"`
+				ExpiresAt string `json:"expires_at"`
+				Token     string `json:"token"`
+			}
+
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+
+			var presentation Presentation
+			err = json.Unmarshal(bytes, &presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			// presentation.token --> Credentialing utility library magic
+
+			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
+
 		}
 
-		var decodedCredential cbr.CredentialRedemption
-		err = json.Unmarshal(bytes, &decodedCredential)
-		if err != nil {
-			return handlers.WrapError(err, "Error in decoded credential formatting", http.StatusBadRequest)
-		}
+		// CBP redemptions can be reserved for other credential types
 
-		err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
-		if err != nil {
-			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
-		}
+		// err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+		// if err != nil {
+		// 	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+		// }
 
 		return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
 	})
