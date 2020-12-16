@@ -264,8 +264,6 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	logger.Warn().Msg("here, in mintgrant!")
-
 	// for all of the promotion ids (limit of 4 wallets can be linked)
 	// attempt to create a claim.  If we run into a unique key constraint, this means that
 	// we have already created a claim for this wallet id/ promotion
