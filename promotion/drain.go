@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -53,6 +54,20 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	// if this is a brave wallet with a user deposit destination, we need to create a
 	// mint drain job in waiting status, waiting for all promotions to be added to it
 	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
+		// first let's make sure this wallet is an ios attested device...
+
+		ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, os.Getenv("WALLET_ON_PLATFORM_PRIOR_TO"))
+		// is this from wallet reputable as an iOS device?
+		isFromOnPlatform, err := service.reputationClient.IsWalletOnPlatform(ctx, walletID, "ios")
+		if err != nil {
+			return fmt.Errorf("invalid device: %w", err)
+		}
+
+		if !isFromOnPlatform {
+			// wallet is not reputable, decline
+			return fmt.Errorf("unable to drain to wallet: invalid device")
+		}
+
 		// these drained claims commit to mint
 		var promotionIDs = []uuid.UUID{}
 		for k := range fundingSources {
