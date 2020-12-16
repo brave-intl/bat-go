@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
+
+	w "github.com/brave-intl/bat-go/utils/wallet"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -41,16 +44,51 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	if err != nil {
 		return err
 	}
+	var (
+		depositProvider string
+	)
+	if wallet.UserDepositAccountProvider != nil {
+		depositProvider = *wallet.UserDepositAccountProvider
+	}
+
+	// if this is a brave wallet with a user deposit destination, we need to create a
+	// mint drain job in waiting status, waiting for all promotions to be added to it
+	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
+		// first let's make sure this wallet is an ios attested device...
+
+		ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, os.Getenv("WALLET_ON_PLATFORM_PRIOR_TO"))
+		// is this from wallet reputable as an iOS device?
+		isFromOnPlatform, err := service.reputationClient.IsWalletOnPlatform(ctx, walletID, "ios")
+		if err != nil {
+			return fmt.Errorf("invalid device: %w", err)
+		}
+
+		if !isFromOnPlatform {
+			// wallet is not reputable, decline
+			return fmt.Errorf("unable to drain to wallet: invalid device")
+		}
+
+		// these drained claims commit to mint
+		var promotionIDs = []uuid.UUID{}
+		for k := range fundingSources {
+			promotionIDs = append(promotionIDs, promotions[k].ID)
+		}
+
+		walletID, err := uuid.FromString(wallet.ID)
+		if err != nil {
+			return fmt.Errorf("invalid wallet id: %w", err)
+		}
+
+		err = service.Datastore.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
+		if err != nil {
+			return fmt.Errorf("error adding mint drain: %w", err)
+		}
+	}
 
 	for k, v := range fundingSources {
 		var (
-			promotion       = promotions[k]
-			depositProvider string
+			promotion = promotions[k]
 		)
-
-		if wallet.UserDepositAccountProvider != nil {
-			depositProvider = *wallet.UserDepositAccountProvider
-		}
 
 		// if the type is not ads
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
@@ -83,8 +121,8 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}
 
 			// the original request context will be cancelled as soon as the dialer closes the connection.
-			// this will setup a new context with the same values and a minute timeout
-			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+			// this will setup a new context with the same values and a 90 second timeout
+			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
 			ctx = contextutil.Wrap(ctx, asyncCtx)
 
 			go func() {
@@ -107,12 +145,43 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		}
 	}
 
+	// if this is a brave deposit provider, with a deposit destination, we need to
+	// commit the mint drain job by setting it's status to pending
+	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
+		// this will setup a new context with the same values and a minute timeout
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx = contextutil.Wrap(ctx, asyncCtx)
+
+		go func() {
+			defer asyncCancel()
+			defer middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextMintDrainJob",
+				}).Dec()
+
+			middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextMintDrainJob",
+				}).Inc()
+
+			_, err := service.RunNextMintDrainJob(ctx)
+			if err != nil {
+				sentry.CaptureException(err)
+			}
+		}()
+	}
+
 	return nil
 }
 
 // DrainWorker attempts to work on a drain job by redeeming the credentials and transferring funds
 type DrainWorker interface {
 	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error)
+}
+
+// MintWorker mint worker describes what a mint worker is able to do, mint grants
+type MintWorker interface {
+	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
 
 // RedeemAndTransferFunds after validating that all the credential bindings
@@ -155,50 +224,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
-	if *wallet.UserDepositAccountProvider == "brave" {
-		logger.Debug().Msg("RedeemAndTransferFunds: account provider to linked wallet is brave")
-		// get and parse the correct transfer promotion id to create claims on
-		braveTransferPromotionIDs, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).([]string)
-		if !ok {
-			logger.Error().Err(errMissingTransferPromotion).
-				Msg("RedeemAndTransferFunds: missing transfer promotion id")
-			return nil, errMissingTransferPromotion
-		}
-		// for all of the promotion ids (limit of 4 wallets can be linked)
-		// attempt to create a claim.  If we run into a unique key constraint, this means that
-		// we have already created a claim for this wallet id/ promotion
-		var attempts int
-		for _, promoID := range braveTransferPromotionIDs {
-			// convert string promo id to uuid
-			pID, err := uuid.FromString(promoID)
-			if err != nil {
-				logger.Error().Err(err).Msg("RedeemAndTransferFunds: invalid transfer promotion id")
-				return nil, fmt.Errorf("invalid configuration, unable to parse BraveTransferPromotionID: %w", err)
-			}
-			logger.Debug().Msg("RedeemAndTransferFunds: creating the claim to destination")
-			// create a new claim for the wallet deposit account for total
-			// this is a legacy claimed claim
-			_, err = service.Datastore.CreateClaim(pID, wallet.UserDepositDestination, total, decimal.Zero, true)
-			if err != nil {
-				var pgErr *pq.Error
-				if errors.As(err, &pgErr) {
-					// unique constraint error (wallet id and promotion id combo exists)
-					// use one of the other 4 promotions instead
-					if pgErr.Code == "23505" {
-						attempts++
-						continue
-					}
-				}
-				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to create a new claim to destination")
-				return nil, err
-			}
-			break
-		}
-		if attempts >= len(braveTransferPromotionIDs) {
-			return nil, errors.New("limit of draining 4 wallets to brave wallet exceeded")
-		}
-		return nil, nil
-	} else if *wallet.UserDepositAccountProvider == "uphold" {
+	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
 		if err != nil {
@@ -208,10 +234,77 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			service.drainChannel <- tx
 		}
 		return tx, err
+	} else if *wallet.UserDepositAccountProvider == "brave" {
+		// update the mint job for this walletID
+
+		promoTotal := map[string]decimal.Decimal{}
+		// iterate through the credentials
+		// get a total count per promotion
+		for _, cred := range credentials {
+			promotionID := strings.TrimSuffix(cred.Issuer, ":control")
+			v, ok := promoTotal[promotionID]
+			if ok {
+				// each credential is 0.25
+				promoTotal[promotionID] = v.Add(decimal.NewFromFloat(0.25))
+			} else {
+				promoTotal[promotionID] = decimal.NewFromFloat(0.25)
+			}
+		}
+		for k, v := range promoTotal {
+			promotionID, err := uuid.FromString(k)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get promotion id as uuid: %w", err)
+			}
+			// update the mint_drain_promotion table with the corresponding total redeemed
+			err = service.Datastore.SetMintDrainPromotionTotal(ctx, walletID, promotionID, v)
+			if err != nil {
+				return nil, fmt.Errorf("failed to set append total funds: %w", err)
+			}
+		}
+		return new(w.TransactionInfo), nil
 	}
 
 	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
 	return nil, fmt.Errorf(
 		"failed to transfer funds: user_deposit_account_provider unknown: %s",
 		*wallet.UserDepositAccountProvider)
+}
+
+// MintGrant create a new grant for the wallet specified with the total specified
+func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promotions ...uuid.UUID) error {
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+
+	// for all of the promotion ids (limit of 4 wallets can be linked)
+	// attempt to create a claim.  If we run into a unique key constraint, this means that
+	// we have already created a claim for this wallet id/ promotion
+	var attempts int
+	for _, pID := range promotions {
+		logger.Debug().Msg("MintGrant: creating the claim to destination")
+		// create a new claim for the wallet deposit account for total
+		// this is a legacy claimed claim
+		_, err = service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
+		if err != nil {
+			var pgErr *pq.Error
+			if errors.As(err, &pgErr) {
+				// unique constraint error (wallet id and promotion id combo exists)
+				// use one of the other 4 promotions instead
+				if pgErr.Code == "23505" {
+					attempts++
+					continue
+				}
+			}
+			logger.Error().Err(err).Msg("MintGrant: failed to create a new claim to destination")
+			return err
+		}
+		break
+	}
+	if attempts >= len(promotions) {
+		return errors.New("limit of draining 4 wallets to brave wallet exceeded")
+	}
+	return nil
 }
