@@ -711,7 +711,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 	})
 }
 
-// HandleStripeWebhook is the handler for stripe checkout session webhooks
+// HandleStripeWebhook is the handler for stripe checkout session webhooks test
 func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// os.Getenv("STRIPE_SECRET")
