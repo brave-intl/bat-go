@@ -254,6 +254,12 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
+		for i, item := range order.Items {
+			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
+				order.Items[i].Type = "time-limited"
+			}
+		}
+
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
 	})
 }
@@ -279,6 +285,12 @@ func GetOrder(service *Service) handlers.AppHandler {
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
+		}
+
+		for i, item := range order.Items {
+			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
+				order.Items[i].Type = "time-limited"
+			}
 		}
 
 		if order != nil && !order.IsPaid() && order.IsStripePayable() {

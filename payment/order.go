@@ -41,6 +41,7 @@ type OrderItem struct {
 	Subtotal    decimal.Decimal      `json:"subtotal" db:"subtotal"`
 	Location    datastore.NullString `json:"location" db:"location"`
 	Description datastore.NullString `json:"description" db:"description"`
+	Type        string               `json:"type"`
 }
 
 const (
