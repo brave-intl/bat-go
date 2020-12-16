@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -392,17 +391,6 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 
 // LinkBraveDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of brave wallets
 func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return &handlers.AppError{
-			Cause:   fmt.Errorf("Internal Error"),
-			Message: "Internal Error",
-			Code:    http.StatusInternalServerError,
-		}
-	}
-}
-
-// LinkBraveDepositAccountV4 - produces an http handler for the service s which handles deposit account linking of brave wallets
-func LinkBraveDepositAccountV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
 			ctx = r.Context()
