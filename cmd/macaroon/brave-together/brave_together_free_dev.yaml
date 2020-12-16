@@ -9,4 +9,3 @@ tokens:
       - description: "One month free trial for Brave Together"
       - credential_type: "time-limited"
       - credential_valid_duration: "P1M"
-      - payment_methods: ["stripe"]
