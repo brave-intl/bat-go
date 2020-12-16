@@ -27,6 +27,7 @@ import (
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
+	"github.com/go-chi/cors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -72,6 +73,18 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r := chi.NewRouter()
 
+	if os.Getenv("ENV") != "production" {
+		r.Use(cors.Handler(cors.Options{
+			Debug:            true,
+			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software"},
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: false,
+			MaxAge:           300,
+		}))
+	}
+
 	// chain should be:
 	// id / transfer -> ip -> heartbeat -> request logger / recovery -> token check -> rate limit
 	// -> instrumentation -> handler
@@ -95,7 +108,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// now we have middlewares we want included in logging
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
-	r.Use(middleware.RateLimiter(ctx, 180))
+	if os.Getenv("ENV") == "production" {
+		r.Use(middleware.RateLimiter(ctx, 180))
+	}
 
 	var walletService *wallet.Service
 	// use cobra configurations for setting up wallet service

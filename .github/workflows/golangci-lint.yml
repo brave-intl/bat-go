@@ -21,4 +21,5 @@ jobs:
         uses: golangci/golangci-lint-action@e868220d9fd3b523f1a8fcfb69749e8c7521ba14
         with:
           version: v1.29
+          args: --timeout 2m
 

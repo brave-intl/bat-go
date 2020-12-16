@@ -95,6 +95,15 @@ type Datastore interface {
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
+	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
+	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
+
+	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
+	SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error
+
+	// RunNextMintDrainJob to create new grants from the mint queue
+	RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error)
+
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
 	// GetOrder by ID
@@ -860,6 +869,70 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	return &order, nil
 }
 
+// SetMintDrainPromotionTotal - set the total number of redemptions for this drain job
+func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	statement := `
+update mint_drain_promotion set total = $1, done = true where
+mint_drain_id=(select mint_drain_id from mint_drain where wallet_id=$2) and
+promotion_id=$3`
+
+	_, err = tx.ExecContext(ctx, statement, total, walletID, promotionID)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
+func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	var mintDrainJob = MintDrainJob{}
+
+	statement := `
+	insert into mint_drain (wallet_id)
+	values ($1)
+	returning *`
+	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range promotionIDs {
+		_, err = tx.Exec(`
+			insert into mint_drain_promotion
+				(mint_drain_id, promotion_id)
+			values
+				($1, $2)`, mintDrainJob.ID, id)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // DrainClaim by marking the claim as drained and inserting a new drain entry
 func (pg *Postgres) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
 	credentialsJSON, err := json.Marshal(credentials)
@@ -1010,6 +1083,160 @@ limit 1`
 	return attempted, nil
 }
 
+// MintDrainJob - Job structure for the mint_drain queue
+type MintDrainJob struct {
+	ID       uuid.UUID       `db:"id"`
+	WalletID uuid.UUID       `db:"wallet_id"`
+	Total    decimal.Decimal `db:"total"`
+	Done     bool            `db:"done"`
+	Status   string          `db:"status"`
+	Erred    bool            `db:"erred"`
+}
+
+// MintDrainPromotion - a list of promotions associated with a mint job
+type MintDrainPromotion struct {
+	MintJobID   uuid.UUID       `db:"mint_drain_id"`
+	PromotionID uuid.UUID       `db:"promotion_id"`
+	Done        bool            `db:"done"`
+	Total       decimal.Decimal `db:"total"`
+}
+
+const (
+	// MintDrainJobPending - pending status for the mint_drain job
+	MintDrainJobPending = "pending"
+	// MintDrainJobFailed - failed status for the mint_drain job
+	MintDrainJobFailed = "failed"
+	// MintDrainJobComplete - complete status for the mint_drain job
+	MintDrainJobComplete = "complete"
+)
+
+// RunNextMintDrainJob to process mints vg
+func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error) {
+
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// get and parse the correct transfer promotion id to create claims on
+	braveTransferPromotionIDs, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).([]string)
+	if !ok {
+		logger.Error().Err(errMissingTransferPromotion).
+			Msg("MintJob: missing transfer promotion id")
+		return false, errMissingTransferPromotion
+	}
+
+	tx, err := pg.RawDB().Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+	defer pg.RollbackTx(tx)
+
+	// get the mint job. only the ones that have finished all the promotion totals
+	statement := `
+select md.*,
+	(select sum(mdp.total) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as total,
+	(select bool_and(mdp.done) from mint_drain_promotion as mdp where mdp.mint_drain_id=md.id) as done
+from mint_drain as md
+where not md.erred and md.status = 'pending' and
+(select bool_and(done) from mint_drain_promotion where mint_drain_id=md.id)
+for update of md skip locked
+limit 1;
+`
+
+	job := MintDrainJob{}
+	err = tx.Get(&job, statement)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return attempted, nil
+		}
+		return attempted, err
+	}
+	// are all of the claims associated with all of the promotions drained?
+
+	statement = `
+select
+	bool_and(c.drained)
+from
+	mint_drain_promotion mdp
+	join claims c
+		on (c.promotion_id=mdp.promotion_id)
+where
+	mdp.mint_drain_id = $1
+	and c.wallet_id= $2
+`
+	var drained bool
+	err = tx.Get(&drained, statement, job.ID, job.WalletID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return attempted, nil
+		}
+		return attempted, err
+	}
+
+	if !drained {
+		return attempted, nil
+	}
+
+	// yes? set status to complete and mint the grants
+	promoIDs, err := toUUIDs(braveTransferPromotionIDs...)
+	if err != nil {
+		// log the error from redeem and transfer
+		logger.Error().Err(err).Msg("failed to derive promotion ids from configuration")
+		return attempted, err
+	}
+
+	attempted = true
+	// mint the grant to the wallet's deposit destination
+	statement = `
+select
+	user_deposit_destination
+from
+	wallets
+where
+	id = $1
+`
+	var depositDestination string
+	err = tx.Get(&depositDestination, statement, job.WalletID)
+	if err != nil {
+		return attempted, err
+	}
+
+	if depositDestination == "" {
+		return attempted, errors.New("Wallet is not verified")
+	}
+
+	depositDestinationUUID, err := uuid.FromString(depositDestination)
+	if err != nil {
+		return attempted, errors.New("destination invalid wallet id")
+	}
+
+	err = worker.MintGrant(ctx, depositDestinationUUID, job.Total, promoIDs...)
+	if err != nil {
+		// log the error from redeem and transfer
+		logger.Error().Err(err).Msg("failed to mint grants")
+		if _, err := tx.Exec(`update mint_drain set erred = true where id = $1`, job.ID); err != nil {
+			pg.RollbackTx(tx)
+		}
+		_ = tx.Commit()
+		return attempted, err
+	}
+
+	if _, err := tx.Exec(`update mint_drain set status = 'complete' where id = $1`, job.ID); err != nil {
+		pg.RollbackTx(tx)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
+}
+
 // UpdateOrder updates the orders status.
 //	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
@@ -1063,4 +1290,18 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	`, orderID)
 
 	return sum, err
+}
+
+func toUUIDs(a ...string) ([]uuid.UUID, error) {
+	var (
+		b = []uuid.UUID{}
+	)
+	for _, id := range a {
+		v, err := uuid.FromString(id)
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, v)
+	}
+	return b, nil
 }
