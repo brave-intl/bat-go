@@ -9,14 +9,10 @@ import (
 
 	"errors"
 
-	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/go-chi/chi"
 	"github.com/linkedin/goavro"
-	"github.com/spf13/viper"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -288,75 +284,75 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 }
 
 // SetupService - setup the payment microservice
-func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+// func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
+// 	logger, err := appctx.GetLogger(ctx)
+// 	if err != nil {
+// 		// no logger, setup
+// 		ctx, logger = logging.SetupLogger(ctx)
+// 	}
 
-	// setup the service now
-	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "payment_db")
-	if err != nil {
-		logger.Panic().Err(err).Msg("unable connect to payment db")
-	}
-	// roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "payment_ro_db")
-	// if err != nil {
-	// 	logger.Panic().Err(err).Msg("unable connect to payment db")
-	// }
+// 	// setup the service now
+// 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "payment_db")
+// 	if err != nil {
+// 		logger.Panic().Err(err).Msg("unable connect to payment db")
+// 	}
+// 	// roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "payment_ro_db")
+// 	// if err != nil {
+// 	// 	logger.Panic().Err(err).Msg("unable connect to payment db")
+// 	// }
 
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
+// 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
 
-	// add our command line params to context
-	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
+// 	// add our command line params to context
+// 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 
-	s, err := InitService(ctx, db)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize payment service")
-	}
+// 	s, err := InitService(ctx, db)
+// 	if err != nil {
+// 		logger.Fatal().Err(err).Msg("failed to initialize payment service")
+// 	}
 
-	// // setup reputation client
-	// s.repClient, err = reputation.New()
-	// // its okay to not fatally fail if this environment is local and we cant make a rep client
-	// if err != nil && os.Getenv("ENV") != "local" {
-	// 	logger.Fatal().Err(err).Msg("failed to initialize payment service")
-	// }
+// 	// // setup reputation client
+// 	// s.repClient, err = reputation.New()
+// 	// // its okay to not fatally fail if this environment is local and we cant make a rep client
+// 	// if err != nil && os.Getenv("ENV") != "local" {
+// 	// 	logger.Fatal().Err(err).Msg("failed to initialize payment service")
+// 	// }
 
-	// ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
+// 	// ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
 
-	// if feature is enabled, setup the routes
-	if viper.GetBool("payments-feature-flag") {
-		// setup our payment routes
-		r.Route("/v1/orders", func(r chi.Router) {
-			r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(s)))
-			r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(s)))
+// 	// if feature is enabled, setup the routes
+// 	if viper.GetBool("payments-feature-flag") {
+// 		// setup our payment routes
+// 		r.Route("/v1/orders", func(r chi.Router) {
+// 			r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(s)))
+// 			r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(s)))
 
-			if os.Getenv("ENV") != "production" {
-				r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(s)))
-			}
+// 			if os.Getenv("ENV") != "production" {
+// 				r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(s)))
+// 			}
 
-			r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(s)))
-			r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(s)))
+// 			r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(s)))
+// 			r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(s)))
 
-			r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(s)))
+// 			r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(s)))
 
-			r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(s)))
-			r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(s)))
-			if os.Getenv("ENV") != "production" {
-				r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(s)))
-			}
-			r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(s)))
-		})
+// 			r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(s)))
+// 			r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(s)))
+// 			if os.Getenv("ENV") != "production" {
+// 				r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(s)))
+// 			}
+// 			r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(s)))
+// 		})
 
-		r.Route("/v1/credentials", func(r chi.Router) {
-			if os.Getenv("ENV") != "production" {
-				r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(s)))
-			}
-		})
+// 		r.Route("/v1/credentials", func(r chi.Router) {
+// 			if os.Getenv("ENV") != "production" {
+// 				r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(s)))
+// 			}
+// 		})
 
-		r.Route("/v1/webhooks", func(r chi.Router) {
-			r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(s)))
-		})
-	}
-	return r, ctx, s
-}
+// 		r.Route("/v1/webhooks", func(r chi.Router) {
+// 			r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(s)))
+// 		})
+// 	}
+// 	return r, ctx, s
+// }
