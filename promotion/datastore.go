@@ -871,23 +871,13 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 // SetMintDrainPromotionTotal - set the total number of redemptions for this drain job
 func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
-	}
-	defer pg.RollbackTx(tx)
 
 	statement := `
 update mint_drain_promotion set total = $1, done = true where
 mint_drain_id=(select mint_drain_id from mint_drain where wallet_id=$2) and
 promotion_id=$3`
 
-	_, err = tx.ExecContext(ctx, statement, total, walletID, promotionID)
-	if err != nil {
-		return err
-	}
-
-	err = tx.Commit()
+	_, err := pg.Exec(statement, total, walletID, promotionID)
 	if err != nil {
 		return err
 	}
