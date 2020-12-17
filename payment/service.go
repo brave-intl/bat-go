@@ -82,13 +82,14 @@ func (s *Service) InitKafka(ctx context.Context) error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(ctx context.Context, datastore Datastore) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (*Service, error) {
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
 	}
 
 	service := &Service{
+		wallet:           walletService,
 		cbClient:         cbClient,
 		Datastore:        datastore,
 		pauseVoteUntilMu: sync.RWMutex{},
@@ -116,7 +117,7 @@ func InitService(ctx context.Context, datastore Datastore) (*Service, error) {
 	return service, nil
 }
 
-// CreateOrderFromRequest creates an order from the request test test test test test
+// CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
@@ -188,7 +189,7 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	return nil
 }
 
-// UpdateOrderMetadata checks to see if an order has been paid and updates it if so
+// UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
 	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
 	if err != nil {
@@ -282,77 +283,3 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 	return s.Datastore.RunNextOrderJob(ctx, s)
 }
-
-// SetupService - setup the payment microservice
-// func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
-// 	logger, err := appctx.GetLogger(ctx)
-// 	if err != nil {
-// 		// no logger, setup
-// 		ctx, logger = logging.SetupLogger(ctx)
-// 	}
-
-// 	// setup the service now
-// 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "payment_db")
-// 	if err != nil {
-// 		logger.Panic().Err(err).Msg("unable connect to payment db")
-// 	}
-// 	// roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "payment_ro_db")
-// 	// if err != nil {
-// 	// 	logger.Panic().Err(err).Msg("unable connect to payment db")
-// 	// }
-
-// 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
-
-// 	// add our command line params to context
-// 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
-
-// 	s, err := InitService(ctx, db)
-// 	if err != nil {
-// 		logger.Fatal().Err(err).Msg("failed to initialize payment service")
-// 	}
-
-// 	// // setup reputation client
-// 	// s.repClient, err = reputation.New()
-// 	// // its okay to not fatally fail if this environment is local and we cant make a rep client
-// 	// if err != nil && os.Getenv("ENV") != "local" {
-// 	// 	logger.Fatal().Err(err).Msg("failed to initialize payment service")
-// 	// }
-
-// 	// ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
-
-// 	// if feature is enabled, setup the routes
-// 	if viper.GetBool("payments-feature-flag") {
-// 		// setup our payment routes
-// 		r.Route("/v1/orders", func(r chi.Router) {
-// 			r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(s)))
-// 			r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(s)))
-
-// 			if os.Getenv("ENV") != "production" {
-// 				r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(s)))
-// 			}
-
-// 			r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(s)))
-// 			r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(s)))
-
-// 			r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(s)))
-
-// 			r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(s)))
-// 			r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(s)))
-// 			if os.Getenv("ENV") != "production" {
-// 				r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(s)))
-// 			}
-// 			r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(s)))
-// 		})
-
-// 		r.Route("/v1/credentials", func(r chi.Router) {
-// 			if os.Getenv("ENV") != "production" {
-// 				r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(s)))
-// 			}
-// 		})
-
-// 		r.Route("/v1/webhooks", func(r chi.Router) {
-// 			r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(s)))
-// 		})
-// 	}
-// 	return r, ctx, s
-// }
