@@ -1340,7 +1340,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	b, _ := httputil.DumpResponse(rr.Result(), true)
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
-	<-time.After(5 * time.Second)
+	<-time.After(2 * time.Second)
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
