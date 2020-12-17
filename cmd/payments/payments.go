@@ -54,7 +54,7 @@ func init() {
 	cmd.Must(viper.BindPFlag("enable-link-drain-flag", PaymentsCmd.PersistentFlags().Lookup("enable-link-drain-flag")))
 	cmd.Must(viper.BindEnv("enable-link-drain-flag", "ENABLE_LINKING_DRAINING"))
 
-	// ro-datastore - the writable datastore
+	// ro-datastore - the writable datastore test
 	PaymentsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
 		"the read only datastore for the payment system")
 	cmd.Must(viper.BindPFlag("ro-datastore", PaymentsCmd.PersistentFlags().Lookup("ro-datastore")))
