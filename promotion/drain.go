@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -122,11 +121,11 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 			// the original request context will be cancelled as soon as the dialer closes the connection.
 			// this will setup a new context with the same values and a 90 second timeout
-			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
-			ctx = contextutil.Wrap(ctx, asyncCtx)
+			//asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
+			//ctx = contextutil.Wrap(ctx, asyncCtx)
 
 			go func() {
-				defer asyncCancel()
+				//defer asyncCancel()
 				defer middleware.ConcurrentGoRoutines.With(
 					prometheus.Labels{
 						"method": "NextDrainJob",
@@ -150,11 +149,11 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	// commit the mint drain job by setting it's status to pending
 	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
 		// this will setup a new context with the same values and a minute timeout
-		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
-		ctx = contextutil.Wrap(ctx, asyncCtx)
+		//asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
+		//ctx = contextutil.Wrap(ctx, asyncCtx)
 
 		go func() {
-			defer asyncCancel()
+			//defer asyncCancel()
 			defer middleware.ConcurrentGoRoutines.With(
 				prometheus.Labels{
 					"method": "NextMintDrainJob",
