@@ -137,6 +137,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 						"method": "NextDrainJob",
 					}).Inc()
 
+				<-time.After(time.Second)
 				_, err := service.RunNextDrainJob(ctx)
 				if err != nil {
 					sentry.CaptureException(err)
