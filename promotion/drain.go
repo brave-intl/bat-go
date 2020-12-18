@@ -145,32 +145,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		}
 	}
 
-	// if this is a brave deposit provider, with a deposit destination, we need to
-	// commit the mint drain job by setting it's status to pending
-	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
-		// this will setup a new context with the same values and a minute timeout
-		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), time.Minute)
-		ctx = contextutil.Wrap(ctx, asyncCtx)
-
-		go func() {
-			defer asyncCancel()
-			defer middleware.ConcurrentGoRoutines.With(
-				prometheus.Labels{
-					"method": "NextMintDrainJob",
-				}).Dec()
-
-			middleware.ConcurrentGoRoutines.With(
-				prometheus.Labels{
-					"method": "NextMintDrainJob",
-				}).Inc()
-
-			_, err := service.RunNextMintDrainJob(ctx)
-			if err != nil {
-				sentry.CaptureException(err)
-			}
-		}()
-	}
-
 	return nil
 }
 
