@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/payment"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"

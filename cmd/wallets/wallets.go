@@ -33,7 +33,7 @@ func init() {
 	WalletsCmd.AddCommand(walletsRestCmd)
 
 	// add this command as a serve subcommand
-	cmd.RootCmd.AddCommand(WalletsCmd)
+	cmd.ServeCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
 	// datastore - the writable datastore
