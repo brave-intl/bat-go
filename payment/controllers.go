@@ -788,7 +788,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 		if req.Type == "time-limited" {
 
-			// Presentation includes a token and token metadata
+			// Presentation includes a token and token metadata test
 			type Presentation struct {
 				IssuedAt  string `json:"issued_at"`
 				ExpiresAt string `json:"expires_at"`
