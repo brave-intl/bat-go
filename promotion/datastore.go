@@ -837,7 +837,7 @@ limit 1`
 
 // This code can be deleted once https://github.com/brave-intl/bat-go/issues/263 is addressed.
 
-// GetOrder queries the database and returns an order test
+// GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
