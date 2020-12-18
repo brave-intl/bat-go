@@ -30,6 +30,7 @@ func Must(err error) {
 	if err != nil {
 		log.Printf("failed to initialize: %s\n", err.Error())
 		// exit with failure
+		<-time.After(5 * time.Second)
 		os.Exit(1)
 	}
 }
@@ -51,6 +52,7 @@ func Execute(version, commit, buildTime string) {
 	// execute the root cmd
 	if err := RootCmd.ExecuteContext(ctx); err != nil {
 		logger.Error().Err(err).Msg("./bat-go command encountered an error")
+		<-time.After(5 * time.Second)
 		os.Exit(1)
 	}
 }
@@ -135,7 +137,7 @@ func Perform(action string, fn func(cmd *cobra.Command, args []string) error) fu
 			}
 			log.Msg("failed")
 		}
-		<-time.After(10 * time.Millisecond)
+		<-time.After(2 * time.Second)
 		if err != nil {
 			os.Exit(1)
 		}
