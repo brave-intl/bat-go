@@ -101,17 +101,6 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	return nil, err
 }
 
-// NewWritablePostgres creates a new Postgres Datastore
-func NewWritablePostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
-	if pg != nil {
-		return &DatastoreWithPrometheus{
-			base: &Postgres{*pg}, instanceName: "wallet_datastore",
-		}, err
-	}
-	return nil, err
-}
-
 // CreateKey creates an encrypted key in the database based on the merchant
 func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error) {
 	// interface and create an api key
