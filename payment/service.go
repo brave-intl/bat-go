@@ -98,24 +98,25 @@ func InitService(ctx context.Context, datastore Datastore) (*Service, error) {
 		pauseVoteUntilMu: sync.RWMutex{},
 	}
 
-	// setup runnable jobs
-	service.jobs = []srv.Job{
-		{
-			Func:    service.RunNextVoteDrainJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
-		{
-			Func:    service.RunNextOrderJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
-		},
-	}
-
-	err = service.InitKafka(ctx)
-	if err != nil {
-		return nil, err
-	}
+	/*
+		// setup runnable jobs
+		service.jobs = []srv.Job{
+			{
+				Func:    service.RunNextVoteDrainJob,
+				Cadence: 5 * time.Second,
+				Workers: 1,
+			},
+			{
+				Func:    service.RunNextOrderJob,
+				Cadence: 5 * time.Second,
+				Workers: 1,
+			},
+		}
+		err = service.InitKafka(ctx)
+		if err != nil {
+			return nil, err
+		}
+	*/
 
 	return service, nil
 }
