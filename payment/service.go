@@ -361,6 +361,6 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(s)))
 		})
 	}
-	logger.Info("setup routes for payment service")
+	logger.Info().Msg("setup routes for payment service")
 	return r, ctx, s
 }
