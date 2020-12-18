@@ -91,6 +91,8 @@ type Datastore interface {
 	// InsertBATLossEvent inserts claims of lost bat
 	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
+	DrainClaims(claim []*Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
+	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
@@ -858,6 +860,43 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	}
 
 	return &order, nil
+}
+
+// DrainClaims by marking the claims as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaims(claims []*Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
+
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	for _, claim := range claims {
+		_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	statement := `
+	insert into claim_drain (credentials, wallet_id, total)
+	values ($1, $2, $3)
+	returning *`
+	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // DrainClaim by marking the claim as drained and inserting a new drain entry

@@ -45,7 +45,7 @@ type result struct{}
 func (r result) LastInsertId() (int64, error) { return 1, nil }
 func (r result) RowsAffected() (int64, error) { return 1, nil }
 
-func TestLinkBraveWalletV4(t *testing.T) {
+func TestLinkBraveWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	var (
@@ -73,7 +73,7 @@ func TestLinkBraveWalletV4(t *testing.T) {
 				}`),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		handler        = wallet.LinkBraveDepositAccountV4(&wallet.Service{
+		handler        = wallet.LinkBraveDepositAccountV3(&wallet.Service{
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
