@@ -15,7 +15,7 @@ type Job struct {
 	Cadence time.Duration
 }
 
-// JobService - interface defining what can have jobs test
+// JobService - interface defining what can have jobs
 type JobService interface {
 	Jobs() []Job
 }

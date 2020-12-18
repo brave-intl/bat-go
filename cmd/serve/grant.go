@@ -174,7 +174,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
-	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
+	paymentService, err := payment.InitService(ctx, paymentPG)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Payment service initialization failed")
@@ -183,11 +183,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, paymentService.Jobs()...)
 
-	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
-	r.Mount("/v1/orders", payment.Router(paymentService))
-	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
-	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
-
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
@@ -195,7 +190,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
-		paymentService, err := payment.InitService(ctx, paymentDB, walletService)
+		paymentService, err := payment.InitService(ctx, paymentDB)
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Payment service initialization failed")
