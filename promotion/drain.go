@@ -123,7 +123,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// the original request context will be cancelled as soon as the dialer closes the connection.
 			// this will setup a new context with the same values and a 90 second timeout
 			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
-			ctx = contextutil.Wrap(ctx, asyncCtx)
+			scopedCtx := contextutil.Wrap(ctx, asyncCtx)
 
 			go func() {
 				defer asyncCancel()
@@ -137,7 +137,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 						"method": "NextDrainJob",
 					}).Inc()
 
-				_, err := service.RunNextDrainJob(ctx)
+				_, err := service.RunNextDrainJob(scopedCtx)
 				if err != nil {
 					sentry.CaptureException(err)
 				}
