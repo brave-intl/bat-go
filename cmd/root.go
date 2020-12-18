@@ -29,6 +29,7 @@ var (
 func Must(err error) {
 	if err != nil {
 		log.Printf("failed to initialize: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "failed to inialize: %s\n", err.Error())
 		// exit with failure
 		<-time.After(5 * time.Second)
 		os.Exit(1)
@@ -52,6 +53,7 @@ func Execute(version, commit, buildTime string) {
 	// execute the root cmd
 	if err := RootCmd.ExecuteContext(ctx); err != nil {
 		logger.Error().Err(err).Msg("./bat-go command encountered an error")
+		fmt.Fprintf(os.Stderr, "error encountered in bat go: %s\n", err.Error())
 		<-time.After(5 * time.Second)
 		os.Exit(1)
 	}
