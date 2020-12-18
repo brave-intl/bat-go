@@ -24,9 +24,11 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r, ctx, _ := payment.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
+
 	cmd.Must(err)
 
 	// add profiling flag to enable profiling routes
+	logger.Info().Msg("setting up pprof for service, port 6061")
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
@@ -35,6 +37,7 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 		}()
 	}
 
+	logger.Info().Msg("creating web server")
 	// setup server, and run
 	srv := http.Server{
 		Addr:         viper.GetString("address"),
@@ -46,8 +49,10 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)
 
+	logger.Info().Msg("server listening")
 	if err = srv.ListenAndServe(); err != nil {
 		sentry.CaptureException(err)
 		logger.Fatal().Err(err).Msg("HTTP server start failed!")
 	}
+	<-time.After(2 * time.Second)
 }

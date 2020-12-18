@@ -300,12 +300,15 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if err != nil {
 		logger.Panic().Err(err).Msg("unable connect to payment db")
 	}
-	// roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "payment_ro_db")
-	// if err != nil {
-	// 	logger.Panic().Err(err).Msg("unable connect to payment db")
-	// }
+	//roDB, err := NewReadOnlyPostgres(viper.GetString("ro-datastore"), false, "payment_ro_db")
+	//if err != nil {
+	//	logger.Panic().Err(err).Msg("unable connect to payment db")
+	//}
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, db)
+
+	// TODO: fix to be actually a read only connection
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, db)
 
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
@@ -358,5 +361,6 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(s)))
 		})
 	}
+	logger.Info("setup routes for payment service")
 	return r, ctx, s
 }
