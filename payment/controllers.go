@@ -20,61 +20,11 @@ import (
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
-	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stripe/stripe-go"
 	"github.com/stripe/stripe-go/client"
 	"github.com/stripe/stripe-go/webhook"
 )
-
-// Router for order endpoints test
-func Router(service *Service) chi.Router {
-	r := chi.NewRouter()
-	// TODO - Scope down CORS to origins / methods we'll need.
-	if os.Getenv("ENV") != "production" {
-		r.Use(cors.Handler(cors.Options{
-			Debug:          true,
-			AllowedOrigins: []string{"https://confab.bsg.brave.software"}, // Use this to allow specific origin hosts
-			//AllowedOrigins: []string{"*"},
-			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
-			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
-			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: false,
-			MaxAge:           300, // Maximum value not ignored by any of major browsers
-		}))
-	}
-
-	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
-
-	if os.Getenv("ENV") != "production" {
-		r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(service)))
-	}
-
-	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
-	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
-
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
-
-	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
-	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-	if os.Getenv("ENV") != "production" {
-		r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(service)))
-	}
-	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
-
-	return r
-}
-
-// CredentialRouter handles calls relating to credentials
-func CredentialRouter(service *Service) chi.Router {
-	r := chi.NewRouter()
-	if os.Getenv("ENV") != "production" {
-		r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
-	}
-	return r
-}
 
 // WebhookRouter handles calls relating to payments
 func WebhookRouter(service *Service) chi.Router {
