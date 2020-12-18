@@ -33,7 +33,7 @@ func init() {
 	PaymentsCmd.AddCommand(paymentsRestCmd)
 
 	// add this command as a serve subcommand
-	cmd.RootCmd.AddCommand(PaymentsCmd)
+	cmd.ServeCmd.AddCommand(PaymentsCmd)
 
 	// setup the flags
 	// datastore - the writable datastore
