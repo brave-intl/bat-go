@@ -641,7 +641,7 @@ from claims, (
 		promotion_type
 	from promotions
 	where promotion_type = $2
-	and id != (
+	and id != any(
 		select id from mint_drain_promotion
 		where mint_drain_id = any(
 			select id from mint_drain
