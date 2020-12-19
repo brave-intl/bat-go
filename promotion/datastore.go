@@ -42,17 +42,6 @@ type BATLossEvent struct {
 	Platform string          `db:"platform" json:"platform"`
 }
 
-// DrainJob holds information about wallets that have had ads drained
-type DrainJob struct {
-	ID            uuid.UUID       `db:"id"`
-	Credentials   string          `db:"credentials"`
-	WalletID      uuid.UUID       `db:"wallet_id"`
-	Total         decimal.Decimal `db:"total"`
-	TransactionID *string         `db:"transaction_id"`
-	Erred         bool            `db:"erred"`
-	ErrCode       *string         `db:"errcode"`
-}
-
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	grantserver.Datastore
@@ -114,8 +103,6 @@ type Datastore interface {
 
 	// RunNextMintDrainJob to create new grants from the mint queue
 	RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error)
-	// GetDrainJobs gets all jobs associated with a wallet
-	GetDrainJobs(ctx context.Context, walletID uuid.UUID) (DrainJob []error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -656,7 +643,10 @@ from claims, (
 	where promotion_type = $2
 	and id != (
 		select id from mint_drain_promotion
-		where wallet_id = $1
+		where mint_drain_id = any(
+			select id from mint_drain
+			where wallet_id = $1
+		)
 	)
 ) as promos
 where claims.wallet_id = $1
@@ -1025,6 +1015,17 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 	}
 	defer pg.RollbackTx(tx)
 
+	// FIXME maybe useful to later move definition outside of this method scope
+	type DrainJob struct {
+		ID            uuid.UUID       `db:"id"`
+		Credentials   string          `db:"credentials"`
+		WalletID      uuid.UUID       `db:"wallet_id"`
+		Total         decimal.Decimal `db:"total"`
+		TransactionID *string         `db:"transaction_id"`
+		Erred         bool            `db:"erred"`
+		ErrCode       *string         `db:"errcode"`
+	}
+
 	statement := `
 select *
 from claim_drain
@@ -1105,16 +1106,6 @@ const (
 	// MintDrainJobComplete - complete status for the mint_drain job
 	MintDrainJobComplete = "complete"
 )
-
-func (pg *Postgres) GetDrainJobs(ctx context.Context, walletID uuid.UUID) (*[]DrainJob, error) {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer pg.RollbackTx(tx)
-
-	return &drainJobs, nil
-}
 
 // RunNextMintDrainJob to process mints vg
 func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error) {
