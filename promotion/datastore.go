@@ -19,6 +19,7 @@ import (
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -641,13 +642,17 @@ from claims, (
 		promotion_type
 	from promotions
 	where promotion_type = $2
+	and id not in (select unnest($3::uuid[]))
 ) as promos
 where claims.wallet_id = $1
 	and (claims.redeemed = true or claims.legacy_claimed = true)
 	and claims.promotion_id = promos.id
 group by promos.promotion_type;`
+
+	braveTransferUUIDs, _ := toUUIDs(strings.Split(os.Getenv("BRAVE_TRANSFER_PROMOTION_IDS"), " ")...)
+
 	summaries := []ClaimSummary{}
-	err := pg.RawDB().Select(&summaries, statement, walletID, grantType)
+	err := pg.RawDB().Select(&summaries, statement, walletID, grantType, pq.Array(braveTransferUUIDs))
 	if err != nil {
 		return nil, err
 	}
