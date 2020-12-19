@@ -144,7 +144,28 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}()
 		}
 	}
+	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
+		scopedCtx := contextutil.Wrap(ctx, asyncCtx)
 
+		go func() {
+			defer asyncCancel()
+			defer middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextMintDrainJob",
+				}).Dec()
+
+			middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextMintDrainJob",
+				}).Inc()
+
+			_, err := service.RunNextMintDrainJob(scopedCtx)
+			if err != nil {
+				sentry.CaptureException(err)
+			}
+		}()
+	}
 	return nil
 }
 

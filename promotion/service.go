@@ -225,8 +225,8 @@ func InitService(
 		},
 		{
 			Func:    service.RunNextMintDrainJob,
-			Cadence: 5 * time.Second,
-			Workers: 1,
+			Cadence: time.Second,
+			Workers: 2,
 		},
 	}
 
