@@ -759,6 +759,24 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 		"type": "ads"
 	}`, body, "expected a aggregated claim response")
 
+	// ignored promotion (brave transfer
+	priorClaim := claim
+	promotion, issuer, claim = suite.setupAdsClaim(service, info, 0)
+	os.Setenv("BRAVE_TRANSFER_PROMOTION_IDS", promotion.ID.String())
+
+	_, err = pg.ClaimForWallet(promotion, issuer, info, blindedCreds)
+	suite.Require().NoError(err, "apply claim to wallet")
+
+	body, code = suite.checkGetClaimSummary(service, walletID, "ads")
+	suite.Require().Equal(http.StatusOK, code)
+	// assert you get existing values
+	suite.Assert().JSONEq(`{
+			"amount": "30",
+			"earnings": "30",
+			"lastClaim": "`+priorClaim.CreatedAt.Format(time.RFC3339Nano)+`",
+			"type": "ads"
+		}`, body, "expected a aggregated claim response")
+
 	// not ignored bonus promotion
 	promotion, issuer, claim = suite.setupAdsClaim(service, info, 20)
 
