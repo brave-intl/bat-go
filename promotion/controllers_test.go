@@ -762,7 +762,9 @@ func (suite *ControllersTestSuite) TestGetClaimSummary() {
 	// ignored promotion (brave transfer
 	priorClaim := claim
 	promotion, issuer, claim = suite.setupAdsClaim(service, info, 0)
-	os.Setenv("BRAVE_TRANSFER_PROMOTION_IDS", promotion.ID.String())
+	// set this promotion as a transfer promotion id, and some other random uuid to have more than one
+	os.Setenv("BRAVE_TRANSFER_PROMOTION_IDS",
+		fmt.Sprintf("%s %s", promotion.ID.String(), "d41ba588-ab18-4300-a180-d2dc01a22371"))
 
 	_, err = pg.ClaimForWallet(promotion, issuer, info, blindedCreds)
 	suite.Require().NoError(err, "apply claim to wallet")
