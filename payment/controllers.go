@@ -838,7 +838,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
 
-			timeLimitedSecret := NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
 			if err != nil {
@@ -849,7 +849,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
-			verified, err := timeLimetedSecret.Verify(issuedAt, expiresAt, presentation.Token)
+			verified, err := timeLimitedSecret.Verify(issuedAt, expiresAt, presentation.Token)
 			if err != nil {
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
