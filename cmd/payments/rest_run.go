@@ -5,13 +5,15 @@ import (
 	// pprof imports
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/payment"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -22,6 +24,19 @@ import (
 func PaymentRestRun(command *cobra.Command, args []string) {
 	// setup generic middlewares and routes for health-check and metrics
 	r := cmd.SetupRouter(command.Context())
+
+	if os.Getenv("ENV") != "production" {
+		r.Use(cors.Handler(cors.Options{
+			Debug:            true,
+			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software"},
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: false,
+			MaxAge:           300,
+		}))
+	}
+
 	r, ctx, _ := payment.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
 
