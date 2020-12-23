@@ -155,6 +155,7 @@ func (order Order) IsPaid() bool {
 }
 
 // IsStripePayable returns true if every item is payable by Stripe
+// FIXME: Use accepted payment types from SKU
 func (order Order) IsStripePayable() bool {
 	for _, item := range order.Items {
 		if item.SKU != "brave-together-paid" {

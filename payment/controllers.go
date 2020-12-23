@@ -9,10 +9,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -236,6 +238,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			status = http.StatusNotFound
 		}
 
+		// FIXME
 		for i, item := range order.Items {
 			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
 				order.Items[i].Type = "time-limited"
@@ -458,6 +461,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 }
 
 // GetOrderCreds is the handler for fetching order credentials
+// FIXME - Allow returning both limited and one-time use credentials
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var orderID = new(inputs.ID)
@@ -468,6 +472,33 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 					"orderID": err.Error(),
 				},
 			)
+		}
+
+		order, err := service.Datastore.GetOrder(*orderID.UUID())
+
+		var credentials []TimeLimitedCreds
+		timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+		// FIXME - We should scope this to subscription paid date
+		issuedAt := time.Now()
+		expiresAt := time.Now().AddDate(0, 0, 35)
+		if order.IsPaid() {
+			for _, item := range order.Items {
+				if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
+					result, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
+					if err != nil {
+						return handlers.WrapError(err, "Error generating time-limited credential", http.StatusInternalServerError)
+					}
+
+					credentials = append(credentials, TimeLimitedCreds{
+						ID:        item.ID,
+						OrderID:   order.ID,
+						IssuedAt:  issuedAt.Format("2006-01-02"),
+						ExpiresAt: expiresAt.Format("2006-01-02"),
+						Token:     result,
+					})
+				}
+			}
+			return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
 		}
 
 		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
@@ -807,9 +838,27 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
 
-			// presentation.token --> Credentialing utility library magic
+			timeLimitedSecret := NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
-			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
+			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+			}
+			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+			}
+
+			verified, err := timeLimetedSecret.Verify(issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+			}
+
+			if verified {
+				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+			}
+
+			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
 
 		}
 
@@ -820,6 +869,6 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		// 	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 		// }
 
-		return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
+		return handlers.WrapError(err, "Unknown credential type", http.StatusBadRequest)
 	})
 }
