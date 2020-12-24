@@ -879,7 +879,7 @@ func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, pr
 
 	statement := `
 update mint_drain_promotion set total = $1, done = true where
-mint_drain_id=(select mint_drain_id from mint_drain where wallet_id=$2) and
+mint_drain_id=(select id from mint_drain where wallet_id=$2) and
 promotion_id=$3`
 
 	_, err := pg.Exec(statement, total, walletID, promotionID)
