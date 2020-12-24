@@ -37,6 +37,7 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 		}))
 	}
 
+	r = cmd.SetupDefaultRoutes(command.Context(), r)
 	r, ctx, _ := payment.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
 

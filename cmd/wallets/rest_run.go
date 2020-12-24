@@ -10,7 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +22,7 @@ import (
 func WalletRestRun(command *cobra.Command, args []string) {
 	// setup generic middlewares and routes for health-check and metrics
 	r := cmd.SetupRouter(command.Context())
+	r = cmd.SetupDefaultRoutes(command.Context(), r)
 	r, ctx, _ := wallet.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
 	cmd.Must(err)
