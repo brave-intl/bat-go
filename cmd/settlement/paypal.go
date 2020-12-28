@@ -34,15 +34,15 @@ func init() {
 	completeBuilder := cmd.NewFlagBuilder(CompletePaypalSettlementCmd)
 	transformBuilder := cmd.NewFlagBuilder(TransformPaypalSettlementCmd)
 	emailBuilder := cmd.NewFlagBuilder(EmailPaypalSettlementCmd)
-	comboBuilder := completeBuilder.Concat(transformBuilder, emailBuilder)
+	transformEmailCompleteBuilder := completeBuilder.Concat(transformBuilder, emailBuilder)
 
-	comboBuilder.Flag().String("input", "",
+	transformEmailCompleteBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Env("INPUT").
 		Bind("input").
 		Require()
 
-	comboBuilder.Flag().String("out", "./paypal-settlement",
+	transformEmailCompleteBuilder.Flag().String("out", "./paypal-settlement",
 		"the location of the file to write out").
 		Env("OUT").
 		Bind("out").
