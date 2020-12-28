@@ -45,14 +45,17 @@ func init() {
 	uploadBuilder := cmd.NewFlagBuilder(UpholdUploadCmd)
 
 	uploadBuilder.Flag().Bool("verbose", false,
-		"how verbose logging should be")
+		"how verbose logging should be").
+		Bind("verbose")
 
 	uploadBuilder.Flag().String("input", "",
 		"input file to submit to a given provider").
+		Bind("input").
 		Require()
 
 	uploadBuilder.Flag().String("progress", "1s",
-		"how often progress should be printed out")
+		"how often progress should be printed out").
+		Bind("progress")
 }
 
 // RunUpholdUpload the runner that the uphold upload command calls

@@ -117,18 +117,22 @@ func init() {
 	comboBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Require().
+		Bind("input").
 		Env("INPUT")
 
 	comboBuilder.Flag().String("out", "./gemini-settlement",
 		"the location of the file").
+		Bind("out").
 		Env("OUT")
 
 	comboBuilder.Flag().String("all-txs-input", "",
 		"the original transactions file").
+		Bind("all-txs-input").
 		Require()
 
 	comboBuilder.Flag().Int("sig", 0,
-		"signature to choose when uploading transactions (for bulk endpoint usage)")
+		"signature to choose when uploading transactions (for bulk endpoint usage)").
+		Bind("sig")
 }
 
 // GeminiUploadSettlement marks the settlement file as complete

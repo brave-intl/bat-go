@@ -39,25 +39,30 @@ func init() {
 	comboBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized").
 		Env("INPUT").
+		Bind("input").
 		Require()
 
 	comboBuilder.Flag().String("out", "./paypal-settlement",
 		"the location of the file to write out").
-		Env("INPUT").
+		Env("OUT").
+		Bind("out").
 		Require()
 
 	transformBuilder.Flag().String("currency", "",
 		"a currency must be set (usually JPY)").
 		Env("CURRENCY").
+		Bind("currency").
 		Require()
 
 	completeBuilder.Flag().String("txn-id", "",
 		"the completed mass pay transaction id").
 		Env("TXN_ID").
+		Bind("txn-id").
 		Require()
 
 	transformBuilder.Flag().Float64("rate", 0,
 		"a currency must be set (usually JPY)").
+		Bind("rate").
 		Env("RATE")
 }
 
