@@ -34,15 +34,18 @@ func init() {
 	VaultCmd.AddCommand(
 		InitCmd,
 	)
-	// key-threshold -> the number of total unseal shares: default 3
-	InitCmd.PersistentFlags().Uint("key-shares", 5,
-		"number of total unseal shares")
-	cmd.Must(viper.BindPFlag("key-shares", InitCmd.PersistentFlags().Lookup("key-shares")))
+
+	initBuilder := cmd.NewFlagBuilder(InitCmd)
+
+	// key-threshold -> the number of total unseal shares: default 5
+	initBuilder.Flag().Uint("key-shares", 5,
+		"number of total unseal shares").
+		Bind("key-shares")
 
 	// key-threshold -> the number of shares needed to unseal: default 3
-	InitCmd.PersistentFlags().Uint("key-threshold", 3,
-		"number of shares needed to unseal")
-	cmd.Must(viper.BindPFlag("key-threshold", InitCmd.PersistentFlags().Lookup("key-threshold")))
+	initBuilder.Flag().Uint("key-threshold", 3,
+		"number of shares needed to unseal").
+		Bind("key-threshold")
 }
 
 // Initialize initializes the vault server

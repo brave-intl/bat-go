@@ -56,6 +56,14 @@ func (fb *FlagBuilder) String(key string, defaultValue string, description strin
 		})
 }
 
+// Uint attaches an uint flag to the command
+func (fb *FlagBuilder) Uint(key string, defaultValue uint, description string) *FlagBuilder {
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().Uint(key, defaultValue, description)
+		})
+}
+
 // Int attaches an int flag to the command
 func (fb *FlagBuilder) Int(key string, defaultValue int, description string) *FlagBuilder {
 	return fb.SetKey(key).
