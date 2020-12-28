@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -40,34 +39,36 @@ var (
 func init() {
 	WalletsCmd.AddCommand(ListTransactionsCmd)
 
-	ListTransactionsCmd.Flags().Bool("verbose", false,
-		"how verbose logging should be")
-	cmd.Must(viper.BindPFlag("verbose", ListTransactionsCmd.Flags().Lookup("verbose")))
+	listTransactionsBuilder := cmd.NewFlagBuilder(ListTransactionsCmd)
 
-	ListTransactionsCmd.Flags().Bool("csv", false,
-		"the output file should be csv")
-	cmd.Must(viper.BindPFlag("csv", ListTransactionsCmd.Flags().Lookup("csv")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("csv"))
+	listTransactionsBuilder.Flag().Bool("verbose", false,
+		"how verbose logging should be").
+		Bind("verbose")
 
-	ListTransactionsCmd.Flags().Bool("signed", false,
-		"signed value depending on transaction direction")
-	cmd.Must(viper.BindPFlag("signed", ListTransactionsCmd.Flags().Lookup("signed")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("signed"))
+	listTransactionsBuilder.Flag().Bool("csv", false,
+		"the output file should be csv").
+		Bind("csv").
+		Require()
 
-	ListTransactionsCmd.Flags().Int("limit", 50,
-		"limit number of transactions returned")
-	cmd.Must(viper.BindPFlag("limit", ListTransactionsCmd.Flags().Lookup("limit")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("limit"))
+	listTransactionsBuilder.Flag().Bool("signed", false,
+		"signed value depending on transaction direction").
+		Bind("signed").
+		Require()
 
-	ListTransactionsCmd.Flags().String("start-date", "none",
-		"only include transactions after this datetime [ISO 8601]")
-	cmd.Must(viper.BindPFlag("start-date", ListTransactionsCmd.Flags().Lookup("start-date")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("start-date"))
+	listTransactionsBuilder.Flag().Int("limit", 50,
+		"limit number of transactions returned").
+		Bind("limit").
+		Require()
 
-	ListTransactionsCmd.Flags().String("provider", "uphold",
-		"provider for the source wallet")
-	cmd.Must(viper.BindPFlag("provider", ListTransactionsCmd.Flags().Lookup("provider")))
-	cmd.Must(ListTransactionsCmd.MarkFlagRequired("provider"))
+	listTransactionsBuilder.Flag().String("start-date", "none",
+		"only include transactions after this datetime [ISO 8601]").
+		Bind("start-date").
+		Require()
+
+	listTransactionsBuilder.Flag().String("provider", "uphold",
+		"provider for the source wallet").
+		Bind("provider").
+		Require()
 }
 
 // RunListTransactions runs the list transactions command
