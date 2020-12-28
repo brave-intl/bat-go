@@ -40,6 +40,14 @@ func (fb *FlagBuilder) Flag() *FlagBuilder {
 	return fb
 }
 
+// StringSlice attaches a string slice flag to the command
+func (fb *FlagBuilder) StringSlice(key string, defaultValue []string, description string) *FlagBuilder {
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().StringSlice(key, defaultValue, description)
+		})
+}
+
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	return fb.SetKey(key).
