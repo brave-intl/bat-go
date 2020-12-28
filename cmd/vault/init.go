@@ -37,9 +37,9 @@ func init() {
 
 	initBuilder := cmd.NewFlagBuilder(InitCmd)
 
-	// key-threshold -> the number of total unseal shares: default 5
+	// key-shares -> the number of shares to split the master key into: default 5
 	initBuilder.Flag().Uint("key-shares", 5,
-		"number of total unseal shares").
+		"the number of shares to split the master key into").
 		Bind("key-shares")
 
 	// key-threshold -> the number of shares needed to unseal: default 3
