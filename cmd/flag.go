@@ -28,7 +28,7 @@ func (fb *FlagBuilder) Bind(key string) *FlagBuilder {
 // SetKey sets the key to be shared across methods
 func (fb *FlagBuilder) SetKey(key string) *FlagBuilder {
 	if fb.key != "" {
-		Must(fmt.Errorf("key has already been set to '%s' cannot set to '%s'", fb.key, key))
+		Must(fmt.Errorf("key has already been set to '%s' cannot set to '%s' try calling .Flag() before starting to define a new flag", fb.key, key))
 	}
 	fb.key = key
 	return fb
