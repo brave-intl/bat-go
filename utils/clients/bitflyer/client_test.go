@@ -7,10 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/brave-intl/bat-go/settlement"
+	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -42,50 +42,29 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 	five := decimal.NewFromFloat(5)
 
-	var accountKey *string
-	if strings.Split(suite.apikey, "-")[0] == "master" {
-		accountListRequest := suite.preparePrivateRequest(NewAccountListPayload())
-		accounts, err := client.FetchAccountList(ctx, suite.apikey, suite.secret, accountListRequest)
-		suite.Require().NoError(err, "should not error during account list fetching")
-		primary := "primary"
-		account := findAccountByClass(accounts, primary)
-		suite.Require().Equal(primary, account.Class, "should have a primary account")
-		accountKey = &primary
-	}
+	quote, err := client.FetchQuote(ctx, "BAT_JPY")
+	suite.Require().NoError(err, "fetching a quote does not fail")
 
-	balancesRequest := suite.preparePrivateRequest(NewBalancesPayload(accountKey))
-	balances, err := client.FetchBalances(ctx, suite.apikey, suite.secret, balancesRequest)
-	suite.Require().NoError(err, "should not error during balances fetching")
-	balance := findBalanceByCurrency(balances, "BAT")
-	suite.Require().True(
-		balance.Available.GreaterThanOrEqual(five),
-		"must have at least 5 bat to pass the rest of the test",
-	)
-
+	dryRun := true
 	tx := settlement.Transaction{
-		// use this settlement id to create an ephemeral test
 		SettlementID: uuid.NewV4().String(),
 		Destination:  os.Getenv("BITFLYER_TEST_DESTINATION_ID"),
 		Channel:      "brave.com",
 	}
-	BAT := "BAT"
-	payouts := []PayoutPayload{{
-		TxRef:       GenerateTxRef(&tx),
-		Amount:      five,
-		Currency:    BAT,
-		Destination: tx.Destination,
-	}}
-	bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
-		accountKey,
-		os.Getenv("BITFLYER_CLIENT_ID"),
-		&payouts,
-	))
+	sourceFrom := os.Getenv("BITFLYER_TEST_SOURCE")
+	txs := []settlement.Transaction{tx}
+	withdrawals := NewWithdrawRequestFromTxs(sourceFrom, &txs)
+	bulkTransferRequest := NewWithdrawToDepositIDBulkRequest(
+		&dryRun,
+		quote.PriceToken,
+		withdrawals,
+	)
 
-	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)
+	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkTransferRequest)
 	pendingStatus := "Pending"
 	expectedPayoutResult := PayoutResult{
 		Result:      "OK",
-		TxRef:       GenerateTxRef(&tx),
+		TxRef:       bitflyersettlement.GenerateTransferID(&tx),
 		Amount:      &five,
 		Currency:    &BAT,
 		Destination: &tx.Destination,
@@ -95,11 +74,11 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 	suite.Require().Equal(&expectedPayoutResults, bulkPayoutResponse, "the response should be predictable")
 
-	status, err := client.CheckTxStatus(
+	status, err := client.CheckPayoutStatus(
 		ctx,
 		suite.apikey,
 		os.Getenv("BITFLYER_CLIENT_ID"),
-		GenerateTxRef(&tx),
+		bitflyersettlement.GenerateTransferID(&tx),
 	)
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 	suite.Require().Equal(&expectedPayoutResult, status, "checking the single response should be predictable")
