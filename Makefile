@@ -25,6 +25,7 @@ mock:
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
 	mockgen -source=./utils/clients/gemini/client.go -destination=utils/clients/gemini/mock/mock.go -package=mock_gemini
+	mockgen -source=./utils/clients/bitflyer/client.go -destination=utils/clients/bitflyer/mock/mock.go -package=mock_bitflyer
 
 instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go
@@ -48,6 +49,7 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/reputation/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/gemini -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/gemini/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/bitflyer -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/bitflyer/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/balance_client_duration_seconds/g' utils/clients/balance/instrumented_client.go
