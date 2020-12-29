@@ -13,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -28,13 +27,17 @@ var (
 func init() {
 	WalletsCmd.AddCommand(CreateCmd)
 
+	createBuilder := cmd.NewFlagBuilder(CreateCmd)
+
 	// name - the name of the new wallet
-	CreateCmd.Flags().String("name", "",
-		"the name for the wallet")
-	cmd.Must(viper.BindPFlag("name", CreateCmd.Flags().Lookup("name")))
-	CreateCmd.Flags().String("provider", "",
-		"the provider for the wallet")
-	cmd.Must(viper.BindPFlag("provider", CreateCmd.Flags().Lookup("provider")))
+	createBuilder.Flag().String("name", "",
+		"the name for the wallet").
+		Bind("name")
+
+	// provider - the provider to target
+	createBuilder.Flag().String("provider", "",
+		"the provider for the wallet").
+		Bind("provider")
 }
 
 // Create creates a wallet
