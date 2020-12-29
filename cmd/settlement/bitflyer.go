@@ -17,11 +17,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+/*
+plan
+hostname:  http://demo22oy5z2d2lu6pyoum26m7k.azurewebsites.net
+client_id: 6cd6f1a070afcd467e198c8039b2c97b
+
+account/inventory
+v
+getprice?product_code=BAT_JPY
+v
+withdraw-to-deposit-id/request
+v
+withdraw-to-deposit-id/status
+
+
+*/
+
 var (
 	// BitflyerSettlementCmd creates the bitflyer subcommand
 	BitflyerSettlementCmd = &cobra.Command{
 		Use:   "bitflyer",
-		Short: "provides bitflyer settlement",
+		Short: "facilitates bitflyer settlement",
 	}
 
 	// UploadBitflyerSettlementCmd creates the bitflyer uphold subcommand
@@ -129,10 +145,6 @@ func init() {
 		"the original transactions file").
 		Bind("all-txs-input").
 		Require()
-
-	uploadCheckStatusBuilder.Flag().Int("sig", 0,
-		"signature to choose when uploading transactions (for bulk endpoint usage)").
-		Bind("sig")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
@@ -205,7 +217,7 @@ func bitflyerMapTransactionsToID(transactions []settlement.AntifraudTransaction)
 	transactionsMap := make(map[string]settlement.Transaction)
 	for _, atx := range transactions {
 		tx := atx.ToTransaction()
-		transactionsMap[bitflyer.GenerateTxRef(&tx)] = tx
+		transactionsMap[GenerateTransferID(&tx)] = tx
 	}
 	return transactionsMap
 }
