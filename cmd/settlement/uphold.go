@@ -17,7 +17,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -43,18 +42,20 @@ func init() {
 		UpholdCmd,
 	)
 
-	UpholdUploadCmd.Flags().Bool("verbose", false,
-		"how verbose logging should be")
-	cmd.Must(viper.BindPFlag("verbose", UpholdUploadCmd.Flags().Lookup("verbose")))
+	uploadBuilder := cmd.NewFlagBuilder(UpholdUploadCmd)
 
-	UpholdUploadCmd.Flags().String("input", "",
-		"input file to submit to a given provider")
-	cmd.Must(viper.BindPFlag("input", UpholdUploadCmd.Flags().Lookup("input")))
-	cmd.Must(UpholdUploadCmd.MarkFlagRequired("input"))
+	uploadBuilder.Flag().Bool("verbose", false,
+		"how verbose logging should be").
+		Bind("verbose")
 
-	UpholdUploadCmd.Flags().String("progress", "1s",
-		"how often progress should be printed out")
-	cmd.Must(viper.BindPFlag("progress", UpholdUploadCmd.Flags().Lookup("progress")))
+	uploadBuilder.Flag().String("input", "",
+		"input file to submit to a given provider").
+		Bind("input").
+		Require()
+
+	uploadBuilder.Flag().String("progress", "1s",
+		"how often progress should be printed out").
+		Bind("progress")
 }
 
 // RunUpholdUpload the runner that the uphold upload command calls

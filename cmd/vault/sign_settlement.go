@@ -56,24 +56,26 @@ func init() {
 		SignSettlementCmd,
 	)
 
+	signSettlementBuilder := cmd.NewFlagBuilder(SignSettlementCmd)
+
 	// in -> the file to parse and sign according to each provider's setup. default: contributions.json
-	SignSettlementCmd.Flags().String("in", "contributions.json",
-		"input file path")
-	cmd.Must(viper.BindPFlag("in", SignSettlementCmd.Flags().Lookup("in")))
+	signSettlementBuilder.Flag().String("in", "contributions.json",
+		"input file path").
+		Bind("in")
 
 	providers := []string{}
 	for k := range providerTransactionTypes {
 		providers = append(providers, k)
 	}
 	// providers -> the providers to parse out of the file and parse. default: uphold paypal gemini
-	SignSettlementCmd.Flags().StringSlice("providers", providers,
-		"providers to parse out of the given input files")
-	cmd.Must(viper.BindPFlag("providers", SignSettlementCmd.Flags().Lookup("providers")))
+	signSettlementBuilder.Flag().StringSlice("providers", providers,
+		"providers to parse out of the given input files").
+		Bind("providers")
 
 	// jpyRate -> the providers to parse out of the file and parse. default: uphold paypal gemini
-	SignSettlementCmd.Flags().Float64("jpyrate", 0.0,
-		"jpyrate to use for paypal payouts")
-	cmd.Must(viper.BindPFlag("jpyrate", SignSettlementCmd.Flags().Lookup("jpyrate")))
+	signSettlementBuilder.Flag().Float64("jpyrate", 0.0,
+		"jpyrate to use for paypal payouts").
+		Bind("jpyrate")
 }
 
 // SignSettlement runs the signing of a settlement

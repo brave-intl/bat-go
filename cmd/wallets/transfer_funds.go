@@ -19,7 +19,6 @@ import (
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -37,40 +36,41 @@ func init() {
 		TransferFundsCmd,
 	)
 
-	TransferFundsCmd.Flags().String("currency", "BAT",
-		"currency for transfer")
-	cmd.Must(viper.BindPFlag("currency", TransferFundsCmd.Flags().Lookup("currency")))
+	transferFundsBuilder := cmd.NewFlagBuilder(TransferFundsCmd)
+	transferFundsBuilder.Flag().String("currency", "BAT",
+		"currency for transfer").
+		Bind("currency")
 
-	TransferFundsCmd.Flags().String("from", "",
-		"vault name for the source wallet")
-	cmd.Must(viper.BindPFlag("from", TransferFundsCmd.Flags().Lookup("from")))
-	cmd.Must(TransferFundsCmd.MarkFlagRequired("from"))
+	transferFundsBuilder.Flag().String("from", "",
+		"vault name for the source wallet").
+		Bind("from").
+		Require()
 
-	TransferFundsCmd.Flags().String("note", "",
-		"optional note for the transfer")
-	cmd.Must(viper.BindPFlag("note", TransferFundsCmd.Flags().Lookup("note")))
+	transferFundsBuilder.Flag().String("note", "",
+		"optional note for the transfer").
+		Bind("note")
 
-	TransferFundsCmd.Flags().Bool("oneshot", false,
-		"submit and commit without confirming")
-	cmd.Must(viper.BindPFlag("oneshot", TransferFundsCmd.Flags().Lookup("oneshot")))
+	transferFundsBuilder.Flag().Bool("oneshot", false,
+		"submit and commit without confirming").
+		Bind("oneshot")
 
-	TransferFundsCmd.Flags().String("to", "",
-		"destination wallet address")
-	cmd.Must(viper.BindPFlag("to", TransferFundsCmd.Flags().Lookup("to")))
-	cmd.Must(TransferFundsCmd.MarkFlagRequired("to"))
+	transferFundsBuilder.Flag().String("to", "",
+		"destination wallet address").
+		Bind("to").
+		Require()
 
-	TransferFundsCmd.Flags().String("value", "",
-		"amount to transfer [float or all]")
-	cmd.Must(viper.BindPFlag("value", TransferFundsCmd.Flags().Lookup("value")))
-	cmd.Must(TransferFundsCmd.MarkFlagRequired("value"))
+	transferFundsBuilder.Flag().String("value", "",
+		"amount to transfer [float or all]").
+		Bind("value").
+		Require()
 
-	TransferFundsCmd.Flags().String("provider", "uphold",
-		"provider for the source wallet")
-	cmd.Must(viper.BindPFlag("provider", TransferFundsCmd.Flags().Lookup("provider")))
+	transferFundsBuilder.Flag().String("provider", "uphold",
+		"provider for the source wallet").
+		Bind("provider")
 
-	TransferFundsCmd.Flags().Bool("usevault", false,
-		"should signer should pull from vault")
-	cmd.Must(viper.BindPFlag("usevault", TransferFundsCmd.Flags().Lookup("usevault")))
+	transferFundsBuilder.Flag().Bool("usevault", false,
+		"should signer should pull from vault").
+		Bind("usevault")
 }
 
 // RunTransferFunds moves funds from one wallet to another
