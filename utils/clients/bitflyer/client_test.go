@@ -64,7 +64,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	pendingStatus := "Pending"
 	expectedPayoutResult := PayoutResult{
 		Result:      "OK",
-		TxRef:       bitflyersettlement.GenerateTransferID(&tx),
+		TxRef:       GenerateTransferID(&tx),
 		Amount:      &five,
 		Currency:    &BAT,
 		Destination: &tx.Destination,
@@ -78,7 +78,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 		ctx,
 		suite.apikey,
 		os.Getenv("BITFLYER_CLIENT_ID"),
-		bitflyersettlement.GenerateTransferID(&tx),
+		GenerateTransferID(&tx),
 	)
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 	suite.Require().Equal(&expectedPayoutResult, status, "checking the single response should be predictable")

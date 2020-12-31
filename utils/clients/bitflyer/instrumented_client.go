@@ -1,10 +1,10 @@
-package gemini
+package bitflyer
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
 // using ../../../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/gemini -i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/bitflyer -i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go
 
 import (
 	"context"
@@ -39,8 +39,8 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
-// CheckTxStatus implements Client
-func (_d ClientWithPrometheus) CheckTxStatus(ctx context.Context, APIKEY string, clientID string, txRef string) (pp1 *PayoutResult, err error) {
+// CheckPayoutStatus implements Client
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, clientID string, transferID string) (pp1 *PayoutResult, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -48,13 +48,13 @@ func (_d ClientWithPrometheus) CheckTxStatus(ctx context.Context, APIKEY string,
 			result = "error"
 		}
 
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckTxStatus", result).Observe(time.Since(_since).Seconds())
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckPayoutStatus", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CheckTxStatus(ctx, APIKEY, clientID, txRef)
+	return _d.base.CheckPayoutStatus(ctx, APIKey, clientID, transferID)
 }
 
-// FetchAccountList implements Client
-func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (aap1 *[]Account, err error) {
+// FetchQuote implements Client
+func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode string) (qp1 *Quote, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -62,23 +62,9 @@ func (_d ClientWithPrometheus) FetchAccountList(ctx context.Context, APIKey stri
 			result = "error"
 		}
 
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchAccountList", result).Observe(time.Since(_since).Seconds())
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchQuote", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchAccountList(ctx, APIKey, signer, payload)
-}
-
-// FetchBalances implements Client
-func (_d ClientWithPrometheus) FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (bap1 *[]Balance, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchBalances", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.FetchBalances(ctx, APIKey, signer, payload)
+	return _d.base.FetchQuote(ctx, productCode)
 }
 
 // UploadBulkPayout implements Client

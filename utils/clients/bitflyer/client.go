@@ -2,15 +2,16 @@ package bitflyer
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
-	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
@@ -105,11 +106,25 @@ func NewWithdrawRequestFromTxs(sourceFrom string, txs *[]settlement.Transaction)
 			Amount:       tx.Amount,
 			DepositID:    tx.Destination,
 			Memo:         tx.Note,
-			TransferID:   bitflyersettlement.GenerateTransferID(&tx),
+			TransferID:   GenerateTransferID(&tx),
 			SourceFrom:   sourceFrom,
 		})
 	}
 	return &withdrawals
+}
+
+// GenerateTransferID generates a deterministic transaction reference id for idempotency
+func GenerateTransferID(tx *settlement.Transaction) string {
+	key := strings.Join([]string{
+		tx.SettlementID,
+		// if you have to resubmit referrals to get status
+		tx.Type,
+		tx.Destination,
+		tx.Channel,
+	}, "_")
+	bytes := sha256.Sum256([]byte(key))
+	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
+	return refID
 }
 
 // PayoutResult contains details about a newly created or fetched issuer
@@ -156,11 +171,11 @@ type Client interface {
 	// // FetchAccountList requests account information to scope future requests
 	// FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// // FetchBalances requests balance information for a given account
-	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Balance, error)
+	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload /string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
 	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error)
 	// CheckTxStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, APIKey string, clientID string, transferID string) (*PayoutResult, error)
+	CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*PayoutResult, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -251,6 +266,25 @@ func (c *HTTPClient) UploadBulkPayout(
 	payload string,
 ) (*Quote, error) {
 	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", nil)
+	if err != nil {
+		return nil, err
+	}
+	var body Quote
+	_, err = c.client.Do(ctx, req, &body)
+	if err != nil {
+		return nil, err
+	}
+	return &body, nil
+}
+
+// CheckPayoutstatus checks bitflyer transaction status
+func (c *HTTPClient) CheckPayoutstatus(
+	ctx context.Context,
+	APIKey string,
+	signer cryptography.HMACKey,
+	payload string,
+) (*Quote, error) {
+	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", nil)
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,7 @@ import (
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
+	go_uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
 	reflect "reflect"
 )
@@ -38,7 +38,7 @@ func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 }
 
 // RedeemAndTransferFunds mocks base method
-func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
+func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID go_uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
@@ -50,4 +50,46 @@ func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credential
 func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total)
+}
+
+// MockMintWorker is a mock of MintWorker interface
+type MockMintWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockMintWorkerMockRecorder
+}
+
+// MockMintWorkerMockRecorder is the mock recorder for MockMintWorker
+type MockMintWorkerMockRecorder struct {
+	mock *MockMintWorker
+}
+
+// NewMockMintWorker creates a new mock instance
+func NewMockMintWorker(ctrl *gomock.Controller) *MockMintWorker {
+	mock := &MockMintWorker{ctrl: ctrl}
+	mock.recorder = &MockMintWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use
+func (m *MockMintWorker) EXPECT() *MockMintWorkerMockRecorder {
+	return m.recorder
+}
+
+// MintGrant mocks base method
+func (m *MockMintWorker) MintGrant(ctx context.Context, walletID go_uuid.UUID, total decimal.Decimal, promoIDs ...go_uuid.UUID) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, walletID, total}
+	for _, a := range promoIDs {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MintGrant", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MintGrant indicates an expected call of MintGrant
+func (mr *MockMintWorkerMockRecorder) MintGrant(ctx, walletID, total interface{}, promoIDs ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, walletID, total}, promoIDs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MintGrant", reflect.TypeOf((*MockMintWorker)(nil).MintGrant), varargs...)
 }
