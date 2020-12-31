@@ -12,8 +12,8 @@ import (
 	"unicode"
 
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/shopspring/decimal"
+	"golang.org/x/crypto/sha3"
 )
 
 // AltCurrency is an enum-like representing a cryptocurrency
@@ -130,7 +130,7 @@ func GetBTCAddressVersion(str string) int {
 // Keccak256 calculates and returns the Keccak256 hash of the input data.
 // Copied from https://github.com/ethereum/go-ethereum/, licensed under the GNU General Public License v3.0
 func Keccak256(data ...[]byte) []byte {
-	d := sha3.NewKeccak256()
+	d := sha3.NewLegacyKeccak256()
 	for _, b := range data {
 		_, err := d.Write(b)
 		if err != nil {
