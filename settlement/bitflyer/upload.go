@@ -2,12 +2,10 @@ package bitflyersettlement
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -18,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
-	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
@@ -46,20 +43,6 @@ func CategorizeResponse(
 	original.Currency = tmp.String()
 	original.ProviderID = payout.TxRef
 	return original, key
-}
-
-// GenerateTransferID generates a deterministic transaction reference id for idempotency
-func GenerateTransferID(tx *settlement.Transaction) string {
-	key := strings.Join([]string{
-		tx.SettlementID,
-		// if you have to resubmit referrals to get status
-		tx.Type,
-		tx.Destination,
-		tx.Channel,
-	}, "_")
-	bytes := sha256.Sum256([]byte(key))
-	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
-	return refID
 }
 
 // CategorizeResponses categorizes the series of responses

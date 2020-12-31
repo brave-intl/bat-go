@@ -20,7 +20,6 @@ mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
-	mockgen -source=./utils/clients/balance/client.go -destination=utils/clients/balance/mock/mock.go -package=mock_balance
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
@@ -44,7 +43,6 @@ instrumented:
 	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
 	# http clients
-	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/balance/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/reputation/instrumented_client.go
@@ -52,7 +50,6 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/bitflyer -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/bitflyer/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
-	sed -i'bak' 's/client_duration_seconds/balance_client_duration_seconds/g' utils/clients/balance/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 

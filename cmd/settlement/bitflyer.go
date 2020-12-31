@@ -217,7 +217,7 @@ func bitflyerMapTransactionsToID(transactions []settlement.AntifraudTransaction)
 	transactionsMap := make(map[string]settlement.Transaction)
 	for _, atx := range transactions {
 		tx := atx.ToTransaction()
-		transactionsMap[GenerateTransferID(&tx)] = tx
+		transactionsMap[bitflyer.GenerateTransferID(&tx)] = tx
 	}
 	return transactionsMap
 }
