@@ -821,8 +821,8 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 			// Presentation includes a token and token metadata test test
 			type Presentation struct {
-				IssuedAt  string `json:"issued_at"`
-				ExpiresAt string `json:"expires_at"`
+				IssuedAt  string `json:"issuedAt"`
+				ExpiresAt string `json:"expiresAt"`
 				Token     string `json:"token"`
 			}
 
