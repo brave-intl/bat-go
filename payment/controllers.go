@@ -840,11 +840,11 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
-			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+			issuedAt, err := time.Parse(time.RFC3339, presentation.IssuedAt)
 			if err != nil {
 				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
 			}
-			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+			expiresAt, err := time.Parse(time.RFC3339, presentation.ExpiresAt)
 			if err != nil {
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
