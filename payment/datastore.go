@@ -373,7 +373,7 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	var sum decimal.Decimal
 
 	err := pg.RawDB().Get(&sum, `
-		SELECT SUM(amount) as sum
+		SELECT COALESCE(SUM(amount), 0.0) as sum
 		FROM transactions
 		WHERE order_id = $1 AND status = 'completed'
 	`, orderID)
