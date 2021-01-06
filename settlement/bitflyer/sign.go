@@ -24,11 +24,11 @@ func SignRequests(
 		return nil, errors.New("a client id was missing during the bitflyer settlement signing process")
 	}
 
-	for _, privateRequestRequirements := range *privateRequests {
-		base := bitflyer.NewBulkPayoutPayload(
-			nil,
-			clientID,
-			&privateRequestRequirements,
+	for _, withdrawals := range *privateRequests {
+		base := bitflyer.NewWithdrawToDepositIDBulkRequest(
+			true,
+			priceToken,
+			&withdrawals,
 		)
 		signatures := []string{}
 		// store the original nonce
