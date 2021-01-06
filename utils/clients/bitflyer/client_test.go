@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/settlement"
-	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -74,14 +73,14 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 	suite.Require().Equal(&expectedPayoutResults, bulkPayoutResponse, "the response should be predictable")
 
-	status, err := client.CheckPayoutStatus(
-		ctx,
-		suite.apikey,
-		os.Getenv("BITFLYER_CLIENT_ID"),
-		GenerateTransferID(&tx),
-	)
-	suite.Require().NoError(err, "should not error during bulk payout uploading")
-	suite.Require().Equal(&expectedPayoutResult, status, "checking the single response should be predictable")
+	// status, err := client.CheckPayoutStatus(
+	// 	ctx,
+	// 	suite.apikey,
+	// 	os.Getenv("BITFLYER_CLIENT_ID"),
+	// 	GenerateTransferID(&tx),
+	// )
+	// suite.Require().NoError(err, "should not error during bulk payout uploading")
+	// suite.Require().Equal(&expectedPayoutResult, status, "checking the single response should be predictable")
 }
 
 func findBalanceByCurrency(balances *[]Balance, currency string) Balance {

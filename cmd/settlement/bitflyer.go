@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 )
 
@@ -131,7 +132,7 @@ func init() {
 		AddCommand(CheckStatusBitflyerSettlementCmd)
 
 	uploadCheckStatusBuilder.Flag().String("input", "",
-		"the file or comma delimited list of files that should be utilized").
+		"the file or comma delimited list of files that should be utilized. both referrals and contributions should be done in one command in order to group the transactions appropriately").
 		Require().
 		Bind("input").
 		Env("INPUT")
@@ -213,13 +214,45 @@ func BitflyerUploadSettlement(ctx context.Context, action string, inPath string,
 }
 
 // bitflyerMapTransactionsToID creates a map of guid's to transactions
-func bitflyerMapTransactionsToID(transactions []settlement.AntifraudTransaction) map[string]settlement.Transaction {
+func bitflyerMapTransactionsToID(antifraudTransactions []settlement.AntifraudTransaction) (
+	map[string]settlement.Transaction,
+	[]settlement.Transaction,
+) {
 	transactionsMap := make(map[string]settlement.Transaction)
-	for _, atx := range transactions {
+	settlementTransactions := []settlement.Transaction{}
+	for _, atx := range antifraudTransactions {
 		tx := atx.ToTransaction()
-		transactionsMap[bitflyer.GenerateTransferID(&tx)] = tx
+		transferID := bitflyer.GenerateTransferID(&tx)
+		previousTx := transactionsMap[transferID]
+		if previousTx.Amount.Equals(decimal.NewFromFloat32(0)) {
+			// add tx to map
+			previousTx = tx
+		} else {
+			// add amount to map
+			previousTx.Amount = previousTx.Amount.Add(tx.Amount)
+		}
+		// check that we are not above amount limits on eyeshade
+		amountLimit := decimal.NewFromFloat32(20000)
+		if previousTx.Amount.LessThanOrEqual(amountLimit) {
+			// within the bounds of our per publishers limit
+			// ok to settle full amount, as is
+			settlementTransactions = append(settlementTransactions, tx)
+		} else {
+			// over the bounds provided. will have to
+			difference := previousTx.Amount.Sub(amountLimit)
+			if difference.LessThan(tx.Amount) {
+				// partial settlement on eyeshade side
+				tx.Amount = tx.Amount.Sub(difference)
+				settlementTransactions = append(settlementTransactions, tx)
+			} else {
+				// do nothing
+				// completely outside of the bounds. do not settle on eyeshade side
+			}
+			previousTx.Amount = amountLimit
+		}
+		transactionsMap[transferID] = previousTx
 	}
-	return transactionsMap
+	return transactionsMap, settlementTransactions
 }
 
 // BitflyerWriteTransactions writes settlement transactions to a json file
