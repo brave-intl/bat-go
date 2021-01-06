@@ -83,13 +83,13 @@ type WithdrawalRequest struct {
 
 // WithdrawToDepositIDBulkRequest holds all WithdrawToDepositID for a single bulk request
 type WithdrawToDepositIDBulkRequest struct {
-	DryRun      *bool               `json:"dry_run"`
+	DryRun      bool                `json:"dry_run"`
 	Withdrawals []WithdrawalRequest `json:"withdrawals"`
 	PriceToken  string              `json:"price_token"`
 }
 
 // NewWithdrawToDepositIDBulkRequest creates a bulk request
-func NewWithdrawToDepositIDBulkRequest(dryRun *bool, priceToken string, withdrawals *[]WithdrawalRequest) WithdrawToDepositIDBulkRequest {
+func NewWithdrawToDepositIDBulkRequest(dryRun bool, priceToken string, withdrawals *[]WithdrawalRequest) WithdrawToDepositIDBulkRequest {
 	return WithdrawToDepositIDBulkRequest{
 		DryRun:      dryRun,
 		PriceToken:  priceToken,
