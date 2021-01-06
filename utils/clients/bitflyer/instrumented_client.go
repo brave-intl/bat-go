@@ -40,7 +40,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CheckPayoutStatus implements Client
-func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, clientID string, transferID string) (pp1 *PayoutResult, err error) {
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (qp1 *Quote, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -50,7 +50,7 @@ func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey str
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckPayoutStatus", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CheckPayoutStatus(ctx, APIKey, clientID, transferID)
+	return _d.base.CheckPayoutStatus(ctx, APIKey, signer, payload)
 }
 
 // FetchQuote implements Client
@@ -68,7 +68,7 @@ func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode strin
 }
 
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (pap1 *[]PayoutResult, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (qp1 *Quote, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

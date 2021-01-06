@@ -173,9 +173,9 @@ type Client interface {
 	// // FetchBalances requests balance information for a given account
 	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload /string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
-	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error)
-	// CheckTxStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*PayoutResult, error)
+	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*Quote, error)
+	// CheckPayoutStatus checks the status of a transaction
+	CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*Quote, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -277,8 +277,8 @@ func (c *HTTPClient) UploadBulkPayout(
 	return &body, nil
 }
 
-// CheckPayoutstatus checks bitflyer transaction status
-func (c *HTTPClient) CheckPayoutstatus(
+// CheckPayoutStatus checks bitflyer transaction status
+func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
 	APIKey string,
 	signer cryptography.HMACKey,
