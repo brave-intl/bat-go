@@ -478,9 +478,9 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		var credentials []TimeLimitedCreds
 		timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
-		// FIXME - We should scope this to subscription paid date
-		issuedAt := time.Now()
-		expiresAt := time.Now().AddDate(0, 0, 35)
+		// FIXME - We should scope this to subscription paid date in case of paid order
+		issuedAt := order.CreatedAt
+		expiresAt := issuedAt.AddDate(0, 0, 35)
 		if order.IsPaid() {
 			for _, item := range order.Items {
 				if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
