@@ -12,7 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/rewards"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -71,6 +71,7 @@ func RestRun(command *cobra.Command, args []string) {
 
 	// do rest endpoints
 	r := cmd.SetupRouter(command.Context())
+	r = cmd.SetupDefaultRoutes(command.Context(), r)
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
 
