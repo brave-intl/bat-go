@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
+	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	geminisettlement "github.com/brave-intl/bat-go/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -34,9 +35,10 @@ var (
 	// the combination of provider + transaction type gives you the key
 	// under which the vault secrets are located by default
 	providerTransactionTypes = map[string][]string{
-		"uphold": {"contribution", "referral"},
-		"paypal": {"default"},
-		"gemini": {"contribution", "referral"},
+		"uphold":   {"contribution", "referral"},
+		"paypal":   {"default"},
+		"gemini":   {"contribution", "referral"},
+		"bitflyer": {"default"},
 	}
 	artifactGenerators = map[string]func(
 		context.Context,
@@ -45,9 +47,10 @@ var (
 		string,
 		[]settlement.Transaction,
 	) error{
-		"uphold": createUpholdArtifact,
-		"gemini": createGeminiArtifact,
-		"paypal": createPaypalArtifact,
+		"uphold":   createUpholdArtifact,
+		"gemini":   createGeminiArtifact,
+		"paypal":   createPaypalArtifact,
+		"bitflyer": createBitflyerArtifact,
 	}
 )
 
@@ -76,6 +79,11 @@ func init() {
 	signSettlementBuilder.Flag().Float64("jpyrate", 0.0,
 		"jpyrate to use for paypal payouts").
 		Bind("jpyrate")
+
+	signSettlementBuilder.Flag().String("config", "config.yaml",
+		"the default path to a configuration file").
+		Bind("config").
+		Env("CONFIG")
 }
 
 // SignSettlement runs the signing of a settlement
@@ -154,7 +162,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 
 		provider := tx.WalletProvider
 		wallet := tx.Type
-		if provider == "paypal" {
+		if len(providerTransactionTypes[provider]) == 1 {
 			// might as well go into one (default)
 			wallet = providerTransactionTypes[provider][0]
 		}
@@ -221,6 +229,52 @@ func createUpholdArtifact(
 		return err
 	}
 	return nil
+}
+
+func createBitflyerArtifact(
+	ctx context.Context,
+	outputFile string,
+	wrappedClient *vaultsigner.WrappedClient,
+	walletKey string,
+	bitflyerOnlySettlements []settlement.Transaction,
+) error {
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return err
+	}
+	token, set := response.Data["token"].(string)
+	if !set {
+		token = "notatoken"
+	}
+	<-time.After(time.Millisecond)
+	requests, err := formBitflyerRequests(
+		wrappedClient,
+		token,
+		&bitflyerOnlySettlements,
+	)
+	if err != nil {
+		return err
+	}
+	out, err := json.Marshal(requests)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(outputFile, out, 0400)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func formBitflyerRequests(
+	wrappedClient *vaultsigner.WrappedClient,
+	token string,
+	privateRequests *[]settlement.Transaction,
+) (*bitflyersettlement.SettlementRequest, error) {
+	return bitflyersettlement.GroupSettlements(
+		token,
+		privateRequests,
+	)
 }
 
 func createGeminiArtifact(

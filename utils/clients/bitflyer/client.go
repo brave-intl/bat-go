@@ -3,58 +3,24 @@ package bitflyer
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
-	"github.com/brave-intl/bat-go/utils/cryptography"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
-// PrivateRequestSequence handles the ability to sign a request multiple times
-type PrivateRequestSequence struct {
-	// the baseline object, corresponds to the signature in the first item
-	// must update the nonce before sending otherwise invalid signature will be encountered
-	Base       BulkPayoutPayload `json:"base"`
-	Signatures []string          `json:"signatures"` // a list of hex encoded singatures
-	APIKey     string            `json:"apikey"`     // the api key that corresponds to the checksum server side
-	Account    *string           `json:"account,omitempty"`
-}
-
-// PayoutPayload contains details about transactions to be confirmed
-type PayoutPayload struct {
-	TxRef       string          `json:"tx_ref"`
-	Amount      decimal.Decimal `json:"amount"`
-	Currency    string          `json:"currency"`
-	Destination string          `json:"destination"`
-	Account     *string         `json:"account,omitempty"`
-}
-
-// AccountListPayload retrieves all accounts associated with a bitflyer key
-type AccountListPayload struct {
-	Request string `json:"request"`
-	Nonce   int64  `json:"nonce"`
-}
-
-// BalancesPayload retrieves all accounts associated with a bitflyer key
-type BalancesPayload struct {
-	Request string  `json:"request"`
-	Nonce   int64   `json:"nonce"`
-	Account *string `json:"account,omitempty"`
-}
-
-// BulkPayoutPayload the payload to be base64'd
-type BulkPayoutPayload struct {
-	Request       string          `json:"request"`
-	Nonce         int64           `json:"nonce"`
-	Payouts       []PayoutPayload `json:"payouts"`
-	OauthClientID string          `json:"client_id"`
-	Account       *string         `json:"account,omitempty"`
-}
+var (
+	bitflyerNS = uuid.Must(uuid.FromString("6ff61d64-7bcd-4ad7-aed8-25752b7f332e"))
+)
 
 // Quote returns a quote of BAT prices
 type Quote struct {
@@ -67,59 +33,92 @@ type Quote struct {
 
 // QuoteQuery holds the query params for the quote
 type QuoteQuery struct {
-	ProductCode string `json:"product_code"`
+	ProductCode string `url:"product_code,omitempty"`
 }
 
-// WithdrawalRequest holds a single withdrawal request
-type WithdrawalRequest struct {
+// WithdrawToDepositIDPayload holds a single withdrawal request
+type WithdrawToDepositIDPayload struct {
+	CurrencyCode string  `json:"currency_code"`
+	Amount       float64 `json:"amount"`
+	DryRun       *bool   `json:"dry_run,omitempty"`
+	DepositID    string  `json:"deposit_id"`
+	Message      string  `json:"message"`
+	TransferID   string  `json:"transfer_id"`
+	SourceFrom   string  `json:"source_from"`
+}
+
+// WithdrawToDepositIDBulkPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
+type WithdrawToDepositIDBulkPayload struct {
+	DryRun      bool                         `json:"dry_run"`
+	Withdrawals []WithdrawToDepositIDPayload `json:"withdrawals"`
+	PriceToken  string                       `json:"price_token"`
+}
+
+// WithdrawToDepositIDResponse holds a single withdrawal request
+type WithdrawToDepositIDResponse struct {
 	CurrencyCode string          `json:"currency_code"`
 	Amount       decimal.Decimal `json:"amount"`
-	DryRun       *bool           `json:"dry_run"`
-	DepositID    string          `json:"deposit_id"`
-	Memo         string          `json:"memo"`
+	Message      string          `json:"message"`
+	Status       string          `json:"transfer_status"`
 	TransferID   string          `json:"transfer_id"`
-	SourceFrom   string          `json:"source_from"`
 }
 
-// WithdrawToDepositIDBulkRequest holds all WithdrawToDepositID for a single bulk request
-type WithdrawToDepositIDBulkRequest struct {
-	DryRun      bool                `json:"dry_run"`
-	Withdrawals []WithdrawalRequest `json:"withdrawals"`
-	PriceToken  string              `json:"price_token"`
-}
-
-// NewWithdrawToDepositIDBulkRequest creates a bulk request
-func NewWithdrawToDepositIDBulkRequest(dryRun bool, priceToken string, withdrawals *[]WithdrawalRequest) WithdrawToDepositIDBulkRequest {
-	return WithdrawToDepositIDBulkRequest{
+// NewWithdrawToDepositIDBulkPayload creates a bulk request
+func NewWithdrawToDepositIDBulkPayload(dryRun bool, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
+	return &WithdrawToDepositIDBulkPayload{
 		DryRun:      dryRun,
 		PriceToken:  priceToken,
 		Withdrawals: *withdrawals,
 	}
 }
 
-// NewWithdrawRequestFromTxs creates an array of withdrawal requests
-func NewWithdrawRequestFromTxs(sourceFrom string, txs *[]settlement.Transaction) *[]WithdrawalRequest {
-	withdrawals := []WithdrawalRequest{}
+// WithdrawToDepositIDBulkResponse holds info about the status of the bulk settlements
+type WithdrawToDepositIDBulkResponse struct {
+	DryRun      bool                          `json:"dry_run"`
+	Withdrawals []WithdrawToDepositIDResponse `json:"withdrawals"`
+}
+
+// NewWithdrawsFromTxs creates an array of withdrawal requests
+func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]WithdrawToDepositIDPayload, error) {
+	withdrawals := []WithdrawToDepositIDPayload{}
+	if sourceFrom == "" {
+		sourceFrom = "self"
+	}
 	for _, tx := range *txs {
-		withdrawals = append(withdrawals, WithdrawalRequest{
+		f64, exact := tx.Amount.Float64()
+		if !exact {
+			return nil, errors.New("could not convert float exactly")
+		}
+		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
-			Amount:       tx.Amount,
+			Amount:       f64,
 			DepositID:    tx.Destination,
-			Memo:         tx.Note,
+			Message:      tx.Note,
 			TransferID:   GenerateTransferID(&tx),
 			SourceFrom:   sourceFrom,
 		})
 	}
-	return &withdrawals
+	return &withdrawals, nil
 }
 
 // GenerateTransferID generates a deterministic transaction reference id for idempotency
 func GenerateTransferID(tx *settlement.Transaction) string {
 	key := strings.Join([]string{
 		tx.SettlementID,
-		// if you have to resubmit referrals to get status
-		tx.Type,
 		tx.Destination,
+		// tx.Channel, // all channels are grouped together
+	}, "_")
+	bytes := sha256.Sum256([]byte(key))
+	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
+	return refID
+}
+
+// GenerateSettlementID generates a deterministic transaction reference id for idempotency
+func GenerateSettlementID(tx *settlement.Transaction) string {
+	key := strings.Join([]string{
+		tx.SettlementID,
+		tx.Destination,
+		tx.Publisher,
 		tx.Channel,
 	}, "_")
 	bytes := sha256.Sum256([]byte(key))
@@ -173,9 +172,9 @@ type Client interface {
 	// // FetchBalances requests balance information for a given account
 	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload /string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
-	UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*Quote, error)
+	UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*Quote, error)
+	CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (*WithdrawToDepositIDBulkResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -198,47 +197,6 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "bitflyer_client"), err
 }
 
-func setHeaders(
-	req *http.Request,
-	APIKey string,
-	signer *cryptography.HMACKey,
-	payload string,
-	submitType string,
-) error {
-	if APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+APIKey)
-	}
-	return setPrivateRequestHeaders(
-		req,
-		APIKey,
-		signer,
-		payload,
-		submitType,
-	)
-}
-
-func setPrivateRequestHeaders(
-	req *http.Request,
-	APIKey string,
-	signer *cryptography.HMACKey,
-	payload string,
-	submitType string,
-) error {
-	// if submitType == "hmac" {
-	// 	if signer == nil {
-	// 		return errors.New("BITFLYER_SUBMIT_TYPE set to 'hmac' but no signer provided")
-	// 	}
-	// 	signs := *signer
-	// 	// only set if sending an hmac salt
-	// 	signature, err := signs.HMACSha384([]byte(payload))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	req.Header.Set("X-BITFLYER-SIGNATURE", hex.EncodeToString(signature))
-	// }
-	return nil
-}
-
 // FetchQuote fetches prices for determining constraints
 func (c *HTTPClient) FetchQuote(
 	ctx context.Context,
@@ -251,9 +209,9 @@ func (c *HTTPClient) FetchQuote(
 		return nil, err
 	}
 	var body Quote
-	_, err = c.client.Do(ctx, req, &body)
+	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
-		return nil, err
+		return nil, handleBitflyerError(err, req, resp)
 	}
 	return &body, nil
 }
@@ -262,17 +220,17 @@ func (c *HTTPClient) FetchQuote(
 func (c *HTTPClient) UploadBulkPayout(
 	ctx context.Context,
 	APIKey string,
-	signer cryptography.HMACKey,
-	payload string,
-) (*Quote, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", nil)
+	payload []byte,
+) (*WithdrawToDepositIDBulkResponse, error) {
+	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
 	if err != nil {
 		return nil, err
 	}
-	var body Quote
-	_, err = c.client.Do(ctx, req, &body)
+	setupRequestHeaders(req, APIKey)
+	var body WithdrawToDepositIDBulkResponse
+	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
-		return nil, err
+		return nil, handleBitflyerError(err, req, resp)
 	}
 	return &body, nil
 }
@@ -281,17 +239,52 @@ func (c *HTTPClient) UploadBulkPayout(
 func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
 	APIKey string,
-	signer cryptography.HMACKey,
-	payload string,
-) (*Quote, error) {
-	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", nil)
+	payload []byte,
+) (*WithdrawToDepositIDBulkResponse, error) {
+	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload)
 	if err != nil {
 		return nil, err
 	}
-	var body Quote
-	_, err = c.client.Do(ctx, req, &body)
+	setupRequestHeaders(req, APIKey)
+	var body WithdrawToDepositIDBulkResponse
+	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
-		return nil, err
+		return nil, handleBitflyerError(err, req, resp)
 	}
 	return &body, nil
+}
+
+func setupRequestHeaders(req *http.Request, APIKey string) {
+	req.Header.Set("authorization", "Bearer "+APIKey)
+	req.Header.Set("content-type", "application/json")
+}
+
+func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var bfError clients.BitflyerError
+	err = json.Unmarshal(b, &bfError)
+	if err != nil {
+		return err
+	}
+	if len(bfError.Label) == 0 {
+		return e
+	}
+	bundle, ok := e.(*errorutils.ErrorBundle)
+	if !ok {
+		return e
+	}
+	state, ok := bundle.Data().(clients.HTTPState)
+	if !ok {
+		return e
+	}
+	return clients.NewHTTPError(
+		err,
+		state.Path,
+		bundle.Error(),
+		state.Status,
+		bfError,
+	)
 }

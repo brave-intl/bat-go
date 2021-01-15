@@ -10,7 +10,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -24,7 +23,7 @@ type ClientWithPrometheus struct {
 
 var clientDurationSummaryVec = promauto.NewSummaryVec(
 	prometheus.SummaryOpts{
-		Name:       "client_duration_seconds",
+		Name:       "bitflyer_client_duration_seconds",
 		Help:       "client runtime duration and result",
 		MaxAge:     time.Minute,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
@@ -40,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CheckPayoutStatus implements Client
-func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (qp1 *Quote, err error) {
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -50,7 +49,7 @@ func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey str
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckPayoutStatus", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CheckPayoutStatus(ctx, APIKey, signer, payload)
+	return _d.base.CheckPayoutStatus(ctx, APIKey, payload)
 }
 
 // FetchQuote implements Client
@@ -68,7 +67,7 @@ func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode strin
 }
 
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (qp1 *Quote, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -78,5 +77,5 @@ func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey stri
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UploadBulkPayout", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UploadBulkPayout(ctx, APIKey, signer, payload)
+	return _d.base.UploadBulkPayout(ctx, APIKey, payload)
 }

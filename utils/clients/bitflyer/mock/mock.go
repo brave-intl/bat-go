@@ -7,7 +7,6 @@ package mock_bitflyer
 import (
 	context "context"
 	bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	cryptography "github.com/brave-intl/bat-go/utils/cryptography"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
 )
@@ -51,31 +50,31 @@ func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode interface{}) *gomo
 }
 
 // UploadBulkPayout mocks base method
-func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*bitflyer.Quote, error) {
+func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBulkPayout", ctx, APIKey, signer, payload)
-	ret0, _ := ret[0].(*bitflyer.Quote)
+	ret := m.ctrl.Call(m, "UploadBulkPayout", ctx, APIKey, payload)
+	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UploadBulkPayout indicates an expected call of UploadBulkPayout
-func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, signer, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, APIKey, signer, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, APIKey, payload)
 }
 
 // CheckPayoutStatus mocks base method
-func (m *MockClient) CheckPayoutStatus(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*bitflyer.Quote, error) {
+func (m *MockClient) CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, APIKey, signer, payload)
-	ret0, _ := ret[0].(*bitflyer.Quote)
+	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, APIKey, payload)
+	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckPayoutStatus indicates an expected call of CheckPayoutStatus
-func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, APIKey, signer, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, APIKey, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, APIKey, signer, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, APIKey, payload)
 }

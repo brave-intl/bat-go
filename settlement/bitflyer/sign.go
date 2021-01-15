@@ -1,61 +1,35 @@
 package bitflyersettlement
 
 import (
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 
-	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	"github.com/brave-intl/bat-go/utils/vaultsigner"
+	"github.com/brave-intl/bat-go/settlement"
 )
 
-// SignRequests signs formed requests
-func SignRequests(
-	clientID string,
-	clientKey string,
-	hmacSecret *vaultsigner.HmacSigner,
-	privateRequests *[][]bitflyer.PayoutPayload,
-) (*[]bitflyer.PrivateRequestSequence, error) {
-	privateRequestSequences := make([]bitflyer.PrivateRequestSequence, 0)
-	// sign each request
+// SettlementRequest holds the api key and settlements to be settled on bitflyer
+type SettlementRequest struct {
+	APIKey       string                              `json:"api_key"`
+	Transactions map[string][]settlement.Transaction `json:"transactions"`
+}
 
-	if len(clientID) == 0 {
-		return nil, errors.New("a client id was missing during the bitflyer settlement signing process")
+// GroupSettlements groups settlements under a single provider id so that we can impose limits based on price
+// no signing here, just grouping settlements under a single deposit id
+func GroupSettlements(
+	token string,
+	settlements *[]settlement.Transaction,
+) (*SettlementRequest, error) {
+	if len(token) == 0 {
+		return nil, errors.New("a client token was missing during the bitflyer settlement signing process")
 	}
 
-	for _, withdrawals := range *privateRequests {
-		base := bitflyer.NewWithdrawToDepositIDBulkRequest(
-			true,
-			priceToken,
-			&withdrawals,
-		)
-		signatures := []string{}
-		// store the original nonce
-		originalNonce := base.Nonce
-		for i := 0; i < 10; i++ {
-			// increment the nonce to correspond to each signature
-			base.Nonce = originalNonce + int64(i)
-			marshalled, err := json.Marshal(base)
-			if err != nil {
-				return nil, err
-			}
-			serializedPayload := base64.StdEncoding.EncodeToString(marshalled)
-			sig, err := hmacSecret.HMACSha384(
-				[]byte(serializedPayload),
-			)
-			if err != nil {
-				return nil, err
-			}
-			signatures = append(signatures, hex.EncodeToString(sig))
-		}
-		base.Nonce = originalNonce
-		requestSequence := bitflyer.PrivateRequestSequence{
-			Signatures: signatures,
-			Base:       base,
-			APIKey:     clientKey,
-		}
-		privateRequestSequences = append(privateRequestSequences, requestSequence)
+	grouped := make(map[string][]settlement.Transaction)
+	for _, payout := range *settlements {
+		id := payout.WalletProviderID
+		grouped[id] = append(grouped[id], payout)
 	}
-	return &privateRequestSequences, nil
+
+	return &SettlementRequest{
+		APIKey:       token,
+		Transactions: grouped,
+	}, nil
 }
