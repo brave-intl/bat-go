@@ -52,6 +52,8 @@ instrumented:
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/gemini_client_duration_seconds/g' utils/clients/gemini/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/bitflyer_client_duration_seconds/g' utils/clients/bitflyer/instrumented_client.go
 
 %-docker: docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -200,6 +201,7 @@ func (c *SimpleHTTPClient) do(
 			}).Dec()
 	}()
 
+	fmt.Printf("%#v\n", req)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -239,7 +241,13 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
-		return resp, NewHTTPError(err, req.URL.String(), "response", code, v)
+		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
+			Body    interface{}
+			Headers interface{}
+		}{
+			Body:    v,
+			Headers: req.Header,
+		})
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil

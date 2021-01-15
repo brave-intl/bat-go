@@ -2,53 +2,54 @@ package bitflyersettlement
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/rs/zerolog"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
 // CategorizeResponse categorizes a response from bitflyer as pending, complete, failed, or unknown
 func CategorizeResponse(
-	originalTransactions map[string]settlement.Transaction,
-	payout *bitflyer.PayoutResult,
-) (settlement.Transaction, string) {
-	original := originalTransactions[payout.TxRef]
-	key := "failed"
-	if payout.Result == "Error" {
-		original.Note = *payout.Reason
-	} else {
-		status := *payout.Status
-		key = "unknown"
-		if *payout.Status == "Pending" {
-			key = "pending"
-		} else if status == "Completed" {
-			key = "complete"
+	originalTransactions map[string][]settlement.Transaction,
+	payout *bitflyer.WithdrawToDepositIDResponse,
+) ([]settlement.Transaction, string) {
+	txs := originalTransactions[payout.TransferID]
+	k := "unknown"
+	for i, original := range txs {
+		key := "failed"
+		if payout.Status == "Error" {
+			original.Note = payout.Message
+		} else {
+			status := payout.Status
+			key = "unknown"
+			if payout.Status == "Pending" {
+				key = "pending"
+			} else if status == "Completed" {
+				key = "complete"
+			}
 		}
+		original.Status = key
+		k = original.Status
+		tmp := altcurrency.BAT
+		original.AltCurrency = &tmp
+		original.Currency = tmp.String()
+		txs[i] = original
 	}
-	original.Status = key
-	tmp := altcurrency.BAT
-	original.AltCurrency = &tmp
-	original.Currency = tmp.String()
-	original.ProviderID = payout.TxRef
-	return original, key
+	return txs, k
 }
 
 // CategorizeResponses categorizes the series of responses
 func CategorizeResponses(
-	originalTransactions map[string]settlement.Transaction,
-	response *[]bitflyer.PayoutResult,
+	originalTransactions map[string][]settlement.Transaction,
+	response *[]bitflyer.WithdrawToDepositIDResponse,
 ) map[string][]settlement.Transaction {
 	transactions := make(map[string][]settlement.Transaction)
 
@@ -57,7 +58,13 @@ func CategorizeResponses(
 			originalTransactions,
 			&payout,
 		)
-		transactions[key] = append(transactions[key], original)
+		nonZero := []settlement.Transaction{}
+		for _, tx := range original {
+			if tx.Amount.GreaterThan(decimal.Zero) {
+				nonZero = append(nonZero, tx)
+			}
+		}
+		transactions[key] = append(transactions[key], original...)
 	}
 	return transactions
 }
@@ -65,53 +72,37 @@ func CategorizeResponses(
 // SubmitBulkPayoutTransactions submits bulk payout transactions
 func SubmitBulkPayoutTransactions(
 	ctx context.Context,
-	transactionsMap map[string]settlement.Transaction,
+	transactionsMap map[string][]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
-	bulkPayoutRequestRequirements bitflyer.PrivateRequestSequence,
+	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
+	token string,
 	total int,
 	blockProgress int,
-	signatureSwitch int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 	logging.SubmitProgress(ctx, blockProgress, total)
-	// make sure payload is parsable
-	// upload the bulk payout
-	sig := bulkPayoutRequestRequirements.Signatures[signatureSwitch]
-	decodedSig, err := hex.DecodeString(sig)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed decode signature")
-		return submittedTransactions, err
-	}
-	base := bulkPayoutRequestRequirements.Base
-	presigner := cryptography.NewPresigner(decodedSig)
-	base.Nonce = base.Nonce + int64(signatureSwitch)
 
 	logger.Debug().
 		Int("total", total).
 		Int("progress", blockProgress).
-		Int64("nonce", base.Nonce).
-		Int("signature switch", signatureSwitch).
 		Msg("parameters used")
 
-	serialized, err := json.Marshal(base)
+	payload, err := json.Marshal(bulkPayoutRequestRequirements)
 	if err != nil {
 		return submittedTransactions, err
 	}
-	payload := base64.StdEncoding.EncodeToString(serialized)
 
 	logger.Debug().
-		Str("api key", bulkPayoutRequestRequirements.APIKey).
-		Str("signature", sig).
+		Str("api key", token).
 		Msg("sending request")
 
 	response, err := bitflyerClient.UploadBulkPayout(
 		ctx,
-		bulkPayoutRequestRequirements.APIKey,
-		presigner,
+		token,
 		payload,
 	)
 	<-time.After(time.Second)
@@ -120,7 +111,7 @@ func SubmitBulkPayoutTransactions(
 		return submittedTransactions, err
 	}
 	// collect all successful transactions to send to eyeshade
-	submitted := CategorizeResponses(transactionsMap, response)
+	submitted := CategorizeResponses(transactionsMap, &response.Withdrawals)
 	for key, txs := range submitted {
 		submittedTransactions[key] = append(submittedTransactions[key], txs...)
 	}
@@ -130,10 +121,11 @@ func SubmitBulkPayoutTransactions(
 // CheckPayoutTransactionsStatus checks the status of given transactions
 func CheckPayoutTransactionsStatus(
 	ctx context.Context,
-	transactionsMap map[string]settlement.Transaction,
+	transactionsMap map[string][]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
-	bulkPayoutRequestRequirements bitflyer.PrivateRequestSequence,
+	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
+	token string,
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
@@ -142,39 +134,38 @@ func CheckPayoutTransactionsStatus(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	APIKey := bulkPayoutRequestRequirements.APIKey
-	base := bulkPayoutRequestRequirements.Base
-	clientID := base.OauthClientID
-	for j, payout := range base.Payouts {
-		result, err := bitflyerClient.CheckTxStatus(
-			ctx,
-			APIKey,
-			clientID,
-			payout.TxRef,
-		)
-		if err != nil {
-			return nil, err
-		}
-		original, key := CategorizeResponse(
-			transactionsMap,
-			result,
-		)
-		submittedTransactions[key] = append(submittedTransactions[key], original)
-
-		prog := blockProgress + j
+	payload, err := json.Marshal(bulkPayoutRequestRequirements)
+	if err != nil {
+		return nil, err
+	}
+	result, err := bitflyerClient.CheckPayoutStatus(
+		ctx,
+		token,
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+	response := CategorizeResponses(
+		transactionsMap,
+		&result.Withdrawals,
+	)
+	for key, original := range response {
+		submittedTransactions[key] = append(submittedTransactions[key], original...)
+		prog := blockProgress
 		logging.SubmitProgress(ctx, prog, total)
 		logger.Debug().
 			Int("total", total).
 			Int("progress", prog).
 			Str("key", key).
-			Str("tx_ref", payout.TxRef).
+			Str("tx_ref", original[0].DocumentID).
 			Msg("parameters used")
 	}
 	return submittedTransactions, err
 }
 
-// GeminiWriteTransactions writes settlement transactions to a json file
-func GeminiWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
+// BitflyerWriteTransactions writes settlement transactions to a json file
+func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -193,64 +184,99 @@ func GeminiWriteTransactions(ctx context.Context, outPath string, metadata *[]se
 	return ioutil.WriteFile(outPath, data, 0600)
 }
 
-// GeminiWriteRequests writes settlement transactions to a json file
-func GeminiWriteRequests(outPath string, metadata *[][]bitflyer.PayoutPayload) error {
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return err
+func setupSettlementTransactions(
+	// token string,
+	transactions map[string][]settlement.Transaction,
+	limit decimal.Decimal,
+	decimalFactor int32,
+) (
+	// transfer_id => partial transactions
+	map[string][]settlement.Transaction,
+	*[][]settlement.Transaction,
+	error,
+) {
+	settlementRequests := [][]settlement.Transaction{{}}
+	settlements := make(map[string][]settlement.Transaction)
+	for key, groupedWithdrawals := range transactions {
+		set, index := getSettlementGroup(&settlementRequests)
+		aggregatedTx := settlement.Transaction{}
+		for gwdIndex, wd := range groupedWithdrawals {
+			last := 1+gwdIndex == len(groupedWithdrawals)
+			if gwdIndex == 0 {
+				aggregatedTx.AltCurrency = wd.AltCurrency
+				aggregatedTx.Currency = wd.Currency
+				aggregatedTx.Destination = wd.Destination
+				aggregatedTx.Publisher = wd.Publisher
+				aggregatedTx.WalletProvider = wd.WalletProvider
+				aggregatedTx.WalletProviderID = wd.WalletProviderID
+				aggregatedTx.Channel = wd.Channel
+				aggregatedTx.SettlementID = wd.SettlementID
+				aggregatedTx.Type = wd.Type
+			}
+			partialAmount := wd.Amount
+			// will hit our limits
+			if aggregatedTx.Amount.Add(partialAmount).GreaterThan(limit) {
+				// reduce amount and fee to be within. can be zero
+				partialAmount = limit.Sub(aggregatedTx.Amount)
+			}
+			// bitflyer constrains us to 8 decimal places
+			tempTotal := aggregatedTx.Amount.Add(partialAmount)
+			tempTotalTrunc := tempTotal.Truncate(decimalFactor)
+			if last && tempTotal.GreaterThan(tempTotalTrunc) {
+				// use reduced amount for last value
+				partialAmount = partialAmount.Sub(tempTotal.Sub(tempTotalTrunc)) // do not truncate because only a part
+			}
+			// derive other number props
+			partialProbi := altcurrency.BAT.ToProbi(partialAmount)            // scale to derive probi
+			partialFee := wd.BATPlatformFee.Mul(partialAmount).Div(wd.Amount) // stoich to derive fee
+			// add to aggregate provider transaction
+			aggregatedTx.Amount = aggregatedTx.Amount.Add(partialAmount)
+			aggregatedTx.BATPlatformFee = aggregatedTx.BATPlatformFee.Add(partialFee) // not needed but useful for sanity checking
+			aggregatedTx.Probi = aggregatedTx.Probi.Add(partialProbi)                 // not needed but useful for sanity checking
+			// need separate so we can settle different types on eyeshade
+			// update single settlement.
+			wd.Amount = partialAmount
+			wd.BATPlatformFee = partialFee
+			wd.Probi = partialProbi
+			// attach to upper levels
+			settlements[key] = append(settlements[key], wd)
+		}
+		j, _ := json.Marshal(aggregatedTx)
+		fmt.Println(string(j))
+		*set = append(*set, aggregatedTx)
+		settlementRequests[index] = *set
 	}
-	return ioutil.WriteFile(outPath, data, 0600)
+	return settlements, &settlementRequests, nil
 }
 
-// ConvertTransactionsToPayouts converts transactions from antifraud to "payouts" for bitflyer
-func ConvertTransactionsToPayouts(transactions *[]settlement.Transaction, txID string) (*[]bitflyer.PayoutPayload, decimal.Decimal) {
-	payouts := make([]bitflyer.PayoutPayload, 0)
-	total := decimal.NewFromFloat(0)
-	for i, tx := range *transactions {
-		tx.SettlementID = txID
-		(*transactions)[i] = tx
-		payout := bitflyer.SettlementTransactionToPayoutPayload(&tx)
-		total = total.Add(payout.Amount)
-		payouts = append(payouts, payout)
+func createBitflyerRequests(token string, settlementRequests *[][]settlement.Transaction) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
+	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
+	for _, withdrawalSet := range *settlementRequests {
+		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs("", &withdrawalSet) // self
+		if err != nil {
+			return nil, err
+		}
+		bitflyerRequests = append(bitflyerRequests, *bitflyer.NewWithdrawToDepositIDBulkPayload(
+			os.Getenv("BITFLYER_DRYRUN") == "true",
+			token,
+			bitflyerPayloads,
+		))
 	}
-	return &payouts, total
+	return &bitflyerRequests, nil
 }
 
-// TransformTransactions splits the transactions into appropriately sized blocks for signing
-func TransformTransactions(ctx context.Context, oauthClientID string, transactions []settlement.Transaction) (*[][]bitflyer.PayoutPayload, error) {
-	maxCount := 30
-	blocksCount := (len(transactions) / maxCount) + 1
-	privateRequests := make([][]bitflyer.PayoutPayload, 0)
-	i := 0
-	logger := zerolog.Ctx(ctx)
-
-	txnID := transactions[0].SettlementID
-	txID := uuid.Must(uuid.FromString(txnID))
-	total := decimal.NewFromFloat(0)
-	for i < blocksCount {
-		lowerBound := i * maxCount
-		upperBound := (i + 1) * maxCount
-		payoutLength := len(transactions)
-		if payoutLength <= upperBound {
-			upperBound = payoutLength
-		}
-		transactionBlock := transactions[lowerBound:upperBound]
-		if len(transactionBlock) > 0 {
-			payoutBlock, blockTotal := ConvertTransactionsToPayouts(&transactionBlock, txnID)
-			total = total.Add(blockTotal)
-			privateRequests = append(privateRequests, *payoutBlock)
-		}
-		i++
+func getSettlementGroup(
+	settlementRequests *[][]settlement.Transaction,
+) (*[]settlement.Transaction, int) {
+	requestSeries := *settlementRequests
+	lastIndex := len(requestSeries) - 1
+	set := requestSeries[lastIndex]
+	if len(requestSeries[lastIndex]) >= 1000 {
+		set := []settlement.Transaction{}
+		*settlementRequests = append(*settlementRequests, set)
+		return &set, len(*settlementRequests) - 1
 	}
-
-	logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
-		return c.Str("transaction_id", txID.String()).
-			Int("blocks", blocksCount).
-			Int("transactions", len(transactions)).
-			Str("total", total.String())
-	})
-
-	return &privateRequests, nil
+	return &set, len(*settlementRequests) - 1
 }
 
 // IterateRequest iterates requests
@@ -258,9 +284,8 @@ func IterateRequest(
 	ctx context.Context,
 	action string,
 	bitflyerClient bitflyer.Client,
-	signatureSwitch int,
 	bulkPayoutFiles []string,
-	transactionsMap map[string]settlement.Transaction,
+	// settlementTransactions map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)
@@ -268,8 +293,13 @@ func IterateRequest(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
+	// for submission to eyeshade
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
+	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY")
+	if err != nil {
+		return &submittedTransactions, err
+	}
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -277,26 +307,45 @@ func IterateRequest(
 			return &submittedTransactions, err
 		}
 
-		var bitflyerBulkPayoutRequestRequirements []bitflyer.PrivateRequestSequence
+		var bitflyerBulkPayoutRequestRequirements SettlementRequest
 		err = json.Unmarshal(bytes, &bitflyerBulkPayoutRequestRequirements)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 			return &submittedTransactions, err
 		}
+		// bat limit
+		var decimalFactor int32 = 8
+		limit := decimal.NewFromFloat32(200000). // start with jpy
+								Div(quote.Rate).        // convert to bat
+								Truncate(decimalFactor) // truncated to satoshis
+		transactionsMap, transactionGroups, err := setupSettlementTransactions(
+			bitflyerBulkPayoutRequestRequirements.Transactions,
+			limit,
+			decimalFactor,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-		total := bitflyerComputeTotal(bitflyerBulkPayoutRequestRequirements)
-		for i, bulkPayoutRequestRequirements := range bitflyerBulkPayoutRequestRequirements {
-			blockProgress := bitflyerComputeTotal(bitflyerBulkPayoutRequestRequirements[:i+1])
+		requests, err := createBitflyerRequests(
+			quote.PriceToken,
+			transactionGroups,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		for i, request := range *requests {
 			if action == "upload" {
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
 					ctx,
 					transactionsMap,
 					submittedTransactions,
-					bulkPayoutRequestRequirements,
+					request,
 					bitflyerClient,
-					len(bulkPayoutFiles),
-					blockProgress,
-					signatureSwitch,
+					bitflyerBulkPayoutRequestRequirements.APIKey,
+					len(bulkPayoutFiles)-1,
+					i,
 				)
 				if err != nil {
 					logger.Error().Err(err).Msg("failed to submit bulk payout transactions")
@@ -307,10 +356,11 @@ func IterateRequest(
 					ctx,
 					transactionsMap,
 					submittedTransactions,
-					bulkPayoutRequestRequirements,
+					request,
 					bitflyerClient,
-					total,
-					blockProgress,
+					bitflyerBulkPayoutRequestRequirements.APIKey,
+					len(bulkPayoutFiles)-1,
+					i,
 				)
 				if err != nil {
 					logger.Error().Err(err).Msg("falied to check payout transactions status")
@@ -320,19 +370,4 @@ func IterateRequest(
 		}
 	}
 	return &submittedTransactions, nil
-}
-
-func bitflyerComputeTotal(bitflyerBulkPayoutRequestRequirements []bitflyer.PrivateRequestSequence) int {
-	if len(bitflyerBulkPayoutRequestRequirements) == 0 {
-		return 0
-	}
-
-	firstLen := len(bitflyerBulkPayoutRequestRequirements[0].Base.Payouts)
-	blockLen := len(bitflyerBulkPayoutRequestRequirements)
-	lastLen := len(bitflyerBulkPayoutRequestRequirements[blockLen-1].Base.Payouts)
-	total := blockLen * firstLen
-	if blockLen > 1 {
-		total += lastLen
-	}
-	return total
 }

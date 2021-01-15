@@ -3,7 +3,6 @@ package settlement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -14,25 +13,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 )
-
-/*
-plan
-hostname:  http://demo22oy5z2d2lu6pyoum26m7k.azurewebsites.net
-client_id: 6cd6f1a070afcd467e198c8039b2c97b
-
-account/inventory
-v
-getprice?product_code=BAT_JPY
-v
-withdraw-to-deposit-id/request
-v
-withdraw-to-deposit-id/status
-
-
-*/
 
 var (
 	// BitflyerSettlementCmd creates the bitflyer subcommand
@@ -62,14 +44,6 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	sig, err := cmd.Flags().GetInt("sig")
-	if err != nil {
-		return err
-	}
-	allTransactionsFile, err := cmd.Flags().GetString("all-txs-input")
-	if err != nil {
-		return err
-	}
 	out, err := cmd.Flags().GetString("out")
 	if err != nil {
 		return err
@@ -82,8 +56,6 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		cmd.Context(),
 		"upload",
 		input,
-		sig,
-		allTransactionsFile,
 		out,
 	)
 }
@@ -101,20 +73,10 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
-	sig, err := cmd.Flags().GetInt("sig")
-	if err != nil {
-		return err
-	}
-	allTxsInput, err := cmd.Flags().GetString("all-txs-input")
-	if err != nil {
-		return err
-	}
 	return BitflyerUploadSettlement(
 		cmd.Context(),
 		"checkstatus",
 		input,
-		sig,
-		allTxsInput,
 		out,
 	)
 }
@@ -142,14 +104,15 @@ func init() {
 		Bind("out").
 		Env("OUT")
 
-	uploadCheckStatusBuilder.Flag().String("all-txs-input", "",
-		"the original transactions file").
-		Bind("all-txs-input").
-		Require()
+	// bitflyer-client-token
+	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
+		"bitflyer-client-token holds the uphold token that we want to use to auth the bulk transactions").
+		Bind("bitflyer-client-token").
+		Env("BITFLYER_CLIENT_TOKEN")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
-func BitflyerUploadSettlement(ctx context.Context, action string, inPath string, signatureSwitch int, allTransactionsFile string, outPath string) error {
+func BitflyerUploadSettlement(ctx context.Context, action string, inPath string, outPath string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
@@ -167,33 +130,11 @@ func BitflyerUploadSettlement(ctx context.Context, action string, inPath string,
 		return err
 	}
 
-	if allTransactionsFile == "" {
-		logger.Error().Msg("transactions file is empty")
-		return errors.New("unable to upload without a transactions file to check against")
-	}
-
-	bytes, err := ioutil.ReadFile(allTransactionsFile)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to read the transactions file")
-		return err
-	}
-
-	var settlementTransactions []settlement.AntifraudTransaction
-	err = json.Unmarshal(bytes, &settlementTransactions)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to unmarshal the transactions file")
-		return err
-	}
-	// create a map of the request transactions
-	transactionsMap := bitflyerMapTransactionsToID(settlementTransactions)
-
 	submittedTransactions, submitErr := bitflyersettlement.IterateRequest(
 		ctx,
 		action,
 		bitflyerClient,
-		signatureSwitch,
 		bulkPayoutFiles,
-		transactionsMap,
 	)
 	// write file for upload to eyeshade
 	logger.Info().
@@ -213,48 +154,6 @@ func BitflyerUploadSettlement(ctx context.Context, action string, inPath string,
 	return submitErr
 }
 
-// bitflyerMapTransactionsToID creates a map of guid's to transactions
-func bitflyerMapTransactionsToID(antifraudTransactions []settlement.AntifraudTransaction) (
-	map[string]settlement.Transaction,
-	[]settlement.Transaction,
-) {
-	transactionsMap := make(map[string]settlement.Transaction)
-	settlementTransactions := []settlement.Transaction{}
-	for _, atx := range antifraudTransactions {
-		tx := atx.ToTransaction()
-		transferID := bitflyer.GenerateTransferID(&tx)
-		previousTx := transactionsMap[transferID]
-		if previousTx.Amount.Equals(decimal.NewFromFloat32(0)) {
-			// add tx to map
-			previousTx = tx
-		} else {
-			// add amount to map
-			previousTx.Amount = previousTx.Amount.Add(tx.Amount)
-		}
-		// check that we are not above amount limits on eyeshade
-		amountLimit := decimal.NewFromFloat32(20000)
-		if previousTx.Amount.LessThanOrEqual(amountLimit) {
-			// within the bounds of our per publishers limit
-			// ok to settle full amount, as is
-			settlementTransactions = append(settlementTransactions, tx)
-		} else {
-			// over the bounds provided. will have to
-			difference := previousTx.Amount.Sub(amountLimit)
-			if difference.LessThan(tx.Amount) {
-				// partial settlement on eyeshade side
-				tx.Amount = tx.Amount.Sub(difference)
-				settlementTransactions = append(settlementTransactions, tx)
-			} else {
-				// do nothing
-				// completely outside of the bounds. do not settle on eyeshade side
-			}
-			previousTx.Amount = amountLimit
-		}
-		transactionsMap[transferID] = previousTx
-	}
-	return transactionsMap, settlementTransactions
-}
-
 // BitflyerWriteTransactions writes settlement transactions to a json file
 func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
 	logger, err := appctx.GetLogger(ctx)
@@ -270,15 +169,6 @@ func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
-}
-
-// BitflyerWriteRequests writes settlement transactions to a json file
-func BitflyerWriteRequests(outPath string, metadata *[][]bitflyer.PayoutPayload) error {
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
 		return err
 	}
 	return ioutil.WriteFile(outPath, data, 0600)
