@@ -58,7 +58,7 @@ func CategorizeResponses(
 		)
 		nonZero := []settlement.Transaction{}
 		for _, tx := range original {
-			if tx.Amount.GreaterThan(decimal.Zero) {
+			if tx.Probi.GreaterThan(decimal.Zero) {
 				nonZero = append(nonZero, tx)
 			}
 		}
@@ -174,7 +174,6 @@ func setupSettlementTransactions(
 	// token string,
 	transactions map[string][]settlement.Transaction,
 	limit decimal.Decimal,
-	decimalFactor int32,
 ) (
 	// transfer_id => partial transactions
 	map[string][]settlement.Transaction,
@@ -187,7 +186,7 @@ func setupSettlementTransactions(
 		set, index := getSettlementGroup(&settlementRequests)
 		aggregatedTx := settlement.Transaction{}
 		for gwdIndex, wd := range groupedWithdrawals {
-			last := 1+gwdIndex == len(groupedWithdrawals)
+			// last := 1+gwdIndex == len(groupedWithdrawals)
 			if gwdIndex == 0 {
 				aggregatedTx.AltCurrency = wd.AltCurrency
 				aggregatedTx.Currency = wd.Currency
@@ -200,22 +199,17 @@ func setupSettlementTransactions(
 				aggregatedTx.SettlementID = wd.SettlementID
 				aggregatedTx.Type = wd.Type
 			}
-			partialAmount := wd.Amount
+			partialProbi := wd.Probi
 			// will hit our limits
-			if aggregatedTx.Amount.Add(partialAmount).GreaterThan(limit) {
+			if aggregatedTx.Amount.Add(partialProbi).GreaterThan(limit) {
 				// reduce amount and fee to be within. can be zero
-				partialAmount = limit.Sub(aggregatedTx.Amount)
+				partialProbi = limit.Sub(aggregatedTx.Probi)
 			}
-			// bitflyer constrains us to 8 decimal places
-			tempTotal := aggregatedTx.Amount.Add(partialAmount)
-			tempTotalTrunc := tempTotal.Truncate(decimalFactor)
-			if last && tempTotal.GreaterThan(tempTotalTrunc) {
-				// use reduced amount for last value
-				partialAmount = partialAmount.Sub(tempTotal.Sub(tempTotalTrunc)) // do not truncate because only a part
+			partialFee := decimal.Zero
+			if wd.BATPlatformFee.GreaterThan(decimal.Zero) {
+				partialFee = partialProbi.Div(decimal.NewFromFloat(19))
 			}
-			// derive other number props
-			partialProbi := altcurrency.BAT.ToProbi(partialAmount)            // scale to derive probi
-			partialFee := wd.BATPlatformFee.Mul(partialAmount).Div(wd.Amount) // stoich to derive fee
+			partialAmount := altcurrency.BAT.FromProbi(partialProbi.Add(partialFee)) // always in BAT to BAT so we're good
 			// add to aggregate provider transaction
 			aggregatedTx.Amount = aggregatedTx.Amount.Add(partialAmount)
 			aggregatedTx.BATPlatformFee = aggregatedTx.BATPlatformFee.Add(partialFee) // not needed but useful for sanity checking
@@ -299,14 +293,12 @@ func IterateRequest(
 			return &submittedTransactions, err
 		}
 		// bat limit
-		var decimalFactor int32 = 8
-		limit := decimal.NewFromFloat32(200000). // start with jpy
-								Div(quote.Rate).        // convert to bat
-								Truncate(decimalFactor) // truncated to satoshis
+		limit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
+											Div(quote.Rate). // convert to bat
+											Truncate(8))     // truncated to satoshis
 		transactionsMap, transactionGroups, err := setupSettlementTransactions(
 			bitflyerBulkPayoutRequestRequirements.Transactions,
 			limit,
-			decimalFactor,
 		)
 		if err != nil {
 			return nil, err

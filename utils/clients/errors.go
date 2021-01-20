@@ -1,7 +1,7 @@
 package clients
 
 import (
-	"encoding/json"
+	"fmt"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
@@ -38,9 +38,8 @@ func NewHTTPError(err error, path, message string, status int, v interface{}) er
 }
 
 // Error returns the error string
-func (bfe *BitflyerError) Error() string {
-	json, _ := json.Marshal(bfe)
-	return string(json)
+func (bfe BitflyerError) Error() string {
+	return fmt.Sprintf("message: %s - label: %s - status: %d - ids: %v", bfe.Message, bfe.Label, bfe.Status, bfe.Errors)
 }
 
 // BitflyerError holds error info directly from bitflyer
