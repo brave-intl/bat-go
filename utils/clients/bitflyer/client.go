@@ -5,14 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
@@ -85,10 +85,11 @@ func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]W
 		sourceFrom = "self"
 	}
 	for _, tx := range *txs {
-		if tx.Amount.Exponent() > 8 {
+		probi := altcurrency.BAT.FromProbi(tx.Probi)
+		if probi.Exponent() > 8 {
 			return nil, errors.New("cannot convert float exactly")
 		}
-		f64, _ := tx.Amount.Float64()
+		f64, _ := probi.Float64()
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
 			Amount:       f64,
@@ -111,56 +112,6 @@ func GenerateTransferID(tx *settlement.Transaction) string {
 	bytes := sha256.Sum256([]byte(key))
 	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
 	return refID
-}
-
-// GenerateSettlementID generates a deterministic transaction reference id for idempotency
-func GenerateSettlementID(tx *settlement.Transaction) string {
-	key := strings.Join([]string{
-		tx.SettlementID,
-		tx.Destination,
-		tx.Publisher,
-		tx.Channel,
-	}, "_")
-	bytes := sha256.Sum256([]byte(key))
-	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
-	return refID
-}
-
-// PayoutResult contains details about a newly created or fetched issuer
-type PayoutResult struct {
-	Result      string           `json:"result"` // OK or Error
-	TxRef       string           `json:"tx_ref"`
-	Amount      *decimal.Decimal `json:"amount"`
-	Currency    *string          `json:"currency"`
-	Destination *string          `json:"destination"`
-	Status      *string          `json:"status"`
-	Reason      *string          `json:"reason"`
-}
-
-// Balance holds balance info
-type Balance struct {
-	Type                   string          `json:"type"`
-	Currency               string          `json:"currency"`
-	Amount                 decimal.Decimal `json:"amount"`
-	Available              decimal.Decimal `json:"available"`
-	AvailableForWithdrawal decimal.Decimal `json:"availableForWithdrawal"`
-}
-
-// Account holds account info
-type Account struct {
-	Name           string `json:"name"`
-	Class          string `json:"account"`
-	Type           string `json:"type"`
-	CounterpartyID string `json:"counterparty_id"`
-	CreatedAt      int64  `json:"created"`
-}
-
-// GenerateLog creates a log
-func (pr PayoutResult) GenerateLog() string {
-	if pr.Result == "OK" {
-		return ""
-	}
-	return strings.Join([]string{pr.Result, pr.TxRef, *pr.Status, *pr.Reason}, ": ")
 }
 
 // Client abstracts over the underlying client
@@ -260,7 +211,7 @@ func setupRequestHeaders(req *http.Request, APIKey string) {
 }
 
 func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := requestutils.Read(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -272,19 +223,5 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if len(bfError.Label) == 0 {
 		return e
 	}
-	bundle, ok := e.(*errorutils.ErrorBundle)
-	if !ok {
-		return e
-	}
-	state, ok := bundle.Data().(clients.HTTPState)
-	if !ok {
-		return e
-	}
-	return clients.NewHTTPError(
-		err,
-		state.Path,
-		bundle.Error(),
-		state.Status,
-		bfError,
-	)
+	return bfError
 }
