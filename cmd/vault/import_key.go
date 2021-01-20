@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
@@ -165,7 +164,6 @@ func ImportKey(command *cobra.Command, args []string) error {
 				}
 			}
 		case "bitflyer":
-			fmt.Println(len(bitflyerClientToken))
 			if len(bitflyerClientToken) != 0 {
 				err = bitflyerVaultImportValues(
 					command.Context(),

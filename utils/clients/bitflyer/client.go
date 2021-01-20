@@ -85,10 +85,10 @@ func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]W
 		sourceFrom = "self"
 	}
 	for _, tx := range *txs {
-		f64, exact := tx.Amount.Float64()
-		if !exact {
-			return nil, errors.New("could not convert float exactly")
+		if tx.Amount.Exponent() > 8 {
+			return nil, errors.New("cannot convert float exactly")
 		}
+		f64, _ := tx.Amount.Float64()
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
 			Amount:       f64,
@@ -172,9 +172,9 @@ type Client interface {
 	// // FetchBalances requests balance information for a given account
 	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload /string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
-	UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (*WithdrawToDepositIDBulkResponse, error)
+	UploadBulkPayout(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (*WithdrawToDepositIDBulkResponse, error)
+	CheckPayoutStatus(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -220,9 +220,9 @@ func (c *HTTPClient) FetchQuote(
 func (c *HTTPClient) UploadBulkPayout(
 	ctx context.Context,
 	APIKey string,
-	payload []byte,
+	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
 	if err != nil {
 		return nil, err
 	}
@@ -239,9 +239,9 @@ func (c *HTTPClient) UploadBulkPayout(
 func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
 	APIKey string,
-	payload []byte,
+	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload)
 	if err != nil {
 		return nil, err
 	}

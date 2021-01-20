@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -201,7 +200,6 @@ func (c *SimpleHTTPClient) do(
 			}).Dec()
 	}()
 
-	fmt.Printf("%#v\n", req)
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -218,6 +216,8 @@ func (c *SimpleHTTPClient) do(
 	if status >= 200 && status <= 299 {
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)
+			// m, _ := json.Marshal(v)
+			// fmt.Println("remarshalled", string(m))
 			if err != nil {
 				return resp, errors.Wrap(err, ErrUnableToDecode)
 			}

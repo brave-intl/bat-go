@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/brave-intl/bat-go/settlement"
+	bitflyerclient "github.com/brave-intl/bat-go/utils/clients/bitflyer"
 )
 
 // SettlementRequest holds the api key and settlements to be settled on bitflyer
@@ -24,7 +25,7 @@ func GroupSettlements(
 
 	grouped := make(map[string][]settlement.Transaction)
 	for _, payout := range *settlements {
-		id := payout.WalletProviderID
+		id := bitflyerclient.GenerateTransferID(&payout)
 		grouped[id] = append(grouped[id], payout)
 	}
 

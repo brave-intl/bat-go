@@ -104,7 +104,7 @@ func SubmitBulkPayoutTransactions(
 	payload := base64.StdEncoding.EncodeToString(serialized)
 
 	logger.Debug().
-		Str("api key", bulkPayoutRequestRequirements.APIKey).
+		Str("api_key", bulkPayoutRequestRequirements.APIKey).
 		Str("signature", sig).
 		Msg("sending request")
 
