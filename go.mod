@@ -34,7 +34,7 @@ require (
 	github.com/rs/zerolog v1.20.0
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0
-	github.com/segmentio/kafka-go v0.4.8
+	github.com/segmentio/kafka-go v0.4.9
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
 	github.com/sirupsen/logrus v1.7.0
