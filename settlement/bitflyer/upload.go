@@ -3,7 +3,6 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -24,17 +23,16 @@ func CategorizeResponse(
 	txs := originalTransactions[payout.TransferID]
 	k := "unknown"
 	for i, original := range txs {
+		status := payout.Status
 		key := "failed"
-		if payout.Status == "Error" {
-			original.Note = payout.Message
-		} else {
-			status := payout.Status
-			key = "unknown"
-			if payout.Status == "Pending" {
-				key = "pending"
-			} else if status == "Completed" {
-				key = "complete"
-			}
+		switch status {
+		case "SUCCESS":
+			key = "complete"
+		case "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT":
+			key = "failed"
+			original.Note = status
+		case "NOT_FOUND", "CREATED", "PENDING", "EXECUTED", "EXPIRED", "NOPOSITION":
+			key = "complete"
 		}
 		original.Status = key
 		k = original.Status
@@ -89,21 +87,13 @@ func SubmitBulkPayoutTransactions(
 	logger.Debug().
 		Int("total", total).
 		Int("progress", blockProgress).
-		Msg("parameters used")
-
-	payload, err := json.Marshal(bulkPayoutRequestRequirements)
-	if err != nil {
-		return submittedTransactions, err
-	}
-
-	logger.Debug().
-		Str("api key", token).
+		Str("api_key", token).
 		Msg("sending request")
 
 	response, err := bitflyerClient.UploadBulkPayout(
 		ctx,
 		token,
-		payload,
+		bulkPayoutRequestRequirements,
 	)
 	<-time.After(time.Second)
 	if err != nil {
@@ -134,14 +124,10 @@ func CheckPayoutTransactionsStatus(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	payload, err := json.Marshal(bulkPayoutRequestRequirements)
-	if err != nil {
-		return nil, err
-	}
 	result, err := bitflyerClient.CheckPayoutStatus(
 		ctx,
 		token,
-		payload,
+		bulkPayoutRequestRequirements,
 	)
 	if err != nil {
 		return nil, err
@@ -209,6 +195,7 @@ func setupSettlementTransactions(
 				aggregatedTx.Publisher = wd.Publisher
 				aggregatedTx.WalletProvider = wd.WalletProvider
 				aggregatedTx.WalletProviderID = wd.WalletProviderID
+				aggregatedTx.ProviderID = wd.WalletProviderID
 				aggregatedTx.Channel = wd.Channel
 				aggregatedTx.SettlementID = wd.SettlementID
 				aggregatedTx.Type = wd.Type
@@ -239,10 +226,9 @@ func setupSettlementTransactions(
 			wd.BATPlatformFee = partialFee
 			wd.Probi = partialProbi
 			// attach to upper levels
+			wd.ProviderID = key
 			settlements[key] = append(settlements[key], wd)
 		}
-		j, _ := json.Marshal(aggregatedTx)
-		fmt.Println(string(j))
 		*set = append(*set, aggregatedTx)
 		settlementRequests[index] = *set
 	}
@@ -285,7 +271,6 @@ func IterateRequest(
 	action string,
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
-	// settlementTransactions map[string]settlement.Transaction,
 ) (*map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)

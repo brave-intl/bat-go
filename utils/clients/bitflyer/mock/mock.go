@@ -50,7 +50,7 @@ func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode interface{}) *gomo
 }
 
 // UploadBulkPayout mocks base method
-func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
+func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UploadBulkPayout", ctx, APIKey, payload)
 	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
@@ -65,7 +65,7 @@ func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, payload interfac
 }
 
 // CheckPayoutStatus mocks base method
-func (m *MockClient) CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
+func (m *MockClient) CheckPayoutStatus(ctx context.Context, APIKey string, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, APIKey, payload)
 	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)

@@ -143,11 +143,13 @@ func BitflyerUploadSettlement(ctx context.Context, action string, inPath string,
 
 	if submittedTransactions != nil {
 		for key, txs := range *submittedTransactions {
-			outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-			err = BitflyerWriteTransactions(ctx, outputPath, &txs)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to write bitflyer transactions file")
-				return err
+			if len(txs) > 0 {
+				outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
+				err = BitflyerWriteTransactions(ctx, outputPath, &txs)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to write bitflyer transactions file")
+					return err
+				}
 			}
 		}
 	}

@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CheckPayoutStatus implements Client
-func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, payload []byte) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -67,7 +67,7 @@ func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode strin
 }
 
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, payload []byte) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -8,8 +8,8 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test lint clean
-all: test buildcmd
+.PHONY: all buildcmd docker test create-json-schema lint clean
+all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
 
@@ -79,6 +79,7 @@ docker-test:
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
+	go run main.go generate json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -130,9 +131,11 @@ vault-clean:
 json-schema:
 	go run main.go generate json-schema --overwrite
 
+create-json-schema:
+	go run main.go generate json-schema
+
 test:
 	GODEBUG=x509ignoreCN=0 go test -v -p 1 $(TEST_FLAGS)
-	go run main.go generate json-schema
 
 format:
 	gofmt -s -w ./
