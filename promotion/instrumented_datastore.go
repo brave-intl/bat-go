@@ -87,6 +87,20 @@ func (_d DatastoreWithPrometheus) CreateClaim(promotionID uuid.UUID, walletID st
 	return _d.base.CreateClaim(promotionID, walletID, value, bonus, legacy)
 }
 
+// CreateDrainPoll implements Datastore
+func (_d DatastoreWithPrometheus) CreateDrainPoll(ctx context.Context) (up1 *uuid.UUID, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateDrainPoll", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CreateDrainPoll(ctx)
+}
+
 // CreatePromotion implements Datastore
 func (_d DatastoreWithPrometheus) CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (pp1 *Promotion, err error) {
 	_since := time.Now()
@@ -130,7 +144,7 @@ func (_d DatastoreWithPrometheus) DeactivatePromotion(promotion *Promotion) (err
 }
 
 // DrainClaim implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
+func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -140,7 +154,7 @@ func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.Cre
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaim", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DrainClaim(claim, credentials, wallet, total)
+	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total)
 }
 
 // EnqueueMintDrainJob implements Datastore
@@ -225,6 +239,20 @@ func (_d DatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, grantType 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimSummary", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetClaimSummary(walletID, grantType)
+}
+
+// GetDrainPoll implements Datastore
+func (_d DatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPoll, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainPoll", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetDrainPoll(drainID)
 }
 
 // GetIssuer implements Datastore
