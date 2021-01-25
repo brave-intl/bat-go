@@ -90,17 +90,17 @@ func transactionSubmitted(status string, tx settlement.Transaction) settlement.T
 
 func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
-
-	settlementTx := settlementTransaction("2", "2492cdba-d33c-4a8d-ae5d-8799a81c61c2")
-	tmpFile := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
-		settlementTx,
+	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
+	settlementTx1 := settlementTransaction("2", address)
+	tmpFile1 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
+		settlementTx1,
 	})
-	defer os.Remove(tmpFile.Name())
+	defer os.Remove(tmpFile1.Name())
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile.Name()},
+		[]string{tmpFile1.Name()},
 	)
 	suite.Require().NoError(err)
 	completed := (*payoutFiles)["complete"]
@@ -108,26 +108,58 @@ func (suite *BitflyerSuite) TestFormData() {
 	completeSerialized, err := json.Marshal(completed)
 	suite.Require().NoError(err)
 
-	settlementTx.ProviderID = bitflyer.GenerateTransferID(&settlementTx) // add bitflyer transaction hash
-	mCompleted, err := json.Marshal([]settlement.Transaction{            // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx),
+	settlementTx1.ProviderID = bitflyer.GenerateTransferID(&settlementTx1) // add bitflyer transaction hash
+	mCompleted, err := json.Marshal([]settlement.Transaction{              // serialize for comparison (decimal.Decimal does not do so well)
+		transactionSubmitted("complete", settlementTx1),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(completeSerialized), string(mCompleted))
 
-	// settlementTx.Amount = settlementTx.Amount.Add(decimal.NewFromFloat(1))
-	// tmpFile = suite.writeSettlementFiles(suite.token, []settlement.Transaction{
-	// 	settlementTx,
-	// })
-	// defer os.Remove(tmpFile.Name())
-	// payoutFiles, err = IterateRequest(
-	// 	ctx,
-	// 	"upload",
-	// 	suite.client,
-	// 	[]string{tmpFile.Name()},
-	// )
-	// suite.Require().NoError(err)
-	// completed = (*payoutFiles)["complete"]
+	payoutFiles, err = IterateRequest(
+		ctx,
+		"checkstatus",
+		suite.client,
+		[]string{tmpFile1.Name()},
+	)
+	suite.Require().NoError(err)
+	completedStatus := (*payoutFiles)["complete"]
+	suite.Require().Len(completedStatus, 1, "one transaction should be created")
+	completeSerializedStatus, err := json.Marshal(completedStatus)
+	suite.Require().NoError(err)
+
+	mCompletedStatus, err := json.Marshal([]settlement.Transaction{
+		transactionSubmitted("complete", settlementTx1),
+	})
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(completeSerializedStatus), string(mCompletedStatus))
+
+	//  100000000000000000
+	// 1900000000000000000
+
+	// make a new tx that will conflict with previous
+	settlementTx2 := settlementTransaction("3", address)
+	settlementTx2.SettlementID = settlementTx1.SettlementID
+	tmpFile2 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
+		settlementTx2,
+	})
+	defer os.Remove(tmpFile2.Name())
+	payoutFiles, err = IterateRequest(
+		ctx,
+		"upload",
+		suite.client,
+		[]string{tmpFile2.Name()},
+	)
+	completed = (*payoutFiles)["complete"]
+	completeSerialized, err = json.Marshal(completed)
+	suite.Require().NoError(err)
+
+	settlementTx2.ProviderID = bitflyer.GenerateTransferID(&settlementTx2) // add bitflyer transaction hash
+	mCompleted, err = json.Marshal([]settlement.Transaction{               // serialize for comparison (decimal.Decimal does not do so well)
+		transactionSubmitted("complete", settlementTx2),
+	})
+	// this test must fail otherwise it is not idempotent
+	// suite.Require().Error(err)
+	// suite.Require().JSONEq(string(completeSerialized), string(mCompleted))
 }
 
 func (suite *BitflyerSuite) writeSettlementFiles(tkn string, txs []settlement.Transaction) (filepath *os.File) {
