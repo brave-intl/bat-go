@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
-	"github.com/dgrijalva/jwt-go"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 var (
@@ -258,7 +258,6 @@ type BitFlierLinkingInfo struct {
 	AccountHash       string    `json:"account_hash"`
 	ExternalAccountID string    `json:"external_account_id"`
 	Timestamp         time.Time `json:"timestamp"`
-	jwt.StandardClaims
 }
 
 // Validate - implementation of validatable interface
@@ -274,16 +273,22 @@ func (blr *BitFlierLinkingRequest) Validate(ctx context.Context) error {
 		return fmt.Errorf("configuration error, no jwt validation key: %w", err)
 	}
 
-	// validates the jwt signature and extracts the claims
-	token, err := jwt.ParseWithClaims(blr.LinkingInfo, &BitFlierLinkingInfo{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(jwtKey), nil
-	})
+	tok, err := jwt.ParseSigned(blr.LinkingInfo)
+	if err != nil {
+		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
+	}
 
-	if claims, ok := token.Claims.(*BitFlierLinkingInfo); ok && token.Valid {
-		// set the account hash and deposit id to what was claimed
-		blr.AccountHash = claims.AccountHash
-		blr.DepositID = claims.DepositID
-	} else {
+	base := jwt.Claims{}
+	linkingInfo := BitFlierLinkingInfo{}
+
+	if err := tok.Claims([]byte(jwtKey), &base, &linkingInfo); err != nil {
+		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
+	}
+
+	blr.DepositID = linkingInfo.DepositID
+	blr.AccountHash = linkingInfo.AccountHash
+
+	if blr.AccountHash == "" || blr.DepositID == "" {
 		// failed to extract claims, or the token is invalid
 		return fmt.Errorf("failed to parse claims in LinkingInfo: %w", err)
 	}
