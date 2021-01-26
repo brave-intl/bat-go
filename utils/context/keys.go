@@ -55,6 +55,8 @@ const (
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
 	// LogLevelCTXKey - context key for application logging level
 	LogLevelCTXKey CTXKey = "log_level"
+	// BitFlierJWTKeyCTXKey - context key for the bitflier jwt key
+	BitFlierJWTKeyCTXKey CTXKey = "bitflier_jwt_key"
 )
 
 var (

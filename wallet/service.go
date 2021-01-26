@@ -13,6 +13,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -94,6 +95,31 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 
 	// Submit and confirm since we are requiring the idempotency key
 	return anonCard.SubmitTransaction(transaction, confirm)
+}
+
+// LinkBitFlierWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkBitFlierWallet(ctx context.Context, info *wallet.Info, depositID, accountHash string) error {
+	// during validation we verified that the account hash and deposit id were signed by bitflier
+	// we also validated that this "info" signed the request to perform the linking with http signature
+	// we assume that since we got linkingInfo signed from BF that they are KYC
+	providerLinkingID := uuid.NewV5(walletClaimNamespace, accountHash)
+	if info.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	} else {
+		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "bitflier")
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == ErrTooManyCardsLinked {
+				status = http.StatusConflict
+			}
+			return handlers.WrapError(err, "unable to link wallets", status)
+		}
+	}
+	return nil
 }
 
 // LinkWallet links a wallet and transfers funds to newly linked wallet
@@ -194,6 +220,7 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
+	ctx = context.WithValue(ctx, appctx.BitFlierJWTKeyCTXKey, viper.Get("bitflier-jwt-key"))
 
 	s, err := InitService(ctx, db, roDB)
 	if err != nil {
@@ -225,6 +252,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+				r.Post("/bitflier/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"LinkBitFlierDepositAccount", LinkBitFlierDepositAccountV3(s))).ServeHTTP)
 				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}

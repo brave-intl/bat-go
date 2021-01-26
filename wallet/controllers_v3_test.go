@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -251,6 +252,94 @@ func TestGetWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Get("/v3/wallet/{paymentID}", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
+	}
+}
+
+func TestLinkBitFlierWalletV3(t *testing.T) {
+	// jwt
+	secret := []byte("a jwt secret")
+
+	// Create a new token object, specifying signing method and the claims
+	// you would like it to contain.
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"deposit_id":          "c3fd9a0a-c4d2-47fc-bf7e-9ae2bc9733a1",
+		"account_hash":        "1234567890",
+		"request_id":          "1",
+		"external_account_id": "2",
+		"timestamp":           "1970-01-01T00:00:00Z",
+	})
+
+	// Sign and get the complete encoded token as a string using the secret
+	tokenString, _ := token.SignedString(secret)
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	var (
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// add the datastore to the context
+		ctx = context.WithValue(context.Background(), appctx.BitFlierJWTKeyCTXKey, string(secret))
+		r   = httptest.NewRequest(
+			"POST",
+			"/v3/wallet/bitflier/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
+			bytes.NewBufferString(fmt.Sprintf(`
+				{
+					"linkingInfo": "%s"
+				}`, tokenString)),
+		)
+		mockReputation = mockreputation.NewMockClient(mockCtrl)
+		handler        = wallet.LinkBitFlierDepositAccountV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+
+		walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
+		idTo, _              = uuid.FromString("c3fd9a0a-c4d2-47fc-bf7e-9ae2bc9733a1")
+		providerLinkingID    = uuid.NewV5(walletClaimNamespace, "1234567890")
+		idFrom, _            = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
+		rows                 = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+					AddRow(idFrom, "bitflier", "", "12345", providerLinkingID, idTo)
+	)
+
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("^select (.+)").WithArgs(providerLinkingID).WillReturnRows(rows)
+
+	// txHasDestination
+	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
+
+	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, providerLinkingID, "bitflier").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/bitflier/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {

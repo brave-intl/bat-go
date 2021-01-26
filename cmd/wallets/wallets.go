@@ -26,6 +26,7 @@ var (
 	walletsFeatureFlag  bool
 	enableLinkDrainFlag bool
 	roDB                string
+	bfJWTKey            string
 )
 
 func init() {
@@ -36,6 +37,13 @@ func init() {
 	cmd.RootCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
+
+	// bitflier-jwt-key - the jwt validation key from bf
+	WalletsCmd.PersistentFlags().StringVarP(&bfJWTKey, "bitflier-jwt-key", "", "",
+		"the bitflier jwt key for validation of linking info")
+	cmd.Must(viper.BindPFlag("bitflier-jwt-key", WalletsCmd.PersistentFlags().Lookup("bitflier-jwt-key")))
+	cmd.Must(viper.BindEnv("bitflier-jwt-key", "BITFLIER_JWT_KEY"))
+
 	// datastore - the writable datastore
 	WalletsCmd.PersistentFlags().StringVarP(&db, "datastore", "", "",
 		"the datastore for the wallet system")

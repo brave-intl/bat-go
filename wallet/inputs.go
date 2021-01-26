@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/dgrijalva/jwt-go"
 )
 
 var (
@@ -22,6 +25,8 @@ var (
 	ErrMissingSignedLinkingRequest = errors.New("missing signed linking request")
 	// ErrInvalidJSON - the input json is invalid
 	ErrInvalidJSON = errors.New("invalid json")
+	// ErrMissingLinkingInfo - required parameter missing from request
+	ErrMissingLinkingInfo = errors.New("missing linking information")
 )
 
 // UpholdCreationRequest - the structure for a brave provider wallet creation request
@@ -236,4 +241,87 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 		}
 	}
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
+}
+
+// BitFlierLinkingRequest - the structure for a brave provider wallet creation request
+type BitFlierLinkingRequest struct {
+	LinkingInfo string `json:"linkingInfo"`
+
+	DepositID   string `json:"-"`
+	AccountHash string `json:"-"`
+}
+
+// BitFlierLinkingInfo - jwt structure of the linking info
+type BitFlierLinkingInfo struct {
+	DepositID         string    `json:"deposit_id"`
+	RequestID         string    `json:"request_id"`
+	AccountHash       string    `json:"account_hash"`
+	ExternalAccountID string    `json:"external_account_id"`
+	Timestamp         time.Time `json:"timestamp"`
+	jwt.StandardClaims
+}
+
+// Validate - implementation of validatable interface
+func (blr *BitFlierLinkingRequest) Validate(ctx context.Context) error {
+	// validate there is a signed creation request
+	if blr.LinkingInfo == "" {
+		return ErrMissingSignedLinkingRequest
+	}
+
+	// get the bitflier jwt key from ctx
+	jwtKey, err := appctx.GetStringFromContext(ctx, appctx.BitFlierJWTKeyCTXKey)
+	if err != nil {
+		return fmt.Errorf("configuration error, no jwt validation key: %w", err)
+	}
+
+	// validates the jwt signature and extracts the claims
+	token, err := jwt.ParseWithClaims(blr.LinkingInfo, &BitFlierLinkingInfo{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(jwtKey), nil
+	})
+
+	if claims, ok := token.Claims.(*BitFlierLinkingInfo); ok && token.Valid {
+		// set the account hash and deposit id to what was claimed
+		blr.AccountHash = claims.AccountHash
+		blr.DepositID = claims.DepositID
+	} else {
+		// failed to extract claims, or the token is invalid
+		return fmt.Errorf("failed to parse claims in LinkingInfo: %w", err)
+	}
+
+	return nil
+}
+
+// Decode - implementation of  decodable interface
+func (blr *BitFlierLinkingRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, blr); err != nil {
+		return fmt.Errorf("failed to decode json: %w", err)
+	}
+
+	// TODO: pull out the DepositID and AccountHash from the JWT
+	// and set them in blr
+	return nil
+}
+
+// HandleErrors - handle any errors from this request
+func (blr *BitFlierLinkingRequest) HandleErrors(err error) *handlers.AppError {
+	issues := map[string]string{}
+	if errors.Is(err, ErrInvalidJSON) {
+		issues["invalidJSON"] = err.Error()
+	}
+
+	var merr *errorutils.MultiError
+	if errors.As(err, &merr) {
+		for _, e := range merr.Errs {
+			if strings.Contains(e.Error(), "failed decoding") {
+				issues["decoding"] = e.Error()
+			}
+			if strings.Contains(e.Error(), "failed validation") {
+				issues["validation"] = e.Error()
+			}
+			if errors.Is(e, ErrMissingLinkingInfo) {
+				issues["linkingInfo"] = "value is required"
+			}
+		}
+	}
+	return handlers.ValidationError("bitflier deposit wallet linking request validation errors", issues)
 }
