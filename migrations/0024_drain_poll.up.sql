@@ -1,18 +1,8 @@
---- drain poll table holds the identifier handed out by
---- /v2/suggestions/claim which will track the progress of
---- the various drain jobs.  Of all the tokens passed in
---- they are segregated by promotion id, and turned into
---- drain jobs.
-create table drain_poll (
-    id uuid primary key not null default uuid_generate_v4(),
-    status varchar(32) not null default 'pending'
-);
-
---- claim drain poll table is the linkage between
---- the claim_drain table and the drain_poll table
-create table claim_drain_poll (
-    drain_poll_id uuid not null,
-    claim_drain_id uuid not null,
-    complete boolean not null default false,
-    primary key (drain_poll_id, claim_drain_id)
-);
+--- completed indicates this claim_drain job is drained and complete
+alter table claim_drain add column completed boolean not null default false;
+--- completed_at indicates the time at which this claim_drain job was completed
+alter table claim_drain add column completed_at timestamp;
+--- batch_id is the draining batch that this claim drain job belongs to
+alter table claim_drain add column batch_id uuid default null;
+--- create an index on the batch_id for easy lookup
+create index batch_id_idx on claim_drain(batch_id);

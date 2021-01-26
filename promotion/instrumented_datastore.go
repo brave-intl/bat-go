@@ -87,20 +87,6 @@ func (_d DatastoreWithPrometheus) CreateClaim(promotionID uuid.UUID, walletID st
 	return _d.base.CreateClaim(promotionID, walletID, value, bonus, legacy)
 }
 
-// CreateDrainPoll implements Datastore
-func (_d DatastoreWithPrometheus) CreateDrainPoll(ctx context.Context) (up1 *uuid.UUID, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateDrainPoll", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CreateDrainPoll(ctx)
-}
-
 // CreatePromotion implements Datastore
 func (_d DatastoreWithPrometheus) CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (pp1 *Promotion, err error) {
 	_since := time.Now()

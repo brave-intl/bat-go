@@ -96,9 +96,6 @@ type Datastore interface {
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
-	// CreateDrainPoll - enqueue a mint drain job in "pending" status
-	CreateDrainPoll(ctx context.Context) (*uuid.UUID, error)
-
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
 
@@ -639,8 +636,11 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 // GetDrainPoll Get the status of the drain poll job
 func (pg *Postgres) GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error) {
 	type dbDrainPoll struct {
-		ID        *uuid.UUID `db:"id"`
-		Completed bool       `db:"completed"`
+		ID         *uuid.UUID `db:"batch_id"`
+		Completed  bool       `db:"completed"`
+		Pending    bool       `db:"pending"`
+		Delayed    bool       `db:"delayed"`
+		InProgress bool       `db:"inprogress"`
 	}
 	var (
 		drainPoll = new(dbDrainPoll)
@@ -649,13 +649,17 @@ func (pg *Postgres) GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error) {
 
 	statement := `
 select
-	drain_poll_id as id, bool_and(complete) as completed
+	batch_id,
+	bool_and(completed) as completed,
+	bool_or(erred) as delayed,
+	(not bool_and(completed) and not bool_or(erred)) as inprogress,
+	(not bool_or(completed)) as pending
 from
-	claim_drain_poll
+	claim_drain
 where
-	drain_poll_id = $1
+	batch_id = $1
 group by
-	drain_poll_id`
+	batch_id`
 
 	err = pg.RawDB().Get(drainPoll, statement, drainID)
 	if err != nil {
@@ -669,9 +673,30 @@ group by
 		}, nil
 	}
 
+	if drainPoll.Pending {
+		return &DrainPoll{
+			ID:     drainID,
+			Status: "pending",
+		}, nil
+	}
+
+	if drainPoll.Delayed {
+		return &DrainPoll{
+			ID:     drainID,
+			Status: "delayed",
+		}, nil
+	}
+
+	if drainPoll.InProgress {
+		return &DrainPoll{
+			ID:     drainID,
+			Status: "in_progress",
+		}, nil
+	}
+
 	return &DrainPoll{
 		ID:     drainID,
-		Status: "pending",
+		Status: "unknown",
 	}, nil
 }
 
@@ -937,33 +962,6 @@ promotion_id=$3`
 	return nil
 }
 
-// CreateDrainPoll - enqueue a mint drain job in "pending" status
-func (pg *Postgres) CreateDrainPoll(ctx context.Context) (*uuid.UUID, error) {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return nil, err
-	}
-	defer pg.RollbackTx(tx)
-
-	var drainPoll = DrainPoll{}
-
-	statement := `
-	insert into drain_poll (status)
-	values ('pending')
-	returning *`
-	err = tx.GetContext(ctx, &drainPoll, statement)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-
-	return drainPoll.ID, nil
-}
-
 // EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error {
 	tx, err := pg.RawDB().Beginx()
@@ -1023,19 +1021,10 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	var claimDrain = DrainJob{}
 
 	statement := `
-	insert into claim_drain (credentials, wallet_id, total)
-	values ($1, $2, $3)
+	insert into claim_drain (credentials, wallet_id, total, batch_id)
+	values ($1, $2, $3, $4)
 	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total)
-	if err != nil {
-		return err
-	}
-
-	statement = `
-		insert into claim_drain_poll (drain_poll_id, claim_drain_id)
-		values ($1, $2)
-	`
-	_, err = tx.Exec(statement, drainPollID, claimDrain.ID)
+	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID)
 	if err != nil {
 		return err
 	}
@@ -1090,6 +1079,9 @@ type DrainJob struct {
 	TransactionID *string         `db:"transaction_id"`
 	Erred         bool            `db:"erred"`
 	ErrCode       *string         `db:"errcode"`
+	BatchID       uuid.UUID       `db:"batch_id"`
+	Completed     bool            `db:"completed"`
+	CompletedAt   *time.Time      `db:"completed_at"`
 }
 
 // RunNextDrainJob to process deposits if there is one waiting
@@ -1150,13 +1142,7 @@ limit 1`
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`update claim_drain set transaction_id = $1 where id = $2`, txn.ID, job.ID)
-	if err != nil {
-		return attempted, err
-	}
-
-	// set this claim drain to complete for client polling
-	_, err = tx.Exec(`update claim_drain_poll set complete = true where claim_drain_id = $1`, job.ID)
+	_, err = tx.Exec(`update claim_drain set transaction_id = $1, completed = true, completed_at = now() where id = $2`, txn.ID, job.ID)
 	if err != nil {
 		return attempted, err
 	}

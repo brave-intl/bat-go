@@ -29,7 +29,7 @@ var errMissingTransferPromotion = errors.New("missing configuration: BraveTransf
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
-	var pollID *uuid.UUID
+	var batchID = uuid.NewV4()
 
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
@@ -87,12 +87,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		}
 	}
 
-	// create a drain_poll tracking number which will be returned to client
-	pollID, err = service.Datastore.CreateDrainPoll(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error adding mint drain: %w", err)
-	}
-
 	for k, v := range fundingSources {
 		var (
 			promotion = promotions[k]
@@ -122,10 +116,8 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
-			// insert claim drain poll linkage so we can assert the state of this drain attempt
-
 			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(pollID, claim, v.Credentials, wallet, v.Amount)
+			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
 				return nil, fmt.Errorf("error draining claim: %w", err)
 			}
@@ -176,7 +168,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}
 		}()
 	}
-	return pollID, nil
+	return &batchID, nil
 }
 
 // DrainPoll - Response structure for the DrainPoll
