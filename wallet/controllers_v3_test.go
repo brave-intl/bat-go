@@ -20,7 +20,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
@@ -263,25 +262,11 @@ func TestGetWalletV3(t *testing.T) {
 }
 
 func TestLinkBitFlierWalletV3(t *testing.T) {
-	// jwt
-	secret := []byte("a jwt secret")
-
-	// Create a new token object, specifying signing method and the claims
-	// you would like it to contain.
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"deposit_id":          "c3fd9a0a-c4d2-47fc-bf7e-9ae2bc9733a1",
-		"account_hash":        "1234567890",
-		"request_id":          "1",
-		"external_account_id": "2",
-		"timestamp":           "1970-01-01T00:00:00Z",
-	})
-
-	// Sign and get the complete encoded token as a string using the secret
-	tokenString, _ := token.SignedString(secret)
-
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	var (
+		secret      = []byte("a jwt secret")
+		tokenString = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50X2hhc2giOiIxMjM0NTY3ODkwIiwiZGVwb3NpdF9pZCI6ImMzZmQ5YTBhLWM0ZDItNDdmYy1iZjdlLTlhZTJiYzk3MzNhMSIsImV4dGVybmFsX2FjY291bnRfaWQiOiIyIiwicmVxdWVzdF9pZCI6IjEiLCJ0aW1lc3RhbXAiOiIxOTcwLTAxLTAxVDAwOjAwOjAwWiJ9.1-PTPLYhMKJkscgoQAY8gQic0cPBIceD4eVTcJ9J-0k"
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
