@@ -3,6 +3,7 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -21,27 +22,42 @@ func CategorizeResponse(
 	payout *bitflyer.WithdrawToDepositIDResponse,
 ) ([]settlement.Transaction, string) {
 	txs := originalTransactions[payout.TransferID]
-	k := "unknown"
+	key := "unknown"
+	switch payout.Status {
+	case "SUCCESS", "EXECUTED":
+		key = "complete"
+	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION":
+		key = "failed"
+	case "CREATED", "PENDING":
+		key = "pending"
+	}
+	aggregatedAmount := decimal.Zero
 	for i, original := range txs {
-		status := payout.Status
-		key := "failed"
-		switch status {
-		case "SUCCESS":
-			key = "complete"
-		case "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT":
-			key = "failed"
-			original.Note = status
-		case "NOT_FOUND", "CREATED", "PENDING", "EXECUTED", "EXPIRED", "NOPOSITION":
-			key = "complete"
-		}
 		original.Status = key
-		k = original.Status
+		note := payout.Status
+		if payout.Message != "" {
+			note = fmt.Sprintf("%s: %s", payout.Status, payout.Message)
+		}
+		original.Note = note
+		aggregatedAmount = aggregatedAmount.Add(original.Probi)
 		tmp := altcurrency.BAT
 		original.AltCurrency = &tmp
 		original.Currency = tmp.String()
 		txs[i] = original
 	}
-	return txs, k
+	if key == "complete" && !payout.Amount.Equal(decimal.Zero) {
+		aggregatedAmount = altcurrency.BAT.FromProbi(aggregatedAmount)
+		// fmt.Println("aggregated", aggregatedAmount.String())
+		// fmt.Println("payout    ", payout.Amount.String())
+		// fmt.Printf("%#v\n", payout)
+		if !aggregatedAmount.Equal(decimal.Zero) && !aggregatedAmount.Equal(payout.Amount) {
+			key = "invalid-input"
+			for i := range txs {
+				txs[i].Status = key
+			}
+		}
+	}
+	return txs, key
 }
 
 // CategorizeResponses categorizes the series of responses

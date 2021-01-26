@@ -173,6 +173,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	APIKey string,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
+	// fmt.Println("payload.Withdrawals[0].TransferID", payload.Withdrawals[0].TransferID)
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
 	if err != nil {
 		return nil, err
@@ -211,6 +212,9 @@ func setupRequestHeaders(req *http.Request, APIKey string) {
 }
 
 func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
+	if resp == nil {
+		return e
+	}
 	b, err := requestutils.Read(resp.Body)
 	if err != nil {
 		return err
