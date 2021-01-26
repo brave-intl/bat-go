@@ -13,13 +13,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
-)
-
-var (
-	bitflyerNS = uuid.Must(uuid.FromString("6ff61d64-7bcd-4ad7-aed8-25752b7f332e"))
 )
 
 // Quote returns a quote of BAT prices

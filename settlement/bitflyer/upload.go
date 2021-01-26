@@ -78,7 +78,7 @@ func CategorizeResponses(
 				nonZero = append(nonZero, tx)
 			}
 		}
-		transactions[key] = append(transactions[key], original...)
+		transactions[key] = append(transactions[key], nonZero...)
 	}
 	return transactions
 }
