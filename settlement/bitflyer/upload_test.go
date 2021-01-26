@@ -97,7 +97,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	tmpFile1 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
 		settlementTx1,
 	})
-	defer os.Remove(tmpFile1.Name())
+	defer func() { _ = os.Remove(tmpFile1.Name()) }()
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
@@ -177,7 +177,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	tmpFile2 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
 		settlementTx2,
 	})
-	defer os.Remove(tmpFile2.Name())
+	defer func() { _ = os.Remove(tmpFile2.Name()) }()
 	// fmt.Println("settlementTx1.Hash", settlementTx1.ProviderID)
 	// fmt.Println("settlementTx1.Amount", settlementTx1.Amount.String())
 	// fmt.Println("settlementTx2.Hash", settlementTx2.ProviderID)
