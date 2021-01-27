@@ -243,16 +243,16 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
 }
 
-// BitFlierLinkingRequest - the structure for a brave provider wallet creation request
-type BitFlierLinkingRequest struct {
+// BitFlyerLinkingRequest - the structure for a brave provider wallet creation request
+type BitFlyerLinkingRequest struct {
 	LinkingInfo string `json:"linkingInfo"`
 
 	DepositID   string `json:"-"`
 	AccountHash string `json:"-"`
 }
 
-// BitFlierLinkingInfo - jwt structure of the linking info
-type BitFlierLinkingInfo struct {
+// BitFlyerLinkingInfo - jwt structure of the linking info
+type BitFlyerLinkingInfo struct {
 	DepositID         string    `json:"deposit_id"`
 	RequestID         string    `json:"request_id"`
 	AccountHash       string    `json:"account_hash"`
@@ -261,14 +261,14 @@ type BitFlierLinkingInfo struct {
 }
 
 // Validate - implementation of validatable interface
-func (blr *BitFlierLinkingRequest) Validate(ctx context.Context) error {
+func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 	// validate there is a signed creation request
 	if blr.LinkingInfo == "" {
 		return ErrMissingSignedLinkingRequest
 	}
 
-	// get the bitflier jwt key from ctx
-	jwtKey, err := appctx.GetStringFromContext(ctx, appctx.BitFlierJWTKeyCTXKey)
+	// get the bitflyer jwt key from ctx
+	jwtKey, err := appctx.GetStringFromContext(ctx, appctx.BitFlyerJWTKeyCTXKey)
 	if err != nil {
 		return fmt.Errorf("configuration error, no jwt validation key: %w", err)
 	}
@@ -279,7 +279,7 @@ func (blr *BitFlierLinkingRequest) Validate(ctx context.Context) error {
 	}
 
 	base := jwt.Claims{}
-	linkingInfo := BitFlierLinkingInfo{}
+	linkingInfo := BitFlyerLinkingInfo{}
 
 	if err := tok.Claims([]byte(jwtKey), &base, &linkingInfo); err != nil {
 		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
@@ -290,14 +290,14 @@ func (blr *BitFlierLinkingRequest) Validate(ctx context.Context) error {
 
 	if blr.AccountHash == "" || blr.DepositID == "" {
 		// failed to extract claims, or the token is invalid
-		return fmt.Errorf("failed to parse claims in LinkingInfo: %w", err)
+		return fmt.Errorf("failed to parse claims: %w", err)
 	}
 
 	return nil
 }
 
 // Decode - implementation of  decodable interface
-func (blr *BitFlierLinkingRequest) Decode(ctx context.Context, v []byte) error {
+func (blr *BitFlyerLinkingRequest) Decode(ctx context.Context, v []byte) error {
 	if err := inputs.DecodeJSON(ctx, v, blr); err != nil {
 		return fmt.Errorf("failed to decode json: %w", err)
 	}
@@ -308,7 +308,7 @@ func (blr *BitFlierLinkingRequest) Decode(ctx context.Context, v []byte) error {
 }
 
 // HandleErrors - handle any errors from this request
-func (blr *BitFlierLinkingRequest) HandleErrors(err error) *handlers.AppError {
+func (blr *BitFlyerLinkingRequest) HandleErrors(err error) *handlers.AppError {
 	issues := map[string]string{}
 	if errors.Is(err, ErrInvalidJSON) {
 		issues["invalidJSON"] = err.Error()
@@ -328,5 +328,5 @@ func (blr *BitFlierLinkingRequest) HandleErrors(err error) *handlers.AppError {
 			}
 		}
 	}
-	return handlers.ValidationError("bitflier deposit wallet linking request validation errors", issues)
+	return handlers.ValidationError("bitflyer deposit wallet linking request validation errors", issues)
 }

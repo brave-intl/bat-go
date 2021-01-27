@@ -147,13 +147,13 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
 }
 
-// LinkBitFlierDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
-func LinkBitFlierDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+// LinkBitFlyerDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
 			ctx = r.Context()
 			id  = new(inputs.ID)
-			blr = new(BitFlierLinkingRequest)
+			blr = new(BitFlyerLinkingRequest)
 		)
 		// get logger from context
 		logger, err := appctx.GetLogger(ctx)
@@ -187,7 +187,7 @@ func LinkBitFlierDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
 		}
 
-		err = s.LinkBitFlierWallet(ctx, wallet, blr.DepositID, blr.AccountHash)
+		err = s.LinkBitFlyerWallet(ctx, wallet, blr.DepositID, blr.AccountHash)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}

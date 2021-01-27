@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -24,6 +25,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
+	"gopkg.in/square/go-jose.v2"
+	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 func must(t *testing.T, msg string, err error) {
@@ -63,14 +66,16 @@ func TestLinkBraveWalletV3(t *testing.T) {
 				},
 			})
 		// add the datastore to the context
-		ctx = context.Background()
-		r   = httptest.NewRequest(
+		ctx    = context.Background()
+		idFrom = uuid.NewV4()
+		idTo   = uuid.NewV4()
+		r      = httptest.NewRequest(
 			"POST",
-			"/v3/wallet/brave/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
-			bytes.NewBufferString(`
+			fmt.Sprintf("/v3/wallet/brave/%s/claim", idFrom),
+			bytes.NewBufferString(fmt.Sprintf(`
 				{
-					"depositDestination": "adef9cda-6a14-4fa1-be86-43da80e56d2c"
-				}`),
+					"depositDestination": "%s"
+				}`, idTo)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
 		handler        = wallet.LinkBraveDepositAccountV3(&wallet.Service{
@@ -78,11 +83,8 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		})
 		w = httptest.NewRecorder()
 
-		walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
-		idTo, _              = uuid.FromString("adef9cda-6a14-4fa1-be86-43da80e56d2c")
-		idFrom, _            = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
-		rows                 = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
-					AddRow(idFrom, "brave", "", "12345", uuid.NewV5(walletClaimNamespace, idTo.String()), idTo)
+		rows = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+			AddRow(idFrom, "brave", "", "12345", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), idTo)
 	)
 
 	mockReputation.EXPECT().IsWalletOnPlatform(
@@ -96,13 +98,13 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(walletClaimNamespace, idTo.String())).WillReturnRows(rows)
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(rows)
 
 	// txHasDestination
 	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
 
-	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, uuid.NewV5(walletClaimNamespace, idTo.String()), "brave").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), "brave").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -234,10 +236,10 @@ func TestGetWalletV3(t *testing.T) {
 			})
 		// add the datastore to the context
 		ctx     = context.Background()
-		r       = httptest.NewRequest("GET", "/v3/wallet/7def9cda-6a14-4fa1-be86-43da80e56d2c", nil)
+		id      = uuid.NewV4()
+		r       = httptest.NewRequest("GET", fmt.Sprintf("/v3/wallet/%s", id), nil)
 		handler = wallet.GetWalletV3
 		w       = httptest.NewRecorder()
-		id, _   = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
 		rows    = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 			AddRow(id, "brave", "", "12345", id, id)
 	)
@@ -261,12 +263,36 @@ func TestGetWalletV3(t *testing.T) {
 	}
 }
 
-func TestLinkBitFlierWalletV3(t *testing.T) {
+func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
+	// setup jwt token for the test
+	var secret = []byte("a jwt secret")
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: secret}, (&jose.SignerOptions{}).WithType("JWT"))
+	if err != nil {
+		panic(err)
+	}
+
 	var (
-		secret      = []byte("a jwt secret")
-		tokenString = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50X2hhc2giOiIxMjM0NTY3ODkwIiwiZGVwb3NpdF9pZCI6ImMzZmQ5YTBhLWM0ZDItNDdmYy1iZjdlLTlhZTJiYzk3MzNhMSIsImV4dGVybmFsX2FjY291bnRfaWQiOiIyIiwicmVxdWVzdF9pZCI6IjEiLCJ0aW1lc3RhbXAiOiIxOTcwLTAxLTAxVDAwOjAwOjAwWiJ9.1-PTPLYhMKJkscgoQAY8gQic0cPBIceD4eVTcJ9J-0k"
+		idTo        = uuid.NewV4()
+		accountHash = uuid.NewV4()
+		timestamp   = time.Now()
+	)
+
+	cl := wallet.BitFlyerLinkingInfo{
+		DepositID:         idTo.String(),
+		RequestID:         "1",
+		AccountHash:       accountHash.String(),
+		ExternalAccountID: "2",
+		Timestamp:         timestamp,
+	}
+
+	tokenString, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+	if err != nil {
+		panic(err)
+	}
+
+	var (
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
@@ -282,27 +308,25 @@ func TestLinkBitFlierWalletV3(t *testing.T) {
 			})
 
 		// add the datastore to the context
-		ctx = context.WithValue(context.Background(), appctx.BitFlierJWTKeyCTXKey, string(secret))
-		r   = httptest.NewRequest(
+		ctx    = context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, string(secret))
+		idFrom = uuid.NewV4()
+		r      = httptest.NewRequest(
 			"POST",
-			"/v3/wallet/bitflier/7def9cda-6a14-4fa1-be86-43da80e56d2c/claim",
+			fmt.Sprintf("/v3/wallet/bitflyer/%s/claim", idFrom),
 			bytes.NewBufferString(fmt.Sprintf(`
 				{
 					"linkingInfo": "%s"
 				}`, tokenString)),
 		)
 		mockReputation = mockreputation.NewMockClient(mockCtrl)
-		handler        = wallet.LinkBitFlierDepositAccountV3(&wallet.Service{
+		handler        = wallet.LinkBitFlyerDepositAccountV3(&wallet.Service{
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
 
-		walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
-		idTo, _              = uuid.FromString("c3fd9a0a-c4d2-47fc-bf7e-9ae2bc9733a1")
-		providerLinkingID    = uuid.NewV5(walletClaimNamespace, "1234567890")
-		idFrom, _            = uuid.FromString("7def9cda-6a14-4fa1-be86-43da80e56d2c")
-		rows                 = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
-					AddRow(idFrom, "bitflier", "", "12345", providerLinkingID, idTo)
+		providerLinkingID = uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
+		rows              = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+					AddRow(idFrom, "bitflyer", "", "12345", providerLinkingID, idTo)
 	)
 
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
@@ -314,7 +338,7 @@ func TestLinkBitFlierWalletV3(t *testing.T) {
 	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
 
-	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, providerLinkingID, "bitflier").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, providerLinkingID, "bitflyer").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -324,13 +348,13 @@ func TestLinkBitFlierWalletV3(t *testing.T) {
 	r = r.WithContext(ctx)
 
 	router := chi.NewRouter()
-	router.Post("/v3/wallet/bitflier/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {
 		t.Logf("%+v\n", resp)
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
-		must(t, "invalid response", fmt.Errorf("expected 201, got %d", resp.StatusCode))
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 }

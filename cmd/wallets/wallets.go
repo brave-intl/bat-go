@@ -33,10 +33,10 @@ func init() {
 	// setup the flags
 	walletsCmdBuilder := cmd.NewFlagBuilder(WalletsCmd)
 
-	walletsCmdBuilder.Flag().String("bitflier-jwt-key", "",
-		"the bitflier jwt key for validation of linking info").
-		Env("BITFLIER_JWT_KEY").
-		Bind("bitflier-jwt-key").
+	walletsCmdBuilder.Flag().String("bitflyer-jwt-key", "",
+		"the bitflyer jwt key for validation of linking info").
+		Env("BITFLYER_JWT_KEY").
+		Bind("bitflyer-jwt-key").
 		Require()
 
 	walletsCmdBuilder.Flag().String("ro-datastore", "",
