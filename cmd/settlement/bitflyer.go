@@ -15,6 +15,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -53,18 +54,10 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	clientID, err := cmd.Flags().GetString("bitflyer-client-id")
-	if err != nil {
-		return err
-	}
-	clientSecret, err := cmd.Flags().GetString("bitflyer-client-secret")
-	if err != nil {
-		return err
-	}
-	extraClientSecret, err := cmd.Flags().GetString("bitflyer-extra-client-secret")
-	if err != nil {
-		return err
-	}
+	v := viper.GetViper()
+	clientID := v.GetString("bitflyer-client-id")
+	clientSecret := v.GetString("bitflyer-client-secret")
+	extraClientSecret := v.GetString("bitflyer-extra-client-secret")
 	client, err := bitflyer.New()
 	if err != nil {
 		return err
@@ -75,7 +68,6 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 		ClientSecret:      clientSecret,
 		ExtraClientSecret: extraClientSecret,
 	}
-	fmt.Printf("%#v\n", payload)
 	auth, err := client.RefreshToken(
 		ctx,
 		payload,
@@ -90,15 +82,10 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 
 // UploadBitflyerSettlement uploads bitflyer settlement
 func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
-	input, err := cmd.Flags().GetString("input")
-	if err != nil {
-		return err
-	}
-	out, err := cmd.Flags().GetString("out")
-	if err != nil {
-		return err
-	}
-
+	v := viper.GetViper()
+	input := v.GetString("input")
+	out := v.GetString("out")
+	token := v.GetString("token")
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
@@ -107,31 +94,25 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		"upload",
 		input,
 		out,
+		token,
 	)
 }
 
 // CheckStatusBitflyerSettlement is the command runner for checking bitflyer transactions status
 func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
-	input, err := cmd.Flags().GetString("input")
-	if err != nil {
-		return err
-	}
-	out, err := cmd.Flags().GetString("out")
-	if err != nil {
-		return err
-	}
+	v := viper.GetViper()
+	input := v.GetString("input")
+	out := v.GetString("out")
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
-	// out, err := cmd.Flags().GetString("out")
-	// if err != nil {
-	// 	return err
-	// }
+	token := v.GetString("token")
 	return BitflyerUploadSettlement(
 		cmd.Context(),
 		"checkstatus",
 		input,
 		out,
+		token,
 	)
 }
 
@@ -174,41 +155,40 @@ func init() {
 	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
 		"the token to be sent for auth on bitflyer").
 		Bind("bitflyer-client-token").
-		Env("BITFLYER_CLIENT_TOKEN").
-		Require()
+		Env("BITFLYER_CLIENT_TOKEN")
 
 	tokenBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
 		Bind("bitflyer-client-id").
-		Env("BITFLYER_CLIENT_ID").
-		Require()
+		Env("BITFLYER_CLIENT_ID")
 
 	tokenBuilder.Flag().String("bitflyer-client-secret", "",
 		"tells bitflyer what the client secret during token generation").
 		Bind("bitflyer-client-secret").
-		Env("BITFLYER_CLIENT_SECRET").
-		Require()
+		Env("BITFLYER_CLIENT_SECRET")
 
 	tokenBuilder.Flag().String("bitflyer-extra-client-secret", "",
 		"tells bitflyer what the extra client secret is during token generation").
 		Bind("bitflyer-extra-client-secret").
-		Env("BITFLYER_EXTRA_CLIENT_SECRET").
-		Require()
+		Env("BITFLYER_EXTRA_CLIENT_SECRET")
 
 	allBuilder.Flag().String("bitflyer-server", "",
 		"the bitflyer domain to interact with").
 		Bind("bitflyer-server").
-		Env("BITFLYER_SERVER").
-		Require()
+		Env("BITFLYER_SERVER")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
-func BitflyerUploadSettlement(ctx context.Context, action string, inPath string, outPath string) error {
+func BitflyerUploadSettlement(ctx context.Context, action string, inPath string, outPath string, token string) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
+	fmt.Println("action", action)
+	fmt.Println("inpath", inPath)
+	fmt.Println("outPath", outPath)
+	fmt.Println("token", token)
 	if outPath == "./bitflyer-settlement" {
 		// use a file with extension if none is passed
 		outPath = "./bitflyer-settlement-complete.json"
@@ -220,6 +200,8 @@ func BitflyerUploadSettlement(ctx context.Context, action string, inPath string,
 		logger.Error().Err(err).Msg("failed to create new bitflyer client")
 		return err
 	}
+	// set the auth token
+	bitflyerClient.SetAuthToken(token)
 
 	submittedTransactions, submitErr := bitflyersettlement.IterateRequest(
 		ctx,
