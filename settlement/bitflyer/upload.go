@@ -16,6 +16,20 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// GroupSettlements groups settlements under a single provider id so that we can impose limits based on price
+// no signing here, just grouping settlements under a single deposit id
+func GroupSettlements(
+	settlements *[]settlement.Transaction,
+) map[string][]settlement.Transaction {
+	grouped := make(map[string][]settlement.Transaction)
+	for _, payout := range *settlements {
+		id := bitflyer.GenerateTransferID(&payout)
+		grouped[id] = append(grouped[id], payout)
+	}
+
+	return grouped
+}
+
 // CategorizeResponse categorizes a response from bitflyer as pending, complete, failed, or unknown
 func CategorizeResponse(
 	originalTransactions map[string][]settlement.Transaction,
@@ -90,7 +104,6 @@ func SubmitBulkPayoutTransactions(
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
-	token string,
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
@@ -103,12 +116,10 @@ func SubmitBulkPayoutTransactions(
 	logger.Debug().
 		Int("total", total).
 		Int("progress", blockProgress).
-		Str("api_key", token).
 		Msg("sending request")
 
 	response, err := bitflyerClient.UploadBulkPayout(
 		ctx,
-		token,
 		bulkPayoutRequestRequirements,
 	)
 	<-time.After(time.Second)
@@ -131,7 +142,6 @@ func CheckPayoutTransactionsStatus(
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
-	token string,
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
@@ -142,7 +152,6 @@ func CheckPayoutTransactionsStatus(
 
 	result, err := bitflyerClient.CheckPayoutStatus(
 		ctx,
-		token,
 		bulkPayoutRequestRequirements,
 	)
 	if err != nil {
@@ -187,7 +196,6 @@ func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]
 }
 
 func setupSettlementTransactions(
-	// token string,
 	transactions map[string][]settlement.Transaction,
 	limit decimal.Decimal,
 ) (
@@ -302,9 +310,10 @@ func IterateRequest(
 			return &submittedTransactions, err
 		}
 
-		var bitflyerBulkPayoutRequestRequirements SettlementRequest
-		err = json.Unmarshal(bytes, &bitflyerBulkPayoutRequestRequirements)
+		var txs []settlement.Transaction
+		err = json.Unmarshal(bytes, &txs)
 		if err != nil {
+			fmt.Println("bytes", string(bytes))
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 			return &submittedTransactions, err
 		}
@@ -313,7 +322,7 @@ func IterateRequest(
 											Div(quote.Rate). // convert to bat
 											Truncate(8))     // truncated to satoshis
 		transactionsMap, transactionGroups, err := setupSettlementTransactions(
-			bitflyerBulkPayoutRequestRequirements.Transactions,
+			GroupSettlements(&txs),
 			limit,
 		)
 		if err != nil {
@@ -336,7 +345,6 @@ func IterateRequest(
 					submittedTransactions,
 					request,
 					bitflyerClient,
-					bitflyerBulkPayoutRequestRequirements.APIKey,
 					len(bulkPayoutFiles)-1,
 					i,
 				)
@@ -351,7 +359,6 @@ func IterateRequest(
 					submittedTransactions,
 					request,
 					bitflyerClient,
-					bitflyerBulkPayoutRequestRequirements.APIKey,
 					len(bulkPayoutFiles)-1,
 					i,
 				)

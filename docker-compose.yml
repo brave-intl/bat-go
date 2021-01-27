@@ -52,9 +52,11 @@ services:
       - GEMINI_CLIENT_ID
       - GEMINI_TEST_DESTINATION_ID
       - BITFLYER_SERVER
-      - BITFLYER_TEST_SOURCE
+      - BITFLYER_SOURCE_FROM
       - BITFLYER_DRYRUN
-      - BITFLYER_CLIENT_TOKEN
+      - BITFLYER_CLIENT_ID
+      - BITFLYER_CLIENT_SECRET
+      - BITFLYER_EXTRA_CLIENT_SECRET
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

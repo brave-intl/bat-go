@@ -3,6 +3,7 @@ package settlement
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,56 @@ var (
 		Short: "uploads signed bitflyer transactions",
 		Run:   cmd.Perform("bitflyer checkstatus", CheckStatusBitflyerSettlement),
 	}
+
+	// GetBitflyerTokenCmd gets a new bitflyer token
+	GetBitflyerTokenCmd = &cobra.Command{
+		Use:   "token",
+		Short: "gets a new token for authing",
+		Run:   cmd.Perform("bitflyer token", GetBitflyerToken),
+	}
 )
+
+// GetBitflyerToken gets a new bitflyer token from cobra command
+func GetBitflyerToken(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	clientID, err := cmd.Flags().GetString("bitflyer-client-id")
+	if err != nil {
+		return err
+	}
+	clientSecret, err := cmd.Flags().GetString("bitflyer-client-secret")
+	if err != nil {
+		return err
+	}
+	extraClientSecret, err := cmd.Flags().GetString("bitflyer-extra-client-secret")
+	if err != nil {
+		return err
+	}
+	client, err := bitflyer.New()
+	if err != nil {
+		return err
+	}
+	payload := bitflyer.TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          clientID,
+		ClientSecret:      clientSecret,
+		ExtraClientSecret: extraClientSecret,
+	}
+	fmt.Printf("%#v\n", payload)
+	auth, err := client.RefreshToken(
+		ctx,
+		payload,
+	)
+	if err != nil {
+		return err
+	}
+	logger.Info().Interface("auth", auth).
+		Msg("token refreshed")
+	return nil
+}
 
 // UploadBitflyerSettlement uploads bitflyer settlement
 func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
@@ -73,6 +123,10 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
+	// out, err := cmd.Flags().GetString("out")
+	// if err != nil {
+	// 	return err
+	// }
 	return BitflyerUploadSettlement(
 		cmd.Context(),
 		"checkstatus",
@@ -83,6 +137,7 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 
 func init() {
 	// add complete and transform subcommand
+	BitflyerSettlementCmd.AddCommand(GetBitflyerTokenCmd)
 	BitflyerSettlementCmd.AddCommand(UploadBitflyerSettlementCmd)
 	BitflyerSettlementCmd.AddCommand(CheckStatusBitflyerSettlementCmd)
 
@@ -90,8 +145,10 @@ func init() {
 	SettlementCmd.AddCommand(BitflyerSettlementCmd)
 
 	// setup the flags
+	tokenBuilder := cmd.NewFlagBuilder(GetBitflyerTokenCmd)
 	uploadCheckStatusBuilder := cmd.NewFlagBuilder(UploadBitflyerSettlementCmd).
 		AddCommand(CheckStatusBitflyerSettlementCmd)
+	allBuilder := tokenBuilder.Concat(uploadCheckStatusBuilder)
 
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized. both referrals and contributions should be done in one command in order to group the transactions appropriately").
@@ -104,11 +161,45 @@ func init() {
 		Bind("out").
 		Env("OUT")
 
-	// bitflyer-client-token
+	uploadCheckStatusBuilder.Flag().String("bitflyer-source-from", "self",
+		"tells bitflyer where to draw funds from").
+		Bind("bitflyer-source-from").
+		Env("BITFLYER_SOURCE_FROM")
+
+	uploadCheckStatusBuilder.Flag().Bool("bitflyer-dry-run", false,
+		"tells bitflyer that this is a practice round").
+		Bind("bitflyer-dry-run").
+		Env("BITFLYER_DRYRUN")
+
 	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
-		"bitflyer-client-token holds the uphold token that we want to use to auth the bulk transactions").
+		"the token to be sent for auth on bitflyer").
 		Bind("bitflyer-client-token").
-		Env("BITFLYER_CLIENT_TOKEN")
+		Env("BITFLYER_CLIENT_TOKEN").
+		Require()
+
+	tokenBuilder.Flag().String("bitflyer-client-id", "",
+		"tells bitflyer what the client id is during token generation").
+		Bind("bitflyer-client-id").
+		Env("BITFLYER_CLIENT_ID").
+		Require()
+
+	tokenBuilder.Flag().String("bitflyer-client-secret", "",
+		"tells bitflyer what the client secret during token generation").
+		Bind("bitflyer-client-secret").
+		Env("BITFLYER_CLIENT_SECRET").
+		Require()
+
+	tokenBuilder.Flag().String("bitflyer-extra-client-secret", "",
+		"tells bitflyer what the extra client secret is during token generation").
+		Bind("bitflyer-extra-client-secret").
+		Env("BITFLYER_EXTRA_CLIENT_SECRET").
+		Require()
+
+	allBuilder.Flag().String("bitflyer-server", "",
+		"the bitflyer domain to interact with").
+		Bind("bitflyer-server").
+		Env("BITFLYER_SERVER").
+		Require()
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
