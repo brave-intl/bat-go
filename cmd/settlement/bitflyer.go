@@ -85,7 +85,7 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	v := viper.GetViper()
 	input := v.GetString("input")
 	out := v.GetString("out")
-	token := v.GetString("token")
+	token := v.GetString("bitflyer-client-token")
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
