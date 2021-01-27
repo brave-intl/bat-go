@@ -12,7 +12,6 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
-	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	geminisettlement "github.com/brave-intl/bat-go/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -238,24 +237,7 @@ func createBitflyerArtifact(
 	walletKey string,
 	bitflyerOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return err
-	}
-	token, set := response.Data["token"].(string)
-	if !set {
-		token = "notatoken"
-	}
-	<-time.After(time.Millisecond)
-	requests, err := formBitflyerRequests(
-		wrappedClient,
-		token,
-		&bitflyerOnlySettlements,
-	)
-	if err != nil {
-		return err
-	}
-	out, err := json.Marshal(requests)
+	out, err := json.Marshal(bitflyerOnlySettlements)
 	if err != nil {
 		return err
 	}
@@ -264,17 +246,6 @@ func createBitflyerArtifact(
 		return err
 	}
 	return nil
-}
-
-func formBitflyerRequests(
-	wrappedClient *vaultsigner.WrappedClient,
-	token string,
-	privateRequests *[]settlement.Transaction,
-) (*bitflyersettlement.SettlementRequest, error) {
-	return bitflyersettlement.GroupSettlements(
-		token,
-		privateRequests,
-	)
 }
 
 func createGeminiArtifact(

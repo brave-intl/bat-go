@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CheckPayoutStatus implements Client
-func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -49,7 +49,7 @@ func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, APIKey str
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckPayoutStatus", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CheckPayoutStatus(ctx, APIKey, payload)
+	return _d.base.CheckPayoutStatus(ctx, payload)
 }
 
 // FetchQuote implements Client
@@ -66,8 +66,33 @@ func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode strin
 	return _d.base.FetchQuote(ctx, productCode)
 }
 
+// RefreshToken implements Client
+func (_d ClientWithPrometheus) RefreshToken(ctx context.Context, payload TokenPayload) (tp1 *TokenResponse, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "RefreshToken", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RefreshToken(ctx, payload)
+}
+
+// SetAuthToken implements Client
+func (_d ClientWithPrometheus) SetAuthToken(authToken string) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "SetAuthToken", result).Observe(time.Since(_since).Seconds())
+	}()
+	_d.base.SetAuthToken(authToken)
+	return
+}
+
 // UploadBulkPayout implements Client
-func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
+func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -77,5 +102,5 @@ func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey stri
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UploadBulkPayout", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.UploadBulkPayout(ctx, APIKey, payload)
+	return _d.base.UploadBulkPayout(ctx, payload)
 }

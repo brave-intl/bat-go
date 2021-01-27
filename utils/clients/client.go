@@ -213,13 +213,13 @@ func (c *SimpleHTTPClient) do(
 	}
 	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
+	// // helpful if you want to read the body as it is
+	// bodyBytes, _ := requestutils.Read(resp.Body)
+	// resp.Body.Close() //  must close
+	// fmt.Println(string(bodyBytes))
+	// resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if status >= 200 && status <= 299 {
 		if v != nil {
-			// // helpful if you want to read the body as it is
-			// bodyBytes, _ := requestutils.Read(resp.Body)
-			// resp.Body.Close() //  must close
-			// fmt.Println(string(bodyBytes))
-			// resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 			err = json.NewDecoder(resp.Body).Decode(v)
 			if err != nil {
 				return resp, errors.Wrap(err, ErrUnableToDecode)

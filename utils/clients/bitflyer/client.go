@@ -58,6 +58,24 @@ type WithdrawToDepositIDResponse struct {
 	TransferID   string          `json:"transfer_id"`
 }
 
+// TokenPayload holds the data needed to get a new token
+type TokenPayload struct {
+	GrantType         string `json:"grant_type"`
+	ClientID          string `json:"client_id"`
+	ClientSecret      string `json:"client_secret"`
+	ExtraClientSecret string `json:"extra_client_secret"`
+}
+
+// TokenResponse holds the response from refreshing a token
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+	AccountHash  string `json:"account_hash"`
+	TokenType    string `json:"token_type"`
+}
+
 // NewWithdrawToDepositIDBulkPayload creates a bulk request
 func NewWithdrawToDepositIDBulkPayload(dryRun bool, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
 	return &WithdrawToDepositIDBulkPayload{
@@ -113,14 +131,14 @@ func GenerateTransferID(tx *settlement.Transaction) string {
 type Client interface {
 	// FetchQuote gets a quote of BAT to JPY
 	FetchQuote(ctx context.Context, productCode string) (*Quote, error)
-	// // FetchAccountList requests account information to scope future requests
-	// FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
-	// // FetchBalances requests balance information for a given account
-	// FetchBalances(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload /string) (*[]Balance, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
-	UploadBulkPayout(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
+	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, APIKey string, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
+	CheckPayoutStatus(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
+	// RefreshToken refreshes the token belonging to the provided secret values
+	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
+	// SetAuthToken sets the auth token on underlying client object
+	SetAuthToken(authToken string)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -141,6 +159,13 @@ func New() (Client, error) {
 		return nil, err
 	}
 	return NewClientWithPrometheus(&HTTPClient{client}, "bitflyer_client"), err
+}
+
+// SetAuthToken sets the auth token
+func (c *HTTPClient) SetAuthToken(
+	authToken string,
+) {
+	c.client.AuthToken = authToken
 }
 
 // FetchQuote fetches prices for determining constraints
@@ -165,15 +190,13 @@ func (c *HTTPClient) FetchQuote(
 // UploadBulkPayout uploads payouts to bitflyer
 func (c *HTTPClient) UploadBulkPayout(
 	ctx context.Context,
-	APIKey string,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	// fmt.Println("payload.Withdrawals[0].TransferID", payload.Withdrawals[0].TransferID)
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
 	if err != nil {
 		return nil, err
 	}
-	setupRequestHeaders(req, APIKey)
+	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
@@ -185,14 +208,13 @@ func (c *HTTPClient) UploadBulkPayout(
 // CheckPayoutStatus checks bitflyer transaction status
 func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
-	APIKey string,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload)
 	if err != nil {
 		return nil, err
 	}
-	setupRequestHeaders(req, APIKey)
+	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
@@ -201,8 +223,26 @@ func (c *HTTPClient) CheckPayoutStatus(
 	return &body, nil
 }
 
-func setupRequestHeaders(req *http.Request, APIKey string) {
-	req.Header.Set("authorization", "Bearer "+APIKey)
+// RefreshToken gets a new token from bitflyer
+func (c *HTTPClient) RefreshToken(
+	ctx context.Context,
+	payload TokenPayload,
+) (*TokenResponse, error) {
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload)
+	if err != nil {
+		return nil, err
+	}
+	c.setupRequestHeaders(req)
+	var body TokenResponse
+	resp, err := c.client.Do(ctx, req, &body)
+	if err != nil {
+		return nil, handleBitflyerError(err, req, resp)
+	}
+	return &body, nil
+}
+
+func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
+	req.Header.Set("authorization", "Bearer "+c.client.AuthToken)
 	req.Header.Set("content-type", "application/json")
 }
 

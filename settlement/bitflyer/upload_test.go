@@ -3,7 +3,6 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -20,7 +19,6 @@ import (
 type BitflyerSuite struct {
 	suite.Suite
 	client bitflyer.Client
-	token  string
 }
 
 func (suite *BitflyerSuite) SetupSuite() {
@@ -33,7 +31,18 @@ func (suite *BitflyerSuite) SetupTest() {
 	client, err := bitflyer.New()
 	suite.client = client
 	suite.Require().NoError(err)
-	suite.token = os.Getenv("BITFLYER_CLIENT_TOKEN")
+	payload := bitflyer.TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          os.Getenv("BITFLYER_CLIENT_ID"),
+		ClientSecret:      os.Getenv("BITFLYER_CLIENT_SECRET"),
+		ExtraClientSecret: os.Getenv("BITFLYER_EXTRA_CLIENT_SECRET"),
+	}
+	auth, err := client.RefreshToken(
+		context.Background(),
+		payload,
+	)
+	suite.Require().NoError(err)
+	client.SetAuthToken(auth.AccessToken)
 }
 
 func (suite *BitflyerSuite) TearDownTest() {
@@ -94,7 +103,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	settlementTx1 := settlementTransaction("2", address)
-	tmpFile1 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
+	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx1,
 	})
 	defer func() { _ = os.Remove(tmpFile1.Name()) }()
@@ -105,6 +114,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		[]string{tmpFile1.Name()},
 	)
 	suite.Require().NoError(err)
+	// setting an array on the "complete" key means we will have a file written
+	// with the suffix of "complete" when this function is called in the cli scripts
 	completed := (*payoutFiles)["complete"]
 	suite.Require().Len(completed, 1, "one transaction should be created")
 	completeSerialized, err := json.Marshal(completed)
@@ -115,7 +126,10 @@ func (suite *BitflyerSuite) TestFormData() {
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
 	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(completeSerialized), string(mCompleted))
+	suite.Require().JSONEq(
+		string(completeSerialized),
+		string(mCompleted),
+	)
 
 	var completedStatus []settlement.Transaction
 	for {
@@ -128,7 +142,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		)
 		suite.Require().NoError(err)
 		completedStatus = (*payoutFiles)["complete"]
-		fmt.Println("status", completedStatus[0].Note)
+		// useful if the loop never finishes
+		// fmt.Println("checkstatus", completedStatus[0].Note)
 		if len(completedStatus) > 0 {
 			break
 		}
@@ -143,45 +158,16 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(completeSerializedStatus), string(mCompletedStatus))
 
-	// payoutFiles, err = IterateRequest(
-	// 	ctx,
-	// 	"upload",
-	// 	suite.client,
-	// 	[]string{tmpFile1.Name()},
-	// )
-	// suite.Require().NoError(err)
-	// idempotencyFailComplete := (*payoutFiles)["complete"]
-	// idempotencyFailInvalidInput := (*payoutFiles)["invalid-input"]
-	// suite.Require().Len(idempotencyFailComplete, 0, "one transaction should be created")
-	// idempotencyFailInvalidInputSerialized, err := json.Marshal(idempotencyFailInvalidInput)
-	// suite.Require().NoError(err)
-
-	// idempotencyFailInvalidInputMarshalled, err := json.Marshal([]settlement.Transaction{
-	// 	transactionSubmitted("invalid-input", settlementTx1, "SUCCESS"),
-	// })
-	// suite.Require().NoError(err)
-	// suite.Require().JSONEq(string(idempotencyFailInvalidInputMarshalled), string(idempotencyFailInvalidInputSerialized))
-
-	//  100000000000000000
-	// 1900000000000000000
-
 	// make a new tx that will conflict with previous
 	settlementTx2 := settlementTransaction("3", address)
-	// fmt.Println("settlementTx1.Hash", settlementTx1.ProviderID)
-	// fmt.Println("settlementTx1.Amount", settlementTx1.Amount.String())
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
 	settlementTx2.ProviderID = bitflyer.GenerateTransferID(&settlementTx2) // add bitflyer transaction hash
-	// fmt.Println("settlementTx2.Hash", settlementTx2.ProviderID)
-	tmpFile2 := suite.writeSettlementFiles(suite.token, []settlement.Transaction{
+	tmpFile2 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx2,
 	})
 	defer func() { _ = os.Remove(tmpFile2.Name()) }()
-	// fmt.Println("settlementTx1.Hash", settlementTx1.ProviderID)
-	// fmt.Println("settlementTx1.Amount", settlementTx1.Amount.String())
-	// fmt.Println("settlementTx2.Hash", settlementTx2.ProviderID)
-	// fmt.Println("settlementTx2.Amount", settlementTx2.Amount.String())
 	payoutFiles, err = IterateRequest(
 		ctx,
 		"upload",
@@ -191,13 +177,9 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().NoError(err)
 	idempotencyFailComplete := (*payoutFiles)["complete"]
 	idempotencyFailInvalidInput := (*payoutFiles)["invalid-input"]
-	// fmt.Println("settlementTx1.Hash", settlementTx1.ProviderID)
-	// fmt.Println("settlementTx1.Amount", settlementTx1.Amount.String())
-	// fmt.Println("settlementTx2.Hash", settlementTx2.ProviderID)
-	// fmt.Println("settlementTx2.Amount", settlementTx2.Amount.String())
-	// fmt.Println("idempotencyFailInvalidInput[0].Amount", idempotencyFailInvalidInput[0].Amount.String())
 
 	suite.Require().Len(idempotencyFailComplete, 0, "one transaction should be created")
+	suite.Require().Len(idempotencyFailInvalidInput, 1, "one transaction should have malformed amount")
 	idempotencyFailInvalidInputActual, err := json.Marshal(idempotencyFailInvalidInput)
 	suite.Require().NoError(err)
 
@@ -207,7 +189,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	// in this particular case, we return the original transactions with an "invalid-input" status
 	// which is why we do not need to modify the number amounts
 	//
-	// the invalid-input part is what will put it in a different file
+	// the invalid-input part is what will put the transaction in a different file
 	// so that we do not send to eyeshade
 	idempotencyFailInvalidInputExpected, err := json.Marshal([]settlement.Transaction{
 		transactionSubmitted("invalid-input", settlementTx2, "SUCCESS"),
@@ -219,25 +201,15 @@ func (suite *BitflyerSuite) TestFormData() {
 	)
 }
 
-func (suite *BitflyerSuite) writeSettlementFiles(tkn string, txs []settlement.Transaction) (filepath *os.File) {
+func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
 	tmpDir := os.TempDir()
 	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
 	suite.Require().NoError(err)
 
-	groupedTxs := make(map[string][]settlement.Transaction)
-	for _, tx := range txs {
-		id := bitflyer.GenerateTransferID(&tx)
-		groupedTxs[id] = append(groupedTxs[id], tx)
-	}
-	json, err := json.Marshal(groupedTxs)
+	json, err := json.Marshal(txs)
 	suite.Require().NoError(err)
 
-	token := tkn
-	if tkn == "" {
-		token = "notoken"
-	}
-	fileContents := fmt.Sprintf(`{"api_key":"%s","transactions":%s}`, token, string(json))
-	_, err = tmpFile.Write([]byte(fileContents))
+	_, err = tmpFile.Write([]byte(json))
 	suite.Require().NoError(err)
 	err = tmpFile.Close()
 	suite.Require().NoError(err)
