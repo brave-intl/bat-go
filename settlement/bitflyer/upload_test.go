@@ -1,3 +1,5 @@
+// +build integration,vpn
+
 package bitflyersettlement
 
 import (
@@ -22,9 +24,6 @@ type BitflyerSuite struct {
 }
 
 func (suite *BitflyerSuite) SetupSuite() {
-}
-
-func (suite *BitflyerSuite) SetupTest() {
 	// mockCtrl := gomock.NewController(suite.T())
 	// defer mockCtrl.Finish()
 	// suite.client = mockbitflyer.NewMockClient(mockCtrl)
@@ -43,6 +42,9 @@ func (suite *BitflyerSuite) SetupTest() {
 	)
 	suite.Require().NoError(err)
 	client.SetAuthToken(auth.AccessToken)
+}
+
+func (suite *BitflyerSuite) SetupTest() {
 }
 
 func (suite *BitflyerSuite) TearDownTest() {
@@ -99,19 +101,66 @@ func transactionSubmitted(status string, tx settlement.Transaction, note string)
 	}
 }
 
+func (suite *BitflyerSuite) TestFailures() {
+	ctx := context.Background()
+	settlementTx0 := settlementTransaction("2", uuid.NewV4().String())
+	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
+		settlementTx0,
+	})
+	defer func() { _ = os.Remove(tmpFile0.Name()) }()
+
+	payoutFiles, err := IterateRequest(
+		ctx,
+		"upload",
+		suite.client,
+		[]string{tmpFile0.Name()},
+		"self",
+		false, // dry run first
+	)
+	suite.Require().NoError(err)
+	bytes, err := json.Marshal(payoutFiles)
+	suite.Require().JSONEq(
+		`{"failed":null}`,
+		string(bytes),
+		"dry runs only pass through validation currently",
+	)
+}
+
 func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
+	sourceFrom := "self"
+	dryRun := false // if we do dry run
+
 	settlementTx1 := settlementTransaction("2", address)
 	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx1,
 	})
 	defer func() { _ = os.Remove(tmpFile1.Name()) }()
+
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
 		[]string{tmpFile1.Name()},
+		sourceFrom,
+		true, // dry run first
+	)
+	suite.Require().NoError(err)
+	bytes, err := json.Marshal(payoutFiles)
+	suite.Require().JSONEq(
+		"{\"complete\":null}",
+		string(bytes),
+		"dry runs only pass through validation currently",
+	)
+
+	payoutFiles, err = IterateRequest(
+		ctx,
+		"upload",
+		suite.client,
+		[]string{tmpFile1.Name()},
+		sourceFrom,
+		dryRun,
 	)
 	suite.Require().NoError(err)
 	// setting an array on the "complete" key means we will have a file written
@@ -139,6 +188,8 @@ func (suite *BitflyerSuite) TestFormData() {
 			"checkstatus",
 			suite.client,
 			[]string{tmpFile1.Name()},
+			sourceFrom,
+			dryRun,
 		)
 		suite.Require().NoError(err)
 		completedStatus = (*payoutFiles)["complete"]
@@ -173,6 +224,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		"upload",
 		suite.client,
 		[]string{tmpFile2.Name()},
+		sourceFrom,
+		dryRun,
 	)
 	suite.Require().NoError(err)
 	idempotencyFailComplete := (*payoutFiles)["complete"]
