@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -23,8 +22,10 @@ func GroupSettlements(
 ) map[string][]settlement.Transaction {
 	grouped := make(map[string][]settlement.Transaction)
 	for _, payout := range *settlements {
-		id := bitflyer.GenerateTransferID(&payout)
-		grouped[id] = append(grouped[id], payout)
+		if payout.WalletProvider == "bitflyer" {
+			id := bitflyer.GenerateTransferID(&payout)
+			grouped[id] = append(grouped[id], payout)
+		}
 	}
 
 	return grouped
@@ -61,9 +62,6 @@ func CategorizeResponse(
 	}
 	if key == "complete" && !payout.Amount.Equal(decimal.Zero) {
 		aggregatedAmount = altcurrency.BAT.FromProbi(aggregatedAmount)
-		// fmt.Println("aggregated", aggregatedAmount.String())
-		// fmt.Println("payout    ", payout.Amount.String())
-		// fmt.Printf("%#v\n", payout)
 		if !aggregatedAmount.Equal(decimal.Zero) && !aggregatedAmount.Equal(payout.Amount) {
 			key = "invalid-input"
 			for i := range txs {
@@ -253,15 +251,20 @@ func setupSettlementTransactions(
 	return settlements, &settlementRequests, nil
 }
 
-func createBitflyerRequests(token string, settlementRequests *[][]settlement.Transaction) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
+func createBitflyerRequests(
+	sourceFrom string,
+	dryRun bool,
+	token string,
+	settlementRequests *[][]settlement.Transaction,
+) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
 	for _, withdrawalSet := range *settlementRequests {
-		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs("", &withdrawalSet) // self
+		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(sourceFrom, &withdrawalSet) // self
 		if err != nil {
 			return nil, err
 		}
 		bitflyerRequests = append(bitflyerRequests, *bitflyer.NewWithdrawToDepositIDBulkPayload(
-			os.Getenv("BITFLYER_DRYRUN") == "true",
+			dryRun,
 			token,
 			bitflyerPayloads,
 		))
@@ -289,6 +292,8 @@ func IterateRequest(
 	action string,
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
+	sourceFrom string,
+	dryRun bool,
 ) (*map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)
@@ -330,6 +335,8 @@ func IterateRequest(
 		}
 
 		requests, err := createBitflyerRequests(
+			sourceFrom,
+			dryRun,
 			quote.PriceToken,
 			transactionGroups,
 		)
