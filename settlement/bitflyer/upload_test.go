@@ -1,4 +1,4 @@
-// +build integration,vpn
+// +build integration
 
 package bitflyersettlement
 
