@@ -33,6 +33,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -1533,6 +1534,49 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 
 	suite.Require().True(drainPoll.Status == "complete")
 
+	// test other conditions
+	delayedID := uuid.NewV4()
+	pendingID := uuid.NewV4()
+	inprogressID := uuid.NewV4()
+
+	err = claimDrainFixtures(pg.RawDB(), delayedID, walletID, false, true)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), pendingID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, true, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	// there is an error in one of the drainings
+	drainPoll, err = service.Datastore.GetDrainPoll(&delayedID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "delayed")
+
+	// at least one drain poll batch has started, but all are not complete
+	drainPoll, err = service.Datastore.GetDrainPoll(&pendingID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "pending")
+
+	// none of the drain poll batches have started
+	drainPoll, err = service.Datastore.GetDrainPoll(&inprogressID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "in_progress")
+
+	// unknown batch_id
+	unknownID := uuid.NewV4()
+	drainPoll, err = service.Datastore.GetDrainPoll(&unknownID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "unknown")
+}
+
+func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total) values ($1, '[{"t":123}]', $2, $3, $4, $5);`, batchID, completed, erred, walletID, 1)
+	return err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {

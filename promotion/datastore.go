@@ -663,6 +663,12 @@ group by
 
 	err = pg.RawDB().Get(drainPoll, statement, drainID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return &DrainPoll{
+				ID:     drainID,
+				Status: "unknown",
+			}, nil
+		}
 		return nil, err
 	}
 
@@ -673,17 +679,17 @@ group by
 		}, nil
 	}
 
-	if drainPoll.Pending {
-		return &DrainPoll{
-			ID:     drainID,
-			Status: "pending",
-		}, nil
-	}
-
 	if drainPoll.Delayed {
 		return &DrainPoll{
 			ID:     drainID,
 			Status: "delayed",
+		}, nil
+	}
+
+	if drainPoll.Pending {
+		return &DrainPoll{
+			ID:     drainID,
+			Status: "pending",
 		}, nil
 	}
 
