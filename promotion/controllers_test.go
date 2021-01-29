@@ -78,7 +78,7 @@ func (suite *ControllersTestSuite) TearDownTest() {
 }
 
 func (suite *ControllersTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_drain", "claim_creds", "claims", "wallets", "issuers", "promotions"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -1573,23 +1573,10 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 
 	suite.Require().True(drainPoll.Status == "unknown")
 
-	err = removeClaimDrainFixtures(pg.RawDB(), delayedID)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = removeClaimDrainFixtures(pg.RawDB(), pendingID)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = removeClaimDrainFixtures(pg.RawDB(), inprogressID)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = removeClaimDrainFixtures(pg.RawDB(), inprogressID)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
 }
 
 func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
 	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total) values ($1, '[{"t":123}]', $2, $3, $4, $5);`, batchID, completed, erred, walletID, 1)
-	return err
-}
-
-func removeClaimDrainFixtures(db *sqlx.DB, batchID uuid.UUID) error {
-	_, err := db.Exec(`delete from claim_drain where batch_id=$1;`, batchID)
 	return err
 }
 
