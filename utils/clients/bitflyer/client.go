@@ -37,7 +37,6 @@ type WithdrawToDepositIDPayload struct {
 	Amount       float64 `json:"amount"`
 	DryRun       *bool   `json:"dry_run,omitempty"`
 	DepositID    string  `json:"deposit_id"`
-	Message      string  `json:"message"`
 	TransferID   string  `json:"transfer_id"`
 	SourceFrom   string  `json:"source_from"`
 }
@@ -107,7 +106,6 @@ func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]W
 			CurrencyCode: "BAT",
 			Amount:       f64,
 			DepositID:    tx.Destination,
-			Message:      tx.Note,
 			TransferID:   GenerateTransferID(&tx),
 			SourceFrom:   sourceFrom,
 		})

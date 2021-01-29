@@ -5,6 +5,7 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -21,6 +23,7 @@ import (
 type BitflyerSuite struct {
 	suite.Suite
 	client bitflyer.Client
+	token  string
 }
 
 func (suite *BitflyerSuite) SetupSuite() {
@@ -41,6 +44,7 @@ func (suite *BitflyerSuite) SetupSuite() {
 		payload,
 	)
 	suite.Require().NoError(err)
+	suite.token = auth.AccessToken
 	client.SetAuthToken(auth.AccessToken)
 }
 
@@ -123,6 +127,30 @@ func (suite *BitflyerSuite) TestFailures() {
 		`{"failed":null}`,
 		string(bytes),
 		"dry runs only pass through validation currently",
+	)
+
+	suite.client.SetAuthToken("")
+	_, err = IterateRequest(
+		ctx,
+		"upload",
+		suite.client,
+		[]string{tmpFile0.Name()},
+		"self",
+		false, // dry run first
+	)
+	suite.client.SetAuthToken(suite.token)
+	suite.Require().Error(err)
+	bfErr, ok := err.(clients.BitflyerError)
+	suite.Require().True(ok)
+	errSerialized, err := json.Marshal(bfErr)
+	suite.Require().JSONEq(
+		fmt.Sprintf(`{
+			"message": "%s",
+			"label": "JsonError.TOKEN_ERROR",
+			"status": -1,
+			"errors": ["%s"]
+		}`, bfErr.Message, bfErr.ErrorIDs[0]),
+		string(errSerialized),
 	)
 }
 
