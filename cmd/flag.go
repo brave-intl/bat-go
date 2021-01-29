@@ -52,32 +52,12 @@ func (fb *FlagBuilder) StringSlice(key string, defaultValue []string, descriptio
 		})
 }
 
-// GetStringSlice gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetStringSlice(key string) ([]string, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetStringSlice(key)
-	if len(value) == 0 {
-		return viper.GetStringSlice(key), nil
-	}
-	return value, err
-}
-
 // String attaches a string flag to the command
 func (fb *FlagBuilder) String(key string, defaultValue string, description string) *FlagBuilder {
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
 			command.Flags().String(key, defaultValue, description)
 		})
-}
-
-// GetString gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetString(key string) (string, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetString(key)
-	if len(value) == 0 {
-		return viper.GetString(key), nil
-	}
-	return value, err
 }
 
 // Uint attaches an uint flag to the command
@@ -88,32 +68,12 @@ func (fb *FlagBuilder) Uint(key string, defaultValue uint, description string) *
 		})
 }
 
-// GetUint gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetUint(key string) (uint, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetUint(key)
-	if value == 0 {
-		return viper.GetUint(key), nil
-	}
-	return value, err
-}
-
 // Int attaches an int flag to the command
 func (fb *FlagBuilder) Int(key string, defaultValue int, description string) *FlagBuilder {
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
 			command.Flags().Int(key, defaultValue, description)
 		})
-}
-
-// GetInt gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetInt(key string) (int, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetInt(key)
-	if value == 0 {
-		return viper.GetInt(key), nil
-	}
-	return value, err
 }
 
 // Float64 attaches a float64 type flag to the command
@@ -124,32 +84,12 @@ func (fb *FlagBuilder) Float64(key string, defaultValue float64, description str
 		})
 }
 
-// GetFloat64 gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetFloat64(key string) (float64, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetFloat64(key)
-	if value == 0 {
-		return viper.GetFloat64(key), nil
-	}
-	return value, err
-}
-
 // Bool attaches a bool flag to the command
 func (fb *FlagBuilder) Bool(key string, defaultValue bool, description string) *FlagBuilder {
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
 			command.Flags().Bool(key, defaultValue, description)
 		})
-}
-
-// GetBool gets the flag value, defaulting back to envs
-func (fb *FlagBuilder) GetBool(key string) (bool, error) {
-	command := fb.commands[0]
-	value, err := command.Flags().GetBool(key)
-	if !value {
-		return viper.GetBool(key), nil
-	}
-	return value, err
 }
 
 // Require requires the flag
