@@ -120,7 +120,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"self",
-		false, // dry run first
+		nil, // dry run first
 	)
 	suite.Require().NoError(err)
 	completeTxs := (*payoutFiles)["complete"]
@@ -149,7 +149,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"self",
-		false, // dry run first
+		nil, // dry run first
 	)
 	suite.client.SetAuthToken(suite.token)
 	suite.Require().Error(err)
@@ -171,13 +171,40 @@ func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	sourceFrom := "self"
-	dryRun := false // if we do dry run
+	dryRunOptions := &bitflyer.DryRunOption{
+		ProcessTimeSec: 4,
+	}
 
 	settlementTx1 := settlementTransaction("2", address)
 	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx1,
 	})
 	defer func() { _ = os.Remove(tmpFile1.Name()) }()
+	/*
+		resultIteration := make(map[string]int)
+
+		var payoutFiles *map[string][]settlement.Transaction
+		for i := 0; i < 2; i++ {
+			<-time.After(2 * time.Second)
+			results, err := IterateRequest(
+				ctx,
+				"upload",
+				suite.client,
+				[]string{tmpFile1.Name()},
+				sourceFrom,
+				dryRunOptions, // dry run first
+			)
+			suite.Require().NoError(err)
+			for key, items := range *results {
+				resultIteration[key] += len(items)
+			}
+			payoutFiles = results
+		}
+		suite.Require().Equal(map[string]int{
+			"pending":  1,
+			"complete": 1,
+		}, resultIteration)
+	*/
 
 	payoutFiles, err := IterateRequest(
 		ctx,
@@ -185,7 +212,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
-		true, // dry run first
+		dryRunOptions, // dry run first
 	)
 	suite.Require().NoError(err)
 	completedDryRunTxs := (*payoutFiles)["complete"]
@@ -203,6 +230,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(expectedBytes),
 		"dry runs only pass through validation currently",
 	)
+	dryRunOptions.ProcessTimeSec = 0
 
 	payoutFiles, err = IterateRequest(
 		ctx,
@@ -210,7 +238,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
-		dryRun,
+		nil,
 	)
 	suite.Require().NoError(err)
 	// setting an array on the "complete" key means we will have a file written
@@ -239,12 +267,12 @@ func (suite *BitflyerSuite) TestFormData() {
 			suite.client,
 			[]string{tmpFile1.Name()},
 			sourceFrom,
-			dryRun,
+			nil,
 		)
 		suite.Require().NoError(err)
 		completedStatus = (*payoutFiles)["complete"]
 		// useful if the loop never finishes
-		// fmt.Println("checkstatus", completedStatus[0].Note)
+		// fmt.Printf("checkstatus %#v\n", *payoutFiles)
 		if len(completedStatus) > 0 {
 			break
 		}
@@ -275,7 +303,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile2.Name()},
 		sourceFrom,
-		dryRun,
+		nil,
 	)
 	suite.Require().NoError(err)
 	idempotencyFailComplete := (*payoutFiles)["complete"]
