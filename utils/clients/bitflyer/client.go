@@ -43,9 +43,10 @@ type WithdrawToDepositIDPayload struct {
 
 // WithdrawToDepositIDBulkPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
 type WithdrawToDepositIDBulkPayload struct {
-	DryRun      bool                         `json:"dry_run"`
-	Withdrawals []WithdrawToDepositIDPayload `json:"withdrawals"`
-	PriceToken  string                       `json:"price_token"`
+	DryRun       bool                         `json:"dry_run"`
+	Withdrawals  []WithdrawToDepositIDPayload `json:"withdrawals"`
+	PriceToken   string                       `json:"price_token"`
+	DryRunOption *DryRunOption                `json:"dry_run_option"`
 }
 
 // WithdrawToDepositIDResponse holds a single withdrawal request
@@ -75,12 +76,31 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+// DryRunOption holds options for dry running a transaction
+type DryRunOption struct {
+	RequestAPITransferStatus string `json:"request_api_transfer_status"`
+	ProcessTimeSec           int    `json:"process_time_sec"`
+	StatusAPITransferStatus  string `json:"status_api_transfer_status"`
+}
+
 // NewWithdrawToDepositIDBulkPayload creates a bulk request
-func NewWithdrawToDepositIDBulkPayload(dryRun bool, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
+func NewWithdrawToDepositIDBulkPayload(dryRunOptions *DryRunOption, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
+	dryRun := false
+	if dryRunOptions != nil {
+		dryRun = true
+		enum := "ENUM"
+		if dryRunOptions.RequestAPITransferStatus != enum {
+			dryRunOptions.RequestAPITransferStatus = enum
+		}
+		if dryRunOptions.StatusAPITransferStatus != enum {
+			dryRunOptions.StatusAPITransferStatus = enum
+		}
+	}
 	return &WithdrawToDepositIDBulkPayload{
-		DryRun:      dryRun,
-		PriceToken:  priceToken,
-		Withdrawals: *withdrawals,
+		PriceToken:   priceToken,
+		Withdrawals:  *withdrawals,
+		DryRun:       dryRun,
+		DryRunOption: dryRunOptions,
 	}
 }
 

@@ -253,7 +253,7 @@ func setupSettlementTransactions(
 
 func createBitflyerRequests(
 	sourceFrom string,
-	dryRun bool,
+	dryRun *bitflyer.DryRunOption,
 	token string,
 	settlementRequests *[][]settlement.Transaction,
 ) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
@@ -293,7 +293,7 @@ func IterateRequest(
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
 	sourceFrom string,
-	dryRun bool,
+	dryRun *bitflyer.DryRunOption,
 ) (*map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)
