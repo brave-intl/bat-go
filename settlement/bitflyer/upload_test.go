@@ -120,7 +120,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"self",
-		nil, // dry run first
+		nil,
 	)
 	suite.Require().NoError(err)
 	completeTxs := (*payoutFiles)["complete"]

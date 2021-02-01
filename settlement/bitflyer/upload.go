@@ -259,7 +259,10 @@ func createBitflyerRequests(
 ) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
 	for _, withdrawalSet := range *settlementRequests {
-		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(sourceFrom, &withdrawalSet) // self
+		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
+			sourceFrom, // self
+			&withdrawalSet,
+		)
 		if err != nil {
 			return nil, err
 		}
