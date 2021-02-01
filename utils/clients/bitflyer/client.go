@@ -79,7 +79,7 @@ type TokenResponse struct {
 // DryRunOption holds options for dry running a transaction
 type DryRunOption struct {
 	RequestAPITransferStatus string `json:"request_api_transfer_status"`
-	ProcessTimeSec           int    `json:"process_time_sec"`
+	ProcessTimeSec           uint   `json:"process_time_sec"`
 	StatusAPITransferStatus  string `json:"status_api_transfer_status"`
 }
 
@@ -111,7 +111,10 @@ type WithdrawToDepositIDBulkResponse struct {
 }
 
 // NewWithdrawsFromTxs creates an array of withdrawal requests
-func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]WithdrawToDepositIDPayload, error) {
+func NewWithdrawsFromTxs(
+	sourceFrom string,
+	txs *[]settlement.Transaction,
+) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if sourceFrom == "" {
 		sourceFrom = "self"
@@ -135,11 +138,12 @@ func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]W
 
 // GenerateTransferID generates a deterministic transaction reference id for idempotency
 func GenerateTransferID(tx *settlement.Transaction) string {
-	key := strings.Join([]string{
+	inputs := []string{
 		tx.SettlementID,
 		tx.Destination,
 		// tx.Channel, // all channels are grouped together
-	}, "_")
+	}
+	key := strings.Join(inputs, "_")
 	bytes := sha256.Sum256([]byte(key))
 	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
 	return refID
