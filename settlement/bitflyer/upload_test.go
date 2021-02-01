@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,10 +123,22 @@ func (suite *BitflyerSuite) TestFailures() {
 		false, // dry run first
 	)
 	suite.Require().NoError(err)
-	bytes, err := json.Marshal(payoutFiles)
+	completeTxs := (*payoutFiles)["complete"]
+	suite.Require().Len(completeTxs, 0, "one tx complete")
+	failedTxs := (*payoutFiles)["failed"]
+	suite.Require().Len(failedTxs, 1, "one tx failed")
+
+	failedBytes, err := json.Marshal(failedTxs)
+	settlementTx0.ProviderID = bitflyer.GenerateTransferID(&settlementTx0)
+	failedTxNote := failedTxs[0].Note
+	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUNTD"))
+	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+		transactionSubmitted("failed", settlementTx0, failedTxNote),
+	})
+	suite.Require().NoError(err)
 	suite.Require().JSONEq(
-		`{"failed":null}`,
-		string(bytes),
+		string(expectedBytes),
+		string(failedBytes),
 		"dry runs only pass through validation currently",
 	)
 
@@ -175,10 +188,19 @@ func (suite *BitflyerSuite) TestFormData() {
 		true, // dry run first
 	)
 	suite.Require().NoError(err)
-	bytes, err := json.Marshal(payoutFiles)
+	completedDryRunTxs := (*payoutFiles)["complete"]
+	suite.Require().Len(completedDryRunTxs, 1, "one transaction should be created")
+
+	completedDryRunBytes, err := json.Marshal(completedDryRunTxs)
+	suite.Require().NoError(err)
+
+	settlementTx1.ProviderID = bitflyer.GenerateTransferID(&settlementTx1)
+	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
+	})
 	suite.Require().JSONEq(
-		"{\"complete\":null}",
-		string(bytes),
+		string(completedDryRunBytes),
+		string(expectedBytes),
 		"dry runs only pass through validation currently",
 	)
 
@@ -257,8 +279,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	)
 	suite.Require().NoError(err)
 	idempotencyFailComplete := (*payoutFiles)["complete"]
-	idempotencyFailInvalidInput := (*payoutFiles)["invalid-input"]
-
+	idempotencyFailInvalidInput := (*payoutFiles)["failed"]
 	suite.Require().Len(idempotencyFailComplete, 0, "one transaction should be created")
 	suite.Require().Len(idempotencyFailInvalidInput, 1, "one transaction should have malformed amount")
 	idempotencyFailInvalidInputActual, err := json.Marshal(idempotencyFailInvalidInput)
@@ -267,13 +288,15 @@ func (suite *BitflyerSuite) TestFormData() {
 	// bitflyer does not send us back what we sent it
 	// so we end up in an odd space if we change amount or other inputs
 	// which is ok, it just makes for odd checks
-	// in this particular case, we return the original transactions with an "invalid-input" status
+	// in this particular case, we return the original transactions with an "failed" status
 	// which is why we do not need to modify the number amounts
 	//
 	// the invalid-input part is what will put the transaction in a different file
 	// so that we do not send to eyeshade
+	idempotencyFailNote := idempotencyFailInvalidInput[0].Note
+	suite.Require().Equal("OTHER_ERROR: Duplicate transfer_id and different parameters", idempotencyFailNote)
 	idempotencyFailInvalidInputExpected, err := json.Marshal([]settlement.Transaction{
-		transactionSubmitted("invalid-input", settlementTx2, "SUCCESS"),
+		transactionSubmitted("failed", settlementTx2, idempotencyFailNote),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(

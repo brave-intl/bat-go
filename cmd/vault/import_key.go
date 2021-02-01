@@ -82,12 +82,6 @@ func init() {
 		"gemini-client-secret holds the uphold guid that we want to use to sign bulk transactions").
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
-
-	// bitflyer-client-token
-	importKeyBuilder.Flag().String("bitflyer-client-token", "",
-		"bitflyer-client-token holds the uphold token that we want to use to auth the bulk transactions").
-		Env("BITFLYER_CLIENT_TOKEN").
-		Bind("bitflyer-client-token")
 }
 
 // ImportKey pulls in keys from environment variables
