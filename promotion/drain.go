@@ -28,21 +28,23 @@ import (
 var errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
 
 // Drain ad suggestions into verified wallet
-func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) error {
+func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
+	var batchID = uuid.NewV4()
+
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
-		return fmt.Errorf("error getting wallet: %w", err)
+		return nil, fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
-		return errors.New("Wallet is not verified")
+		return nil, errors.New("Wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
 	_, _, fundingSources, promotions, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var (
 		depositProvider string
@@ -60,12 +62,12 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// is this from wallet reputable as an iOS device?
 		isFromOnPlatform, err := service.reputationClient.IsWalletOnPlatform(ctx, walletID, "ios")
 		if err != nil {
-			return fmt.Errorf("invalid device: %w", err)
+			return nil, fmt.Errorf("invalid device: %w", err)
 		}
 
 		if !isFromOnPlatform {
 			// wallet is not reputable, decline
-			return fmt.Errorf("unable to drain to wallet: invalid device")
+			return nil, fmt.Errorf("unable to drain to wallet: invalid device")
 		}
 
 		// these drained claims commit to mint
@@ -76,12 +78,12 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		walletID, err := uuid.FromString(wallet.ID)
 		if err != nil {
-			return fmt.Errorf("invalid wallet id: %w", err)
+			return nil, fmt.Errorf("invalid wallet id: %w", err)
 		}
 
 		err = service.Datastore.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
 		if err != nil {
-			return fmt.Errorf("error adding mint drain: %w", err)
+			return nil, fmt.Errorf("error adding mint drain: %w", err)
 		}
 	}
 
@@ -94,30 +96,30 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
-			return errors.New("Only ads suggestions can be drained")
+			return nil, errors.New("Only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
-			return fmt.Errorf("error finding claim for wallet: %w", err)
+			return nil, fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
-			return fmt.Errorf("error calculating expected number of suggestions: %w", err)
+			return nil, fmt.Errorf("error calculating expected number of suggestions: %w", err)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
-			return errors.New("Cannot claim more funds than were earned")
+			return nil, errors.New("Cannot claim more funds than were earned")
 		}
 
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(claim, v.Credentials, wallet, v.Amount)
+			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
-				return fmt.Errorf("error draining claim: %w", err)
+				return nil, fmt.Errorf("error draining claim: %w", err)
 			}
 
 			// the original request context will be cancelled as soon as the dialer closes the connection.
@@ -166,7 +168,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}
 		}()
 	}
-	return nil
+	return &batchID, nil
+}
+
+// DrainPoll - Response structure for the DrainPoll
+type DrainPoll struct {
+	ID     *uuid.UUID `db:"id"`
+	Status string     `db:"status"`
 }
 
 // DrainWorker attempts to work on a drain job by redeeming the credentials and transferring funds

@@ -53,6 +53,10 @@ const (
 	BraveTransferPromotionIDCTXKey CTXKey = "brave_transfer_promotion_id"
 	// WalletOnPlatformPriorToCTXKey - context key for the build time of code
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
+	// LogLevelCTXKey - context key for application logging level
+	LogLevelCTXKey CTXKey = "log_level"
+	// BitFlyerJWTKeyCTXKey - context key for the bitflyer jwt key
+	BitFlyerJWTKeyCTXKey CTXKey = "bitflyer_jwt_key"
 )
 
 var (

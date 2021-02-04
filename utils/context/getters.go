@@ -36,6 +36,20 @@ func GetDurationFromContext(ctx context.Context, key CTXKey) (time.Duration, err
 	return time.Duration(0), ErrValueWrongType
 }
 
+//GetLogLevelFromContext - given a CTXKey return the duration value from the context if it exists
+func GetLogLevelFromContext(ctx context.Context, key CTXKey) (zerolog.Level, error) {
+	v := ctx.Value(key)
+	if v == nil {
+		// value not on context
+		return zerolog.InfoLevel, ErrNotInContext
+	}
+	if l, ok := v.(zerolog.Level); ok {
+		return l, nil
+	}
+	// value not a log level
+	return zerolog.InfoLevel, ErrValueWrongType
+}
+
 //GetLogger - return the logger value from the context if it exists
 func GetLogger(ctx context.Context) (*zerolog.Logger, error) {
 	// get the logger from the context, if the logger is disabled

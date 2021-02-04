@@ -33,6 +33,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
@@ -77,7 +78,7 @@ func (suite *ControllersTestSuite) TearDownTest() {
 }
 
 func (suite *ControllersTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_drain", "claim_creds", "claims", "wallets", "issuers", "promotions"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -1361,6 +1362,222 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	<-time.After(2 * time.Second)
+}
+
+func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	ch := make(chan *walletutils.TransactionInfo)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	w := uphold.Wallet{
+		Info:    info,
+		PrivKey: privKey,
+		PubKey:  publicKey,
+	}
+	err = w.Register("drain-card-test")
+	suite.Require().NoError(err, "Failed to register wallet")
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+		reputationClient: mockReputation,
+		drainChannel:     ch,
+	}
+
+	err = service.InitHotWallet(context.Background())
+	suite.Require().NoError(err, "Failed to init hot wallet")
+
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	err = service.wallet.Datastore.UpsertWallet(context.Background(), &info)
+	suite.Require().NoError(err, "the wallet failed to be inserted")
+
+	claimBonus := 0.25
+	grantAmount := decimal.NewFromFloat(0.25)
+	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus), false)
+	suite.Require().NoError(err, "create a claim for a promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(walletID.String())).Return(nil)
+
+	handler := middleware.HTTPSignedOnly(service)(DrainSuggestionV2(service))
+
+	drainReq := DrainSuggestionRequest{
+		WalletID: walletID,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	body, err := json.Marshal(&drainReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	var s httpsignature.Signature
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = info.ID
+	s.Headers = []string{"digest", "(request-target)"}
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	err = walletDB.InsertWallet(context.Background(), &w.Info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
+
+	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	info.UserDepositDestination = w.ProviderID
+	info.UserDepositAccountProvider = new(string)
+	*info.UserDepositAccountProvider = "uphold"
+
+	err = walletDB.UpsertWallet(context.Background(), &info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	b, _ := httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+
+	var dsv2r = new(DrainSuggestionV2Response)
+
+	err = json.NewDecoder(rr.Result().Body).Decode(dsv2r)
+
+	suite.Require().NoError(err, "Failed to unmarshal response")
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	tx := <-ch
+	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+
+	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	suite.Require().NoError(err)
+
+	// pull out drain id, and check the datastore has completed state
+	drainPoll, err := service.Datastore.GetDrainPoll(dsv2r.DrainID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "complete")
+
+	// test other conditions
+	delayedID := uuid.NewV4()
+	pendingID := uuid.NewV4()
+	inprogressID := uuid.NewV4()
+
+	err = claimDrainFixtures(pg.RawDB(), delayedID, walletID, false, true)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), pendingID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, true, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	// there is an error in one of the drainings
+	drainPoll, err = service.Datastore.GetDrainPoll(&delayedID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "delayed")
+
+	// at least one drain poll batch has started, but all are not complete
+	drainPoll, err = service.Datastore.GetDrainPoll(&pendingID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "pending")
+
+	// none of the drain poll batches have started
+	drainPoll, err = service.Datastore.GetDrainPoll(&inprogressID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "in_progress")
+
+	// unknown batch_id
+	unknownID := uuid.NewV4()
+	drainPoll, err = service.Datastore.GetDrainPoll(&unknownID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "unknown")
+
+}
+
+func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total) values ($1, '[{"t":123}]', $2, $3, $4, $5);`, batchID, completed, erred, walletID, 1)
+	return err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
