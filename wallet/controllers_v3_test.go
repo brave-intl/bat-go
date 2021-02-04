@@ -308,7 +308,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 			})
 
 		// add the datastore to the context
-		ctx    = context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, string(secret))
+		ctx    = context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret))
 		idFrom = uuid.NewV4()
 		r      = httptest.NewRequest(
 			"POST",

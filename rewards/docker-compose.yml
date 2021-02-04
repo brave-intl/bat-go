@@ -24,7 +24,7 @@ services:
       - PPROF_ENABLED
       - ENV=local
       - ADDR=:3333
-      - RATIOS_SERVICE=https://bat-ratios-dev.herokuapp.com/
+      - RATIOS_SERVICE="https://ratios.rewards.bravesoftware.com"
       - RATIOS_TOKEN
       - DEFAULT_TIP_CHOICES=1,10,100
       - DEFAULT_MONTHLY_CHOICES=1,10,100
@@ -49,7 +49,7 @@ services:
       - PPROF_ENABLED
       - ENV=local
       - ADDR=:3343
-      - RATIOS_SERVICE=https://bat-ratios-dev.herokuapp.com/
+      - RATIOS_SERVICE="https://ratios.rewards.bravesoftware.com"
       - RATIOS_TOKEN
       - DEFAULT_AC_CHOICES
       - DEFAULT_TIP_CHOICES=1,10,100
