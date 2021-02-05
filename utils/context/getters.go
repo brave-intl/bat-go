@@ -8,6 +8,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
+//GetByteSliceFromContext - given a CTXKey return the string value from the context if it exists
+func GetByteSliceFromContext(ctx context.Context, key CTXKey) ([]byte, error) {
+	v := ctx.Value(key)
+	if v == nil {
+		// value not on context
+		return nil, ErrNotInContext
+	}
+	if s, ok := v.([]byte); ok {
+		return s, nil
+	}
+	// value not a string
+	return nil, ErrValueWrongType
+}
+
 //GetStringFromContext - given a CTXKey return the string value from the context if it exists
 func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 	v := ctx.Value(key)

@@ -268,7 +268,7 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 	}
 
 	// get the bitflyer jwt key from ctx
-	jwtKey, err := appctx.GetStringFromContext(ctx, appctx.BitFlyerJWTKeyCTXKey)
+	jwtKey, err := appctx.GetByteSliceFromContext(ctx, appctx.BitFlyerJWTKeyCTXKey)
 	if err != nil {
 		return fmt.Errorf("configuration error, no jwt validation key: %w", err)
 	}
@@ -281,7 +281,7 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 	base := jwt.Claims{}
 	linkingInfo := BitFlyerLinkingInfo{}
 
-	if err := tok.Claims([]byte(jwtKey), &base, &linkingInfo); err != nil {
+	if err := tok.Claims(jwtKey, &base, &linkingInfo); err != nil {
 		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
 	}
 
