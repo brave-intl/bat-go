@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -220,7 +221,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
-	ctx = context.WithValue(ctx, appctx.BitFlyerJWTKeyCTXKey, viper.Get("bitflyer-jwt-key"))
+
+	// jwt key is hex encoded string
+	decodedBitFlyerJWTKey, err := hex.DecodeString(viper.GetString("bitflyer-jwt-key"))
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid bitflyer jwt key")
+	}
+	ctx = context.WithValue(ctx, appctx.BitFlyerJWTKeyCTXKey, decodedBitFlyerJWTKey)
 
 	s, err := InitService(ctx, db, roDB)
 	if err != nil {
