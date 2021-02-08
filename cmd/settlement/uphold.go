@@ -153,17 +153,24 @@ func UpholdUpload(
 
 	var total = len(settlementState.Transactions)
 
-	allComplete := true
+	allFinalized := true
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
+
+		if settlementTransaction.IsComplete() || settlementTransaction.IsFailed() {
+			continue
+		}
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
 			if errorutils.IsErrInvalidDestination(err) {
 				logger.Info().Err(err).Msg("invalid destination, skipping")
+				// This is a final failure so we do not need to unset allFinalized
 				continue
 			}
-			logger.Panic().Err(err).Msg("unanticipated error")
+			logger.Error().Err(err).Msg("unanticipated error")
+			allFinalized = false
+			continue
 		}
 
 		var out []byte
@@ -202,18 +209,18 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to sync output log")
 		}
 
-		if !settlementTransaction.IsComplete() {
-			allComplete = false
+		if !settlementTransaction.IsComplete() && !settlementTransaction.IsFailed() {
+			allFinalized = false
 		}
 
 		// perform progress logging
 		logging.SubmitProgress(ctx, i, total)
 	}
 
-	if allComplete {
-		logger.Info().Msg("all transactions successfully completed, writing out settlement file")
+	if allFinalized {
+		logger.Info().Msg("all transactions finalized, writing out settlement file")
 	} else {
-		logger.Panic().Msg("not all transactions are successfully completed, rerun to resubmit")
+		logger.Panic().Msg("not all transactions are finalized, rerun to resubmit")
 	}
 
 	for i := 0; i < len(settlementState.Transactions); i++ {
