@@ -85,13 +85,13 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
 
 	logFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-log.json"
-	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-finished.json"
+	outputFilePrefix := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
 
 	return UpholdUpload(
 		ctx,
 		inputFile,
 		logFile,
-		outputFile,
+		outputFilePrefix,
 	)
 }
 
@@ -100,7 +100,7 @@ func UpholdUpload(
 	ctx context.Context,
 	inputFile string,
 	logFile string,
-	outputFile string,
+	outputFilePrefix string,
 ) error {
 
 	// setup logger, with the context that has the logger
@@ -223,20 +223,29 @@ func UpholdUpload(
 		logger.Panic().Msg("not all transactions are finalized, rerun to resubmit")
 	}
 
+	transactionsMap := make(map[string][]settlement.Transaction)
 	for i := 0; i < len(settlementState.Transactions); i++ {
 		// Redact signed transactions
 		settlementState.Transactions[i].SignedTx = ""
+
+		// Group by status
+		status := settlementState.Transactions[i].Status
+		transactionsMap[status] = append(transactionsMap[status], settlementState.Transactions[i])
 	}
 
-	// Write out transactions ready to be submitted to eyeshade
-	out, err := json.MarshalIndent(settlementState.Transactions, "", "    ")
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
-	}
+	for key, txs := range transactionsMap {
+		outputFile := outputFilePrefix + "-" + key + ".json"
 
-	err = ioutil.WriteFile(outputFile, out, 0600)
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
+		// Write out transactions ready to be submitted to eyeshade
+		out, err := json.MarshalIndent(txs, "", "    ")
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
+		}
+
+		err = ioutil.WriteFile(outputFile, out, 0600)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
+		}
 	}
 
 	logger.Info().Msg("done!")
