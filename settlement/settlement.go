@@ -297,7 +297,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 			return nil
 		}
 		if settlement.IsFailed() {
-			fmt.Printf("already failed, skipping submit for channel %s\n", settlement.Channel)
+			fmt.Printf("already failed, skipping confirm for channel %s\n", settlement.Channel)
 			return nil
 		}
 

@@ -166,11 +166,11 @@ func UpholdUpload(
 			if errorutils.IsErrInvalidDestination(err) {
 				logger.Info().Err(err).Msg("invalid destination, skipping")
 				// This is a final failure so we do not need to unset allFinalized
+			} else {
+				logger.Error().Err(err).Msg("unanticipated error")
+				allFinalized = false
 				continue
 			}
-			logger.Error().Err(err).Msg("unanticipated error")
-			allFinalized = false
-			continue
 		}
 
 		var out []byte
