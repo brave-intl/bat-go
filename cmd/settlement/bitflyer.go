@@ -2,16 +2,12 @@ package settlement
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/settlement"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -50,6 +46,20 @@ var (
 	}
 )
 
+// NewRefreshTokenPayloadFromViper creates the payload to refresh a bitflyer token from viper
+func NewRefreshTokenPayloadFromViper() *bitflyer.TokenPayload {
+	vpr := viper.GetViper()
+	clientID := vpr.GetString("bitflyer-client-id")
+	clientSecret := vpr.GetString("bitflyer-client-secret")
+	extraClientSecret := vpr.GetString("bitflyer-extra-client-secret")
+	return &bitflyer.TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          clientID,
+		ClientSecret:      clientSecret,
+		ExtraClientSecret: extraClientSecret,
+	}
+}
+
 // GetBitflyerToken gets a new bitflyer token from cobra command
 func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
@@ -57,22 +67,14 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	clientID := viper.GetViper().GetString("bitflyer-client-id")
-	clientSecret := viper.GetViper().GetString("bitflyer-client-secret")
-	extraClientSecret := viper.GetViper().GetString("bitflyer-extra-client-secret")
+	refreshTokenPayload := NewRefreshTokenPayloadFromViper()
 	client, err := bitflyer.New()
 	if err != nil {
 		return err
 	}
-	payload := bitflyer.TokenPayload{
-		GrantType:         "client_credentials",
-		ClientID:          clientID,
-		ClientSecret:      clientSecret,
-		ExtraClientSecret: extraClientSecret,
-	}
 	auth, err := client.RefreshToken(
 		ctx,
-		payload,
+		*refreshTokenPayload,
 	)
 	if err != nil {
 		return err
@@ -239,15 +241,6 @@ func BitflyerUploadSettlement(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	// logger.Info().
-	// 	Str("action", action).
-	// 	Str("inPath", inPath).
-	// 	Str("outPath", outPath).
-	// 	Str("token", token).
-	// 	Str("sourceFrom", sourceFrom).
-	// 	Bool("dryRun", dryRun).
-	// 	Msg("stop")
-	// return nil
 	bulkPayoutFiles := strings.Split(inPath, ",")
 	bitflyerClient, err := bitflyer.New()
 	if err != nil {
@@ -255,10 +248,15 @@ func BitflyerUploadSettlement(
 		return err
 	}
 	// set the auth token
-	if token == "" {
-		return errors.New("a token must be set at BITFLYER_CLIENT_TOKEN")
+	if token != "" {
+		bitflyerClient.SetAuthToken(token)
+	} else {
+		refreshTokenPayload := NewRefreshTokenPayloadFromViper()
+		_, err := bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
+		if err != nil {
+			return err
+		}
 	}
-	bitflyerClient.SetAuthToken(token)
 
 	submittedTransactions, submitErr := bitflyersettlement.IterateRequest(
 		ctx,
@@ -273,37 +271,9 @@ func BitflyerUploadSettlement(
 		Str("files", outPath).
 		Msg("outputting files")
 
-	if submittedTransactions != nil {
-		for key, txs := range *submittedTransactions {
-			if len(txs) > 0 {
-				outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-				err = BitflyerWriteTransactions(ctx, outputPath, &txs)
-				if err != nil {
-					logger.Error().Err(err).Msg("failed to write bitflyer transactions file")
-					return err
-				}
-			}
-		}
+	err = WriteCategorizedTransactions(ctx, outPath, submittedTransactions)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to write transactions file")
 	}
 	return submitErr
-}
-
-// BitflyerWriteTransactions writes settlement transactions to a json file
-func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-
-	if len(*metadata) == 0 {
-		return nil
-	}
-
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
 }

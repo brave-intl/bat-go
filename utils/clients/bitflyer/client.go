@@ -13,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/rs/zerolog/log"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -260,6 +261,11 @@ func (c *HTTPClient) RefreshToken(
 	if err != nil {
 		return nil, handleBitflyerError(err, req, resp)
 	}
+	log.Ctx(ctx).
+		Info().
+		Str("token", body.AccessToken).
+		Msg("using updated token. make sure this value is in your env vars to avoid refreshes")
+	c.SetAuthToken(body.AccessToken)
 	return &body, nil
 }
 
