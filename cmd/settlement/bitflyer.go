@@ -76,7 +76,12 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	logger.Info().Interface("auth", auth).
+	logger.Info().
+		Str("access_token", auth.AccessToken).
+		Int("expires_in", auth.ExpiresIn).
+		Str("refresh_token", auth.RefreshToken).
+		Str("scope", auth.Scope).
+		Str("token_type", auth.TokenType).
 		Msg("token refreshed")
 	return nil
 }
