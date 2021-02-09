@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -79,9 +80,9 @@ type TokenResponse struct {
 
 // DryRunOption holds options for dry running a transaction
 type DryRunOption struct {
-	RequestAPITransferStatus string `json:"request_api_transfer_status"`
-	ProcessTimeSec           uint   `json:"process_time_sec"`
-	StatusAPITransferStatus  string `json:"status_api_transfer_status"`
+	RequestAPITransferStatus string        `json:"request_api_transfer_status"`
+	ProcessTimeSec           time.Duration `json:"process_time_sec"`
+	StatusAPITransferStatus  string        `json:"status_api_transfer_status"`
 }
 
 // NewWithdrawToDepositIDBulkPayload creates a bulk request
