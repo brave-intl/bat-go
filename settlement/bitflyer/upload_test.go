@@ -46,7 +46,7 @@ func (suite *BitflyerSuite) SetupSuite() {
 	)
 	suite.Require().NoError(err)
 	suite.token = auth.AccessToken
-	client.SetAuthToken(auth.AccessToken)
+	client.SetAuthToken(context.Background(), auth.AccessToken)
 }
 
 func (suite *BitflyerSuite) SetupTest() {
