@@ -34,19 +34,24 @@ func (suite *BitflyerSuite) SetupSuite() {
 	client, err := bitflyer.New()
 	suite.client = client
 	suite.Require().NoError(err)
-	payload := bitflyer.TokenPayload{
-		GrantType:         "client_credentials",
-		ClientID:          os.Getenv("BITFLYER_CLIENT_ID"),
-		ClientSecret:      os.Getenv("BITFLYER_CLIENT_SECRET"),
-		ExtraClientSecret: os.Getenv("BITFLYER_EXTRA_CLIENT_SECRET"),
+	token := os.Getenv("BITFLYER_TOKEN")
+	if token == "" {
+		payload := bitflyer.TokenPayload{
+			GrantType:         "client_credentials",
+			ClientID:          os.Getenv("BITFLYER_CLIENT_ID"),
+			ClientSecret:      os.Getenv("BITFLYER_CLIENT_SECRET"),
+			ExtraClientSecret: os.Getenv("BITFLYER_EXTRA_CLIENT_SECRET"),
+		}
+		auth, err := client.RefreshToken(
+			context.Background(),
+			payload,
+		)
+		suite.Require().NoError(err)
+		suite.token = auth.AccessToken
+		client.SetAuthToken(auth.AccessToken)
+	} else {
+		suite.token = token
 	}
-	auth, err := client.RefreshToken(
-		context.Background(),
-		payload,
-	)
-	suite.Require().NoError(err)
-	suite.token = auth.AccessToken
-	client.SetAuthToken(auth.AccessToken)
 }
 
 func (suite *BitflyerSuite) SetupTest() {
@@ -174,7 +179,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	duration, err := time.ParseDuration("4s")
 	suite.Require().NoError(err)
 	dryRunOptions := &bitflyer.DryRunOption{
-		ProcessTimeSec: duration,
+		ProcessTimeSec: uint(duration.Seconds()),
 	}
 
 	settlementTx1 := settlementTransaction("2", address)
