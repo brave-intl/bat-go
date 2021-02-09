@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	"github.com/rs/zerolog/log"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -48,7 +48,7 @@ type WithdrawToDepositIDBulkPayload struct {
 	DryRun       bool                         `json:"dry_run"`
 	Withdrawals  []WithdrawToDepositIDPayload `json:"withdrawals"`
 	PriceToken   string                       `json:"price_token"`
-	DryRunOption *DryRunOption                `json:"dry_run_option"`
+	DryRunOption *DryRunOption                `json:"dry_run_option,omitempty"`
 }
 
 // WithdrawToDepositIDResponse holds a single withdrawal request
@@ -80,9 +80,9 @@ type TokenResponse struct {
 
 // DryRunOption holds options for dry running a transaction
 type DryRunOption struct {
-	RequestAPITransferStatus string        `json:"request_api_transfer_status"`
-	ProcessTimeSec           time.Duration `json:"process_time_sec"`
-	StatusAPITransferStatus  string        `json:"status_api_transfer_status"`
+	RequestAPITransferStatus string `json:"request_api_transfer_status"`
+	ProcessTimeSec           uint   `json:"process_time_sec"`
+	StatusAPITransferStatus  string `json:"status_api_transfer_status"`
 }
 
 // NewWithdrawToDepositIDBulkPayload creates a bulk request
@@ -262,10 +262,13 @@ func (c *HTTPClient) RefreshToken(
 	if err != nil {
 		return nil, handleBitflyerError(err, req, resp)
 	}
-	log.Ctx(ctx).
-		Info().
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
 		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars to avoid refreshes")
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_CLIENT) to avoid refreshes")
 	c.SetAuthToken(body.AccessToken)
 	return &body, nil
 }
