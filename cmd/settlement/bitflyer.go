@@ -2,16 +2,13 @@ package settlement
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -119,18 +116,18 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 
 // ParseDryRun parses the dry run option
 func ParseDryRun(cmd *cobra.Command) (*bitflyer.DryRunOption, error) {
-	dryRun, err := cmd.Flags().GetString("bitflyer-dryrun")
+	dryRun, err := cmd.Flags().GetBool("bitflyer-dryrun")
 	if err != nil {
 		return nil, err
 	}
 	var dryRunOptions *bitflyer.DryRunOption
-	if dryRun != "" {
-		dryRunUint, err := strconv.ParseUint(dryRun, 10, 64)
+	if dryRun {
+		dryRunDuration, err := cmd.Flags().GetDuration("bitflyer-process-time")
 		if err != nil {
-			return nil, errorutils.Wrap(err, fmt.Sprintf("unable to parse `bitflyer-dryrun` flag or env of `%s`", dryRun))
+			return nil, err
 		}
 		dryRunOptions = &bitflyer.DryRunOption{
-			ProcessTimeSec: uint(dryRunUint),
+			ProcessTimeSec: dryRunDuration,
 		}
 	}
 	return dryRunOptions, nil
@@ -199,7 +196,7 @@ func init() {
 		Bind("bitflyer-source-from").
 		Env("BITFLYER_SOURCE_FROM")
 
-	uploadCheckStatusBuilder.Flag().String("bitflyer-dryrun", "",
+	uploadCheckStatusBuilder.Flag().Bool("bitflyer-dryrun", false,
 		"tells bitflyer that this is a practice round").
 		Bind("bitflyer-dryrun").
 		Env("BITFLYER_DRYRUN")

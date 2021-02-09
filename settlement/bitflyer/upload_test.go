@@ -46,7 +46,7 @@ func (suite *BitflyerSuite) SetupSuite() {
 	)
 	suite.Require().NoError(err)
 	suite.token = auth.AccessToken
-	client.SetAuthToken(context.Background(), auth.AccessToken)
+	client.SetAuthToken(auth.AccessToken)
 }
 
 func (suite *BitflyerSuite) SetupTest() {
@@ -171,8 +171,10 @@ func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	sourceFrom := "self"
+	duration, err := time.ParseDuration("4s")
+	suite.Require().NoError(err)
 	dryRunOptions := &bitflyer.DryRunOption{
-		ProcessTimeSec: 4,
+		ProcessTimeSec: duration,
 	}
 
 	settlementTx1 := settlementTransaction("2", address)
