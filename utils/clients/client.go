@@ -217,7 +217,7 @@ func (c *SimpleHTTPClient) do(
 
 	// helpful if you want to read the body as it is
 	bodyBytes, _ := requestutils.Read(resp.Body)
-	resp.Body.Close() //  must close
+	resp.Body.Close() // must close
 	fmt.Println(string(bodyBytes))
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if status >= 200 && status <= 299 {
@@ -245,6 +245,10 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		code = resp.StatusCode
 		header = resp.Header
 	}
+	bodyBytes, _ := requestutils.Read(resp.Body)
+	resp.Body.Close() // must close
+	fmt.Println(code, header, string(bodyBytes))
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
 			Body    interface{}
