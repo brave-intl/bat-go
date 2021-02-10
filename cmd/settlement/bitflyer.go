@@ -244,7 +244,7 @@ func BitflyerUploadSettlement(
 		bitflyerClient,
 		bulkPayoutFiles,
 		sourceFrom,
-		dryRun,
+		&bitflyer.DryRunOption{},
 	)
 	// write file for upload to eyeshade
 	logger.Info().
