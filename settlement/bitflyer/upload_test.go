@@ -35,6 +35,7 @@ func (suite *BitflyerSuite) SetupSuite() {
 	suite.client = client
 	suite.Require().NoError(err)
 	token := os.Getenv("BITFLYER_TOKEN")
+	fmt.Println("bitflyer token", len(token), token)
 	if token == "" {
 		payload := bitflyer.TokenPayload{
 			GrantType:         "client_credentials",
