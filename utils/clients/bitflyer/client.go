@@ -297,3 +297,34 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	}
 	return bfError
 }
+
+// TokenPayloadFromCtx - given some context, create our bf token payload
+func TokenPayloadFromCtx(ctx context.Context) TokenPayload {
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+	// get bf creds from context
+	clientID, err := appctx.GetStringFromContext(ctx, appctx.BitflyerClientIDCTXKey)
+	if err != nil {
+		// misconfigured, needs client id
+		logger.Error().Err(err).Msg("missing bitflyer client id from ctx")
+	}
+	clientSecret, err := appctx.GetStringFromContext(ctx, appctx.BitflyerClientSecretCTXKey)
+	if err != nil {
+		// misconfigured, needs client Secret
+		logger.Error().Err(err).Msg("missing bitflyer client Secret from ctx")
+	}
+	extraClientSecret, err := appctx.GetStringFromContext(ctx, appctx.BitflyerExtraClientSecretCTXKey)
+	if err != nil {
+		// misconfigured, needs extra client secret
+		logger.Error().Err(err).Msg("missing bitflyer extra client Secret from ctx")
+	}
+	return TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          clientID,
+		ClientSecret:      clientSecret,
+		ExtraClientSecret: extraClientSecret,
+	}
+}

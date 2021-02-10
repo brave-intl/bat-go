@@ -205,7 +205,7 @@ func (c *SimpleHTTPClient) do(
 	resp, err := c.client.Do(req)
 	if err != nil {
 		bodyBytes, _ := requestutils.Read(resp.Body)
-		resp.Body.Close() // must close
+		defer closers.Panic(resp.Body) // must close
 		fmt.Println(resp.StatusCode, string(bodyBytes))
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 		return resp, err
@@ -249,7 +249,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		code = resp.StatusCode
 		header = resp.Header
 		bodyBytes, _ := requestutils.Read(resp.Body)
-		resp.Body.Close() // must close
+		defer closers.Panic(resp.Body) // must close
 		fmt.Println(code, header, string(bodyBytes))
 		resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -82,6 +83,7 @@ type Service struct {
 	RoDatastore             ReadOnlyDatastore
 	cbClient                cbr.Client
 	reputationClient        reputation.Client
+	bfClient                bitflyer.Client
 	codecs                  map[string]*goavro.Codec
 	kafkaWriter             *kafka.Writer
 	kafkaDialer             *kafka.Dialer
@@ -165,8 +167,14 @@ func InitService(
 	walletService *wallet.Service,
 ) (*Service, error) {
 
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	// register metrics with prometheus
-	err := prometheus.Register(countGrantsClaimedBatTotal)
+	err = prometheus.Register(countGrantsClaimedBatTotal)
 	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
 		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
 	}
@@ -191,6 +199,21 @@ func InitService(
 		return nil, err
 	}
 
+	// setup bfClient
+	bfClient, err := bitflyer.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bitflyer client: %w", err)
+	}
+
+	// get a fresh bf token
+	// this will set the AuthToken on the client for us
+	_, err = bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+
+	if err != nil {
+		// we don't want to stop the world if we can't connect to bf
+		logger.Error().Err(err).Msg("failed to get bf access token!")
+	}
+
 	reputationClient, err := reputation.New()
 	// okay to fail to make a reputation client if the environment is local
 	if err != nil && os.Getenv("ENV") != localEnv {
@@ -201,6 +224,7 @@ func InitService(
 		Datastore:               promotionDB,
 		RoDatastore:             promotionRODB,
 		cbClient:                cbClient,
+		bfClient:                bfClient,
 		reputationClient:        reputationClient,
 		wallet:                  walletService,
 		pauseSuggestionsUntilMu: sync.RWMutex{},
