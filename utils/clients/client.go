@@ -204,7 +204,11 @@ func (c *SimpleHTTPClient) do(
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		bodyBytes, _ := requestutils.Read(resp.Body)
+		resp.Body.Close() // must close
+		fmt.Println(resp.StatusCode, string(bodyBytes))
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+		return resp, err
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
@@ -215,11 +219,11 @@ func (c *SimpleHTTPClient) do(
 	}
 	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
-	// helpful if you want to read the body as it is
-	bodyBytes, _ := requestutils.Read(resp.Body)
-	resp.Body.Close() // must close
-	fmt.Println(string(bodyBytes))
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	// // helpful if you want to read the body as it is
+	// bodyBytes, _ := requestutils.Read(resp.Body)
+	// resp.Body.Close() // must close
+	// fmt.Println(string(bodyBytes))
+	// resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if status >= 200 && status <= 299 {
 		if v != nil {
 			err = json.NewDecoder(resp.Body).Decode(v)
@@ -244,11 +248,11 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		// it is possible to have a nil resp from c.do...
 		code = resp.StatusCode
 		header = resp.Header
+		bodyBytes, _ := requestutils.Read(resp.Body)
+		resp.Body.Close() // must close
+		fmt.Println(code, header, string(bodyBytes))
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
-	bodyBytes, _ := requestutils.Read(resp.Body)
-	resp.Body.Close() // must close
-	fmt.Println(code, header, string(bodyBytes))
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
 			Body    interface{}
