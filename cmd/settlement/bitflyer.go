@@ -276,6 +276,7 @@ func BitflyerUploadSettlement(
 	err = WriteCategorizedTransactions(ctx, outPath, submittedTransactions)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to write transactions file")
+		return err
 	}
 	return submitErr
 }
