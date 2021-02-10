@@ -86,7 +86,7 @@ func init() {
 	// bitflyer-client-token
 	importKeyBuilder.Flag().String("bitflyer-client-token", "",
 		"bitflyer-client-token holds the uphold token that we want to use to auth the bulk transactions").
-		Env("BITFLYER_CLIENT_TOKEN").
+		Env("BITFLYER_TOKEN").
 		Bind("bitflyer-client-token")
 }
 

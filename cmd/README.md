@@ -110,7 +110,7 @@ with output
 ## bitflyer settlement
 
 ### refresh token
-After running the refres token command, you will need to copy the value in the printed `auth.access_token` field into your `.env` file and source that file. This can now be used with the other bitflyer commands. The env name should be `BITFLYER_CLIENT_TOKEN`.
+After running the refres token command, you will need to copy the value in the printed `auth.access_token` field into your `.env` file and source that file. This can now be used with the other bitflyer commands. The env name should be `BITFLYER_TOKEN`.
 ```bash
 ./bat-go settlement bitflyer token
 ```
