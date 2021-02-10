@@ -209,7 +209,7 @@ func init() {
 	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
 		"the token to be sent for auth on bitflyer").
 		Bind("bitflyer-client-token").
-		Env("BITFLYER_CLIENT_TOKEN")
+		Env("BITFLYER_TOKEN")
 
 	tokenBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
@@ -222,7 +222,7 @@ func init() {
 		Env("BITFLYER_CLIENT_SECRET")
 
 	tokenBuilder.Flag().String("bitflyer-extra-client-secret", "",
-		"tells bitflyer what the extra client secret is during token generation").
+		"tells bitflyer what the extra client secret is during token").
 		Bind("bitflyer-extra-client-secret").
 		Env("BITFLYER_EXTRA_CLIENT_SECRET")
 
