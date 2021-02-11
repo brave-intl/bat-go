@@ -173,26 +173,6 @@ func CheckPayoutTransactionsStatus(
 	return submittedTransactions, err
 }
 
-// BitflyerWriteTransactions writes settlement transactions to a json file
-func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-
-	if len(*metadata) == 0 {
-		return nil
-	}
-
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
-}
-
 func setupSettlementTransactions(
 	transactions map[string][]settlement.Transaction,
 	limit decimal.Decimal,
