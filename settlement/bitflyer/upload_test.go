@@ -173,6 +173,7 @@ func (suite *BitflyerSuite) TestFailures() {
 }
 
 func (suite *BitflyerSuite) TestFormData() {
+	// TODO: after we figure out why we are being blocked by bf enable
 	suite.T().Skip("bitflyer side unable to settle")
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
