@@ -109,9 +109,15 @@ with output
 
 ## bitflyer settlement
 
+equivalent envs are available as flags `ENV_KEY` -> `--env-key`
+
 ### refresh token
 After running the refres token command, you will need to copy the value in the printed `auth.access_token` field into your `.env` file and source that file. This can now be used with the other bitflyer commands. The env name should be `BITFLYER_TOKEN`.
 ```bash
+BITFLYER_CLIENT_ID=
+BITFLYER_CLIENT_SECRET=
+BITFLYER_EXTRA_CLIENT_SECRET=
+BITFLYER_SERVER=
 ./bat-go settlement bitflyer token
 ```
 
@@ -120,6 +126,10 @@ at this point, it makes sense to run the `sign-settlement` command so that trans
 ### upload
 
 ```bash
+BITFLYER_SOURCE_FROM=self
+BITFLYER_SERVER=
+# omit to execute
+BITFLYER_DRYRUN=1 # seconds to delay
 ./bat-go bitflyer upload \
   --in "bitflyer-transactions.json"
 ```
@@ -127,6 +137,8 @@ at this point, it makes sense to run the `sign-settlement` command so that trans
 ### checkstatus
 
 ```bash
+BITFLYER_SOURCE_FROM=self
+BITFLYER_SERVER=
 ./bat-go bitflyer checkstatus \
   --in "bitflyer-transactions.json"
 ```

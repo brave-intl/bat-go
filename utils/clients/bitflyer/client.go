@@ -45,9 +45,10 @@ type WithdrawToDepositIDPayload struct {
 
 // WithdrawToDepositIDBulkPayload holds all WithdrawToDepositIDPayload(s) for a single bulk request
 type WithdrawToDepositIDBulkPayload struct {
-	DryRun      bool                         `json:"dry_run"`
-	Withdrawals []WithdrawToDepositIDPayload `json:"withdrawals"`
-	PriceToken  string                       `json:"price_token"`
+	DryRun       bool                         `json:"dry_run"`
+	Withdrawals  []WithdrawToDepositIDPayload `json:"withdrawals"`
+	PriceToken   string                       `json:"price_token"`
+	DryRunOption *DryRunOption                `json:"dry_run_option,omitempty"`
 }
 
 // WithdrawToDepositIDResponse holds a single withdrawal request
@@ -77,12 +78,31 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+// DryRunOption holds options for dry running a transaction
+type DryRunOption struct {
+	RequestAPITransferStatus string `json:"request_api_transfer_status"`
+	ProcessTimeSec           uint   `json:"process_time_sec"`
+	StatusAPITransferStatus  string `json:"status_api_transfer_status"`
+}
+
 // NewWithdrawToDepositIDBulkPayload creates a bulk request
-func NewWithdrawToDepositIDBulkPayload(dryRun bool, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
+func NewWithdrawToDepositIDBulkPayload(dryRunOptions *DryRunOption, priceToken string, withdrawals *[]WithdrawToDepositIDPayload) *WithdrawToDepositIDBulkPayload {
+	dryRun := false
+	if dryRunOptions != nil {
+		dryRun = true
+		enum := "ENUM"
+		if dryRunOptions.RequestAPITransferStatus != enum {
+			dryRunOptions.RequestAPITransferStatus = enum
+		}
+		if dryRunOptions.StatusAPITransferStatus != enum {
+			dryRunOptions.StatusAPITransferStatus = enum
+		}
+	}
 	return &WithdrawToDepositIDBulkPayload{
-		DryRun:      dryRun,
-		PriceToken:  priceToken,
-		Withdrawals: *withdrawals,
+		PriceToken:   priceToken,
+		Withdrawals:  *withdrawals,
+		DryRun:       dryRun,
+		DryRunOption: dryRunOptions,
 	}
 }
 
@@ -93,7 +113,10 @@ type WithdrawToDepositIDBulkResponse struct {
 }
 
 // NewWithdrawsFromTxs creates an array of withdrawal requests
-func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]WithdrawToDepositIDPayload, error) {
+func NewWithdrawsFromTxs(
+	sourceFrom string,
+	txs *[]settlement.Transaction,
+) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if sourceFrom == "" {
 		sourceFrom = "self"
@@ -117,11 +140,12 @@ func NewWithdrawsFromTxs(sourceFrom string, txs *[]settlement.Transaction) (*[]W
 
 // GenerateTransferID generates a deterministic transaction reference id for idempotency
 func GenerateTransferID(tx *settlement.Transaction) string {
-	key := strings.Join([]string{
+	inputs := []string{
 		tx.SettlementID,
 		tx.Destination,
 		// tx.Channel, // all channels are grouped together
-	}, "_")
+	}
+	key := strings.Join(inputs, "_")
 	bytes := sha256.Sum256([]byte(key))
 	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
 	return refID
@@ -238,6 +262,14 @@ func (c *HTTPClient) RefreshToken(
 	if err != nil {
 		return nil, handleBitflyerError(err, req, resp)
 	}
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
+		Str("token", body.AccessToken).
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_CLIENT) to avoid refreshes")
+	c.SetAuthToken(body.AccessToken)
 	return &body, nil
 }
 

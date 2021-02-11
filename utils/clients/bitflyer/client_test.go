@@ -36,7 +36,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	quote, err := client.FetchQuote(ctx, "BAT_JPY")
 	suite.Require().NoError(err, "fetching a quote does not fail")
 
-	dryRun := true
+	dryRun := &DryRunOption{}
 	tx := settlement.Transaction{
 		SettlementID: uuid.NewV4().String(),
 		Destination:  os.Getenv("BITFLYER_TEST_DESTINATION_ID"),

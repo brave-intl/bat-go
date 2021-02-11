@@ -41,7 +41,7 @@ func CategorizeResponse(
 	switch payout.Status {
 	case "SUCCESS", "EXECUTED":
 		key = "complete"
-	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION":
+	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION", "OTHER_ERROR":
 		key = "failed"
 	case "CREATED", "PENDING":
 		key = "pending"
@@ -173,26 +173,6 @@ func CheckPayoutTransactionsStatus(
 	return submittedTransactions, err
 }
 
-// BitflyerWriteTransactions writes settlement transactions to a json file
-func BitflyerWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-
-	if len(*metadata) == 0 {
-		return nil
-	}
-
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
-}
-
 func setupSettlementTransactions(
 	transactions map[string][]settlement.Transaction,
 	limit decimal.Decimal,
@@ -253,13 +233,16 @@ func setupSettlementTransactions(
 
 func createBitflyerRequests(
 	sourceFrom string,
-	dryRun bool,
+	dryRun *bitflyer.DryRunOption,
 	token string,
 	settlementRequests *[][]settlement.Transaction,
 ) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
 	for _, withdrawalSet := range *settlementRequests {
-		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(sourceFrom, &withdrawalSet) // self
+		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
+			sourceFrom, // self
+			&withdrawalSet,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +276,7 @@ func IterateRequest(
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
 	sourceFrom string,
-	dryRun bool,
+	dryRun *bitflyer.DryRunOption,
 ) (*map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)

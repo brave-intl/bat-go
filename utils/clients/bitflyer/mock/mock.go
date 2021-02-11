@@ -50,31 +50,58 @@ func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode interface{}) *gomo
 }
 
 // UploadBulkPayout mocks base method
-func (m *MockClient) UploadBulkPayout(ctx context.Context, APIKey string, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
+func (m *MockClient) UploadBulkPayout(ctx context.Context, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UploadBulkPayout", ctx, APIKey, payload)
+	ret := m.ctrl.Call(m, "UploadBulkPayout", ctx, payload)
 	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UploadBulkPayout indicates an expected call of UploadBulkPayout
-func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, APIKey, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, APIKey, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadBulkPayout", reflect.TypeOf((*MockClient)(nil).UploadBulkPayout), ctx, payload)
 }
 
 // CheckPayoutStatus mocks base method
-func (m *MockClient) CheckPayoutStatus(ctx context.Context, APIKey string, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
+func (m *MockClient) CheckPayoutStatus(ctx context.Context, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, APIKey, payload)
+	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, payload)
 	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckPayoutStatus indicates an expected call of CheckPayoutStatus
-func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, APIKey, payload interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, APIKey, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, payload)
+}
+
+// RefreshToken mocks base method
+func (m *MockClient) RefreshToken(ctx context.Context, payload bitflyer.TokenPayload) (*bitflyer.TokenResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshToken", ctx, payload)
+	ret0, _ := ret[0].(*bitflyer.TokenResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshToken indicates an expected call of RefreshToken
+func (mr *MockClientMockRecorder) RefreshToken(ctx, payload interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockClient)(nil).RefreshToken), ctx, payload)
+}
+
+// SetAuthToken mocks base method
+func (m *MockClient) SetAuthToken(authToken string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetAuthToken", authToken)
+}
+
+// SetAuthToken indicates an expected call of SetAuthToken
+func (mr *MockClientMockRecorder) SetAuthToken(authToken interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAuthToken", reflect.TypeOf((*MockClient)(nil).SetAuthToken), authToken)
 }
