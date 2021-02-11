@@ -13,112 +13,97 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
+	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
 
-type BitflyerSuite struct {
+type BitflyerMockSuite struct {
 	suite.Suite
-	client bitflyer.Client
+	client *mockbitflyer.MockClient
 	token  string
+	ctrl   *gomock.Controller
 }
 
-func (suite *BitflyerSuite) SetupSuite() {
-	// mockCtrl := gomock.NewController(suite.T())
-	// defer mockCtrl.Finish()
-	// suite.client = mockbitflyer.NewMockClient(mockCtrl)
-	client, err := bitflyer.New()
-	suite.client = client
-	suite.Require().NoError(err)
-	token := os.Getenv("BITFLYER_TOKEN")
-	if token == "" {
-		payload := bitflyer.TokenPayload{
-			GrantType:         "client_credentials",
-			ClientID:          os.Getenv("BITFLYER_CLIENT_ID"),
-			ClientSecret:      os.Getenv("BITFLYER_CLIENT_SECRET"),
-			ExtraClientSecret: os.Getenv("BITFLYER_EXTRA_CLIENT_SECRET"),
-		}
-		auth, err := client.RefreshToken(
-			context.Background(),
-			payload,
-		)
-		suite.Require().NoError(err)
-		suite.token = auth.AccessToken
-		client.SetAuthToken(auth.AccessToken)
-	} else {
-		suite.token = token
-	}
+func (suite *BitflyerMockSuite) SetupSuite() {
+	mockCtrl := gomock.NewController(suite.T())
+	suite.token = os.Getenv("BITFLYER_TOKEN")
+	suite.ctrl = mockCtrl
+	suite.client = mockbitflyer.NewMockClient(mockCtrl)
 }
 
-func (suite *BitflyerSuite) SetupTest() {
+func (suite *BitflyerMockSuite) SetupTest() {
 }
 
-func (suite *BitflyerSuite) TearDownTest() {
+func (suite *BitflyerMockSuite) TearDownSuite() {
+	suite.ctrl.Finish()
 }
 
-func (suite *BitflyerSuite) CleanDB() {
+func (suite *BitflyerMockSuite) TearDownTest() {
 }
 
-func TestBitflyerSuite(t *testing.T) {
-	suite.Run(t, new(BitflyerSuite))
+func (suite *BitflyerMockSuite) CleanDB() {
 }
 
-func settlementTransaction(amount, address string) settlement.Transaction {
-	amountDecimal, _ := decimal.NewFromString(amount)
-	bat := altcurrency.BAT
-	feeFactor := decimal.NewFromFloat32(0.05)
-	fees := amountDecimal.Mul(feeFactor)
-	settlementID := uuid.NewV4().String()
-	return settlement.Transaction{
-		AltCurrency:      &bat,
-		Currency:         "BAT",
-		Amount:           amountDecimal,
-		Probi:            amountDecimal.Sub(fees).Mul(decimal.New(1, 18)),
-		BATPlatformFee:   fees.Mul(decimal.New(1, 18)),
-		Destination:      address,
-		SettlementID:     settlementID,
-		WalletProvider:   "bitflyer",
-		WalletProviderID: uuid.NewV4().String(),
-		TransferFee:      decimal.NewFromFloat(0),
-		ExchangeFee:      decimal.NewFromFloat(0),
-		ProviderID: bitflyer.GenerateTransferID(&settlement.Transaction{
-			SettlementID: settlementID,
-			Destination:  address,
-		}),
-	}
+func TestBitflyerMockSuite(t *testing.T) {
+	suite.Run(t, new(BitflyerMockSuite))
 }
 
-func transactionSubmitted(status string, tx settlement.Transaction, note string) settlement.Transaction {
-	return settlement.Transaction{
-		Status:           status,
-		AltCurrency:      tx.AltCurrency,
-		Currency:         tx.Currency,
-		ProviderID:       tx.ProviderID,
-		Amount:           tx.Amount,
-		Probi:            tx.Probi,
-		BATPlatformFee:   tx.BATPlatformFee,
-		Destination:      tx.Destination,
-		SettlementID:     tx.SettlementID,
-		WalletProvider:   tx.WalletProvider,
-		WalletProviderID: tx.WalletProviderID,
-		ExchangeFee:      tx.ExchangeFee,
-		TransferFee:      tx.TransferFee,
-		Note:             note,
-	}
-}
-
-func (suite *BitflyerSuite) TestFailures() {
+func (suite *BitflyerMockSuite) TestFailures() {
 	ctx := context.Background()
-	settlementTx0 := settlementTransaction("2", uuid.NewV4().String())
+	price := decimal.NewFromFloat(0.25)
+	amount := decimal.NewFromFloat(2)
+	settledAmountAsFloat, _ := amount.Sub(amount.Mul(decimal.NewFromFloat(0.05))).Float64()
+	knownDepositID := uuid.NewV4()
+	settlementTx0 := settlementTransaction(amount.String(), knownDepositID.String())
+	priceToken := uuid.NewV4()
+	JPY := "JPY"
+	BAT := "BAT"
+	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
+	self := "self"
+
 	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx0,
 	})
 	defer func() { _ = os.Remove(tmpFile0.Name()) }()
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+	suite.client.EXPECT().
+		UploadBulkPayout(
+			ctx,
+			*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				nil,
+				priceToken.String(),
+				&[]bitflyer.WithdrawToDepositIDPayload{{
+					CurrencyCode: BAT,
+					Amount:       settledAmountAsFloat,
+					DepositID:    knownDepositID.String(),
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx0),
+					SourceFrom:   self,
+				}},
+			),
+		).
+		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
+			DryRun: false,
+			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
+				CurrencyCode: currencyCode,
+				Amount:       price,
+				Status:       "NOT_FOUNTD",
+				TransferID:   bitflyer.GenerateTransferID(&settlementTx0),
+			}},
+		}, nil)
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
@@ -147,7 +132,40 @@ func (suite *BitflyerSuite) TestFailures() {
 		"dry runs only pass through validation currently",
 	)
 
+	suite.client.EXPECT().SetAuthToken("")
 	suite.client.SetAuthToken("")
+
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+	suite.client.EXPECT().
+		UploadBulkPayout(
+			ctx,
+			*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				nil,
+				priceToken.String(),
+				&[]bitflyer.WithdrawToDepositIDPayload{{
+					CurrencyCode: BAT,
+					Amount:       settledAmountAsFloat,
+					DepositID:    knownDepositID.String(),
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx0),
+					SourceFrom:   self,
+				}},
+			),
+		).
+		Return(nil, clients.BitflyerError{
+			Message:  uuid.NewV4().String(),
+			ErrorIDs: []string{"1234"},
+			Label:    "JsonError.TOKEN_ERROR",
+			Status:   -1,
+		})
+
 	_, err = IterateRequest(
 		ctx,
 		"upload",
@@ -156,8 +174,10 @@ func (suite *BitflyerSuite) TestFailures() {
 		"self",
 		nil, // dry run first
 	)
+	suite.client.EXPECT().SetAuthToken(suite.token)
 	suite.client.SetAuthToken(suite.token)
 	suite.Require().Error(err)
+
 	bfErr, ok := err.(clients.BitflyerError)
 	suite.Require().True(ok)
 	errSerialized, err := json.Marshal(bfErr)
@@ -172,21 +192,26 @@ func (suite *BitflyerSuite) TestFailures() {
 	)
 }
 
-func (suite *BitflyerSuite) TestFormData() {
-	// TODO: after we figure out why we are being blocked by bf enable
-	if os.Getenv("BITFLYER_LIVE") != "true" {
-		suite.T().Skip("bitflyer side unable to settle")
-	}
+func (suite *BitflyerMockSuite) TestFormData() {
+	// suite.T().Skip("bitflyer side unable to settle")
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	sourceFrom := "self"
+	priceToken := uuid.NewV4()
+	JPY := "JPY"
+	BAT := "BAT"
+	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
+	price := decimal.NewFromFloat(0.25)
+	amount := decimal.NewFromFloat(2)
+	settledAmount := amount.Sub(amount.Mul(decimal.NewFromFloat(0.05)))
+	settledAmountAsFloat, _ := settledAmount.Float64()
 	duration, err := time.ParseDuration("4s")
 	suite.Require().NoError(err)
 	dryRunOptions := &bitflyer.DryRunOption{
 		ProcessTimeSec: uint(duration.Seconds()),
 	}
 
-	settlementTx1 := settlementTransaction("2", address)
+	settlementTx1 := settlementTransaction(amount.String(), address)
 	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx1,
 	})
@@ -217,6 +242,40 @@ func (suite *BitflyerSuite) TestFormData() {
 		}, resultIteration)
 	*/
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+	suite.client.EXPECT().
+		UploadBulkPayout(
+			ctx,
+			*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				dryRunOptions,
+				priceToken.String(),
+				&[]bitflyer.WithdrawToDepositIDPayload{{
+					CurrencyCode: BAT,
+					Amount:       settledAmountAsFloat,
+					DepositID:    address,
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+					SourceFrom:   sourceFrom,
+				}},
+			),
+		).
+		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
+			DryRun: true,
+			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
+				CurrencyCode: currencyCode,
+				Amount:       settledAmount,
+				Status:       "SUCCESS",
+				TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+			}},
+		}, nil)
+
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
@@ -243,6 +302,40 @@ func (suite *BitflyerSuite) TestFormData() {
 	)
 	dryRunOptions.ProcessTimeSec = 0
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+	suite.client.EXPECT().
+		UploadBulkPayout(
+			ctx,
+			*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				nil,
+				priceToken.String(),
+				&[]bitflyer.WithdrawToDepositIDPayload{{
+					CurrencyCode: BAT,
+					Amount:       settledAmountAsFloat,
+					DepositID:    address,
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+					SourceFrom:   sourceFrom,
+				}},
+			),
+		).
+		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
+			DryRun: true,
+			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
+				CurrencyCode: currencyCode,
+				Amount:       settledAmount,
+				Status:       "SUCCESS",
+				TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+			}},
+		}, nil)
+
 	payoutFiles, err = IterateRequest(
 		ctx,
 		"upload",
@@ -268,10 +361,44 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(completeSerialized),
 		string(mCompleted),
 	)
-
 	var completedStatus []settlement.Transaction
 	for {
 		<-time.After(time.Second)
+		suite.client.EXPECT().
+			FetchQuote(ctx, currencyCode).
+			Return(&bitflyer.Quote{
+				PriceToken:   priceToken.String(),
+				ProductCode:  currencyCode,
+				MainCurrency: "JPY",
+				SubCurrency:  "BAT",
+				Rate:         price,
+			}, nil)
+
+		suite.client.EXPECT().
+			CheckPayoutStatus(
+				ctx,
+				*bitflyer.NewWithdrawToDepositIDBulkPayload(
+					nil,
+					priceToken.String(),
+					&[]bitflyer.WithdrawToDepositIDPayload{{
+						CurrencyCode: BAT,
+						Amount:       settledAmountAsFloat,
+						DepositID:    address,
+						TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+						SourceFrom:   sourceFrom,
+					}},
+				),
+			).
+			Return(&bitflyer.WithdrawToDepositIDBulkResponse{
+				DryRun: true,
+				Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
+					CurrencyCode: currencyCode,
+					Amount:       settledAmount,
+					Status:       "EXECUTED",
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
+				}},
+			}, nil)
+
 		payoutFiles, err = IterateRequest(
 			ctx,
 			"checkstatus",
@@ -299,7 +426,10 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().JSONEq(string(completeSerializedStatus), string(mCompletedStatus))
 
 	// make a new tx that will conflict with previous
-	settlementTx2 := settlementTransaction("3", address)
+	three := decimal.NewFromFloat(3)
+	settledAmount3 := three.Sub(three.Mul(decimal.NewFromFloat(0.05)))
+	settledAmount3AsFloat, _ := settledAmount3.Float64()
+	settlementTx2 := settlementTransaction(three.String(), address)
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
@@ -308,6 +438,42 @@ func (suite *BitflyerSuite) TestFormData() {
 		settlementTx2,
 	})
 	defer func() { _ = os.Remove(tmpFile2.Name()) }()
+
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+	suite.client.EXPECT().
+		UploadBulkPayout(
+			ctx,
+			*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				nil,
+				priceToken.String(),
+				&[]bitflyer.WithdrawToDepositIDPayload{{
+					CurrencyCode: BAT,
+					Amount:       settledAmount3AsFloat,
+					DepositID:    address,
+					TransferID:   bitflyer.GenerateTransferID(&settlementTx2),
+					SourceFrom:   sourceFrom,
+				}},
+			),
+		).
+		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
+			DryRun: false,
+			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
+				CurrencyCode: currencyCode,
+				Amount:       settledAmount3,
+				Message:      "Duplicate transfer_id and different parameters",
+				Status:       "OTHER_ERROR",
+				TransferID:   bitflyer.GenerateTransferID(&settlementTx2),
+			}},
+		}, nil)
+
 	payoutFiles, err = IterateRequest(
 		ctx,
 		"upload",
@@ -344,7 +510,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	)
 }
 
-func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
+func (suite *BitflyerMockSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
 	tmpDir := os.TempDir()
 	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
 	suite.Require().NoError(err)
