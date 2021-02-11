@@ -104,7 +104,7 @@ func SubmitBulkPayoutTransactions(
 	payload := base64.StdEncoding.EncodeToString(serialized)
 
 	logger.Debug().
-		Str("api key", bulkPayoutRequestRequirements.APIKey).
+		Str("api_key", bulkPayoutRequestRequirements.APIKey).
 		Str("signature", sig).
 		Msg("sending request")
 
@@ -171,35 +171,6 @@ func CheckPayoutTransactionsStatus(
 			Msg("parameters used")
 	}
 	return submittedTransactions, err
-}
-
-// GeminiWriteTransactions writes settlement transactions to a json file
-func GeminiWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-
-	if len(*metadata) == 0 {
-		return nil
-	}
-
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
-}
-
-// GeminiWriteRequests writes settlement transactions to a json file
-func GeminiWriteRequests(outPath string, metadata *[][]gemini.PayoutPayload) error {
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
 }
 
 // ConvertTransactionsToPayouts converts transactions from antifraud to "payouts" for gemini

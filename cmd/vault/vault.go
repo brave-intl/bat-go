@@ -19,14 +19,6 @@ var (
 
 func init() {
 	cmd.RootCmd.AddCommand(VaultCmd)
-
-	vaultBuilder := cmd.NewFlagBuilder(VaultCmd)
-
-	// config - defaults to config.yaml
-	vaultBuilder.Flag().String("config", "config.yaml",
-		"the default path to a configuration file").
-		Bind("config").
-		Env("CONFIG")
 }
 
 // ReadConfig sets up the config flag

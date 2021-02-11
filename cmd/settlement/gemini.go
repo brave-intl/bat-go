@@ -187,15 +187,9 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 		Str("files", outPath).
 		Msg("outputting files")
 
-	if submittedTransactions != nil {
-		for key, txs := range *submittedTransactions {
-			outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-			err = GeminiWriteTransactions(ctx, outputPath, &txs)
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to write gemini transactions file")
-				return err
-			}
-		}
+	err = WriteCategorizedTransactions(ctx, outPath, submittedTransactions)
+	if err != nil {
+		return err
 	}
 	return submitErr
 }
@@ -208,33 +202,4 @@ func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) m
 		transactionsMap[gemini.GenerateTxRef(&tx)] = tx
 	}
 	return transactionsMap
-}
-
-// GeminiWriteTransactions writes settlement transactions to a json file
-func GeminiWriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-
-	if len(*metadata) == 0 {
-		return nil
-	}
-
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		logger.Error().Err(err).Msg("failed writing outputting files")
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
-}
-
-// GeminiWriteRequests writes settlement transactions to a json file
-func GeminiWriteRequests(outPath string, metadata *[][]gemini.PayoutPayload) error {
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(outPath, data, 0600)
 }

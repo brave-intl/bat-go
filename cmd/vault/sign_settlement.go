@@ -34,9 +34,10 @@ var (
 	// the combination of provider + transaction type gives you the key
 	// under which the vault secrets are located by default
 	providerTransactionTypes = map[string][]string{
-		"uphold": {"contribution", "referral"},
-		"paypal": {"default"},
-		"gemini": {"contribution", "referral"},
+		"uphold":   {"contribution", "referral"},
+		"paypal":   {"default"},
+		"gemini":   {"contribution", "referral"},
+		"bitflyer": {"default"},
 	}
 	artifactGenerators = map[string]func(
 		context.Context,
@@ -45,9 +46,10 @@ var (
 		string,
 		[]settlement.Transaction,
 	) error{
-		"uphold": createUpholdArtifact,
-		"gemini": createGeminiArtifact,
-		"paypal": createPaypalArtifact,
+		"uphold":   createUpholdArtifact,
+		"gemini":   createGeminiArtifact,
+		"paypal":   createPaypalArtifact,
+		"bitflyer": createBitflyerArtifact,
 	}
 )
 
@@ -76,6 +78,11 @@ func init() {
 	signSettlementBuilder.Flag().Float64("jpyrate", 0.0,
 		"jpyrate to use for paypal payouts").
 		Bind("jpyrate")
+
+	signSettlementBuilder.Flag().String("config", "config.yaml",
+		"the default path to a configuration file").
+		Bind("config").
+		Env("CONFIG")
 }
 
 // SignSettlement runs the signing of a settlement
@@ -154,7 +161,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 
 		provider := tx.WalletProvider
 		wallet := tx.Type
-		if provider == "paypal" {
+		if len(providerTransactionTypes[provider]) == 1 {
 			// might as well go into one (default)
 			wallet = providerTransactionTypes[provider][0]
 		}
@@ -216,6 +223,24 @@ func createUpholdArtifact(
 		return err
 	}
 
+	err = ioutil.WriteFile(outputFile, out, 0400)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func createBitflyerArtifact(
+	ctx context.Context,
+	outputFile string,
+	wrappedClient *vaultsigner.WrappedClient,
+	walletKey string,
+	bitflyerOnlySettlements []settlement.Transaction,
+) error {
+	out, err := json.Marshal(bitflyerOnlySettlements)
+	if err != nil {
+		return err
+	}
 	err = ioutil.WriteFile(outputFile, out, 0400)
 	if err != nil {
 		return err
