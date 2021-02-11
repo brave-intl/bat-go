@@ -176,11 +176,12 @@ func (suite *BitflyerSuite) TestFormData() {
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	sourceFrom := "self"
-	duration, err := time.ParseDuration("4s")
-	suite.Require().NoError(err)
-	dryRunOptions := &bitflyer.DryRunOption{
-		ProcessTimeSec: uint(duration.Seconds()),
-	}
+	// duration, err := time.ParseDuration("4s")
+	// suite.Require().NoError(err)
+	// dryRunOptions := &bitflyer.DryRunOption{
+	// 	ProcessTimeSec: uint(duration.Seconds()),
+	// }
+	var dryRunOptions *bitflyer.DryRunOption
 
 	settlementTx1 := settlementTransaction("2", address)
 	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
@@ -237,7 +238,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(expectedBytes),
 		"dry runs only pass through validation currently",
 	)
-	dryRunOptions.ProcessTimeSec = 0
+	// dryRunOptions.ProcessTimeSec = 0
 
 	payoutFiles, err = IterateRequest(
 		ctx,
