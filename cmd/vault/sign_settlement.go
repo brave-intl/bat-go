@@ -76,6 +76,11 @@ func init() {
 	signSettlementBuilder.Flag().Float64("jpyrate", 0.0,
 		"jpyrate to use for paypal payouts").
 		Bind("jpyrate")
+
+	signSettlementBuilder.Flag().String("config", "config.yaml",
+		"the default path to a configuration file").
+		Bind("config").
+		Env("CONFIG")
 }
 
 // SignSettlement runs the signing of a settlement
