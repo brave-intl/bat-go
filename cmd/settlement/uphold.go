@@ -13,7 +13,6 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/spf13/cobra"
@@ -163,14 +162,9 @@ func UpholdUpload(
 
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
-			if errorutils.IsErrInvalidDestination(err) {
-				logger.Info().Err(err).Msg("invalid destination, skipping")
-				// This is a final failure so we do not need to unset allFinalized
-			} else {
-				logger.Error().Err(err).Msg("unanticipated error")
-				allFinalized = false
-				continue
-			}
+			logger.Error().Err(err).Msg("unanticipated error")
+			allFinalized = false
+			continue
 		}
 
 		var out []byte
