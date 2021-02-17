@@ -145,11 +145,14 @@ func NewWithdrawsFromTxs(
 		sourceFrom = "tipping"
 	}
 	for _, tx := range *txs {
-		probi := altcurrency.BAT.FromProbi(tx.Probi)
-		if probi.Exponent() > 8 {
+		bat := altcurrency.BAT.FromProbi(tx.Probi)
+		if bat.Exponent() > 8 {
 			return nil, errors.New("cannot convert float exactly")
 		}
-		f64, _ := probi.Float64()
+		f64, _ := bat.Float64()
+		if !decimal.NewFromFloat(f64).Equal(bat) {
+			return nil, errors.New("bat conversion did not work: %d is not equal %d")
+		}
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
 			Amount:       f64,
