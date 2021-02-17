@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	w "github.com/brave-intl/bat-go/utils/wallet"
-
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
+	w "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -125,12 +126,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// the original request context will be cancelled as soon as the dialer closes the connection.
 			// this will setup a new context with the same values and a 90 second timeout
 			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
-			scopedCtx := contextutil.Wrap(ctx, asyncCtx)
+			scopedCtx := appctx.Wrap(ctx, asyncCtx)
 
 			go func() {
 				defer asyncCancel()
 				defer middleware.ConcurrentGoRoutines.With(
 					prometheus.Labels{
+
 						"method": "NextDrainJob",
 					}).Dec()
 
@@ -148,7 +150,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 	}
 	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
 		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
-		scopedCtx := contextutil.Wrap(ctx, asyncCtx)
+		scopedCtx := appctx.Wrap(ctx, asyncCtx)
 
 		go func() {
 			defer asyncCancel()
@@ -233,6 +235,57 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if err != nil {
 			return nil, fmt.Errorf("failed to transfer funds: %w", err)
 		}
+		if service.drainChannel != nil {
+			service.drainChannel <- tx
+		}
+		return tx, err
+	} else if *wallet.UserDepositAccountProvider == "bitflyer" {
+
+		transferID := uuid.NewV4().String()
+		totalF64, _ := total.Float64()
+
+		tx := new(w.TransactionInfo)
+
+		tx.ID = transferID
+		tx.Destination = wallet.UserDepositDestination
+		tx.DestAmount = total
+
+		// create a WithdrawToDepositIDBulkPayload
+		payload := bitflyer.WithdrawToDepositIDBulkPayload{
+			Withdrawals: []bitflyer.WithdrawToDepositIDPayload{
+				{
+					CurrencyCode: "BAT",
+					Amount:       totalF64,
+					DepositID:    wallet.UserDepositDestination,
+					TransferID:   transferID,
+					SourceFrom:   "userdrain",
+				},
+			},
+		}
+		// upload
+		_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+		if err != nil {
+			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+			var bfe *clients.BitflyerError
+			if errors.As(err, &bfe) {
+				if bfe.Status == http.StatusUnauthorized {
+					// try to refresh the token and go again
+					logger.Warn().Msg("attempting to refresh the bf token")
+					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+					if err != nil {
+						return nil, fmt.Errorf("failed to get token from bf: %w", err)
+					}
+					// redo the request after token refresh
+					_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+					if err != nil {
+						return nil, fmt.Errorf("failed to transfer funds: %w", err)
+					}
+				}
+			}
+			return nil, fmt.Errorf("failed to transfer funds: %w", err)
+		}
+		// check if this
+
 		if service.drainChannel != nil {
 			service.drainChannel <- tx
 		}

@@ -107,6 +107,42 @@ with output
   --all-txs-input "4ae996f5-679b-46c6-9aea-9892f763ffe6"
 ```
 
+## bitflyer settlement
+
+equivalent envs are available as flags `ENV_KEY` -> `--env-key`
+
+### refresh token
+After running the refres token command, you will need to copy the value in the printed `auth.access_token` field into your `.env` file and source that file. This can now be used with the other bitflyer commands. The env name should be `BITFLYER_TOKEN`.
+```bash
+BITFLYER_CLIENT_ID=
+BITFLYER_CLIENT_SECRET=
+BITFLYER_EXTRA_CLIENT_SECRET=
+BITFLYER_SERVER=
+./bat-go settlement bitflyer token
+```
+
+at this point, it makes sense to run the `sign-settlement` command so that transactions are split across multiple files, however this is not strictly necessary to do because we do all of the transforms needed in the upload step.
+
+### upload
+
+```bash
+BITFLYER_SOURCE_FROM=tipping
+BITFLYER_SERVER=
+# omit to execute
+BITFLYER_DRYRUN=1 # seconds to delay
+./bat-go bitflyer upload \
+  --in "bitflyer-transactions.json"
+```
+
+### checkstatus
+
+```bash
+BITFLYER_SOURCE_FROM=tipping
+BITFLYER_SERVER=
+./bat-go bitflyer checkstatus \
+  --in "bitflyer-transactions.json"
+```
+
 ## wallet
 
 ### create

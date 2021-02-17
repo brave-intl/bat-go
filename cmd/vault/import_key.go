@@ -42,6 +42,11 @@ func init() {
 		"the default path to a configuration file").
 		Bind("wallet-refs")
 
+	// config
+	importKeyBuilder.Flag().String("config", "config.yaml",
+		"config holds the mapping of wallet identifiers and secrets are to be held in vault").
+		Bind("config")
+
 	// ed25519-private-key
 	importKeyBuilder.Flag().String("ed25519-private-key", "",
 		"ed25519-private-key holds the private key in plaintext hex that we want to interact with").
@@ -77,20 +82,24 @@ func init() {
 		"gemini-client-secret holds the uphold guid that we want to use to sign bulk transactions").
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
+
+	// bitflyer-token
+	importKeyBuilder.Flag().String("bitflyer-token", "",
+		"bitflyer-token holds the uphold token that we want to use to auth the bulk transactions").
+		Env("BITFLYER_TOKEN").
+		Bind("bitflyer-token")
 }
 
 // ImportKey pulls in keys from environment variables
 func ImportKey(command *cobra.Command, args []string) error {
-	var err error
-
 	ReadConfig(command)
-	walletRefs := viper.GetStringSlice("wallet-refs")
-	ed25519PrivateKey := viper.GetString("ed25519-private-key")
-	ed25519PublicKey := viper.GetString("ed25519-public-key")
-	upholdProviderID := viper.GetString("uphold-provider-id")
-	geminiClientID := viper.GetString("gemini-client-id")
-	geminiClientKey := viper.GetString("gemini-client-key")
-	geminiClientSecret := viper.GetString("gemini-client-secret")
+	walletRefs := viper.GetViper().GetStringSlice("wallet-refs")
+	ed25519PrivateKey := viper.GetViper().GetString("ed25519-private-key")
+	ed25519PublicKey := viper.GetViper().GetString("ed25519-public-key")
+	upholdProviderID := viper.GetViper().GetString("uphold-provider-id")
+	geminiClientID := viper.GetViper().GetString("gemini-client-id")
+	geminiClientKey := viper.GetViper().GetString("gemini-client-key")
+	geminiClientSecret := viper.GetViper().GetString("gemini-client-secret")
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {

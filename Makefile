@@ -8,8 +8,8 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test lint clean
-all: test buildcmd
+.PHONY: all buildcmd docker test create-json-schema lint clean
+all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
 
@@ -20,11 +20,11 @@ mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
-	mockgen -source=./utils/clients/balance/client.go -destination=utils/clients/balance/mock/mock.go -package=mock_balance
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
 	mockgen -source=./utils/clients/gemini/client.go -destination=utils/clients/gemini/mock/mock.go -package=mock_gemini
+	mockgen -source=./utils/clients/bitflyer/client.go -destination=utils/clients/bitflyer/mock/mock.go -package=mock_bitflyer
 
 instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go
@@ -43,16 +43,17 @@ instrumented:
 	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
 	# http clients
-	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/balance -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/balance/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/reputation/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/gemini -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/gemini/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/bitflyer -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/bitflyer/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
-	sed -i'bak' 's/client_duration_seconds/balance_client_duration_seconds/g' utils/clients/balance/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/gemini_client_duration_seconds/g' utils/clients/gemini/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/bitflyer_client_duration_seconds/g' utils/clients/bitflyer/instrumented_client.go
 
 %-docker: docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
@@ -78,6 +79,7 @@ docker-test:
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) PKG=$(TEST_PKG) RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
+	go run main.go generate json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -129,9 +131,11 @@ vault-clean:
 json-schema:
 	go run main.go generate json-schema --overwrite
 
-test:
-	GODEBUG=x509ignoreCN=0 go test -v -p 1 $(TEST_FLAGS)
+create-json-schema:
 	go run main.go generate json-schema
+
+test:
+	GODEBUG=x509ignoreCN=0 go test -count 1 -v -p 1 $(TEST_FLAGS)
 
 format:
 	gofmt -s -w ./

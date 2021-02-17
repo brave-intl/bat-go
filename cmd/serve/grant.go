@@ -47,17 +47,43 @@ var (
 func init() {
 	cmd.ServeCmd.AddCommand(GrantServerCmd)
 
-	GrantServerCmd.PersistentFlags().Bool("enable-job-workers", true, "enable job workers (defaults true)")
-	cmd.Must(viper.BindPFlag("enable-job-workers", GrantServerCmd.PersistentFlags().Lookup("enable-job-workers")))
-	cmd.Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
+	flagBuilder := cmd.NewFlagBuilder(GrantServerCmd)
 
-	GrantServerCmd.PersistentFlags().StringSlice("brave-transfer-promotion-ids", []string{""}, "brave vg deposit destination promotion id")
-	cmd.Must(viper.BindPFlag("brave-transfer-promotion-ids", GrantServerCmd.PersistentFlags().Lookup("brave-transfer-promotion-ids")))
-	cmd.Must(viper.BindEnv("brave-transfer-promotion-ids", "BRAVE_TRANSFER_PROMOTION_IDS"))
+	flagBuilder.Flag().Bool("enable-job-workers", true,
+		"enable job workers (defaults true)").
+		Bind("enable-job-workers").
+		Env("ENABLE_JOB_WORKERS")
 
-	GrantServerCmd.PersistentFlags().StringSlice("wallet-on-platform-prior-to", []string{""}, "wallet on platform prior to for transfer")
-	cmd.Must(viper.BindPFlag("wallet-on-platform-prior-to", GrantServerCmd.PersistentFlags().Lookup("wallet-on-platform-prior-to")))
-	cmd.Must(viper.BindEnv("wallet-on-platform-prior-to", "WALLET_ON_PLATFORM_PRIOR_TO"))
+	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
+		"brave vg deposit destination promotion id").
+		Bind("brave-transfer-promotion-ids").
+		Env("BRAVE_TRANSFER_PROMOTION_IDS")
+
+	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
+		"wallet on platform prior to for transfer").
+		Bind("wallet-on-platform-prior-to").
+		Env("WALLET_ON_PLATFORM_PRIOR_TO")
+
+	// bitflyer credentials
+	flagBuilder.Flag().String("bitflyer-client-id", "",
+		"tells bitflyer what the client id is during token generation").
+		Bind("bitflyer-client-id").
+		Env("BITFLYER_CLIENT_ID")
+
+	flagBuilder.Flag().String("bitflyer-client-secret", "",
+		"tells bitflyer what the client secret during token generation").
+		Bind("bitflyer-client-secret").
+		Env("BITFLYER_CLIENT_SECRET")
+
+	flagBuilder.Flag().String("bitflyer-extra-client-secret", "",
+		"tells bitflyer what the extra client secret is during token").
+		Bind("bitflyer-extra-client-secret").
+		Env("BITFLYER_EXTRA_CLIENT_SECRET")
+
+	flagBuilder.Flag().String("bitflyer-server", "",
+		"the bitflyer domain to interact with").
+		Bind("bitflyer-server").
+		Env("BITFLYER_SERVER")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -304,6 +330,11 @@ func GrantServer(
 	// add flags to context
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
+
+	// bitflyer variables
+	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
+	ctx = context.WithValue(ctx, appctx.BitflyerClientSecretCTXKey, viper.GetString("bitflyer-client-secret"))
+	ctx = context.WithValue(ctx, appctx.BitflyerClientIDCTXKey, viper.GetString("bitflyer-client-id"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

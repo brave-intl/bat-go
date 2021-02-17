@@ -3,3 +3,4 @@ wallets:
   gemini-contribution: 'gemini-contribution'
   uphold-referral: 'uphold-referral'
   gemini-referral: 'gemini-referral'
+  bitflyer-default: 'bitflyer-default'

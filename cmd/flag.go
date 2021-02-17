@@ -18,6 +18,10 @@ type FlagBuilder struct {
 	key      string
 }
 
+func init() {
+	viper.AutomaticEnv()
+}
+
 // Bind runs the BindPFlag function
 func (fb *FlagBuilder) Bind(key string) *FlagBuilder {
 	return fb.loopCommands(func(command *cobra.Command) {
