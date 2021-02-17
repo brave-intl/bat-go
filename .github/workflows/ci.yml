@@ -32,7 +32,7 @@ env:
   UPHOLD_ACCESS_TOKEN: ${{secrets.UPHOLD_ACCESS_TOKEN}}
   RATIOS_TOKEN: ${{secrets.RATIOS_TOKEN}}
   UPHOLD_SETTLEMENT_ADDRESS: ${{secrets.UPHOLD_SETTLEMENT_ADDRESS}}
-  BITFLYER_SOURCE_FROM: self
+  BITFLYER_SOURCE_FROM: tipping
   BITFLYER_CLIENT_ID: ${{secrets.BITFLYER_CLIENT_ID}}
   BITFLYER_CLIENT_SECRET: ${{secrets.BITFLYER_CLIENT_SECRET}}
   BITFLYER_EXTRA_CLIENT_SECRET: ${{secrets.BITFLYER_EXTRA_CLIENT_SECRET}}
@@ -45,7 +45,7 @@ jobs:
     strategy:
       matrix:
         goversion:
-        - 1.14
+        - 1.15
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f

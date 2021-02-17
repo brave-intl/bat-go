@@ -126,7 +126,7 @@ at this point, it makes sense to run the `sign-settlement` command so that trans
 ### upload
 
 ```bash
-BITFLYER_SOURCE_FROM=self
+BITFLYER_SOURCE_FROM=tipping
 BITFLYER_SERVER=
 # omit to execute
 BITFLYER_DRYRUN=1 # seconds to delay
@@ -137,7 +137,7 @@ BITFLYER_DRYRUN=1 # seconds to delay
 ### checkstatus
 
 ```bash
-BITFLYER_SOURCE_FROM=self
+BITFLYER_SOURCE_FROM=tipping
 BITFLYER_SERVER=
 ./bat-go bitflyer checkstatus \
   --in "bitflyer-transactions.json"

@@ -135,7 +135,7 @@ create-json-schema:
 	go run main.go generate json-schema
 
 test:
-	GODEBUG=x509ignoreCN=0 go test -v -p 1 $(TEST_FLAGS)
+	GODEBUG=x509ignoreCN=0 go test -count 1 -v -p 1 $(TEST_FLAGS)
 
 format:
 	gofmt -s -w ./

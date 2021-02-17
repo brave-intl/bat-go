@@ -51,6 +51,29 @@ type WithdrawToDepositIDBulkPayload struct {
 	DryRunOption *DryRunOption                `json:"dry_run_option,omitempty"`
 }
 
+// CheckStatusPayload holds the transfer id to check
+type CheckStatusPayload struct {
+	TransferID string `json:"transfer_id"`
+}
+
+// CheckBulkStatusPayload holds info for checking the status of a transfer
+type CheckBulkStatusPayload struct {
+	Withdrawals []CheckStatusPayload `json:"withdrawals"`
+}
+
+// ToBulkStatus converts an upload to a checks status payload
+func (w WithdrawToDepositIDBulkPayload) ToBulkStatus() CheckBulkStatusPayload {
+	checkStatusPayload := []CheckStatusPayload{}
+	for _, wd := range w.Withdrawals {
+		checkStatusPayload = append(checkStatusPayload, CheckStatusPayload{
+			TransferID: wd.TransferID,
+		})
+	}
+	return CheckBulkStatusPayload{
+		Withdrawals: checkStatusPayload,
+	}
+}
+
 // WithdrawToDepositIDResponse holds a single withdrawal request
 type WithdrawToDepositIDResponse struct {
 	CurrencyCode string          `json:"currency_code"`
@@ -119,7 +142,7 @@ func NewWithdrawsFromTxs(
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if sourceFrom == "" {
-		sourceFrom = "self"
+		sourceFrom = "tipping"
 	}
 	for _, tx := range *txs {
 		probi := altcurrency.BAT.FromProbi(tx.Probi)
@@ -234,7 +257,12 @@ func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload)
+	req, err := c.client.NewRequest(
+		ctx,
+		http.MethodPost,
+		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
+		payload.ToBulkStatus(),
+	)
 	if err != nil {
 		return nil, err
 	}

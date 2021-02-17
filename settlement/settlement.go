@@ -241,10 +241,17 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
+		fmt.Printf("invalid destination, skipping\n")
 		settlement.Status = "failed"
-		return err
+		return nil
 	} else if err != nil {
 		return err
+	}
+
+	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
+		fmt.Printf("quote returned is invalid, skipping\n")
+		settlement.Status = "failed"
+		return nil
 	}
 
 	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)

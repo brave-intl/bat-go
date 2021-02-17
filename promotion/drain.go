@@ -258,7 +258,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 					Amount:       totalF64,
 					DepositID:    wallet.UserDepositDestination,
 					TransferID:   transferID,
-					SourceFrom:   "self",
+					SourceFrom:   "userdrain",
 				},
 			},
 		}

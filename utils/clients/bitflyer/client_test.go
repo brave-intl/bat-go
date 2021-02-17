@@ -46,7 +46,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	}
 	sourceFrom := os.Getenv("BITFLYER_SOURCE_FROM")
 	if sourceFrom == "" {
-		sourceFrom = "self"
+		sourceFrom = "tipping"
 	}
 	txs := []settlement.Transaction{tx}
 	withdrawals, err := NewWithdrawsFromTxs(sourceFrom, &txs)
