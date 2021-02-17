@@ -278,6 +278,10 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
 	}
 
+	if len(tok.Headers) != 1 || tok.Headers[0].Algorithm != "HS256" {
+		return fmt.Errorf("failed to parse the linking info jwt token: invalid number of signatures or algorithm")
+	}
+
 	base := jwt.Claims{}
 	linkingInfo := BitFlyerLinkingInfo{}
 
