@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +18,14 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
+)
+
+var (
+	validSourceFrom = map[string]bool{
+		"tipping":   true,
+		"adrewards": true,
+		"userdrain": true,
+	}
 )
 
 // Quote returns a quote of BAT prices
@@ -141,17 +150,18 @@ func NewWithdrawsFromTxs(
 	txs *[]settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
-	if sourceFrom == "" {
-		sourceFrom = "tipping"
+	if validSourceFrom[sourceFrom] {
+		return nil, errors.New("valid `sourceFrom` value must be passed")
 	}
 	for _, tx := range *txs {
 		bat := altcurrency.BAT.FromProbi(tx.Probi)
 		if bat.Exponent() > 8 {
-			return nil, errors.New("cannot convert float exactly")
+			return nil, fmt.Errorf("cannot convert float exactly, %d", bat)
 		}
+		// exact is never true, equality check needed
 		f64, _ := bat.Float64()
 		if !decimal.NewFromFloat(f64).Equal(bat) {
-			return nil, errors.New("bat conversion did not work: %d is not equal %d")
+			return nil, fmt.Errorf("bat conversion did not work: %.8f is not equal %d", f64, bat)
 		}
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
