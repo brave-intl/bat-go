@@ -196,7 +196,7 @@ func init() {
 		Bind("out").
 		Env("OUT")
 
-	uploadCheckStatusBuilder.Flag().String("bitflyer-source-from", "self",
+	uploadCheckStatusBuilder.Flag().String("bitflyer-source-from", "tipping",
 		"tells bitflyer where to draw funds from").
 		Bind("bitflyer-source-from").
 		Env("BITFLYER_SOURCE_FROM")

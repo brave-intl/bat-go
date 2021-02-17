@@ -124,7 +124,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		"upload",
 		suite.client,
 		[]string{tmpFile0.Name()},
-		"self",
+		"tipping",
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -153,7 +153,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		"upload",
 		suite.client,
 		[]string{tmpFile0.Name()},
-		"self",
+		"tipping",
 		nil, // dry run first
 	)
 	suite.client.SetAuthToken(suite.token)
@@ -179,7 +179,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	}
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
-	sourceFrom := "self"
+	sourceFrom := "tipping"
 	duration, err := time.ParseDuration("4s")
 	suite.Require().NoError(err)
 	dryRunOptions := &bitflyer.DryRunOption{

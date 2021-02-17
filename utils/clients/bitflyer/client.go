@@ -142,7 +142,7 @@ func NewWithdrawsFromTxs(
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if sourceFrom == "" {
-		sourceFrom = "self"
+		sourceFrom = "tipping"
 	}
 	for _, tx := range *txs {
 		probi := altcurrency.BAT.FromProbi(tx.Probi)

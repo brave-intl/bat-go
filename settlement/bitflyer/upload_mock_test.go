@@ -64,7 +64,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	JPY := "JPY"
 	BAT := "BAT"
 	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
-	self := "self"
+	sourceFrom := "tipping"
 
 	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx0,
@@ -91,7 +91,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 					Amount:       settledAmountAsFloat,
 					DepositID:    knownDepositID.String(),
 					TransferID:   bitflyer.GenerateTransferID(&settlementTx0),
-					SourceFrom:   self,
+					SourceFrom:   sourceFrom,
 				}},
 			),
 		).
@@ -109,7 +109,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		"upload",
 		suite.client,
 		[]string{tmpFile0.Name()},
-		"self",
+		"tipping",
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -155,7 +155,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 					Amount:       settledAmountAsFloat,
 					DepositID:    knownDepositID.String(),
 					TransferID:   bitflyer.GenerateTransferID(&settlementTx0),
-					SourceFrom:   self,
+					SourceFrom:   sourceFrom,
 				}},
 			),
 		).
@@ -171,7 +171,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		"upload",
 		suite.client,
 		[]string{tmpFile0.Name()},
-		"self",
+		"tipping",
 		nil, // dry run first
 	)
 	suite.client.EXPECT().SetAuthToken(suite.token)
@@ -196,7 +196,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	// suite.T().Skip("bitflyer side unable to settle")
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
-	sourceFrom := "self"
+	sourceFrom := "tipping"
 	priceToken := uuid.NewV4()
 	JPY := "JPY"
 	BAT := "BAT"
