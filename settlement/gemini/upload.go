@@ -286,7 +286,6 @@ func IterateRequest(
 		if action == "upload" {
 			for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
 				blockProgress := geminiComputeTotal(geminiBulkPayoutRequestRequirements[:i+1])
-				// if action == "upload" {
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
 					ctx,
 					transactionsMap,
