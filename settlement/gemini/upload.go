@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/concurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -132,43 +133,70 @@ func CheckPayoutTransactionsStatus(
 	ctx context.Context,
 	transactionsMap map[string]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
-	bulkPayoutRequestRequirements gemini.PrivateRequestSequence,
+	manyBulkPayoutRequestRequirements []gemini.PrivateRequestSequence,
 	geminiClient gemini.Client,
-	total int,
-	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	APIKey := bulkPayoutRequestRequirements.APIKey
-	base := bulkPayoutRequestRequirements.Base
-	clientID := base.OauthClientID
-	for j, payout := range base.Payouts {
-		result, err := geminiClient.CheckTxStatus(
-			ctx,
-			APIKey,
-			clientID,
-			payout.TxRef,
-		)
-		if err != nil {
-			return nil, err
+	total := geminiComputeTotal(manyBulkPayoutRequestRequirements)
+	results := make(chan *gemini.PayoutResult)
+	concurrently := concurrency.New(20)
+	baseCounter := 0
+
+	for _, bulkPayoutRequestRequirements := range manyBulkPayoutRequestRequirements {
+		APIKey := bulkPayoutRequestRequirements.APIKey
+		base := bulkPayoutRequestRequirements.Base
+		clientID := base.OauthClientID
+		baseCounter += len(base.Payouts)
+		for j, payout := range base.Payouts {
+			go func(
+				progress int,
+				APIKey, clientID string,
+				payout gemini.PayoutPayload,
+			) {
+				concurrently.Next(progress)
+
+				result, err := geminiClient.CheckTxStatus(
+					ctx,
+					APIKey,
+					clientID,
+					payout.TxRef,
+				)
+				if err != nil {
+					concurrently.Error(err)
+					return
+				}
+				results <- result
+
+				logging.SubmitProgress(ctx, progress, total)
+				logger.Debug().
+					Int("total", total).
+					Int("progress", progress).
+					Str("tx_ref", payout.TxRef).
+					Msg("parameters used")
+
+				concurrently.Finish()
+			}(baseCounter+j, APIKey, clientID, payout)
 		}
+	}
+	if err := concurrently.Errors(); err != nil {
+		return nil, err
+	}
+	i := 0
+	for {
+		result := <-results
 		original, key := CategorizeResponse(
 			transactionsMap,
 			result,
 		)
+		i++
 		submittedTransactions[key] = append(submittedTransactions[key], original)
-
-		prog := blockProgress + j
-		logging.SubmitProgress(ctx, prog, total)
-		logger.Debug().
-			Int("total", total).
-			Int("progress", prog).
-			Str("key", key).
-			Str("tx_ref", payout.TxRef).
-			Msg("parameters used")
+		if i == total {
+			break
+		}
 	}
 	return submittedTransactions, err
 }
@@ -255,10 +283,10 @@ func IterateRequest(
 			return &submittedTransactions, err
 		}
 
-		total := geminiComputeTotal(geminiBulkPayoutRequestRequirements)
-		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
-			blockProgress := geminiComputeTotal(geminiBulkPayoutRequestRequirements[:i+1])
-			if action == "upload" {
+		if action == "upload" {
+			for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
+				blockProgress := geminiComputeTotal(geminiBulkPayoutRequestRequirements[:i+1])
+				// if action == "upload" {
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
 					ctx,
 					transactionsMap,
@@ -273,20 +301,18 @@ func IterateRequest(
 					logger.Error().Err(err).Msg("failed to submit bulk payout transactions")
 					return nil, err
 				}
-			} else if action == "checkstatus" {
-				submittedTransactions, err = CheckPayoutTransactionsStatus(
-					ctx,
-					transactionsMap,
-					submittedTransactions,
-					bulkPayoutRequestRequirements,
-					geminiClient,
-					total,
-					blockProgress,
-				)
-				if err != nil {
-					logger.Error().Err(err).Msg("falied to check payout transactions status")
-					return nil, err
-				}
+			}
+		} else if action == "checkstatus" {
+			submittedTransactions, err = CheckPayoutTransactionsStatus(
+				ctx,
+				transactionsMap,
+				submittedTransactions,
+				geminiBulkPayoutRequestRequirements,
+				geminiClient,
+			)
+			if err != nil {
+				logger.Error().Err(err).Msg("falied to check payout transactions status")
+				return nil, err
 			}
 		}
 	}
