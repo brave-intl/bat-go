@@ -309,7 +309,7 @@ func (c *HTTPClient) RefreshToken(
 	}
 	logger.Info().
 		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars (BITFLYER_CLIENT) to avoid refreshes")
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
 	c.SetAuthToken(body.AccessToken)
 	return &body, nil
 }
