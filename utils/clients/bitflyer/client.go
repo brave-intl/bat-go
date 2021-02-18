@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +18,14 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
+)
+
+var (
+	validSourceFrom = map[string]bool{
+		"tipping":   true,
+		"adrewards": true,
+		"userdrain": true,
+	}
 )
 
 // Quote returns a quote of BAT prices
@@ -141,15 +150,19 @@ func NewWithdrawsFromTxs(
 	txs *[]settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
-	if sourceFrom == "" {
-		sourceFrom = "tipping"
+	if !validSourceFrom[sourceFrom] {
+		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
 	for _, tx := range *txs {
-		probi := altcurrency.BAT.FromProbi(tx.Probi)
-		if probi.Exponent() > 8 {
-			return nil, errors.New("cannot convert float exactly")
+		bat := altcurrency.BAT.FromProbi(tx.Probi)
+		if bat.Exponent() > 8 {
+			return nil, fmt.Errorf("cannot convert float exactly, %d", bat)
 		}
-		f64, _ := probi.Float64()
+		// exact is never true, equality check needed
+		f64, _ := bat.Float64()
+		if !decimal.NewFromFloat(f64).Equal(bat) {
+			return nil, fmt.Errorf("bat conversion did not work: %.8f is not equal %d", f64, bat)
+		}
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
 			Amount:       f64,
@@ -280,6 +293,16 @@ func (c *HTTPClient) RefreshToken(
 	ctx context.Context,
 	payload TokenPayload,
 ) (*TokenResponse, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
+		Str("client_id", payload.ClientID).
+		Str("client_secret", payload.ClientSecret).
+		Str("extra_client_secret", payload.ExtraClientSecret).
+		Str("grant_type", payload.GrantType).
+		Msg("payload values")
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload)
 	if err != nil {
 		return nil, err
@@ -290,13 +313,9 @@ func (c *HTTPClient) RefreshToken(
 	if err != nil {
 		return nil, handleBitflyerError(err, req, resp)
 	}
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
 	logger.Info().
 		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars (BITFLYER_CLIENT) to avoid refreshes")
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
 	c.SetAuthToken(body.AccessToken)
 	return &body, nil
 }

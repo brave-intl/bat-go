@@ -301,7 +301,6 @@ func IterateRequest(
 		var txs []settlement.Transaction
 		err = json.Unmarshal(bytes, &txs)
 		if err != nil {
-			fmt.Println("bytes", string(bytes))
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 			return &submittedTransactions, err
 		}
