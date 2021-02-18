@@ -151,7 +151,7 @@ func NewWithdrawsFromTxs(
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if validSourceFrom[sourceFrom] {
-		return nil, errors.New("valid `sourceFrom` value must be passed")
+		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
 	for _, tx := range *txs {
 		bat := altcurrency.BAT.FromProbi(tx.Probi)
