@@ -150,7 +150,7 @@ func NewWithdrawsFromTxs(
 	txs *[]settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
-	if validSourceFrom[sourceFrom] {
+	if !validSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
 	for _, tx := range *txs {
