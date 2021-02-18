@@ -1,4 +1,4 @@
-// +build providers
+// +build integration,providers
 
 package bitflyersettlement
 
