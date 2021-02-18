@@ -293,6 +293,16 @@ func (c *HTTPClient) RefreshToken(
 	ctx context.Context,
 	payload TokenPayload,
 ) (*TokenResponse, error) {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
+		Str("client_id", payload.ClientID).
+		Str("client_secret", payload.ClientSecret).
+		Str("extra_client_secret", payload.ExtraClientSecret).
+		Str("grant_type", payload.GrantType).
+		Msg("payload values")
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload)
 	if err != nil {
 		return nil, err
@@ -302,10 +312,6 @@ func (c *HTTPClient) RefreshToken(
 	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, handleBitflyerError(err, req, resp)
-	}
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
 	}
 	logger.Info().
 		Str("token", body.AccessToken).

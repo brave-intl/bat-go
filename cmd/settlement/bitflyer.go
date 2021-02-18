@@ -69,16 +69,9 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	payload := *refreshTokenPayload
-	logger.Info().
-		Str("client_id", payload.ClientID).
-		Str("client_secret", payload.ClientSecret).
-		Str("extra_client_secret", payload.ExtraClientSecret).
-		Str("grant_type", payload.GrantType).
-		Msg("payload values")
 	auth, err := client.RefreshToken(
 		ctx,
-		payload,
+		*refreshTokenPayload,
 	)
 	if err != nil {
 		return err
