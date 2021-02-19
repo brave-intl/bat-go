@@ -91,6 +91,8 @@ type Datastore interface {
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
 	// InsertBATLossEvent inserts claims of lost bat
 	InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (bool, error)
+	// InsertBAPReportEvent inserts a BAP report
+	InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
 	// RunNextDrainJob to process deposits if there is one waiting
@@ -250,6 +252,51 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 	}
 	err = tx.Commit()
 	return err
+}
+
+// BAPReport holds info about wallet events
+type BAPReport struct {
+	ID        uuid.UUID       `db:"id" json:"id"`
+	WalletID  uuid.UUID       `db:"wallet_id" json:"walletId"`
+	Amount    decimal.Decimal `db:"amount" json:"amount"`
+	CreatedAt time.Time       `db:"created_at" json:"createdAt"`
+}
+
+// InsertBAPReportEvent inserts a BAP report
+func (pg *Postgres) InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error) {
+
+	// bap report id
+	id := uuid.NewV4()
+
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.RollbackTx(tx)
+
+	insertBapReportEventStatement := `
+INSERT INTO bap_report (id, wallet_id, amount)
+VALUES ($1, $2, $3)`
+
+	_, err = tx.Exec(
+		insertBapReportEventStatement,
+		id,
+		paymentID,
+		amount,
+	)
+	if err != nil {
+		// if this is a duplicate constraint error, conflict propogation
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == pq.ErrorCode("23505") {
+				// duplicate
+				return nil, errorutils.ErrConflictBAPReportEvent
+			}
+		}
+		return nil, err
+	}
+	err = tx.Commit()
+	return &id, err
 }
 
 // InsertBATLossEvent inserts claims of lost bat to db
