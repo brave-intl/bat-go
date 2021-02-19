@@ -15,6 +15,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/middleware"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -66,8 +67,8 @@ func TestLinkBraveWalletV3(t *testing.T) {
 				},
 			})
 		// add the datastore to the context
-		ctx    = context.Background()
 		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
 		idTo   = uuid.NewV4()
 		r      = httptest.NewRequest(
 			"POST",
@@ -307,10 +308,10 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				},
 			})
 
-		// add the datastore to the context
-		ctx    = context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret))
 		idFrom = uuid.NewV4()
-		r      = httptest.NewRequest(
+		// add the datastore to the context
+		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
+		r   = httptest.NewRequest(
 			"POST",
 			fmt.Sprintf("/v3/wallet/bitflyer/%s/claim", idFrom),
 			bytes.NewBufferString(fmt.Sprintf(`

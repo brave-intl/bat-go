@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -169,6 +170,26 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 				"error validating paymentID url parameter",
 				map[string]interface{}{
 					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// validate payment id matches what was in the http signature
+		signatureID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		if id.String() != signatureID {
+			return handlers.ValidationError(
+				"paymentId from URL does not match paymentId in http signature",
+				map[string]interface{}{
+					"paymentID": "does not match http signature id",
 				},
 			)
 		}
@@ -461,6 +482,26 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 				"error validating paymentID url parameter",
 				map[string]interface{}{
 					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// validate payment id matches what was in the http signature
+		signatureID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		if id.String() != signatureID {
+			return handlers.ValidationError(
+				"paymentId from URL does not match paymentId in http signature",
+				map[string]interface{}{
+					"paymentID": "does not match http signature id",
 				},
 			)
 		}
