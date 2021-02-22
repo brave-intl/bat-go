@@ -1310,7 +1310,6 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 
 	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
-	fmt.Println("!!!! ", promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
 		Issuer:        issuerName,
@@ -1527,8 +1526,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	tx := <-ch
-	fmt.Printf("!!!! tx: %+v\n", tx)
+	<-ch
 	//suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 
 	//settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
@@ -2104,4 +2102,53 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 		}
 		<-time.After(10 * time.Millisecond)
 	}
+}
+
+func (suite *ControllersTestSuite) TestPostReportBAPEvent() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "could not connect to db")
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore:        pg,
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
+	}
+	handler := PostReportBAPEvent(service)
+	walletID1 := uuid.NewV4()
+
+	run := func(walletID uuid.UUID, amount decimal.Decimal) *httptest.ResponseRecorder {
+		requestPayload := BapReportPayload{
+			Amount: amount,
+		}
+		payload, err := json.Marshal(&requestPayload)
+		suite.Require().NoError(err)
+		req, err := http.NewRequest("POST", "/v1/promotions/report-bap", bytes.NewBuffer([]byte(payload)))
+		suite.Require().NoError(err)
+
+		rctx := chi.NewRouteContext()
+		ctx := middleware.AddKeyID(req.Context(), walletID1.String())
+		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr
+	}
+	suite.Require().Equal(http.StatusOK, run(walletID1, decimal.NewFromFloat(10)).Code)
+	suite.Require().Equal(http.StatusConflict, run(walletID1, decimal.NewFromFloat(10)).Code)
+
+	BAPEvents := []BAPReport{}
+	suite.Require().NoError(pg.RawDB().Select(&BAPEvents, `select * from bap_report`))
+	serializedActual1, err := json.Marshal(&BAPEvents)
+	serializedExpected1, err := json.Marshal([]BAPReport{{
+		ID:        BAPEvents[0].ID,
+		WalletID:  walletID1,
+		Amount:    decimal.NewFromFloat(10),
+		CreatedAt: BAPEvents[0].CreatedAt,
+	}})
+	suite.Require().JSONEq(string(serializedExpected1), string(serializedActual1))
+
 }

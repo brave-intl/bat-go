@@ -17,6 +17,11 @@ type Keystore interface {
 	LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error)
 }
 
+//AddKeyID - Helpful for test cases
+func AddKeyID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, httpSignedKeyID{}, id)
+}
+
 // GetKeyID retrieves the http signing keyID from the context
 func GetKeyID(ctx context.Context) (string, error) {
 	keyID, ok := ctx.Value(httpSignedKeyID{}).(string)

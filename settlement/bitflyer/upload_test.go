@@ -28,9 +28,9 @@ type BitflyerSuite struct {
 }
 
 func (suite *BitflyerSuite) SetupSuite() {
-	// mockCtrl := gomock.NewController(suite.T())
-	// defer mockCtrl.Finish()
-	// suite.client = mockbitflyer.NewMockClient(mockCtrl)
+	if os.Getenv("BITFLYER_LIVE") != "true" {
+		suite.T().Skip("bitflyer side unable to settle")
+	}
 	client, err := bitflyer.New()
 	suite.client = client
 	suite.Require().NoError(err)
@@ -174,9 +174,6 @@ func (suite *BitflyerSuite) TestFailures() {
 
 func (suite *BitflyerSuite) TestFormData() {
 	// TODO: after we figure out why we are being blocked by bf enable
-	if os.Getenv("BITFLYER_LIVE") != "true" {
-		suite.T().Skip("bitflyer side unable to settle")
-	}
 	ctx := context.Background()
 	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
 	sourceFrom := "tipping"

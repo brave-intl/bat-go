@@ -339,6 +339,20 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 	return _d.base.GetSumForTransactions(orderID)
 }
 
+// InsertBAPReportEvent implements Datastore
+func (_d DatastoreWithPrometheus) InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (up1 *uuid.UUID, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBAPReportEvent", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertBAPReportEvent(ctx, paymentID, amount)
+}
+
 // InsertBATLossEvent implements Datastore
 func (_d DatastoreWithPrometheus) InsertBATLossEvent(ctx context.Context, paymentID uuid.UUID, reportID int, amount decimal.Decimal, platform string) (b1 bool, err error) {
 	_since := time.Now()

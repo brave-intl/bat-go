@@ -59,6 +59,7 @@ func Router(service *Service) chi.Router {
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
+	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	return r
 }
 
@@ -719,5 +720,61 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			status = http.StatusCreated
 		}
 		return handlers.RenderContent(r.Context(), nil, w, status)
+	})
+}
+
+// BapReportPayload holds the data needed to report that bat has been lost by client bug
+type BapReportPayload struct {
+	Amount decimal.Decimal `json:"amount" valid:"required"`
+}
+
+// BapReportResp holds the data needed to report that bat has been lost by client bug
+type BapReportResp struct {
+	ReportBapID *uuid.UUID `json:"reportBapId" valid:"required"`
+}
+
+// PostReportBAPEvent is the handler for reporting bat was lost by client bug
+func PostReportBAPEvent(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req BapReportPayload
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		// get wallet id from http signature id
+		id, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError("no id in http signature", map[string]string{
+				"id": "missing",
+			})
+		}
+
+		walletID, err := uuid.FromString(id)
+		if err != nil {
+			return handlers.ValidationError("query parameter", map[string]string{
+				"paymentId": "must be a uuidv4",
+			})
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		// do the magic here
+		bapReportID, err := service.Datastore.InsertBAPReportEvent(
+			r.Context(),
+			walletID,
+			req.Amount,
+		)
+
+		if err != nil {
+			if errors.Is(err, errorutils.ErrConflictBAPReportEvent) {
+				return handlers.WrapError(err, "Error inserting bap report, paymentId already reported", http.StatusConflict)
+			}
+			return handlers.WrapError(err, "Error inserting bap report", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(r.Context(), BapReportResp{ReportBapID: bapReportID}, w, http.StatusOK)
 	})
 }

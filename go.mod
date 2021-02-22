@@ -9,7 +9,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/frankban/quicktest v1.4.2 // indirect
-	github.com/getsentry/sentry-go v0.9.0
+	github.com/getsentry/sentry-go v0.10.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.1.1
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
@@ -36,7 +36,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.9
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.8.0
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0
