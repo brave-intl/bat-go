@@ -91,7 +91,7 @@ func (promotion *Promotion) Claimable() bool {
 	if promotion.Expired() {
 		return false
 	}
-	// always allow previously claimed grants to go through
+	// otherwise allow previously claimed grants to go through
 	if promotion.LegacyClaimed {
 		return true
 	}
