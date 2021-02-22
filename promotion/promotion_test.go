@@ -40,7 +40,6 @@ type Assertion struct {
 
 func (suite *PromotionTestSuite) TestPromotionClaimable() {
 	now := time.Now()
-	// nowPlus := now.Add(time.Minute)
 	monthsAgo3 := now.AddDate(0, -3, 0)
 	scenarios := []Assertion{{
 		Claimable: false,
