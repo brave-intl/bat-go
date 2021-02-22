@@ -14,7 +14,7 @@ require (
 	github.com/go-chi/cors v1.1.1
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/golang-migrate/migrate/v4 v4.14.1
-	github.com/golang/mock v1.4.4
+	github.com/golang/mock v1.5.0
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.0.0
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
