@@ -20,9 +20,6 @@ func (suite *PromotionTestSuite) SetupTest() {
 func (suite *PromotionTestSuite) TearDownTest() {
 }
 
-func (suite *PromotionTestSuite) CleanDB() {
-}
-
 func TestPromotionTestSuite(t *testing.T) {
 	suite.Run(t, new(PromotionTestSuite))
 }
