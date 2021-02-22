@@ -87,22 +87,24 @@ func (promotion *Promotion) Claimable() bool {
 	if !promotion.Active {
 		return false
 	}
+	// always refuse expired promotions
+	if promotion.Expired() {
+		return false
+	}
 	// always allow previously claimed grants to go through
 	if promotion.LegacyClaimed {
 		return true
 	}
-	if promotion.Type == "ads" {
-		// give ads more time
-		if promotion.ExpiresAt.Before(time.Now()) || promotion.CreatedAt.Before(time.Now().AddDate(-1, 0, 0)) {
-			return false
-		}
-	} else {
-		// everyone else gets 3 months
-		if promotion.ExpiresAt.Before(time.Now()) || promotion.CreatedAt.Before(time.Now().AddDate(0, -3, 0)) {
-			return false
-		}
+	// expire grants created 3 months ago
+	if promotion.CreatedAt.Before(time.Now().AddDate(0, -3, 0)) {
+		return false
 	}
 	return true
+}
+
+// Expired check if now is after the expires_at time
+func (promotion *Promotion) Expired() bool {
+	return promotion.ExpiresAt.Before(time.Now())
 }
 
 // GetAvailablePromotions first tries to look up the wallet and then retrieves available promotions
