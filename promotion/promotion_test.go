@@ -12,41 +12,15 @@ type PromotionTestSuite struct {
 }
 
 func (suite *PromotionTestSuite) SetupSuite() {
-	// pg, _, err := NewPostgres()
-	// suite.Require().NoError(err, "Failed to get postgres conn")
-
-	// m, err := pg.NewMigrate()
-	// suite.Require().NoError(err, "Failed to create migrate instance")
-
-	// ver, dirty, _ := m.Version()
-	// if dirty {
-	// 	suite.Require().NoError(m.Force(int(ver)))
-	// }
-	// if ver > 0 {
-	// 	suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
-	// }
-
-	// suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 }
 
 func (suite *PromotionTestSuite) SetupTest() {
-	suite.CleanDB()
 }
 
 func (suite *PromotionTestSuite) TearDownTest() {
-	suite.CleanDB()
 }
 
 func (suite *PromotionTestSuite) CleanDB() {
-	// tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
-
-	// pg, _, err := NewPostgres()
-	// suite.Require().NoError(err, "Failed to get postgres conn")
-
-	// for _, table := range tables {
-	// 	_, err = pg.RawDB().Exec("delete from " + table)
-	// 	suite.Require().NoError(err, "Failed to get clean table")
-	// }
 }
 
 func TestPromotionTestSuite(t *testing.T) {
