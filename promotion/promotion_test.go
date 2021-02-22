@@ -60,7 +60,7 @@ func (suite *PromotionTestSuite) TestPromotionClaimable() {
 	}, {
 		Claimable: true,
 		Promotion: Promotion{
-			Active:        true, // fails because not active
+			Active:        true,
 			LegacyClaimed: true,
 			CreatedAt:     monthsAgo3.Add(time.Minute),
 			ExpiresAt:     now.Add(time.Minute),
@@ -68,7 +68,7 @@ func (suite *PromotionTestSuite) TestPromotionClaimable() {
 	}, {
 		Claimable: false,
 		Promotion: Promotion{
-			Active:        true, // fails because not active
+			Active:        true,
 			LegacyClaimed: true,
 			CreatedAt:     monthsAgo3,
 			ExpiresAt:     now,
@@ -76,7 +76,7 @@ func (suite *PromotionTestSuite) TestPromotionClaimable() {
 	}, {
 		Claimable: true,
 		Promotion: Promotion{
-			Active:        true, // fails because not active
+			Active:        true,
 			LegacyClaimed: false,
 			CreatedAt:     monthsAgo3.Add(time.Minute),
 			ExpiresAt:     now.Add(time.Minute),
