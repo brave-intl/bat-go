@@ -86,7 +86,7 @@ func (service *Service) ClaimPromotionForWallet(
 	if promotion == nil {
 		return nil, errors.New("promotion did not exist")
 	}
-	if !promotion.Active || promotion.ExpiresAt.Before(time.Now()) || promotion.CreatedAt.Before(time.Now().AddDate(0, -3, 0)) {
+	if !promotion.Claimable() {
 		return nil, &handlers.AppError{
 			Message: "promotion is no longer active",
 			Code:    http.StatusGone,

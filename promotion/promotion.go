@@ -81,6 +81,32 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 	return promotion.ApproximateValue.Div(decimal.New(int64(promotion.SuggestionsPerGrant), 0))
 }
 
+// Claimable checks whether the promotion can be claimed
+func (promotion *Promotion) Claimable() bool {
+	// manually disallow claims
+	if !promotion.Active {
+		return false
+	}
+	// always refuse expired promotions
+	if promotion.Expired() {
+		return false
+	}
+	// otherwise allow previously claimed grants to go through
+	if promotion.LegacyClaimed {
+		return true
+	}
+	// expire grants created 3 months ago
+	if promotion.CreatedAt.Before(time.Now().AddDate(0, -3, 0)) {
+		return false
+	}
+	return true
+}
+
+// Expired check if now is after the expires_at time
+func (promotion *Promotion) Expired() bool {
+	return promotion.ExpiresAt.Before(time.Now())
+}
+
 // GetAvailablePromotions first tries to look up the wallet and then retrieves available promotions
 func (service *Service) GetAvailablePromotions(
 	ctx context.Context,
