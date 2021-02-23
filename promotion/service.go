@@ -206,15 +206,13 @@ func InitService(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create bitflyer client: %w", err)
 		}
-	}
-
-	// get a fresh bf token
-	// this will set the AuthToken on the client for us
-	_, err = bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
-
-	if err != nil {
-		// we don't want to stop the world if we can't connect to bf
-		logger.Error().Err(err).Msg("failed to get bf access token!")
+		// get a fresh bf token
+		// this will set the AuthToken on the client for us
+		_, err = bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+		if err != nil {
+			// we don't want to stop the world if we can't connect to bf
+			logger.Error().Err(err).Msg("failed to get bf access token!")
+		}
 	}
 
 	reputationClient, err := reputation.New()
