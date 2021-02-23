@@ -199,10 +199,13 @@ func InitService(
 		return nil, err
 	}
 
+	var bfClient bitflyer.Client
 	// setup bfClient
-	bfClient, err := bitflyer.New()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bitflyer client: %w", err)
+	if os.Getenv("BITFLYER_ENABLED") == "true" {
+		bfClient, err = bitflyer.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create bitflyer client: %w", err)
+		}
 	}
 
 	// get a fresh bf token
