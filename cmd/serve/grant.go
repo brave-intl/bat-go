@@ -352,6 +352,14 @@ func GrantServer(
 		}
 	}
 
+	go func() {
+		err := http.ListenAndServe(":9090", middleware.Metrics())
+		if err != nil {
+			sentry.CaptureException(err)
+			logger.Panic().Err(err).Msg("metrics HTTP server start failed!")
+		}
+	}()
+
 	srv := http.Server{
 		Addr:         ":3333",
 		Handler:      chi.ServerBaseContext(ctx, r),
