@@ -1132,7 +1132,7 @@ type DrainJob struct {
 	TransactionID *string         `db:"transaction_id"`
 	Erred         bool            `db:"erred"`
 	ErrCode       *string         `db:"errcode"`
-	BatchID       uuid.UUID       `db:"batch_id"`
+	BatchID       *uuid.UUID      `db:"batch_id"`
 	Completed     bool            `db:"completed"`
 	CompletedAt   *time.Time      `db:"completed_at"`
 }
