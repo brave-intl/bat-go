@@ -58,6 +58,7 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - BITFLYER_LIVE
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -124,6 +125,7 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - BITFLYER_LIVE
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
