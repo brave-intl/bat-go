@@ -204,6 +204,7 @@ func (c *SimpleHTTPClient) do(
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		fmt.Println("do error", err)
 		return nil, err
 	}
 	status := resp.StatusCode
