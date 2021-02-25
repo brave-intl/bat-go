@@ -58,7 +58,30 @@ func Router(service *Service) chi.Router {
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
+	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	return r
+}
+
+// SuggestionsV2Router for suggestions endpoints
+func SuggestionsV2Router(service *Service) (chi.Router, error) {
+	r := chi.NewRouter()
+	var (
+		enableLinkingDraining bool
+		err                   error
+	)
+	// make sure that we only enable the DrainJob if we have linking/draining enabled
+	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
+		enableLinkingDraining, err = strconv.ParseBool(os.Getenv("ENABLE_LINKING_DRAINING"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid enable_linking_draining flag: %w", err)
+		}
+	}
+
+	if enableLinkingDraining {
+		r.Method("POST", "/claim", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("DrainSuggestionV2", DrainSuggestionV2(service))))
+	}
+	return r, nil
 }
 
 // SuggestionsRouter for suggestions endpoints
@@ -268,6 +291,51 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 	})
 }
 
+// DrainPollResponse - structure for a drain poll response
+type DrainPollResponse struct {
+	ID     *uuid.UUID `json:"drainId"`
+	Status string     `json:"status"`
+}
+
+// GetDrainPoll is the handler for checking on a particular claim's status
+func GetDrainPoll(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var drainID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), drainID, chi.URLParam(r, "drainId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"drainId": err.Error(),
+				},
+			)
+		}
+
+		var resp = &DrainPollResponse{}
+
+		drainPoll, err := service.Datastore.GetDrainPoll(drainID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting drain poll by id", http.StatusBadRequest)
+		}
+
+		if drainPoll == nil {
+			return &handlers.AppError{
+				Message: "Drain Job does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		resp.ID = drainPoll.ID
+		resp.Status = drainPoll.Status
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
+
 // GetClaimResponse includes signed credentials and a batch proof showing they were signed by the public key
 type GetClaimResponse struct {
 	SignedCreds jsonutils.JSONStringArray `json:"signedCreds"`
@@ -408,6 +476,67 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 	})
 }
 
+// DrainSuggestionV2Request includes the ID of the verified wallet attempting to drain suggestions
+// and returns the drain_poll uuid so the client can poll for status updates on this draining
+type DrainSuggestionV2Request struct {
+	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	Credentials []CredentialBinding `json:"credentials"`
+}
+
+// DrainSuggestionV2Response - the response structure of the token draining endpoint v2
+type DrainSuggestionV2Response struct {
+	DrainID *uuid.UUID `json:"drainId"`
+}
+
+// DrainSuggestionV2 is the handler for draining ad suggestions for a verified wallet
+func DrainSuggestionV2(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			req  DrainSuggestionV2Request
+			resp = DrainSuggestionV2Response{}
+		)
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logging.AddWalletIDToContext(r.Context(), req.WalletID)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if req.WalletID.String() != keyID {
+			return handlers.ValidationError("request",
+				map[string]string{"paymentId": "paymentId must match signature"})
+		}
+
+		resp.DrainID, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		if err != nil {
+			switch err.(type) {
+			case govalidator.Error:
+				return handlers.WrapValidationError(err)
+			case govalidator.Errors:
+				return handlers.WrapValidationError(err)
+			default:
+				// FIXME not all remaining errors should be mapped to 400
+				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
+
 // DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
 type DrainSuggestionRequest struct {
 	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
@@ -439,7 +568,7 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
-		err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		_, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
@@ -591,5 +720,61 @@ func PostReportWalletEvent(service *Service) handlers.AppHandler {
 			status = http.StatusCreated
 		}
 		return handlers.RenderContent(r.Context(), nil, w, status)
+	})
+}
+
+// BapReportPayload holds the data needed to report that bat has been lost by client bug
+type BapReportPayload struct {
+	Amount decimal.Decimal `json:"amount" valid:"required"`
+}
+
+// BapReportResp holds the data needed to report that bat has been lost by client bug
+type BapReportResp struct {
+	ReportBapID *uuid.UUID `json:"reportBapId" valid:"required"`
+}
+
+// PostReportBAPEvent is the handler for reporting bat was lost by client bug
+func PostReportBAPEvent(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req BapReportPayload
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		// get wallet id from http signature id
+		id, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError("no id in http signature", map[string]string{
+				"id": "missing",
+			})
+		}
+
+		walletID, err := uuid.FromString(id)
+		if err != nil {
+			return handlers.ValidationError("query parameter", map[string]string{
+				"paymentId": "must be a uuidv4",
+			})
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		// do the magic here
+		bapReportID, err := service.Datastore.InsertBAPReportEvent(
+			r.Context(),
+			walletID,
+			req.Amount,
+		)
+
+		if err != nil {
+			if errors.Is(err, errorutils.ErrConflictBAPReportEvent) {
+				return handlers.WrapError(err, "Error inserting bap report, paymentId already reported", http.StatusConflict)
+			}
+			return handlers.WrapError(err, "Error inserting bap report", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(r.Context(), BapReportResp{ReportBapID: bapReportID}, w, http.StatusOK)
 	})
 }

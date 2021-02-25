@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -38,9 +37,11 @@ func init() {
 		CreateWalletCmd,
 	)
 
-	CreateWalletCmd.Flags().Bool("offline", false,
-		"operate in multi-step offline mode")
-	cmd.Must(viper.BindPFlag("offline", CreateWalletCmd.Flags().Lookup("offline")))
+	createWalletBuilder := cmd.NewFlagBuilder(CreateWalletCmd)
+
+	createWalletBuilder.Flag().Bool("offline", false,
+		"operate in multi-step offline mode").
+		Bind("offline")
 }
 
 // CreateWallet creates a wallet

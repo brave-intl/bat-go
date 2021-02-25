@@ -33,14 +33,16 @@ func init() {
 		MacaroonCmd,
 	)
 
-	MacaroonCreateCmd.Flags().String("config", "example.yaml",
-		"the location of the config file")
-	cmd.Must(viper.BindPFlag("config", MacaroonCreateCmd.Flags().Lookup("config")))
+	createBuilder := cmd.NewFlagBuilder(MacaroonCreateCmd)
 
-	MacaroonCreateCmd.Flags().String("secret", "mysecret",
-		"the location of the config file")
-	cmd.Must(viper.BindPFlag("secret", MacaroonCreateCmd.Flags().Lookup("secret")))
-	cmd.Must(viper.BindEnv("secret", "MACAROON_SECRET"))
+	createBuilder.Flag().String("config", "example.yaml",
+		"the location of the config file").
+		Bind("config")
+
+	createBuilder.Flag().String("secret", "mysecret",
+		"the value of the secret").
+		Env("MACAROON_SECRET").
+		Bind("secret")
 }
 
 // RunMacaroonCreate runs the generate command

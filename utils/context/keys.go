@@ -53,6 +53,16 @@ const (
 	BraveTransferPromotionIDCTXKey CTXKey = "brave_transfer_promotion_id"
 	// WalletOnPlatformPriorToCTXKey - context key for the build time of code
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
+	// LogLevelCTXKey - context key for application logging level
+	LogLevelCTXKey CTXKey = "log_level"
+	// BitFlyerJWTKeyCTXKey - context key for the bitflyer jwt key
+	BitFlyerJWTKeyCTXKey CTXKey = "bitflyer_jwt_key"
+	// BitflyerExtraClientSecretCTXKey - context key for the extra client secret
+	BitflyerExtraClientSecretCTXKey CTXKey = "bitflyer_extra_client_secret"
+	// BitflyerClientSecretCTXKey - context key for the client secret
+	BitflyerClientSecretCTXKey CTXKey = "bitflyer_client_secret"
+	// BitflyerClientIDCTXKey - context key for the client secret
+	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
 )
 
 var (

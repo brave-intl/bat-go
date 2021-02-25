@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,7 +24,8 @@ import (
 )
 
 var (
-	walletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
+	// WalletClaimNamespace uuidv5 namespace for provider linking - exported for tests
+	WalletClaimNamespace = uuid.Must(uuid.FromString("c39b298b-b625-42e9-a463-69c7726e5ddc"))
 )
 
 // Service contains datastore connections
@@ -96,6 +98,31 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	return anonCard.SubmitTransaction(transaction, confirm)
 }
 
+// LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutils.Info, depositID, accountHash string) error {
+	// during validation we verified that the account hash and deposit id were signed by bitflyer
+	// we also validated that this "info" signed the request to perform the linking with http signature
+	// we assume that since we got linkingInfo signed from BF that they are KYC
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
+	if info.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	} else {
+		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "bitflyer")
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == ErrTooManyCardsLinked {
+				status = http.StatusConflict
+			}
+			return handlers.WrapError(err, "unable to link wallets", status)
+		}
+	}
+	return nil
+}
+
 // LinkWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkWallet(
 	ctx context.Context,
@@ -143,7 +170,7 @@ func (service *Service) LinkWallet(
 	probi = tx.Probi
 	depositProvider = "uphold"
 
-	providerLinkingID := uuid.NewV5(walletClaimNamespace, userID)
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	if info.ProviderLinkingID != nil {
 		// check if the member matches the associated member
 		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
@@ -195,6 +222,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	// add our command line params to context
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
 
+	// jwt key is hex encoded string
+	decodedBitFlyerJWTKey, err := hex.DecodeString(viper.GetString("bitflyer-jwt-key"))
+	if err != nil {
+		logger.Error().Err(err).Msg("invalid bitflyer jwt key")
+	}
+	ctx = context.WithValue(ctx, appctx.BitFlyerJWTKeyCTXKey, decodedBitFlyerJWTKey)
+
 	s, err := InitService(ctx, db, roDB)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
@@ -225,6 +259,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				// create wallet claim routes for our wallet providers
 				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+				r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}
@@ -271,7 +307,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	}
 
 	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
-	providerLinkingID := uuid.NewV5(walletClaimNamespace, to.String())
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, to.String())
 
 	if fromInfo.ProviderLinkingID != nil { // if the from wallet already has a provider linking id
 		if !uuid.Equal(*fromInfo.ProviderLinkingID, providerLinkingID) {

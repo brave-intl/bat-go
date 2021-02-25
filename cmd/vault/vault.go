@@ -4,7 +4,6 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -20,12 +19,6 @@ var (
 
 func init() {
 	cmd.RootCmd.AddCommand(VaultCmd)
-
-	// config - defaults to config.yaml
-	VaultCmd.PersistentFlags().String("config", "",
-		"the default path to a configuration file")
-	cmd.Must(viper.BindPFlag("config", VaultCmd.PersistentFlags().Lookup("config")))
-	cmd.Must(viper.BindEnv("config", "CONFIG"))
 }
 
 // ReadConfig sets up the config flag

@@ -32,6 +32,12 @@ env:
   UPHOLD_ACCESS_TOKEN: ${{secrets.UPHOLD_ACCESS_TOKEN}}
   RATIOS_TOKEN: ${{secrets.RATIOS_TOKEN}}
   UPHOLD_SETTLEMENT_ADDRESS: ${{secrets.UPHOLD_SETTLEMENT_ADDRESS}}
+  BITFLYER_SOURCE_FROM: tipping
+  BITFLYER_CLIENT_ID: ${{secrets.BITFLYER_CLIENT_ID}}
+  BITFLYER_CLIENT_SECRET: ${{secrets.BITFLYER_CLIENT_SECRET}}
+  BITFLYER_EXTRA_CLIENT_SECRET: ${{secrets.BITFLYER_EXTRA_CLIENT_SECRET}}
+  BITFLYER_SERVER: ${{secrets.BITFLYER_SERVER}}
+  BITFLYER_TOKEN: ${{secrets.BITFLYER_TOKEN}}
 
 jobs:
   CI:
@@ -39,7 +45,7 @@ jobs:
     strategy:
       matrix:
         goversion:
-        - 1.14
+        - 1.15
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
@@ -53,23 +59,6 @@ jobs:
       uses: KengoTODA/actions-setup-docker-compose@92cbaf8ac8c113c35e1cedd1182f217043fbdd00
       with:
         version: '1.25.4'
-
-    - name: Cache Docker Images
-      uses: satackey/action-docker-layer-caching@da67a6cd88114ce3e232893dc6d946efa225aefb
-      # Ignore the failure of a step and avoid terminating the job.
-      continue-on-error: true
-      with:
-        key: docker-cache-{hash}
-        restore-keys: |
-          docker-cache-
-
-    - name: Cache Go Modules
-      uses: actions/cache@0781355a23dac32fd3bac414512f4b903437991a
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
 
     - run: docker-compose pull
 

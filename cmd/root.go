@@ -60,7 +60,6 @@ func Execute(version, commit, buildTime string) {
 }
 
 func init() {
-
 	// pprof-enabled - defaults to ""
 	RootCmd.PersistentFlags().String("pprof-enabled", "",
 		"pprof enablement")
@@ -126,7 +125,6 @@ func Perform(action string, fn func(cmd *cobra.Command, args []string) error) fu
 				_, logger = logging.SetupLogger(cmd.Context())
 			}
 
-			// var bundle errorutils.ErrorBundle
 			log := logger.Err(err).Str("action", action)
 			httpError, ok := err.(*errorutils.ErrorBundle)
 			if ok {

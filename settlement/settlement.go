@@ -129,6 +129,11 @@ func (tx Transaction) IsComplete() bool {
 	return tx.Status == "completed"
 }
 
+// IsFailed returns true if the transaction status is failed
+func (tx Transaction) IsFailed() bool {
+	return tx.Status == "failed"
+}
+
 // PrepareTransactions by embedding signed transactions into the settlement documents
 func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error {
 	for i := 0; i < len(settlements); i++ {
@@ -203,6 +208,10 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 		fmt.Printf("already complete, skipping submit for channel %s\n", settlement.Channel)
 		return nil
 	}
+	if settlement.IsFailed() {
+		fmt.Printf("already failed, skipping submit for channel %s\n", settlement.Channel)
+		return nil
+	}
 
 	if len(settlement.ProviderID) > 0 {
 		// first check if the transaction has already been confirmed
@@ -231,8 +240,18 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(settlement.SignedTx, false)
-	if err != nil {
+	if errorutils.IsErrInvalidDestination(err) {
+		fmt.Printf("invalid destination, skipping\n")
+		settlement.Status = "failed"
+		return nil
+	} else if err != nil {
 		return err
+	}
+
+	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
+		fmt.Printf("quote returned is invalid, skipping\n")
+		settlement.Status = "failed"
+		return nil
 	}
 
 	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)
@@ -282,6 +301,10 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 
 		if settlement.IsComplete() {
 			fmt.Printf("already complete, skipping confirm for channel %s\n", settlement.Channel)
+			return nil
+		}
+		if settlement.IsFailed() {
+			fmt.Printf("already failed, skipping confirm for channel %s\n", settlement.Channel)
 			return nil
 		}
 

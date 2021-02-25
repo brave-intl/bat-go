@@ -130,7 +130,7 @@ func (_d DatastoreWithPrometheus) DeactivatePromotion(promotion *Promotion) (err
 }
 
 // DrainClaim implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
+func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -140,7 +140,21 @@ func (_d DatastoreWithPrometheus) DrainClaim(claim *Claim, credentials []cbr.Cre
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaim", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DrainClaim(claim, credentials, wallet, total)
+	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total)
+}
+
+// EnqueueMintDrainJob implements Datastore
+func (_d DatastoreWithPrometheus) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "EnqueueMintDrainJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
 }
 
 // DrainClaims implements Datastore
@@ -225,6 +239,20 @@ func (_d DatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, grantType 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimSummary", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetClaimSummary(walletID, grantType)
+}
+
+// GetDrainPoll implements Datastore
+func (_d DatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPoll, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainPoll", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetDrainPoll(drainID)
 }
 
 // GetIssuer implements Datastore
@@ -323,6 +351,20 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSumForTransactions", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetSumForTransactions(orderID)
+}
+
+// InsertBAPReportEvent implements Datastore
+func (_d DatastoreWithPrometheus) InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (up1 *uuid.UUID, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBAPReportEvent", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertBAPReportEvent(ctx, paymentID, amount)
 }
 
 // InsertBATLossEvent implements Datastore
@@ -472,6 +514,20 @@ func (_d DatastoreWithPrometheus) RunNextDrainJob(ctx context.Context, worker Dr
 	return _d.base.RunNextDrainJob(ctx, worker)
 }
 
+// RunNextMintDrainJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextMintDrainJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextMintDrainJob(ctx, worker)
+}
+
 // RunNextSuggestionJob implements Datastore
 func (_d DatastoreWithPrometheus) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (b1 bool, err error) {
 	_since := time.Now()
@@ -498,6 +554,20 @@ func (_d DatastoreWithPrometheus) SaveClaimCreds(claimCreds *ClaimCreds) (err er
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SaveClaimCreds", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.SaveClaimCreds(claimCreds)
+}
+
+// SetMintDrainPromotionTotal implements Datastore
+func (_d DatastoreWithPrometheus) SetMintDrainPromotionTotal(ctx context.Context, walletID uuid.UUID, promotionID uuid.UUID, total decimal.Decimal) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetMintDrainPromotionTotal", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetMintDrainPromotionTotal(ctx, walletID, promotionID, total)
 }
 
 // UpdateOrder implements Datastore

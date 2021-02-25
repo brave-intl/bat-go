@@ -13,11 +13,9 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/settlement"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -43,18 +41,20 @@ func init() {
 		UpholdCmd,
 	)
 
-	UpholdUploadCmd.Flags().Bool("verbose", false,
-		"how verbose logging should be")
-	cmd.Must(viper.BindPFlag("verbose", UpholdUploadCmd.Flags().Lookup("verbose")))
+	uploadBuilder := cmd.NewFlagBuilder(UpholdUploadCmd)
 
-	UpholdUploadCmd.Flags().String("input", "",
-		"input file to submit to a given provider")
-	cmd.Must(viper.BindPFlag("input", UpholdUploadCmd.Flags().Lookup("input")))
-	cmd.Must(UpholdUploadCmd.MarkFlagRequired("input"))
+	uploadBuilder.Flag().Bool("verbose", false,
+		"how verbose logging should be").
+		Bind("verbose")
 
-	UpholdUploadCmd.Flags().String("progress", "1s",
-		"how often progress should be printed out")
-	cmd.Must(viper.BindPFlag("progress", UpholdUploadCmd.Flags().Lookup("progress")))
+	uploadBuilder.Flag().String("input", "",
+		"input file to submit to a given provider").
+		Bind("input").
+		Require()
+
+	uploadBuilder.Flag().String("progress", "1s",
+		"how often progress should be printed out").
+		Bind("progress")
 }
 
 // RunUpholdUpload the runner that the uphold upload command calls
@@ -84,13 +84,13 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
 
 	logFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-log.json"
-	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-finished.json"
+	outputFilePrefix := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
 
 	return UpholdUpload(
 		ctx,
 		inputFile,
 		logFile,
-		outputFile,
+		outputFilePrefix,
 	)
 }
 
@@ -99,7 +99,7 @@ func UpholdUpload(
 	ctx context.Context,
 	inputFile string,
 	logFile string,
-	outputFile string,
+	outputFilePrefix string,
 ) error {
 
 	// setup logger, with the context that has the logger
@@ -152,17 +152,19 @@ func UpholdUpload(
 
 	var total = len(settlementState.Transactions)
 
-	allComplete := true
+	allFinalized := true
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
 
+		if settlementTransaction.IsComplete() || settlementTransaction.IsFailed() {
+			continue
+		}
+
 		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
 		if err != nil {
-			if errorutils.IsErrInvalidDestination(err) {
-				logger.Info().Err(err).Msg("invalid destination, skipping")
-				continue
-			}
-			logger.Panic().Err(err).Msg("unanticipated error")
+			logger.Error().Err(err).Msg("unanticipated error")
+			allFinalized = false
+			continue
 		}
 
 		var out []byte
@@ -201,34 +203,43 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to sync output log")
 		}
 
-		if !settlementTransaction.IsComplete() {
-			allComplete = false
+		if !settlementTransaction.IsComplete() && !settlementTransaction.IsFailed() {
+			allFinalized = false
 		}
 
 		// perform progress logging
 		logging.SubmitProgress(ctx, i, total)
 	}
 
-	if allComplete {
-		logger.Info().Msg("all transactions successfully completed, writing out settlement file")
+	if allFinalized {
+		logger.Info().Msg("all transactions finalized, writing out settlement file")
 	} else {
-		logger.Panic().Msg("not all transactions are successfully completed, rerun to resubmit")
+		logger.Panic().Msg("not all transactions are finalized, rerun to resubmit")
 	}
 
+	transactionsMap := make(map[string][]settlement.Transaction)
 	for i := 0; i < len(settlementState.Transactions); i++ {
 		// Redact signed transactions
 		settlementState.Transactions[i].SignedTx = ""
+
+		// Group by status
+		status := settlementState.Transactions[i].Status
+		transactionsMap[status] = append(transactionsMap[status], settlementState.Transactions[i])
 	}
 
-	// Write out transactions ready to be submitted to eyeshade
-	out, err := json.MarshalIndent(settlementState.Transactions, "", "    ")
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
-	}
+	for key, txs := range transactionsMap {
+		outputFile := outputFilePrefix + "-" + key + ".json"
 
-	err = ioutil.WriteFile(outputFile, out, 0600)
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
+		// Write out transactions ready to be submitted to eyeshade
+		out, err := json.MarshalIndent(txs, "", "    ")
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to marshal settlement transactions to eyeshade input")
+		}
+
+		err = ioutil.WriteFile(outputFile, out, 0600)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to write out settlement transactions to eyeshade input")
+		}
 	}
 
 	logger.Info().Msg("done!")

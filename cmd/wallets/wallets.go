@@ -7,7 +7,6 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -22,10 +21,6 @@ var (
 		Short: "provides REST api services",
 		Run:   WalletRestRun,
 	}
-	db                  string
-	walletsFeatureFlag  bool
-	enableLinkDrainFlag bool
-	roDB                string
 )
 
 func init() {
@@ -36,27 +31,36 @@ func init() {
 	cmd.ServeCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
-	// datastore - the writable datastore
-	WalletsCmd.PersistentFlags().StringVarP(&db, "datastore", "", "",
-		"the datastore for the wallet system")
-	cmd.Must(viper.BindPFlag("datastore", WalletsCmd.PersistentFlags().Lookup("datastore")))
-	cmd.Must(viper.BindEnv("datastore", "DATABASE_URL"))
+	walletsCmdBuilder := cmd.NewFlagBuilder(WalletsCmd)
 
-	// walletsFeatureFlag - enable the wallet endpoints through this feature flag
-	WalletsCmd.PersistentFlags().BoolVarP(&walletsFeatureFlag, "wallets-feature-flag", "", false,
-		"the feature flag enabling the wallets feature")
-	cmd.Must(viper.BindPFlag("wallets-feature-flag", WalletsCmd.PersistentFlags().Lookup("wallets-feature-flag")))
-	cmd.Must(viper.BindEnv("wallets-feature-flag", "FEATURE_WALLET"))
+	walletsCmdBuilder.Flag().String("bitflyer-jwt-key", "",
+		"the bitflyer jwt key for validation of linking info").
+		Env("BITFLYER_JWT_KEY").
+		Bind("bitflyer-jwt-key").
+		Require()
 
-	// ENABLE_LINKING_DRAINING - enable ability to link wallets and drain wallets
-	WalletsCmd.PersistentFlags().BoolVarP(&enableLinkDrainFlag, "enable-link-drain-flag", "", false,
-		"the in-migration flag disabling the wallets link feature")
-	cmd.Must(viper.BindPFlag("enable-link-drain-flag", WalletsCmd.PersistentFlags().Lookup("enable-link-drain-flag")))
-	cmd.Must(viper.BindEnv("enable-link-drain-flag", "ENABLE_LINKING_DRAINING"))
+	walletsCmdBuilder.Flag().String("ro-datastore", "",
+		"the read only datastore for the wallet system").
+		Env("RO_DATABASE_URL").
+		Bind("ro-datastore").
+		Require()
 
-	// ro-datastore - the writable datastore
-	WalletsCmd.PersistentFlags().StringVarP(&roDB, "ro-datastore", "", "",
-		"the read only datastore for the wallet system")
-	cmd.Must(viper.BindPFlag("ro-datastore", WalletsCmd.PersistentFlags().Lookup("ro-datastore")))
-	cmd.Must(viper.BindEnv("ro-datastore", "RO_DATABASE_URL"))
+	walletsCmdBuilder.Flag().String("datastore", "",
+		"the datastore for the wallet system").
+		Env("DATABASE_URL").
+		Bind("datastore").
+		Require()
+
+	walletsCmdBuilder.Flag().Bool("wallets-feature-flag", false,
+		"the feature flag enabling the wallets feature").
+		Env("FEATURE_WALLET").
+		Bind("wallets-feature-flag").
+		Require()
+
+	walletsCmdBuilder.Flag().Bool("enable-link-drain-flag", false,
+		"the in-migration flag disabling the wallets link feature").
+		Env("ENABLE_LINKING_DRAINING").
+		Bind("enable-link-drain-flag").
+		Require()
+
 }

@@ -6,6 +6,8 @@ import (
 )
 
 var (
+	// ErrConflictBAPReportEvent is an error created when trying to update a bat loss event with a different amount
+	ErrConflictBAPReportEvent = errors.New("unable to record BAP report")
 	// ErrConflictBATLossEvent is an error created when trying to update a bat loss event with a different amount
 	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
 	// ErrWalletNotFound when there is no wallet found
@@ -47,22 +49,22 @@ func New(cause error, message string, data interface{}) error {
 }
 
 // Data from error origin
-func (err *ErrorBundle) Data() interface{} {
+func (err ErrorBundle) Data() interface{} {
 	return err.data
 }
 
 // Cause returns the associated cause
-func (err *ErrorBundle) Cause() error {
+func (err ErrorBundle) Cause() error {
 	return err.cause
 }
 
 // Unwrap returns the associated cause
-func (err *ErrorBundle) Unwrap() error {
+func (err ErrorBundle) Unwrap() error {
 	return err.cause
 }
 
 // Error turns into an error
-func (err *ErrorBundle) Error() string {
+func (err ErrorBundle) Error() string {
 	return err.message
 }
 

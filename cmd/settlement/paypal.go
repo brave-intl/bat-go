@@ -19,7 +19,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func init() {
@@ -32,40 +31,39 @@ func init() {
 	SettlementCmd.AddCommand(PaypalSettlementCmd)
 
 	// setup the flags
+	completeBuilder := cmd.NewFlagBuilder(CompletePaypalSettlementCmd)
+	transformBuilder := cmd.NewFlagBuilder(TransformPaypalSettlementCmd)
+	emailBuilder := cmd.NewFlagBuilder(EmailPaypalSettlementCmd)
+	transformEmailCompleteBuilder := completeBuilder.Concat(transformBuilder, emailBuilder)
 
-	// input (required by all)
-	PaypalSettlementCmd.PersistentFlags().String("input", "",
-		"the file or comma delimited list of files that should be utilized")
-	cmd.Must(viper.BindPFlag("input", PaypalSettlementCmd.PersistentFlags().Lookup("input")))
-	cmd.Must(viper.BindEnv("input", "INPUT"))
-	cmd.Must(PaypalSettlementCmd.MarkPersistentFlagRequired("input"))
+	transformEmailCompleteBuilder.Flag().String("input", "",
+		"the file or comma delimited list of files that should be utilized").
+		Env("INPUT").
+		Bind("input").
+		Require()
 
-	// out (required by all with default)
-	PaypalSettlementCmd.PersistentFlags().String("out", "./paypal-settlement",
-		"the location of the file")
-	cmd.Must(viper.BindPFlag("out", PaypalSettlementCmd.PersistentFlags().Lookup("out")))
-	cmd.Must(viper.BindEnv("out", "OUT"))
-	cmd.Must(PaypalSettlementCmd.MarkPersistentFlagRequired("out"))
+	transformEmailCompleteBuilder.Flag().String("out", "./paypal-settlement",
+		"the location of the file to write out").
+		Env("OUT").
+		Bind("out").
+		Require()
 
-	// currency (required by transform)
-	TransformPaypalSettlementCmd.PersistentFlags().String("currency", "",
-		"a currency must be set")
-	cmd.Must(viper.BindPFlag("currency", TransformPaypalSettlementCmd.PersistentFlags().Lookup("currency")))
-	cmd.Must(viper.BindEnv("currency", "CURRENCY"))
-	cmd.Must(TransformPaypalSettlementCmd.MarkPersistentFlagRequired("currency"))
+	transformBuilder.Flag().String("currency", "",
+		"a currency must be set (usually JPY)").
+		Env("CURRENCY").
+		Bind("currency").
+		Require()
 
-	// txnID (required by complete)
-	CompletePaypalSettlementCmd.Flags().String("txn-id", "",
-		"the completed mass pay transaction id")
-	cmd.Must(viper.BindPFlag("txn-id", CompletePaypalSettlementCmd.Flags().Lookup("txn-id")))
-	cmd.Must(viper.BindEnv("txn-id", "TXN_ID"))
-	cmd.Must(CompletePaypalSettlementCmd.MarkFlagRequired("txn-id"))
+	completeBuilder.Flag().String("txn-id", "",
+		"the completed mass pay transaction id").
+		Env("TXN_ID").
+		Bind("txn-id").
+		Require()
 
-	// rate
-	TransformPaypalSettlementCmd.Flags().Float64("rate", 0,
-		"the rate to compute the currency conversion")
-	cmd.Must(viper.BindPFlag("rate", TransformPaypalSettlementCmd.Flags().Lookup("rate")))
-	cmd.Must(viper.BindEnv("rate", "RATE"))
+	transformBuilder.Flag().Float64("rate", 0,
+		"a currency must be set (usually JPY)").
+		Bind("rate").
+		Env("RATE")
 }
 
 // PaypalEmailTemplate performs template replacement of date fields in emails

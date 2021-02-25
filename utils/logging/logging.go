@@ -31,15 +31,25 @@ func init() {
 	prometheus.MustRegister(droppedLogTotal)
 }
 
+// SetupLoggerWithLevel - helper to setup a logger and associate with context with a given log level
+func SetupLoggerWithLevel(ctx context.Context, level zerolog.Level) (context.Context, *zerolog.Logger) {
+	// setup context with log level passed in
+	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, level)
+	// call SetupLogger
+	return SetupLogger(ctx)
+}
+
 // SetupLogger - helper to setup a logger and associate with context
 func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
-	var (
-		env, err = appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
-	)
+	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		// if not in context, default to local
 		env = "local"
 	}
+
+	// defaults to info level
+	level, _ := appctx.GetLogLevelFromContext(ctx, appctx.LogLevelCTXKey)
+
 	var output io.Writer
 	if env != "local" {
 		// this log writer uses a ring buffer and drops messages that cannot be processed
@@ -71,10 +81,11 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 		}
 	}
 
-	if !debug {
-		// if not debug, set log level to info
-		l = l.Level(zerolog.InfoLevel)
-	} else {
+	// set the log level
+	l = l.Level(level)
+
+	// debug override
+	if debug {
 		l = l.Level(zerolog.DebugLevel)
 	}
 
