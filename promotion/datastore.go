@@ -976,7 +976,7 @@ limit 1`
 
 // This code can be deleted once https://github.com/brave-intl/bat-go/issues/263 is addressed.
 
-// GetOrder queries the database and returns an order test
+// GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := "SELECT * FROM orders WHERE id = $1"
 	order := Order{}
@@ -999,11 +999,6 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	return &order, nil
 }
 
-<<<<<<< HEAD
-// DrainClaims by marking the claims as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaims(claims []*Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
-	credentialsJSON, err := json.Marshal(credentials)
-=======
 // SetMintDrainPromotionTotal - set the total number of redemptions for this drain job
 func (pg *Postgres) SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error {
 
@@ -1013,39 +1008,21 @@ mint_drain_id=(select id from mint_drain where wallet_id=$2) and
 promotion_id=$3`
 
 	_, err := pg.Exec(statement, total, walletID, promotionID)
->>>>>>> 71a71ad2f6da83915f990b18e5189035c3754058
 	if err != nil {
 		return err
 	}
 
-<<<<<<< HEAD
-=======
 	return nil
 }
 
 // EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error {
->>>>>>> 71a71ad2f6da83915f990b18e5189035c3754058
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
 	}
 	defer pg.RollbackTx(tx)
 
-<<<<<<< HEAD
-	for _, claim := range claims {
-		_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
-		if err != nil {
-			return err
-		}
-	}
-
-	statement := `
-	insert into claim_drain (credentials, wallet_id, total)
-	values ($1, $2, $3)
-	returning *`
-	_, err = tx.Exec(statement, credentialsJSON, wallet.ID, total)
-=======
 	var mintDrainJob = MintDrainJob{}
 
 	statement := `
@@ -1053,13 +1030,10 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 	values ($1)
 	returning *`
 	err = tx.GetContext(ctx, &mintDrainJob, statement, walletID)
->>>>>>> 71a71ad2f6da83915f990b18e5189035c3754058
 	if err != nil {
 		return err
 	}
 
-<<<<<<< HEAD
-=======
 	for _, id := range promotionIDs {
 		_, err = tx.Exec(`
 			insert into mint_drain_promotion
@@ -1071,7 +1045,6 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 		}
 	}
 
->>>>>>> 71a71ad2f6da83915f990b18e5189035c3754058
 	err = tx.Commit()
 	if err != nil {
 		return err
