@@ -28,6 +28,7 @@ type BitflyerSuite struct {
 }
 
 func (suite *BitflyerSuite) SetupSuite() {
+	fmt.Println("os.Getenv(\"BITFLYER_LIVE\")", os.Getenv("BITFLYER_LIVE"))
 	if os.Getenv("BITFLYER_LIVE") != "true" {
 		suite.T().Skip("bitflyer side unable to settle")
 	}
