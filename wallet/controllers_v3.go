@@ -218,6 +218,76 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 	}
 }
 
+// LinkGeminiDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx = r.Context()
+			id  = new(inputs.ID)
+			glr = new(GeminiLinkingRequest)
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		// get payment id
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// validate payment id matches what was in the http signature
+		signatureID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		if id.String() != signatureID {
+			return handlers.ValidationError(
+				"paymentId from URL does not match paymentId in http signature",
+				map[string]interface{}{
+					"paymentID": "does not match http signature id",
+				},
+			)
+		}
+
+		// read post body
+		if err := inputs.DecodeAndValidateReader(ctx, glr, r.Body); err != nil {
+			return glr.HandleErrors(err)
+		}
+
+		// get the wallet
+		wallet, err := s.GetWallet(ctx, *id.UUID())
+		if err != nil {
+			if strings.Contains(err.Error(), "looking up wallet") {
+				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
+			}
+			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
+		}
+
+		err = s.LinkGeminiWallet(ctx, wallet, glr.Destination, glr.AccountID)
+		if err != nil {
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
+		}
+
+		// render the wallet
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
 // LinkUpholdDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
 func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {

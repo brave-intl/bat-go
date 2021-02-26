@@ -2,6 +2,8 @@ package promotion
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,14 +12,16 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	w "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -26,7 +30,12 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+var (
+	errMissingTransferPromotion     = errors.New("missing configuration: BraveTransferPromotionID")
+	errMissingEnvGeminiClientID     = errors.New("missing env for gemini redemption `GEMINI_CLIENT_ID`")
+	errMissingEnvGeminiClientKey    = errors.New("missing env for gemini redemption `GEMINI_CLIENT_KEY`")
+	errMissingEnvGeminiClientSecret = errors.New("missing env for gemini redemption `GEMINI_CLIENT_SECRET`")
+)
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
@@ -244,7 +253,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		transferID := uuid.NewV4().String()
 		totalF64, _ := total.Float64()
 
-		tx := new(w.TransactionInfo)
+		tx := new(walletutils.TransactionInfo)
 
 		tx.ID = transferID
 		tx.Destination = wallet.UserDepositDestination
@@ -290,6 +299,10 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			service.drainChannel <- tx
 		}
 		return tx, err
+	} else if *wallet.UserDepositAccountProvider == "gemini" {
+
+		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
+
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
 
@@ -317,13 +330,88 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				return nil, fmt.Errorf("failed to set append total funds: %w", err)
 			}
 		}
-		return new(w.TransactionInfo), nil
+		return new(walletutils.TransactionInfo), nil
 	}
 
 	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
 	return nil, fmt.Errorf(
 		"failed to transfer funds: user_deposit_account_provider unknown: %s",
 		*wallet.UserDepositAccountProvider)
+}
+
+func redeemAndTransferGeminiFunds(
+	ctx context.Context,
+	service *Service,
+	wallet *walletutils.Info,
+	total decimal.Decimal,
+) (*walletutils.TransactionInfo, error) {
+
+	ns := uuid.Must(uuid.FromString(wallet.UserDepositDestination))
+	txType := "drain"
+	channel := "wallet"
+	transferID := uuid.NewV5(ns, txType+channel).String()
+
+	tx := new(walletutils.TransactionInfo)
+
+	tx.ID = transferID
+	tx.Destination = wallet.UserDepositDestination
+	tx.DestAmount = total
+
+	account := "primary" // the account we want to drain from
+	settlementTx := settlement.Transaction{
+		SettlementID: transferID,
+		Type:         txType,
+		Destination:  wallet.UserDepositDestination,
+		Channel:      channel,
+	}
+	payouts := []gemini.PayoutPayload{
+		{
+			TxRef:       gemini.GenerateTxRef(&settlementTx),
+			Amount:      total,
+			Currency:    "BAT",
+			Destination: wallet.UserDepositDestination,
+			Account:     &account,
+		},
+	}
+	clientID := os.Getenv("GEMINI_CLIENT_ID")
+	if clientID == "" {
+		return nil, errMissingEnvGeminiClientID
+	}
+	APIKey := os.Getenv("GEMINI_CLIENT_KEY")
+	if clientID == "" {
+		return nil, errMissingEnvGeminiClientKey
+	}
+	secret := os.Getenv("GEMINI_CLIENT_SECRET")
+	if clientID == "" {
+		return nil, errMissingEnvGeminiClientSecret
+	}
+
+	payload := gemini.NewBulkPayoutPayload(
+		&account,
+		clientID,
+		&payouts,
+	)
+	// upload
+	signer := cryptography.NewHMACHasher([]byte(secret))
+	serializedPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize payload: %w", err)
+	}
+	b64Payload := base64.StdEncoding.EncodeToString([]byte(serializedPayload))
+	_, err = service.geminiClient.UploadBulkPayout(
+		ctx,
+		APIKey,
+		signer,
+		b64Payload,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+	// check if this
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
+	}
+	return tx, err
 }
 
 // MintGrant create a new grant for the wallet specified with the total specified

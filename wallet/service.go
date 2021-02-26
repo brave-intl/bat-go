@@ -123,6 +123,31 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutil
 	return nil
 }
 
+// LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, depositID, accountID string) error {
+	// during validation we verified that the account hash and deposit id were signed by gemini
+	// we also validated that this "info" signed the request to perform the linking with http signature
+	// we assume that since we got linkingInfo signed from BF that they are KYC
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
+	if info.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	} else {
+		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "gemini")
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == ErrTooManyCardsLinked {
+				status = http.StatusConflict
+			}
+			return handlers.WrapError(err, "unable to link wallets", status)
+		}
+	}
+	return nil
+}
+
 // LinkWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkWallet(
 	ctx context.Context,
@@ -261,6 +286,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
 				r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 					"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
+				r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+					"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}

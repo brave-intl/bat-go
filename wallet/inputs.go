@@ -243,10 +243,60 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
 }
 
+// GeminiLinkingRequest holds info needed to link gemini account
+type GeminiLinkingRequest struct {
+	Signature   string `json:"signature"`
+	Destination string `json:"destination"`
+	AccountID   string `json:"account_id"`
+}
+
+// Validate - implementation of validatable interface
+func (glr *GeminiLinkingRequest) Validate(ctx context.Context) error {
+	var merr = new(errorutils.MultiError)
+	if glr.Signature == "" {
+		merr.Append(errors.New("failed to validate 'signature': must not be empty"))
+	}
+	if glr.Destination == "" || !govalidator.IsUUID(glr.Destination) {
+		merr.Append(errors.New("failed to validate 'destination': must be uuid"))
+	}
+	if merr.Count() > 0 {
+		return merr
+	}
+	return nil
+}
+
+// Decode - implementation of  decodable interface
+func (glr *GeminiLinkingRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, glr); err != nil {
+		return fmt.Errorf("failed to decode json: %w", err)
+	}
+	return nil
+}
+
+// HandleErrors - handle any errors from this request
+func (glr *GeminiLinkingRequest) HandleErrors(err error) *handlers.AppError {
+	issues := map[string]string{}
+	if errors.Is(err, ErrInvalidJSON) {
+		issues["invalidJSON"] = err.Error()
+	}
+
+	var merr *errorutils.MultiError
+	if errors.As(err, &merr) {
+		for _, e := range merr.Errs {
+			if strings.Contains(e.Error(), "failed decoding") {
+				issues["decoding"] = e.Error()
+			}
+			if strings.Contains(e.Error(), "failed validation") {
+				issues["validation"] = e.Error()
+			}
+		}
+	}
+	return handlers.ValidationError("brave create wallet request validation errors", issues)
+}
+
 // BitFlyerLinkingRequest - the structure for a brave provider wallet creation request
 type BitFlyerLinkingRequest struct {
 	LinkingInfo string `json:"linkingInfo"`
-
 	DepositID   string `json:"-"`
 	AccountHash string `json:"-"`
 }
