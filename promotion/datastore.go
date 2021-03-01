@@ -514,14 +514,14 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if promotion.Type == "ads" || legacyClaimExists {
 		statement := `
 		update claims
-		set redeemed = true
+		set redeemed = true, redeemed_at = now()
 		where promotion_id = $1 and wallet_id = $2 and not redeemed
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID)
 	} else {
 		statement := `
-		insert into claims (promotion_id, wallet_id, approximate_value, redeemed)
-		values ($1, $2, $3, true)
+		insert into claims (promotion_id, wallet_id, approximate_value, redeemed, redeemed_at)
+		values ($1, $2, $3, true, now())
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID, promotion.ApproximateValue)
 	}
@@ -1066,7 +1066,7 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	}
 	defer pg.RollbackTx(tx)
 
-	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
 	if err != nil {
 		return err
 	}
@@ -1074,10 +1074,10 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	var claimDrain = DrainJob{}
 
 	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id)
-	values ($1, $2, $3, $4)
+	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id)
+	values ($1, $2, $3, $4, $5)
 	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID)
+	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID)
 	if err != nil {
 		return err
 	}
@@ -1126,6 +1126,7 @@ func errToDrainCode(err error) (string, bool) {
 // DrainJob - definition of a drain job
 type DrainJob struct {
 	ID            uuid.UUID       `db:"id"`
+	ClaimID       *uuid.UUID      `db:"claim_id"`
 	Credentials   string          `db:"credentials"`
 	WalletID      uuid.UUID       `db:"wallet_id"`
 	Total         decimal.Decimal `db:"total"`
@@ -1134,7 +1135,8 @@ type DrainJob struct {
 	ErrCode       *string         `db:"errcode"`
 	BatchID       *uuid.UUID      `db:"batch_id"`
 	Completed     bool            `db:"completed"`
-	CompletedAt   *time.Time      `db:"completed_at"`
+	CompletedAt   pq.NullTime     `db:"completed_at"`
+	UpdatedAt     pq.NullTime     `db:"updated_at"`
 }
 
 // RunNextDrainJob to process deposits if there is one waiting

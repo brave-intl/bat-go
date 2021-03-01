@@ -30,6 +30,9 @@ type Claim struct {
 	LegacyClaimed    bool            `db:"legacy_claimed"`
 	RedeemedAt       pq.NullTime     `db:"redeemed_at"`
 	Drained          bool            `db:"drained"`
+	DrainedAt        pq.NullTime     `db:"drained_at"`
+	UpdatedAt        pq.NullTime     `db:"updated_at"`
+	ClaimType        *string         `db:"claim_type"`
 }
 
 // SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
