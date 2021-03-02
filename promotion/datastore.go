@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -1116,6 +1117,12 @@ func errToDrainCode(err error) (string, bool) {
 		if codedErr, ok := err.(uphold.Coded); ok {
 			// possible wallet provider specific errors
 			errCode = codedErr.GetCode()
+		}
+		if codedErr, ok := err.(clients.BitflyerError); ok {
+			// possible wallet provider specific errors
+			if len(codedErr.ErrorIDs) > 0 {
+				errCode = codedErr.ErrorIDs[0]
+			}
 		} else {
 			errCode = "unknown"
 		}
