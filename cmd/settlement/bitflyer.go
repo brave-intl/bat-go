@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
@@ -202,6 +203,11 @@ func init() {
 		Env("BITFLYER_SOURCE_FROM")
 
 	uploadCheckStatusBuilder.Flag().Bool("bitflyer-dryrun", false,
+		"tells bitflyer that this is a practice round").
+		Bind("bitflyer-dryrun").
+		Env("BITFLYER_DRYRUN")
+
+	uploadCheckStatusBuilder.Flag().Duration("bitflyer-process-time", time.Second,
 		"tells bitflyer that this is a practice round").
 		Bind("bitflyer-dryrun").
 		Env("BITFLYER_DRYRUN")

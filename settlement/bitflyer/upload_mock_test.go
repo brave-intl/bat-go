@@ -377,7 +377,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client.EXPECT().
 			CheckPayoutStatus(
 				ctx,
-				*bitflyer.NewWithdrawToDepositIDBulkPayload(
+				bitflyer.NewWithdrawToDepositIDBulkPayload(
 					nil,
 					priceToken.String(),
 					&[]bitflyer.WithdrawToDepositIDPayload{{
@@ -387,7 +387,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 						TransferID:   bitflyer.GenerateTransferID(&settlementTx1),
 						SourceFrom:   sourceFrom,
 					}},
-				),
+				).ToBulkStatus(),
 			).
 			Return(&bitflyer.WithdrawToDepositIDBulkResponse{
 				DryRun: true,

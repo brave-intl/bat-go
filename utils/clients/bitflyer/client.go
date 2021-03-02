@@ -2,13 +2,11 @@ package bitflyer
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -16,7 +14,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
@@ -70,6 +67,19 @@ type CheckBulkStatusPayload struct {
 	Withdrawals []CheckStatusPayload `json:"withdrawals"`
 }
 
+// TransferIDsToBulkStatus takes a list of transferIDs and turns them into a payload for checking their status
+func TransferIDsToBulkStatus(transferIDs []string) CheckBulkStatusPayload {
+	checkStatusPayload := []CheckStatusPayload{}
+	for _, transferID := range transferIDs {
+		checkStatusPayload = append(checkStatusPayload, CheckStatusPayload{
+			TransferID: transferID,
+		})
+	}
+	return CheckBulkStatusPayload{
+		Withdrawals: checkStatusPayload,
+	}
+}
+
 // ToBulkStatus converts an upload to a checks status payload
 func (w WithdrawToDepositIDBulkPayload) ToBulkStatus() CheckBulkStatusPayload {
 	checkStatusPayload := []CheckStatusPayload{}
@@ -90,6 +100,19 @@ type WithdrawToDepositIDResponse struct {
 	Message      string          `json:"message"`
 	Status       string          `json:"transfer_status"`
 	TransferID   string          `json:"transfer_id"`
+}
+
+// CategorizeStatus checks the status of a withdrawal response and categorizes it
+func (withdrawResponse *WithdrawToDepositIDResponse) CategorizeStatus() string {
+	switch withdrawResponse.Status {
+	case "SUCCESS", "EXECUTED":
+		return "complete"
+	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION", "OTHER_ERROR", "MONTHLY_SEND_LIMIT":
+		return "failed"
+	case "CREATED", "PENDING":
+		return "pending"
+	}
+	return "unknown"
 }
 
 // TokenPayload holds the data needed to get a new token
@@ -147,13 +170,13 @@ type WithdrawToDepositIDBulkResponse struct {
 // NewWithdrawsFromTxs creates an array of withdrawal requests
 func NewWithdrawsFromTxs(
 	sourceFrom string,
-	txs *[]settlement.Transaction,
+	txs []settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if !validSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
-	for _, tx := range *txs {
+	for _, tx := range txs {
 		bat := altcurrency.BAT.FromProbi(tx.Probi)
 		if bat.Exponent() > 8 {
 			return nil, fmt.Errorf("cannot convert float exactly, %d", bat)
@@ -167,7 +190,7 @@ func NewWithdrawsFromTxs(
 			CurrencyCode: "BAT",
 			Amount:       f64,
 			DepositID:    tx.Destination,
-			TransferID:   GenerateTransferID(&tx),
+			TransferID:   tx.TransferID(),
 			SourceFrom:   sourceFrom,
 		})
 	}
@@ -175,16 +198,8 @@ func NewWithdrawsFromTxs(
 }
 
 // GenerateTransferID generates a deterministic transaction reference id for idempotency
-func GenerateTransferID(tx *settlement.Transaction) string {
-	inputs := []string{
-		tx.SettlementID,
-		tx.Destination,
-		// tx.Channel, // all channels are grouped together
-	}
-	key := strings.Join(inputs, "_")
-	bytes := sha256.Sum256([]byte(key))
-	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
-	return refID
+func GenerateTransferID(tx settlement.Transaction) string {
+	return tx.TransferID()
 }
 
 // Client abstracts over the underlying client
@@ -194,7 +209,7 @@ type Client interface {
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
 	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
+	CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// RefreshToken refreshes the token belonging to the provided secret values
 	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
 	// SetAuthToken sets the auth token on underlying client object
@@ -262,13 +277,13 @@ func (c *HTTPClient) UploadBulkPayout(
 // CheckPayoutStatus checks bitflyer transaction status
 func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
-	payload WithdrawToDepositIDBulkPayload,
+	payload CheckBulkStatusPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(
 		ctx,
 		http.MethodPost,
 		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-		payload.ToBulkStatus(),
+		payload,
 	)
 	if err != nil {
 		return nil, err
