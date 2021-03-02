@@ -475,7 +475,6 @@ func gatherCompletedPublishers(
 			for _, tx := range byPublisher[publisher] {
 				transferID := tx.TransferID()
 				if statusesByTransferID[transferID].Status == notFoundStatus {
-					fmt.Printf("%#v\n", tx)
 					tx.Status = "not-submitted"
 					tx.Note = "MONTHLY_SEND_LIMIT: not-submitted prefiltered"
 					notSubmittedTxs = append(notSubmittedTxs, tx)
