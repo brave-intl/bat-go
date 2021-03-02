@@ -18,8 +18,10 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
@@ -279,7 +281,17 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 	for {
 		_, err := job(ctx)
 		if err != nil {
-			logger.Error().Err(err).Msg("error encountered in job run")
+			log := logger.Error().Err(err)
+			httpError, ok := err.(*errorutils.ErrorBundle)
+			if ok {
+				state, ok := httpError.Data().(clients.HTTPState)
+				if ok {
+					log = log.Int("status", state.Status).
+						Str("path", state.Path).
+						Interface("data", state.Body)
+				}
+			}
+			log.Msg("error encountered in job run")
 			sentry.CaptureException(err)
 		}
 		// regardless if attempted or not, wait for the duration until retrying
