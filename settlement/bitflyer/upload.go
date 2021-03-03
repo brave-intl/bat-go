@@ -62,11 +62,16 @@ func CategorizeResponse(
 ) (settlement.Transaction, string) {
 	currentTx := limitedSettlements[payout.TransferID]
 	key := payout.CategorizeStatus()
-	if key == "OTHER_ERROR" && !currentTx.Amount.Equal(payout.Amount) {
+	if payout.Status == "OTHER_ERROR" && !currentTx.Amount.Equal(payout.Amount) {
 		key = "complete"
 		payout.Status = "EXECUTED"
 		// use payed out amount
-		currentTx.Amount = payout.Amount
+		amount := payout.Amount
+		currentTx.Amount = amount
+		currentTx.Probi = altcurrency.BAT.ToProbi(amount)
+		if currentTx.Type == "contribution" {
+			currentTx.BATPlatformFee = currentTx.Probi.Div(decimal.NewFromFloat(19)).Truncate(0)
+		}
 	}
 	currentTx.Status = key
 	note := payout.Status
@@ -196,7 +201,7 @@ func setupSettlementTransactions(
 	error,
 ) {
 	// goes to bitflyer, does not include 0 value txs
-	settlementRequests := [][]settlement.Transaction{{}}
+	settlementRequests := [][]settlement.Transaction{}
 	// goes to eyeshade, includes 0 value txs
 	settlements := []settlement.Transaction{}
 	// a list of settlements that are not being sent
@@ -208,6 +213,9 @@ func setupSettlementTransactions(
 			continue
 		}
 		set, index := getSettlementGroup(settlementRequests, len(groupedWithdrawals))
+		if index == len(settlementRequests) {
+			settlementRequests = append(settlementRequests, set)
+		}
 		aggregatedTx := settlement.Transaction{}
 		limitedTxs := []settlement.Transaction{}
 		for groupedWithdrawalIndex, limitedTx := range groupedWithdrawals {
@@ -231,10 +239,10 @@ func setupSettlementTransactions(
 			}
 			partialFee := decimal.Zero
 			if limitedTx.BATPlatformFee.GreaterThan(decimal.Zero) {
-				partialFee = partialProbi.Mul(decimal.NewFromFloat(0.05)).Truncate(0)
+				partialFee = partialProbi.Div(decimal.NewFromFloat(19)).Truncate(0)
 			}
 			// always in BAT to BAT so we're good
-			partialAmount := altcurrency.BAT.FromProbi(partialProbi.Add(partialFee))
+			partialAmount := altcurrency.BAT.FromProbi(partialProbi)
 			// add to aggregate provider transaction
 			aggregatedTx.Amount = aggregatedTx.Amount.Add(partialAmount)
 			// not needed but useful for sanity checking
@@ -291,12 +299,15 @@ func getSettlementGroup(
 	toAdd int,
 ) ([]settlement.Transaction, int) {
 	requestSeries := settlementRequests
+	if len(requestSeries) == 0 {
+		set := []settlement.Transaction{}
+		return set, 0
+	}
 	lastIndex := len(requestSeries) - 1
 	set := requestSeries[lastIndex]
 	futureLength := len(requestSeries[lastIndex]) + toAdd
 	if futureLength > 1000 {
 		set := []settlement.Transaction{}
-		settlementRequests = append(settlementRequests, set)
 		return set, len(settlementRequests) - 1
 	}
 	return set, len(settlementRequests) - 1
@@ -382,7 +393,6 @@ func IterateRequest(
 		if err != nil {
 			return nil, err
 		}
-
 		for i, request := range *requests {
 			if action == "upload" {
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
@@ -423,7 +433,7 @@ func IterateRequest(
 func mapSettlementsByTransferID(settlements []settlement.Transaction) map[string]settlement.Transaction {
 	byTransferID := make(map[string]settlement.Transaction)
 	for _, settlement := range settlements {
-		byTransferID[bitflyer.GenerateTransferID(settlement)] = settlement
+		byTransferID[settlement.TransferID()] = settlement
 	}
 	return byTransferID
 }
@@ -450,7 +460,6 @@ func gatherCompletedPublishers(
 		payload,
 	)
 	successfulPerPublisher := make(map[string]int)
-	// submittedByTransferID := make(map[string]settlement.Transaction)
 	if err != nil {
 		return submittedTransactions, successfulPerPublisher, err
 	}
@@ -472,6 +481,8 @@ func gatherCompletedPublishers(
 			// increment successful publisher transactions if one ever existed
 			successfulPerPublisher[publisher]++
 			// submittedByTransferID[transferID] = tx
+			tx.Note = checkedPayout.Status
+			tx.Status = category
 		}
 		submittedTransactions[category] = append(submittedTransactions[category], tx)
 	}

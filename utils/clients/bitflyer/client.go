@@ -106,7 +106,7 @@ type WithdrawToDepositIDResponse struct {
 }
 
 // CategorizeStatus checks the status of a withdrawal response and categorizes it
-func (withdrawResponse *WithdrawToDepositIDResponse) CategorizeStatus() string {
+func (withdrawResponse WithdrawToDepositIDResponse) CategorizeStatus() string {
 	switch withdrawResponse.Status {
 	case "SUCCESS", "EXECUTED":
 		return "complete"
@@ -200,11 +200,6 @@ func NewWithdrawsFromTxs(
 	return &withdrawals, nil
 }
 
-// GenerateTransferID generates a deterministic transaction reference id for idempotency
-func GenerateTransferID(tx settlement.Transaction) string {
-	return tx.TransferID()
-}
-
 // Client abstracts over the underlying client
 type Client interface {
 	// FetchQuote gets a quote of BAT to JPY
@@ -252,12 +247,16 @@ func (c *HTTPClient) FetchQuote(
 	productCode string,
 	readFromFile bool,
 ) (*Quote, error) {
-	// if readFromFile {
-	// 	read := readQuoteFromFile()
-	// 	if withinPriceTokenExpiration(read) {
-	// 		return read.Body, nil
-	// 	}
-	// }
+	if readFromFile {
+		read, err := readQuoteFromFile()
+		if err != nil {
+			fmt.Println("failed to read quote from file", err)
+			return nil, err
+		}
+		if withinPriceTokenExpiration(read) {
+			return &read.Body, nil
+		}
+	}
 	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
 		ProductCode: productCode,
 	})
@@ -266,47 +265,46 @@ func (c *HTTPClient) FetchQuote(
 	}
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
-	// jwtKey, err := appctx.GetByteSliceFromContext(ctx, appctx.BitFlyerJWTKeyCTXKey)
-	// if err == nil {
-	// 	writeQuoteToFile(SavedQuote{
-	// 		Body: &body,
-	// 		Key:  string(jwtKey),
-	// 	})
-	// } else {
-	// 	fmt.Println("jwt byteslice get failed", err)
-	// }
+	if err == nil {
+		expiry, err := parseExpiry(body.PriceToken)
+		if err == nil {
+			writeQuoteToFile(SavedQuote{
+				Body:   body,
+				Expiry: *expiry,
+			})
+		}
+	}
 	return &body, handleBitflyerError(err, req, resp)
+}
+
+// PriceTokenInfo holds info from the price token
+type PriceTokenInfo struct {
+	ProductCode string          `json:"product_code,omitempty"`
+	Rate        decimal.Decimal `json:"rate,omitempty"`
+	IssuedAt    int             `json:"iat,omitempty"`
+	Expiry      int             `json:"exp,omitempty"`
+}
+
+func parseExpiry(token string) (*time.Time, error) {
+	var claims map[string]interface{}
+	parsed, err := jwt.ParseSigned(token)
+	if err != nil {
+		return nil, err
+	}
+	err = parsed.UnsafeClaimsWithoutVerification(&claims)
+	if err != nil {
+		return nil, err
+	}
+	exp := claims["exp"].(float64)
+	ts := time.Unix(int64(exp), 0)
+	return &ts, nil
 }
 
 func withinPriceTokenExpiration(savedQuote *SavedQuote) bool {
 	if savedQuote == nil {
 		return false
 	}
-	fmt.Printf("%#v\n", savedQuote)
-	tok, err := jwt.ParseSigned(savedQuote.Body.PriceToken)
-	if err != nil {
-		fmt.Println("failed to parse signed")
-		return false
-	}
-
-	type PriceTokenInfo struct {
-		ProductCode string          `json:"product_code,omitempty"`
-		Rate        decimal.Decimal `json:"rate,omitempty"`
-		IssuedAt    int             `json:"iat,omitempty"`
-		Expiry      int             `json:"exp,omitempty"`
-	}
-	base := jwt.Claims{}
-	linkingInfo := PriceTokenInfo{}
-
-	fmt.Printf("%#v\n", tok)
-	if err := tok.Claims([]byte(savedQuote.Key), &base, &linkingInfo); err != nil {
-		fmt.Println("failed to parse claims", err)
-		return false
-	}
-
-	expired := time.Now().After(base.Expiry.Time().Add(time.Second * 30))
-	fmt.Println("expired", expired, base.Expiry.Time().UTC())
-	return !expired
+	return time.Now().After(savedQuote.Expiry)
 }
 
 func writeQuoteToFile(quote SavedQuote) {
@@ -315,27 +313,27 @@ func writeQuoteToFile(quote SavedQuote) {
 		fmt.Println("marshal error", err)
 		return
 	}
-	ioutil.WriteFile("./fetch-quote.json", data, 777)
+	_ = ioutil.WriteFile("./fetch-quote.json", data, 0777)
 }
 
+// SavedQuote stores a quote locally
 type SavedQuote struct {
-	Body *Quote `json:"body"`
-	Key  string `json:"key"`
+	Body   Quote     `json:"body"`
+	Expiry time.Time `json:"expiry"`
 }
 
-func readQuoteFromFile() *SavedQuote {
+func readQuoteFromFile() (*SavedQuote, error) {
 	dat, err := ioutil.ReadFile("./fetch-quote.json")
 	if err != nil {
 		fmt.Println("read file error", err)
-		return nil
+		return nil, nil
 	}
 	var body SavedQuote
 	err = json.Unmarshal(dat, &body)
 	if err != nil {
-		fmt.Println("unmarshal error", err)
-		return nil
+		return nil, fmt.Errorf("unmarshal quote file error: %w", err)
 	}
-	return &body
+	return &body, nil
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
@@ -416,9 +414,11 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 		return err
 	}
 	var bfError clients.BitflyerError
-	err = json.Unmarshal(b, &bfError)
-	if err != nil {
-		return err
+	if len(b) != 0 {
+		err = json.Unmarshal(b, &bfError)
+		if err != nil {
+			return err
+		}
 	}
 	if len(bfError.Label) == 0 {
 		return e

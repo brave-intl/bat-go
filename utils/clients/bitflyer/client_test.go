@@ -49,7 +49,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 		sourceFrom = "tipping"
 	}
 	txs := []settlement.Transaction{tx}
-	withdrawals, err := NewWithdrawsFromTxs(sourceFrom, &txs)
+	withdrawals, err := NewWithdrawsFromTxs(sourceFrom, txs)
 	suite.Require().NoError(err)
 	bulkTransferRequest := NewWithdrawToDepositIDBulkPayload(
 		dryRun,
@@ -61,7 +61,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	expectedPayoutResults := WithdrawToDepositIDBulkResponse{
 		Withdrawals: []WithdrawToDepositIDResponse{
 			{
-				TransferID:   GenerateTransferID(&tx),
+				TransferID:   tx.TransferID(),
 				Amount:       one,
 				Message:      "",
 				Status:       "SUCCESS",
