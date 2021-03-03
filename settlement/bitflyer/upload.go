@@ -24,10 +24,7 @@ var (
 // no signing here, just grouping settlements under a single deposit id
 func GroupSettlements(
 	settlements *[]settlement.Transaction,
-) (
-	map[string][]settlement.Transaction,
-	map[string]settlement.Transaction,
-) {
+) map[string][]settlement.Transaction {
 	byAttr := make(map[string]map[string]settlement.Transaction)
 	byTransferID := make(map[string]settlement.Transaction)
 	groupedByPublisher := make(map[string][]settlement.Transaction)
@@ -51,7 +48,7 @@ func GroupSettlements(
 			groupedByPublisher[publisher] = append(groupedByPublisher[publisher], byAttr[publisher][channel])
 		}
 	}
-	return groupedByPublisher, byTransferID
+	return groupedByPublisher
 }
 
 // CategorizeResponse categorizes a response from bitflyer as pending, complete, failed, or unknown
@@ -193,7 +190,7 @@ func CheckPayoutTransactionsStatus(
 func setupSettlementTransactions(
 	transactionsByPublisher map[string][]settlement.Transaction,
 	limit decimal.Decimal,
-	successfulPerPublisher map[string]int,
+	// successfulPerPublisher map[string]int,
 ) (
 	[]settlement.Transaction,
 	[][]settlement.Transaction,
@@ -207,11 +204,11 @@ func setupSettlementTransactions(
 	// a list of settlements that are not being sent
 	notSubmittedSettlements := []settlement.Transaction{}
 
-	for key, groupedWithdrawals := range transactionsByPublisher {
+	for _, groupedWithdrawals := range transactionsByPublisher {
 		// skip publishers that have already been seen by bitflyer
-		if successfulPerPublisher[key] > 0 {
-			continue
-		}
+		// if successfulPerPublisher[key] > 0 {
+		// 	continue
+		// }
 		set, index := getSettlementGroup(settlementRequests, len(groupedWithdrawals))
 		if index == len(settlementRequests) {
 			settlementRequests = append(settlementRequests, set)
@@ -355,18 +352,18 @@ func IterateRequest(
 		}
 		// group by publisher and transfer id
 		// groupedByPublisher is ordered by channel field
-		groupedByPublisher, byTransferID := GroupSettlements(&txs)
+		groupedByPublisher := GroupSettlements(&txs)
 		// use byTransferID to check status of transfer before sending
-		submittedTransactions, successfulPerPublisher, err := gatherCompletedPublishers(
-			ctx,
-			bitflyerClient,
-			submittedTransactions,
-			byTransferID,
-			groupedByPublisher,
-		)
-		if err != nil {
-			return nil, err
-		}
+		// submittedTransactions, successfulPerPublisher, err := gatherCompletedPublishers(
+		// 	ctx,
+		// 	bitflyerClient,
+		// 	submittedTransactions,
+		// 	byTransferID,
+		// 	groupedByPublisher,
+		// )
+		// if err != nil {
+		// 	return nil, err
+		// }
 		// bat limit
 		limit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
 											Div(quote.Rate). // convert to bat
@@ -375,7 +372,7 @@ func IterateRequest(
 		limitedSettlements, transactionGroups, notSubmittedSettlements, err := setupSettlementTransactions(
 			groupedByPublisher,
 			limit,
-			successfulPerPublisher,
+			// successfulPerPublisher,
 		)
 		if err != nil {
 			return nil, err
@@ -436,74 +433,4 @@ func mapSettlementsByTransferID(settlements []settlement.Transaction) map[string
 		byTransferID[settlement.TransferID()] = settlement
 	}
 	return byTransferID
-}
-
-func gatherCompletedPublishers(
-	ctx context.Context,
-	bitflyerClient bitflyer.Client,
-	submittedTransactions map[string][]settlement.Transaction,
-	byTransferID map[string]settlement.Transaction,
-	byPublisher map[string][]settlement.Transaction,
-) (
-	map[string][]settlement.Transaction,
-	map[string]int,
-	error,
-) {
-	transferIDs := []string{}
-	for transferID := range byTransferID {
-		transferIDs = append(transferIDs, transferID)
-	}
-	// check the status of any payouts that bitflyer has seen before
-	payload := bitflyer.TransferIDsToBulkStatus(transferIDs)
-	checkedPayouts, err := bitflyerClient.CheckPayoutStatus(
-		ctx,
-		payload,
-	)
-	successfulPerPublisher := make(map[string]int)
-	if err != nil {
-		return submittedTransactions, successfulPerPublisher, err
-	}
-	// create a filter to be used in the future
-	statusesByTransferID := make(map[string]*bitflyer.WithdrawToDepositIDResponse)
-	statusesByPublisher := make(map[string][]bitflyer.WithdrawToDepositIDResponse)
-	notFoundStatus := "NOT_FOUND"
-	// for each of the checked payouts
-	for _, checkedPayout := range checkedPayouts.Withdrawals {
-		category := checkedPayout.CategorizeStatus()
-		transferID := checkedPayout.TransferID
-		tx := byTransferID[transferID]
-		publisher := tx.Publisher
-		// create a list of statuses under a publisher
-		statusesByPublisher[publisher] = append(statusesByPublisher[publisher], checkedPayout)
-		if checkedPayout.Status == notFoundStatus {
-			continue
-		} else if category == "complete" {
-			// increment successful publisher transactions if one ever existed
-			successfulPerPublisher[publisher]++
-			// submittedByTransferID[transferID] = tx
-			tx.Note = checkedPayout.Status
-			tx.Status = category
-		}
-		submittedTransactions[category] = append(submittedTransactions[category], tx)
-	}
-	notSubmittedTxs := []settlement.Transaction{}
-	// mark transactions that were never submitted, but where any other transaction from the same publisher was submitted as submitted. this limitation is due to price requirements from bitflyer
-	for publisher := range statusesByPublisher {
-		anySuccess := successfulPerPublisher[publisher] > 0
-		if anySuccess && successfulPerPublisher[publisher] != len(byPublisher[publisher]) {
-			for _, tx := range byPublisher[publisher] {
-				transferID := tx.TransferID()
-				if statusesByTransferID[transferID].Status == notFoundStatus {
-					tx.Status = "not-submitted"
-					tx.Note = "MONTHLY_SEND_LIMIT: not-submitted prefiltered"
-					notSubmittedTxs = append(notSubmittedTxs, tx)
-				}
-			}
-		}
-	}
-	if len(notSubmittedTxs) != 0 {
-		submittedTransactions[notSubmittedCategory] = notSubmittedTxs
-	}
-
-	return submittedTransactions, successfulPerPublisher, nil
 }

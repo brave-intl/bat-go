@@ -93,17 +93,6 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		}},
 	)
 	suite.client.EXPECT().
-		CheckPayoutStatus(
-			ctx,
-			withdrawToDepositIDBulkPayload.ToBulkStatus(),
-		).
-		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
-			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
-				Status:     "NOT_FOUND",
-				TransferID: settlementTx0.TransferID(),
-			}},
-		}, nil)
-	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,
 			*withdrawToDepositIDBulkPayload,
@@ -168,17 +157,6 @@ func (suite *BitflyerMockSuite) TestFailures() {
 			SourceFrom:   sourceFrom,
 		}},
 	)
-	suite.client.EXPECT().
-		CheckPayoutStatus(
-			ctx,
-			withdrawToDepositIDBulkPayload.ToBulkStatus(),
-		).
-		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
-			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
-				Status:     "NOT_FOUND",
-				TransferID: settlementTx0.TransferID(),
-			}},
-		}, nil)
 	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,
@@ -288,17 +266,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		}},
 	)
 	suite.client.EXPECT().
-		CheckPayoutStatus(
-			ctx,
-			withdrawToDepositIDBulkPayload.ToBulkStatus(),
-		).
-		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
-			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
-				Status:     "NOT_FOUND",
-				TransferID: settlementTx1.TransferID(),
-			}},
-		}, nil)
-	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,
 			*withdrawToDepositIDBulkPayload,
@@ -359,17 +326,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			SourceFrom:   sourceFrom,
 		}},
 	)
-	suite.client.EXPECT().
-		CheckPayoutStatus(
-			ctx,
-			withdrawToDepositIDBulkPayload.ToBulkStatus(),
-		).
-		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
-			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
-				Status:     "NOT_FOUND",
-				TransferID: settlementTx1.TransferID(),
-			}},
-		}, nil)
 	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,
@@ -506,17 +462,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			SourceFrom:   sourceFrom,
 		}},
 	)
-	suite.client.EXPECT().
-		CheckPayoutStatus(
-			ctx,
-			withdrawToDepositIDBulkPayload.ToBulkStatus(),
-		).
-		Return(&bitflyer.WithdrawToDepositIDBulkResponse{
-			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
-				Status:     "NOT_FOUND",
-				TransferID: settlementTx2.TransferID(),
-			}},
-		}, nil)
 	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,
