@@ -3,6 +3,7 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"sort"
@@ -313,10 +314,11 @@ func IterateRequest(
 	// for submission to eyeshade
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY")
+	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
 	if err != nil {
 		return submittedTransactions, err
 	}
+	return nil, errors.New("early return")
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -478,7 +480,6 @@ func gatherCompletedPublishers(
 					tx.Status = "not-submitted"
 					tx.Note = "MONTHLY_SEND_LIMIT: not-submitted prefiltered"
 					notSubmittedTxs = append(notSubmittedTxs, tx)
-					// submittedByTransferID[transferID] = tx
 				}
 			}
 		}

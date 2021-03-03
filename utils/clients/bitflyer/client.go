@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -15,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/shopspring/decimal"
+	"github.com/square/go-jose/jwt"
 )
 
 var (
@@ -205,7 +208,7 @@ func GenerateTransferID(tx settlement.Transaction) string {
 // Client abstracts over the underlying client
 type Client interface {
 	// FetchQuote gets a quote of BAT to JPY
-	FetchQuote(ctx context.Context, productCode string) (*Quote, error)
+	FetchQuote(ctx context.Context, productCode string, readFromFile bool) (*Quote, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
 	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
@@ -247,7 +250,14 @@ func (c *HTTPClient) SetAuthToken(
 func (c *HTTPClient) FetchQuote(
 	ctx context.Context,
 	productCode string,
+	readFromFile bool,
 ) (*Quote, error) {
+	if readFromFile {
+		read := readQuoteFromFile()
+		if read != nil && withinPriceTokenExpiration(read.PriceToken) {
+			return read, nil
+		}
+	}
 	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
 		ProductCode: productCode,
 	})
@@ -256,7 +266,59 @@ func (c *HTTPClient) FetchQuote(
 	}
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
+	writeQuoteToFile(body)
 	return &body, handleBitflyerError(err, req, resp)
+}
+
+func withinPriceTokenExpiration(token string) bool {
+	tok, err := jwt.ParseSigned(token)
+	if err != nil {
+		fmt.Println("failed to parse signed")
+		return false
+	}
+
+	type PriceTokenInfo struct {
+		ProductCode string          `json:"product_code,omitempty"`
+		Rate        decimal.Decimal `json:"rate,omitempty"`
+		IssuedAt    int             `json:"iat,omitempty"`
+		Expiry      int             `json:"exp,omitempty"`
+	}
+	base := jwt.Claims{}
+	linkingInfo := PriceTokenInfo{}
+
+	fmt.Printf("%#v\n", tok)
+	if err := tok.Claims(&base, &linkingInfo); err != nil {
+		fmt.Println("failed to parse claims", err)
+		return false
+	}
+
+	expired := time.Now().After(base.Expiry.Time().Add(time.Second * 30))
+	fmt.Println("expired", expired, base.Expiry.Time().UTC())
+	return !expired
+}
+
+func writeQuoteToFile(quote Quote) {
+	data, err := json.Marshal(quote)
+	if err != nil {
+		fmt.Println("marshal error", err)
+		return
+	}
+	ioutil.WriteFile("./fetch-quote.json", data, 777)
+}
+
+func readQuoteFromFile() *Quote {
+	dat, err := ioutil.ReadFile("./fetch-quote.json")
+	if err != nil {
+		fmt.Println("read file error", err)
+		return nil
+	}
+	var body Quote
+	err = json.Unmarshal(dat, &body)
+	if err != nil {
+		fmt.Println("unmarshal error", err)
+		return nil
+	}
+	return &body
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
