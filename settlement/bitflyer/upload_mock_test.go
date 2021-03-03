@@ -72,7 +72,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	defer func() { _ = os.Remove(tmpFile0.Name()) }()
 
 	suite.client.EXPECT().
-		FetchQuote(ctx, currencyCode).
+		FetchQuote(ctx, currencyCode, true).
 		Return(&bitflyer.Quote{
 			PriceToken:   priceToken.String(),
 			ProductCode:  currencyCode,
@@ -136,7 +136,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.SetAuthToken("")
 
 	suite.client.EXPECT().
-		FetchQuote(ctx, currencyCode).
+		FetchQuote(ctx, currencyCode, true).
 		Return(&bitflyer.Quote{
 			PriceToken:   priceToken.String(),
 			ProductCode:  currencyCode,
@@ -243,7 +243,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	*/
 
 	suite.client.EXPECT().
-		FetchQuote(ctx, currencyCode).
+		FetchQuote(ctx, currencyCode, true).
 		Return(&bitflyer.Quote{
 			PriceToken:   priceToken.String(),
 			ProductCode:  currencyCode,
@@ -303,7 +303,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	dryRunOptions.ProcessTimeSec = 0
 
 	suite.client.EXPECT().
-		FetchQuote(ctx, currencyCode).
+		FetchQuote(ctx, currencyCode, true).
 		Return(&bitflyer.Quote{
 			PriceToken:   priceToken.String(),
 			ProductCode:  currencyCode,
@@ -365,7 +365,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	for {
 		<-time.After(time.Second)
 		suite.client.EXPECT().
-			FetchQuote(ctx, currencyCode).
+			FetchQuote(ctx, currencyCode, true).
 			Return(&bitflyer.Quote{
 				PriceToken:   priceToken.String(),
 				ProductCode:  currencyCode,
@@ -440,7 +440,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	defer func() { _ = os.Remove(tmpFile2.Name()) }()
 
 	suite.client.EXPECT().
-		FetchQuote(ctx, currencyCode).
+		FetchQuote(ctx, currencyCode, true).
 		Return(&bitflyer.Quote{
 			PriceToken:   priceToken.String(),
 			ProductCode:  currencyCode,

@@ -33,7 +33,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 	one := decimal.NewFromFloat(1)
 
-	quote, err := client.FetchQuote(ctx, "BAT_JPY")
+	quote, err := client.FetchQuote(ctx, "BAT_JPY", true)
 	suite.Require().NoError(err, "fetching a quote does not fail")
 
 	dryRun := &DryRunOption{}

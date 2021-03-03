@@ -252,12 +252,12 @@ func (c *HTTPClient) FetchQuote(
 	productCode string,
 	readFromFile bool,
 ) (*Quote, error) {
-	if readFromFile {
-		read := readQuoteFromFile()
-		if read != nil && withinPriceTokenExpiration(read.PriceToken) {
-			return read, nil
-		}
-	}
+	// if readFromFile {
+	// 	read := readQuoteFromFile()
+	// 	if withinPriceTokenExpiration(read) {
+	// 		return read.Body, nil
+	// 	}
+	// }
 	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
 		ProductCode: productCode,
 	})
@@ -266,12 +266,24 @@ func (c *HTTPClient) FetchQuote(
 	}
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
-	writeQuoteToFile(body)
+	// jwtKey, err := appctx.GetByteSliceFromContext(ctx, appctx.BitFlyerJWTKeyCTXKey)
+	// if err == nil {
+	// 	writeQuoteToFile(SavedQuote{
+	// 		Body: &body,
+	// 		Key:  string(jwtKey),
+	// 	})
+	// } else {
+	// 	fmt.Println("jwt byteslice get failed", err)
+	// }
 	return &body, handleBitflyerError(err, req, resp)
 }
 
-func withinPriceTokenExpiration(token string) bool {
-	tok, err := jwt.ParseSigned(token)
+func withinPriceTokenExpiration(savedQuote *SavedQuote) bool {
+	if savedQuote == nil {
+		return false
+	}
+	fmt.Printf("%#v\n", savedQuote)
+	tok, err := jwt.ParseSigned(savedQuote.Body.PriceToken)
 	if err != nil {
 		fmt.Println("failed to parse signed")
 		return false
@@ -287,7 +299,7 @@ func withinPriceTokenExpiration(token string) bool {
 	linkingInfo := PriceTokenInfo{}
 
 	fmt.Printf("%#v\n", tok)
-	if err := tok.Claims(&base, &linkingInfo); err != nil {
+	if err := tok.Claims([]byte(savedQuote.Key), &base, &linkingInfo); err != nil {
 		fmt.Println("failed to parse claims", err)
 		return false
 	}
@@ -297,7 +309,7 @@ func withinPriceTokenExpiration(token string) bool {
 	return !expired
 }
 
-func writeQuoteToFile(quote Quote) {
+func writeQuoteToFile(quote SavedQuote) {
 	data, err := json.Marshal(quote)
 	if err != nil {
 		fmt.Println("marshal error", err)
@@ -306,13 +318,18 @@ func writeQuoteToFile(quote Quote) {
 	ioutil.WriteFile("./fetch-quote.json", data, 777)
 }
 
-func readQuoteFromFile() *Quote {
+type SavedQuote struct {
+	Body *Quote `json:"body"`
+	Key  string `json:"key"`
+}
+
+func readQuoteFromFile() *SavedQuote {
 	dat, err := ioutil.ReadFile("./fetch-quote.json")
 	if err != nil {
 		fmt.Println("read file error", err)
 		return nil
 	}
-	var body Quote
+	var body SavedQuote
 	err = json.Unmarshal(dat, &body)
 	if err != nil {
 		fmt.Println("unmarshal error", err)

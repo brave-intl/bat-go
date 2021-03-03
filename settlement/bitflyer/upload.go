@@ -3,7 +3,6 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"sort"
@@ -63,11 +62,18 @@ func CategorizeResponse(
 ) (settlement.Transaction, string) {
 	currentTx := limitedSettlements[payout.TransferID]
 	key := payout.CategorizeStatus()
+	if key == "OTHER_ERROR" && !currentTx.Amount.Equal(payout.Amount) {
+		key = "complete"
+		payout.Status = "EXECUTED"
+		// use payed out amount
+		currentTx.Amount = payout.Amount
+	}
 	currentTx.Status = key
 	note := payout.Status
 	if payout.Message != "" {
 		note = fmt.Sprintf("%s: %s", payout.Status, payout.Message)
 	}
+	// overwrite the amount
 	currentTx.Note = note
 	tmp := altcurrency.BAT
 	currentTx.AltCurrency = &tmp
@@ -225,7 +231,7 @@ func setupSettlementTransactions(
 			}
 			partialFee := decimal.Zero
 			if limitedTx.BATPlatformFee.GreaterThan(decimal.Zero) {
-				partialFee = partialProbi.Div(decimal.NewFromFloat(19))
+				partialFee = partialProbi.Mul(decimal.NewFromFloat(0.05)).Truncate(0)
 			}
 			// always in BAT to BAT so we're good
 			partialAmount := altcurrency.BAT.FromProbi(partialProbi.Add(partialFee))
@@ -318,7 +324,7 @@ func IterateRequest(
 	if err != nil {
 		return submittedTransactions, err
 	}
-	return nil, errors.New("early return")
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
