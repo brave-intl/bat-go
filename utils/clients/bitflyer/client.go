@@ -241,10 +241,7 @@ func (c *HTTPClient) FetchQuote(
 	}
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, handleBitflyerError(err, req, resp)
-	}
-	return &body, nil
+	return &body, handleBitflyerError(err, req, resp)
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
@@ -259,10 +256,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, handleBitflyerError(err, req, resp)
-	}
-	return &body, nil
+	return &body, handleBitflyerError(err, req, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
@@ -282,10 +276,7 @@ func (c *HTTPClient) CheckPayoutStatus(
 	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, handleBitflyerError(err, req, resp)
-	}
-	return &body, nil
+	return &body, handleBitflyerError(err, req, resp)
 }
 
 // RefreshToken gets a new token from bitflyer
@@ -310,14 +301,11 @@ func (c *HTTPClient) RefreshToken(
 	c.setupRequestHeaders(req)
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, handleBitflyerError(err, req, resp)
-	}
 	logger.Info().
 		Str("token", body.AccessToken).
 		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
 	c.SetAuthToken(body.AccessToken)
-	return &body, nil
+	return &body, handleBitflyerError(err, req, resp)
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {

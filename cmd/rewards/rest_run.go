@@ -12,7 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/rewards"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -74,6 +74,17 @@ func RestRun(command *cobra.Command, args []string) {
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
 
+	// make sure exceptions go to sentry
+	defer sentry.Flush(time.Second * 2)
+
+	go func() {
+		err := http.ListenAndServe(":9090", middleware.Metrics())
+		if err != nil {
+			sentry.CaptureException(err)
+			logger.Panic().Err(err).Msg("metrics HTTP server start failed!")
+		}
+	}()
+
 	// setup server, and run
 	srv := http.Server{
 		Addr:         viper.GetString("address"),
@@ -81,9 +92,6 @@ func RestRun(command *cobra.Command, args []string) {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
-
-	// make sure exceptions go to sentry
-	defer sentry.Flush(time.Second * 2)
 
 	if err = srv.ListenAndServe(); err != nil {
 		sentry.CaptureException(err)
