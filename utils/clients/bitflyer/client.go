@@ -304,7 +304,7 @@ func withinPriceTokenExpiration(savedQuote *SavedQuote) bool {
 	if savedQuote == nil {
 		return false
 	}
-	return time.Now().After(savedQuote.Expiry)
+	return time.Now().Before(savedQuote.Expiry)
 }
 
 func writeQuoteToFile(quote SavedQuote) {

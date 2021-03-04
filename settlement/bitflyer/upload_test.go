@@ -114,7 +114,7 @@ func transactionSubmitted(status string, tx settlement.Transaction, note string)
 
 func (suite *BitflyerSuite) TestFailures() {
 	ctx := context.Background()
-	settlementTx0 := settlementTransaction("2", uuid.NewV4().String())
+	settlementTx0 := settlementTransaction("1.9", uuid.NewV4().String())
 	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx0,
 	})
@@ -126,6 +126,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"tipping",
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -138,7 +139,7 @@ func (suite *BitflyerSuite) TestFailures() {
 	settlementTx0.ProviderID = settlementTx0.TransferID()
 	failedTxNote := failedTxs[0].Note
 	fmt.Printf("%#v\n", failedTxNote)
-	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUNTD"))
+	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("failed", settlementTx0, failedTxNote),
 	})
@@ -156,6 +157,7 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"tipping",
+		false,
 		nil, // dry run first
 	)
 	suite.client.SetAuthToken(suite.token)
@@ -177,7 +179,7 @@ func (suite *BitflyerSuite) TestFailures() {
 func (suite *BitflyerSuite) TestFormData() {
 	// TODO: after we figure out why we are being blocked by bf enable
 	ctx := context.Background()
-	address := "2492cdba-d33c-4a8d-ae5d-8799a81c61c2"
+	address := "ff3a0ead-c945-4c52-bcf7-9309319573de"
 	sourceFrom := "tipping"
 	duration, err := time.ParseDuration("4s")
 	suite.Require().NoError(err)
@@ -185,7 +187,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		ProcessTimeSec: uint(duration.Seconds()),
 	}
 
-	settlementTx1 := settlementTransaction("2", address)
+	settlementTx1 := settlementTransaction("1.9", address)
 	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
 		settlementTx1,
 	})
@@ -202,6 +204,7 @@ func (suite *BitflyerSuite) TestFormData() {
 				suite.client,
 				[]string{tmpFile1.Name()},
 				sourceFrom,
+				false,
 				dryRunOptions, // dry run first
 			)
 			suite.Require().NoError(err)
@@ -222,6 +225,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
+		false,
 		dryRunOptions, // dry run first
 	)
 	suite.Require().NoError(err)
@@ -248,6 +252,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -277,6 +282,7 @@ func (suite *BitflyerSuite) TestFormData() {
 			suite.client,
 			[]string{tmpFile1.Name()},
 			sourceFrom,
+			false,
 			nil,
 		)
 		suite.Require().NoError(err)
@@ -298,7 +304,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().JSONEq(string(completeSerializedStatus), string(mCompletedStatus))
 
 	// make a new tx that will conflict with previous
-	settlementTx2 := settlementTransaction("3", address)
+	settlementTx2 := settlementTransaction("2.85", address)
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
@@ -313,14 +319,13 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile2.Name()},
 		sourceFrom,
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)
 	idempotencyFailComplete := payoutFiles["complete"]
-	idempotencyFailInvalidInput := payoutFiles["failed"]
-	suite.Require().Len(idempotencyFailComplete, 0, "one transaction should be created")
-	suite.Require().Len(idempotencyFailInvalidInput, 1, "one transaction should have malformed amount")
-	idempotencyFailInvalidInputActual, err := json.Marshal(idempotencyFailInvalidInput)
+	suite.Require().Len(idempotencyFailComplete, 1, "one transaction should be created")
+	idempotencyFailCompleteActual, err := json.Marshal(idempotencyFailComplete)
 	suite.Require().NoError(err)
 
 	// bitflyer does not send us back what we sent it
@@ -331,15 +336,15 @@ func (suite *BitflyerSuite) TestFormData() {
 	//
 	// the invalid-input part is what will put the transaction in a different file
 	// so that we do not send to eyeshade
-	idempotencyFailNote := idempotencyFailInvalidInput[0].Note
+	idempotencyFailNote := idempotencyFailComplete[0].Note
 	suite.Require().Equal("OTHER_ERROR: Duplicate transfer_id and different parameters", idempotencyFailNote)
-	idempotencyFailInvalidInputExpected, err := json.Marshal([]settlement.Transaction{
+	idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
 		transactionSubmitted("failed", settlementTx2, idempotencyFailNote),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(
-		string(idempotencyFailInvalidInputExpected),
-		string(idempotencyFailInvalidInputActual),
+		string(idempotencyFailCompleteExpected),
+		string(idempotencyFailCompleteActual),
 	)
 }
 

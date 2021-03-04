@@ -102,7 +102,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
 				CurrencyCode: currencyCode,
 				Amount:       price,
-				Status:       "NOT_FOUNTD",
+				Status:       "NOT_FOUND",
 				TransferID:   settlementTx0.TransferID(),
 			}},
 		}, nil)
@@ -112,6 +112,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"tipping",
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -123,7 +124,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	failedBytes, err := json.Marshal(failedTxs)
 	settlementTx0.ProviderID = settlementTx0.TransferID()
 	failedTxNote := failedTxs[0].Note
-	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUNTD"))
+	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("failed", settlementTx0, failedTxNote),
 	})
@@ -175,6 +176,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		suite.client,
 		[]string{tmpFile0.Name()},
 		"tipping",
+		false,
 		nil, // dry run first
 	)
 	suite.client.EXPECT().SetAuthToken(suite.token)
@@ -230,6 +232,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 				suite.client,
 				[]string{tmpFile1.Name()},
 				sourceFrom,
+				false,
 				dryRunOptions, // dry run first
 			)
 			suite.Require().NoError(err)
@@ -286,6 +289,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
+		false,
 		dryRunOptions, // dry run first
 	)
 	suite.Require().NoError(err)
@@ -347,6 +351,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile1.Name()},
 		sourceFrom,
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -408,6 +413,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			suite.client,
 			[]string{tmpFile1.Name()},
 			sourceFrom,
+			false,
 			nil,
 		)
 		suite.Require().NoError(err)
@@ -484,6 +490,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client,
 		[]string{tmpFile2.Name()},
 		sourceFrom,
+		false,
 		nil,
 	)
 	suite.Require().NoError(err)

@@ -189,7 +189,8 @@ func CheckPayoutTransactionsStatus(
 
 func setupSettlementTransactions(
 	transactionsByPublisher map[string][]settlement.Transaction,
-	limit decimal.Decimal,
+	probiLimit decimal.Decimal,
+	excludeLimited bool,
 	// successfulPerPublisher map[string]int,
 ) (
 	[]settlement.Transaction,
@@ -205,16 +206,13 @@ func setupSettlementTransactions(
 	notSubmittedSettlements := []settlement.Transaction{}
 
 	for _, groupedWithdrawals := range transactionsByPublisher {
-		// skip publishers that have already been seen by bitflyer
-		// if successfulPerPublisher[key] > 0 {
-		// 	continue
-		// }
 		set, index := getSettlementGroup(settlementRequests, len(groupedWithdrawals))
 		if index == len(settlementRequests) {
 			settlementRequests = append(settlementRequests, set)
 		}
 		aggregatedTx := settlement.Transaction{}
 		limitedTxs := []settlement.Transaction{}
+		publisherProbiLimit := probiLimit
 		for groupedWithdrawalIndex, limitedTx := range groupedWithdrawals {
 			if groupedWithdrawalIndex == 0 {
 				aggregatedTx.AltCurrency = limitedTx.AltCurrency
@@ -230,9 +228,14 @@ func setupSettlementTransactions(
 			}
 			partialProbi := limitedTx.Probi
 			// will hit our limits
-			if aggregatedTx.Amount.Add(partialProbi).GreaterThan(limit) {
+			if aggregatedTx.Probi.Add(partialProbi).GreaterThan(publisherProbiLimit) {
 				// reduce amount and fee to be within. can be zero
-				partialProbi = limit.Sub(aggregatedTx.Probi)
+				if excludeLimited {
+					// if we are excluding any limited transactions,
+					// then simply reduce the limit for that publisher
+					publisherProbiLimit = aggregatedTx.Probi
+				}
+				partialProbi = publisherProbiLimit.Sub(aggregatedTx.Probi)
 			}
 			partialFee := decimal.Zero
 			if limitedTx.BATPlatformFee.GreaterThan(decimal.Zero) {
@@ -317,6 +320,7 @@ func IterateRequest(
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
 	sourceFrom string,
+	excludeLimited bool,
 	dryRun *bitflyer.DryRunOption,
 ) (map[string][]settlement.Transaction, error) {
 
@@ -351,33 +355,26 @@ func IterateRequest(
 			txs[i] = tx
 		}
 		// group by publisher and transfer id
-		// groupedByPublisher is ordered by channel field
 		groupedByPublisher := GroupSettlements(&txs)
-		// use byTransferID to check status of transfer before sending
-		// submittedTransactions, successfulPerPublisher, err := gatherCompletedPublishers(
-		// 	ctx,
-		// 	bitflyerClient,
-		// 	submittedTransactions,
-		// 	byTransferID,
-		// 	groupedByPublisher,
-		// )
-		// if err != nil {
-		// 	return nil, err
-		// }
 		// bat limit
-		limit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
+		probiLimit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
 											Div(quote.Rate). // convert to bat
 			// Mul(decimal.NewFromFloat(0.9)). // reduce by an extra 10% if we're paranoid
 			Truncate(8)) // truncated to satoshis
 		limitedSettlements, transactionGroups, notSubmittedSettlements, err := setupSettlementTransactions(
 			groupedByPublisher,
-			limit,
-			// successfulPerPublisher,
+			probiLimit,
+			excludeLimited,
 		)
 		if err != nil {
 			return nil, err
 		}
-		submittedTransactions[notSubmittedCategory] = append(submittedTransactions[notSubmittedCategory], notSubmittedSettlements...)
+		if len(notSubmittedSettlements) > 0 {
+			submittedTransactions[notSubmittedCategory] = append(
+				submittedTransactions[notSubmittedCategory],
+				notSubmittedSettlements...,
+			)
+		}
 
 		limitedSettlementsByTransferID := mapSettlementsByTransferID(limitedSettlements)
 
