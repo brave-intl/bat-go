@@ -131,7 +131,8 @@ BITFLYER_SERVER=
 # omit to execute
 BITFLYER_DRYRUN=1 # seconds to delay
 ./bat-go bitflyer upload \
-  --in "bitflyer-transactions.json"
+  --in "bitflyer-transactions.json" \
+  --exclude-limited true # if a transaction ever hits transfer limit, do not send it
 ```
 
 ### checkstatus

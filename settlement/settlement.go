@@ -4,6 +4,7 @@ package settlement
 //      due to transient network errors (if retries are enabled)
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	sentry "github.com/getsentry/sentry-go"
+	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
 
@@ -71,6 +73,24 @@ type ProviderInfo struct {
 	Establishment string `json:"establishment"`
 	Type          string `json:"type"`
 	ID            string `json:"id"`
+}
+
+// TransferID generate the transfer id
+func (tx Transaction) TransferID() string {
+	inputs := []string{
+		tx.SettlementID,
+		tx.Destination,
+		tx.Channel,
+	}
+	key := strings.Join(inputs, "_")
+	bytes := sha256.Sum256([]byte(key))
+	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
+	return refID
+}
+
+// Log logs a message
+func (tx Transaction) Log() {
+	fmt.Println(tx.Destination, tx.Publisher, tx.TransferID(), tx.Channel)
 }
 
 // ProviderInfo splits apart provider info from wallet provider id

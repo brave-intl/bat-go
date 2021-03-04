@@ -2,13 +2,13 @@ package bitflyer
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -16,8 +16,8 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
+	"github.com/square/go-jose/jwt"
 )
 
 var (
@@ -70,6 +70,19 @@ type CheckBulkStatusPayload struct {
 	Withdrawals []CheckStatusPayload `json:"withdrawals"`
 }
 
+// TransferIDsToBulkStatus takes a list of transferIDs and turns them into a payload for checking their status
+func TransferIDsToBulkStatus(transferIDs []string) CheckBulkStatusPayload {
+	checkStatusPayload := []CheckStatusPayload{}
+	for _, transferID := range transferIDs {
+		checkStatusPayload = append(checkStatusPayload, CheckStatusPayload{
+			TransferID: transferID,
+		})
+	}
+	return CheckBulkStatusPayload{
+		Withdrawals: checkStatusPayload,
+	}
+}
+
 // ToBulkStatus converts an upload to a checks status payload
 func (w WithdrawToDepositIDBulkPayload) ToBulkStatus() CheckBulkStatusPayload {
 	checkStatusPayload := []CheckStatusPayload{}
@@ -90,6 +103,19 @@ type WithdrawToDepositIDResponse struct {
 	Message      string          `json:"message"`
 	Status       string          `json:"transfer_status"`
 	TransferID   string          `json:"transfer_id"`
+}
+
+// CategorizeStatus checks the status of a withdrawal response and categorizes it
+func (withdrawResponse WithdrawToDepositIDResponse) CategorizeStatus() string {
+	switch withdrawResponse.Status {
+	case "SUCCESS", "EXECUTED":
+		return "complete"
+	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION", "OTHER_ERROR", "MONTHLY_SEND_LIMIT":
+		return "failed"
+	case "CREATED", "PENDING":
+		return "pending"
+	}
+	return "unknown"
 }
 
 // TokenPayload holds the data needed to get a new token
@@ -147,13 +173,13 @@ type WithdrawToDepositIDBulkResponse struct {
 // NewWithdrawsFromTxs creates an array of withdrawal requests
 func NewWithdrawsFromTxs(
 	sourceFrom string,
-	txs *[]settlement.Transaction,
+	txs []settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	if !validSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
-	for _, tx := range *txs {
+	for _, tx := range txs {
 		bat := altcurrency.BAT.FromProbi(tx.Probi)
 		if bat.Exponent() > 8 {
 			return nil, fmt.Errorf("cannot convert float exactly, %d", bat)
@@ -167,34 +193,21 @@ func NewWithdrawsFromTxs(
 			CurrencyCode: "BAT",
 			Amount:       f64,
 			DepositID:    tx.Destination,
-			TransferID:   GenerateTransferID(&tx),
+			TransferID:   tx.TransferID(),
 			SourceFrom:   sourceFrom,
 		})
 	}
 	return &withdrawals, nil
 }
 
-// GenerateTransferID generates a deterministic transaction reference id for idempotency
-func GenerateTransferID(tx *settlement.Transaction) string {
-	inputs := []string{
-		tx.SettlementID,
-		tx.Destination,
-		// tx.Channel, // all channels are grouped together
-	}
-	key := strings.Join(inputs, "_")
-	bytes := sha256.Sum256([]byte(key))
-	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
-	return refID
-}
-
 // Client abstracts over the underlying client
 type Client interface {
 	// FetchQuote gets a quote of BAT to JPY
-	FetchQuote(ctx context.Context, productCode string) (*Quote, error)
+	FetchQuote(ctx context.Context, productCode string, readFromFile bool) (*Quote, error)
 	// UploadBulkPayout posts a signed bulk layout to bitflyer
 	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
-	CheckPayoutStatus(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
+	CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// RefreshToken refreshes the token belonging to the provided secret values
 	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
 	// SetAuthToken sets the auth token on underlying client object
@@ -232,7 +245,18 @@ func (c *HTTPClient) SetAuthToken(
 func (c *HTTPClient) FetchQuote(
 	ctx context.Context,
 	productCode string,
+	readFromFile bool,
 ) (*Quote, error) {
+	if readFromFile {
+		read, err := readQuoteFromFile()
+		if err != nil {
+			fmt.Println("failed to read quote from file", err)
+			return nil, err
+		}
+		if withinPriceTokenExpiration(read) {
+			return &read.Body, nil
+		}
+	}
 	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
 		ProductCode: productCode,
 	})
@@ -241,7 +265,75 @@ func (c *HTTPClient) FetchQuote(
 	}
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
+	if err == nil {
+		expiry, err := parseExpiry(body.PriceToken)
+		if err == nil {
+			writeQuoteToFile(SavedQuote{
+				Body:   body,
+				Expiry: *expiry,
+			})
+		}
+	}
 	return &body, handleBitflyerError(err, req, resp)
+}
+
+// PriceTokenInfo holds info from the price token
+type PriceTokenInfo struct {
+	ProductCode string          `json:"product_code,omitempty"`
+	Rate        decimal.Decimal `json:"rate,omitempty"`
+	IssuedAt    int             `json:"iat,omitempty"`
+	Expiry      int             `json:"exp,omitempty"`
+}
+
+func parseExpiry(token string) (*time.Time, error) {
+	var claims map[string]interface{}
+	parsed, err := jwt.ParseSigned(token)
+	if err != nil {
+		return nil, err
+	}
+	err = parsed.UnsafeClaimsWithoutVerification(&claims)
+	if err != nil {
+		return nil, err
+	}
+	exp := claims["exp"].(float64)
+	ts := time.Unix(int64(exp), 0)
+	return &ts, nil
+}
+
+func withinPriceTokenExpiration(savedQuote *SavedQuote) bool {
+	if savedQuote == nil {
+		return false
+	}
+	return time.Now().Before(savedQuote.Expiry)
+}
+
+func writeQuoteToFile(quote SavedQuote) {
+	data, err := json.Marshal(quote)
+	if err != nil {
+		fmt.Println("marshal error", err)
+		return
+	}
+	_ = ioutil.WriteFile("./fetch-quote.json", data, 0777)
+}
+
+// SavedQuote stores a quote locally
+type SavedQuote struct {
+	Body   Quote     `json:"body"`
+	Expiry time.Time `json:"expiry"`
+}
+
+func readQuoteFromFile() (*SavedQuote, error) {
+	dat, err := ioutil.ReadFile("./fetch-quote.json")
+	if err != nil {
+		fmt.Println("read file error", err)
+		return nil, nil
+	}
+	var body SavedQuote
+	err = json.Unmarshal(dat, &body)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal quote file error: %w", err)
+	}
+	return &body, nil
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
@@ -262,13 +354,13 @@ func (c *HTTPClient) UploadBulkPayout(
 // CheckPayoutStatus checks bitflyer transaction status
 func (c *HTTPClient) CheckPayoutStatus(
 	ctx context.Context,
-	payload WithdrawToDepositIDBulkPayload,
+	payload CheckBulkStatusPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(
 		ctx,
 		http.MethodPost,
 		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-		payload.ToBulkStatus(),
+		payload,
 	)
 	if err != nil {
 		return nil, err
@@ -322,9 +414,11 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 		return err
 	}
 	var bfError clients.BitflyerError
-	err = json.Unmarshal(b, &bfError)
-	if err != nil {
-		return err
+	if len(b) != 0 {
+		err = json.Unmarshal(b, &bfError)
+		if err != nil {
+			return err
+		}
 	}
 	if len(bfError.Label) == 0 {
 		return e
