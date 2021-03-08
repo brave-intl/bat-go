@@ -249,9 +249,12 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 	}
 
 	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
-		fmt.Printf("quote returned is invalid, skipping\n")
-		settlement.Status = "failed"
-		return nil
+		// BAT transfers have TTL of zero, as do invalid transfers of XAU / LBA
+		if submitInfo.DestCurrency == "XAU" || submitInfo.DestCurrency == "LBA" {
+			fmt.Printf("quote returned is invalid, skipping\n")
+			settlement.Status = "failed"
+			return nil
+		}
 	}
 
 	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)
