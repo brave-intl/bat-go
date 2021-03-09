@@ -285,6 +285,10 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
 	}
 
+	if time.Since(linkingInfo.Timestamp) > 2*time.Minute {
+		return fmt.Errorf("failed to validate token, timestamp is over 2 minutes old")
+	}
+
 	blr.DepositID = linkingInfo.DepositID
 	blr.AccountHash = linkingInfo.AccountHash
 
