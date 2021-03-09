@@ -232,7 +232,7 @@ func IterateRequest(
 	signatureSwitch int,
 	bulkPayoutFiles []string,
 	transactionsMap map[string]settlement.Transaction,
-) (*map[string][]settlement.Transaction, error) {
+) (map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -245,14 +245,14 @@ func IterateRequest(
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
-			return &submittedTransactions, err
+			return submittedTransactions, err
 		}
 
 		var geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence
 		err = json.Unmarshal(bytes, &geminiBulkPayoutRequestRequirements)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
-			return &submittedTransactions, err
+			return submittedTransactions, err
 		}
 
 		total := geminiComputeTotal(geminiBulkPayoutRequestRequirements)
@@ -290,7 +290,7 @@ func IterateRequest(
 			}
 		}
 	}
-	return &submittedTransactions, nil
+	return submittedTransactions, nil
 }
 
 func geminiComputeTotal(geminiBulkPayoutRequestRequirements []gemini.PrivateRequestSequence) int {

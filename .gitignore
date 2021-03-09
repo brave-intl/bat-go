@@ -31,3 +31,5 @@ grantTokens.json
 bat-go
 config.yaml
 share-0.gpg
+
+fetch-quote.json
