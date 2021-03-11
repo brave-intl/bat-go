@@ -88,12 +88,6 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		}
 	}
 
-	var (
-		claims = []*Claim{}
-		total  = decimal.Zero
-		creds  = []cbr.CredentialRedemption{}
-	)
-
 	for k, v := range fundingSources {
 		var (
 			promotion = promotions[k]

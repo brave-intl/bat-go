@@ -157,20 +157,6 @@ func (_d DatastoreWithPrometheus) EnqueueMintDrainJob(ctx context.Context, walle
 	return _d.base.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
 }
 
-// DrainClaims implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaims(claim []*Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaims", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.DrainClaims(claim, credentials, wallet, total)
-}
-
 // GetAvailablePromotions implements Datastore
 func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()

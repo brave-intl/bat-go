@@ -113,6 +113,20 @@ func (_d DatastoreWithPrometheus) DeleteKey(id uuid.UUID, delaySeconds int) (kp1
 	return _d.base.DeleteKey(id, delaySeconds)
 }
 
+// DeleteOrderCreds implements Datastore
+func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteOrderCreds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DeleteOrderCreds(orderID, isSigned)
+}
+
 // GetIssuer implements Datastore
 func (_d DatastoreWithPrometheus) GetIssuer(merchantID string) (ip1 *Issuer, err error) {
 	_since := time.Now()
@@ -183,20 +197,6 @@ func (_d DatastoreWithPrometheus) GetOrderCreds(orderID uuid.UUID, isSigned bool
 	return _d.base.GetOrderCreds(orderID, isSigned)
 }
 
-// DeleteOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteOrderCreds", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.DeleteOrderCreds(orderID, isSigned)
-}
-
 // GetOrderCredsByItemID implements Datastore
 func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (op1 *OrderCreds, err error) {
 	_since := time.Now()
@@ -209,6 +209,20 @@ func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemI
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderCredsByItemID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetOrderCredsByItemID(orderID, itemID, isSigned)
+}
+
+// GetOrderMetadata implements Datastore
+func (_d DatastoreWithPrometheus) GetOrderMetadata(orderID uuid.UUID, key string) (s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderMetadata", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetOrderMetadata(orderID, key)
 }
 
 // GetPagedMerchantTransactions implements Datastore
@@ -440,18 +454,4 @@ func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key str
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrderMetadata", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateOrderMetadata(orderID, key, value)
-}
-
-// GetOrderMetadata implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderMetadata(orderID uuid.UUID, key string) (value string, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderMetadata", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetOrderMetadata(orderID, key)
 }
