@@ -2,7 +2,9 @@ package wallet
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -285,8 +288,30 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 		return fmt.Errorf("failed to parse the linking info jwt token: %w", err)
 	}
 
+	// Linking Info token is not to be more than 2 minutes old
 	if time.Since(linkingInfo.Timestamp) > 2*time.Minute {
 		return fmt.Errorf("failed to validate token, timestamp is over 2 minutes old")
+	}
+
+	// ExternalAccountID is Hex encoded sha256 digest of the payment id
+	// 1.) grab the payment id string from the context (comes from http signature)
+	paymentID, err := middleware.GetKeyID(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to validate linking info jwt token, unable to key payment_id from signature: %w", err)
+	}
+	// 2.) sha256 digest
+	h := sha256.New()
+	if _, err := h.Write([]byte(paymentID)); err != nil {
+		return fmt.Errorf("failed to validate linking info jwt token, hash payment_id: %w", err)
+	}
+	// 3.) hex encode
+	// 4.) compare to external account id from linking info
+	if hex.EncodeToString(h.Sum(nil)) != linkingInfo.ExternalAccountID {
+		return fmt.Errorf("failed to validate linking info jwt token, external account id invalid: %w", err)
+	}
+
+	if bitFlyerRequestIDSpent(ctx, linkingInfo.RequestID) {
+		return fmt.Errorf("failed to validate linking info jwt token, request id already used: %w", err)
 	}
 
 	blr.DepositID = linkingInfo.DepositID

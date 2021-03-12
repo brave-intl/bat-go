@@ -84,6 +84,20 @@ func (_d DatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Context, s1 s
 	return _d.base.GetWalletByPublicKey(ctx, s1)
 }
 
+// InsertBitFlyerRequestID implements Datastore
+func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, requestID string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBitFlyerRequestID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertBitFlyerRequestID(ctx, requestID)
+}
+
 // InsertWallet implements Datastore
 func (_d DatastoreWithPrometheus) InsertWallet(ctx context.Context, wallet *walletutils.Info) (err error) {
 	_since := time.Now()
