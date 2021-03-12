@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -49,6 +50,8 @@ type Datastore interface {
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// InsertWallet inserts the given wallet
 	InsertWallet(ctx context.Context, wallet *walletutils.Info) error
+	// InsertBitFlyerRequestID - attempt an insert on a request id
+	InsertBitFlyerRequestID(ctx context.Context, requestID string) error
 	// UpsertWallets inserts a wallet if it does not already exist
 	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
 }
@@ -225,6 +228,18 @@ func (pg *Postgres) GetByProviderLinkingID(ctx context.Context, providerLinkingI
 	return &wallets, err
 }
 
+// InsertBitFlyerRequestID - attempts to insert a request id
+func (pg *Postgres) InsertBitFlyerRequestID(ctx context.Context, requestID string) error {
+	statement := `insert into bf_req_ids(id) ($1)`
+	_, err := pg.RawDB().ExecContext(ctx, statement, requestID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 // InsertWallet inserts the given wallet
 func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) error {
 	// NOTE on conflict do nothing because none of the wallet information is updateable
@@ -327,6 +342,24 @@ func txGetByProviderLinkingID(ctx context.Context, tx *sqlx.Tx, providerLinkingI
 	var wallets []walletutils.Info
 	err := tx.SelectContext(ctx, &wallets, statement, providerLinkingID)
 	return &wallets, err
+}
+
+func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
+	// get pg from context
+	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
+	if !ok {
+		// if we cant check the db consider "spent"
+		return true
+	}
+
+	// attempt an insert into the spent bf request id table
+	// if duplicate error, false
+	if err := db.InsertBitFlyerRequestID(ctx, requestID); err != nil {
+		// check error, consider "spent" if error
+		return true
+	}
+	// else not spent if successfully inserted
+	return false
 }
 
 func getEnvMaxCards() int {

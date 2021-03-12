@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -275,16 +276,24 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	}
 
 	var (
+		idFrom      = uuid.NewV4()
 		idTo        = uuid.NewV4()
 		accountHash = uuid.NewV4()
 		timestamp   = time.Now()
 	)
 
+	h := sha256.New()
+	if _, err := h.Write([]byte(idFrom.String())); err != nil {
+		panic(err)
+	}
+
+	externalAccountID := hex.EncodeToString(h.Sum(nil))
+
 	cl := wallet.BitFlyerLinkingInfo{
 		DepositID:         idTo.String(),
 		RequestID:         "1",
 		AccountHash:       accountHash.String(),
-		ExternalAccountID: "2",
+		ExternalAccountID: externalAccountID,
 		Timestamp:         timestamp,
 	}
 
@@ -308,7 +317,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				},
 			})
 
-		idFrom = uuid.NewV4()
 		// add the datastore to the context
 		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
 		r   = httptest.NewRequest(
@@ -329,6 +337,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		rows              = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 					AddRow(idFrom, "bitflyer", "", "12345", providerLinkingID, idTo)
 	)
+	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
