@@ -306,7 +306,8 @@ func (blr *BitFlyerLinkingRequest) Validate(ctx context.Context) error {
 	}
 	// 3.) hex encode
 	// 4.) compare to external account id from linking info
-	if hex.EncodeToString(h.Sum(nil)) != linkingInfo.ExternalAccountID {
+	hashed := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(hashed, linkingInfo.ExternalAccountID) {
 		return fmt.Errorf("failed to validate linking info jwt token, external account id invalid: %w", err)
 	}
 
