@@ -231,7 +231,7 @@ func (pg *Postgres) GetByProviderLinkingID(ctx context.Context, providerLinkingI
 
 // InsertBitFlyerRequestID - attempts to insert a request id
 func (pg *Postgres) InsertBitFlyerRequestID(ctx context.Context, requestID string) error {
-	statement := `insert into bf_req_ids(id) ($1)`
+	statement := `insert into bf_req_ids(id) values ($1)`
 	_, err := pg.RawDB().ExecContext(ctx, statement, requestID)
 	if err != nil {
 		return err
