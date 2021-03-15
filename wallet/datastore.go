@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
@@ -345,10 +346,16 @@ func txGetByProviderLinkingID(ctx context.Context, tx *sqlx.Tx, providerLinkingI
 }
 
 func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
 	// get pg from context
 	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
 	if !ok {
 		// if we cant check the db consider "spent"
+		logger.Error().Msg("bitFlyerRequestIDSpent: unable to get datastore from context")
 		return true
 	}
 
@@ -356,6 +363,7 @@ func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
 	// if duplicate error, false
 	if err := db.InsertBitFlyerRequestID(ctx, requestID); err != nil {
 		// check error, consider "spent" if error
+		logger.Error().Err(err).Msg("bitFlyerRequestIDSpent: database error attempting to insert")
 		return true
 	}
 	// else not spent if successfully inserted
