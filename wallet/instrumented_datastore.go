@@ -56,6 +56,20 @@ func (_d DatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, pr
 	return _d.base.GetByProviderLinkingID(ctx, providerLinkingID)
 }
 
+// GetLinkingLimitInfo implements Datastore
+func (_d DatastoreWithPrometheus) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (l1 LinkingInfo, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetLinkingLimitInfo", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetLinkingLimitInfo(ctx, providerLinkingID)
+}
+
 // GetWallet implements Datastore
 func (_d DatastoreWithPrometheus) GetWallet(ctx context.Context, ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()
@@ -82,6 +96,20 @@ func (_d DatastoreWithPrometheus) GetWalletByPublicKey(ctx context.Context, s1 s
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWalletByPublicKey", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetWalletByPublicKey(ctx, s1)
+}
+
+// IncreaseLinkingLimit implements Datastore
+func (_d DatastoreWithPrometheus) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IncreaseLinkingLimit", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IncreaseLinkingLimit(ctx, providerLinkingID)
 }
 
 // InsertBitFlyerRequestID implements Datastore

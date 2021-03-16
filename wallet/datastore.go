@@ -43,6 +43,8 @@ type Datastore interface {
 	grantserver.Datastore
 	TxLinkWalletInfo(ctx context.Context, tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
+	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
+	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -331,18 +333,26 @@ func (pg *Postgres) TxLinkWalletInfo(
 	return nil
 }
 
-func txGetByProviderLinkingID(ctx context.Context, tx *sqlx.Tx, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
+func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (int, error) {
+	var (
+		max int
+	)
 	statement := `
-	select
-		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
-		user_deposit_account_provider, user_deposit_destination
-	from
-		wallets
-	WHERE provider_linking_id = $1
+		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
 	`
-	var wallets []walletutils.Info
-	err := tx.SelectContext(ctx, &wallets, statement, providerLinkingID)
-	return &wallets, err
+	err := tx.Get(&max, statement, providerLinkingID, getEnvMaxCards())
+	return max, err
+}
+
+func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (int, error) {
+	var (
+		used int
+	)
+	statement := `
+		select count(1) as used from wallets where provider_linking_id = $1
+	`
+	err := tx.Get(&used, statement, providerLinkingID)
+	return used, err
 }
 
 func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
@@ -377,6 +387,49 @@ func getEnvMaxCards() int {
 	return 4
 }
 
+// LinkingInfo - a structure for wallet linking information
+type LinkingInfo struct {
+	WalletsLinked    int `json:"walletsLinked"`
+	OpenLinkingSlots int `json:"openLinkingSlots"`
+}
+
+// GetLinkingLimitInfo - get some basic info about linking limit
+func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error) {
+	var info = LinkingInfo{}
+
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return info, err
+	}
+	defer pg.RollbackTx(tx)
+
+	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID)
+	if err != nil {
+		return info, errorutils.Wrap(err, "error looking up max linkings for wallet")
+	}
+
+	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID)
+	if err != nil {
+		return info, errorutils.Wrap(err, "error looking up used linkings for wallet")
+	}
+
+	info.WalletsLinked = usedLinkings
+	info.OpenLinkingSlots = maxLinkings - usedLinkings
+
+	return info, nil
+
+}
+
+// IncreaseLinkingLimit - increase the linking limit for the given walletID by one
+func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error {
+	statement := `INSERT INTO linking_limit_adjust (provider_linking_id) VALUES ($1)`
+	_, err := pg.RawDB().ExecContext(ctx, statement, providerLinkingID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
 	tx, err := pg.RawDB().Beginx()
@@ -385,12 +438,17 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	}
 	defer pg.RollbackTx(tx)
 
-	walletsMatchingProviderLinkingID, err := txGetByProviderLinkingID(ctx, tx, providerLinkingID)
+	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, ID)
 	if err != nil {
-		return errorutils.Wrap(err, "error looking up wallets by provider id")
+		return errorutils.Wrap(err, "error looking up max linkings for wallet")
 	}
-	walletLinkedLength := len(*walletsMatchingProviderLinkingID)
-	if walletLinkedLength >= getEnvMaxCards() {
+
+	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID.String())
+	if err != nil {
+		return errorutils.Wrap(err, "error looking up used linkings for wallet")
+	}
+
+	if usedLinkings >= maxLinkings {
 		sentry.WithScope(func(scope *sentry.Scope) {
 			anonAddr := ""
 			if anonymousAddress != nil {
