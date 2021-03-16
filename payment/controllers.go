@@ -503,7 +503,10 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 					})
 				}
 			}
-			return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
+
+			if len(credentials) > 0 {
+				return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
+			}
 		}
 
 		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
