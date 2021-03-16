@@ -3,6 +3,7 @@ package payments
 import (
 
 	// pprof imports
+	"context"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -38,7 +39,7 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 	}
 
 	r = cmd.SetupDefaultRoutes(command.Context(), r)
-	r, ctx, _ := payment.SetupService(command.Context(), r)
+	r, ctx, paymentService := payment.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
 
 	cmd.Must(err)
@@ -51,6 +52,15 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 		go func() {
 			logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
 		}()
+	}
+
+	for _, job := range paymentService.Jobs() {
+		// iterate over jobs
+		for i := 0; i < job.Workers; i++ {
+			// spin up a job worker for each worker
+			logger.Debug().Msg("starting job worker")
+			go jobWorker(ctx, job.Func, job.Cadence)
+		}
 	}
 
 	logger.Info().Msg("creating web server")
@@ -71,4 +81,20 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 		logger.Fatal().Err(err).Msg("HTTP server start failed!")
 	}
 	<-time.After(2 * time.Second)
+}
+
+// FIXME dedupe
+func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
+	logger, err := appctx.GetLogger(ctx)
+	cmd.Must(err)
+
+	for {
+		_, err := job(ctx)
+		if err != nil {
+			logger.Error().Err(err).Msg("error encountered in job run")
+			sentry.CaptureException(err)
+		}
+		// regardless if attempted or not, wait for the duration until retrying
+		<-time.After(duration)
+	}
 }
