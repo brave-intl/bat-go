@@ -22,7 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go"
+	stripe "github.com/stripe/stripe-go"
 	"github.com/stripe/stripe-go/client"
 	"github.com/stripe/stripe-go/webhook"
 )
@@ -206,8 +206,11 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		for i, item := range order.Items {
+			// FIXME
 			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
 				order.Items[i].Type = "time-limited"
+			} else {
+				order.Items[i].Type = "single-use"
 			}
 		}
 
@@ -242,6 +245,8 @@ func GetOrder(service *Service) handlers.AppHandler {
 		for i, item := range order.Items {
 			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
 				order.Items[i].Type = "time-limited"
+			} else {
+				order.Items[i].Type = "single-use"
 			}
 		}
 
@@ -259,7 +264,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			}
 
 			orderWithStripeCheckoutSessionID := OrderWithStripeCheckoutSessionID{
-				Order:                   order,
+				Order: order,
 				StripeCheckoutSessionID: stripeCheckoutSessionID,
 			}
 
