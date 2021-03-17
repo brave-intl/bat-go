@@ -251,7 +251,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			return nil, fmt.Errorf("failed to fetch bitflyer quote")
 		}
 
-		JPYLimit := decimal.NewFromFloat(100000.0)
+		JPYLimit := decimal.NewFromFloat(100000)
 		var overLimitErr error
 
 		totalJPYTransfer := total.Mul(quote.Rate)
@@ -259,7 +259,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()
 			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
-			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s", over)
+			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
 		}
 
 		tx := new(w.TransactionInfo)
