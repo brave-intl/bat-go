@@ -242,7 +242,25 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	} else if *wallet.UserDepositAccountProvider == "bitflyer" {
 
 		transferID := uuid.NewV4().String()
+
 		totalF64, _ := total.Float64()
+
+		// get quote, make sure we dont go over 100K JPY
+		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch bitflyer quote")
+		}
+
+		JPYLimit := decimal.NewFromFloat(100000)
+		var overLimitErr error
+
+		totalJPYTransfer := total.Mul(quote.Rate)
+
+		if totalJPYTransfer.GreaterThan(JPYLimit) {
+			over := JPYLimit.Sub(totalJPYTransfer).String()
+			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
+			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
+		}
 
 		tx := new(w.TransactionInfo)
 
@@ -263,7 +281,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			},
 		}
 		// upload
-		_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+		_, err = service.bfClient.UploadBulkPayout(ctx, payload)
 		if err != nil {
 			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 			var bfe *clients.BitflyerError
@@ -289,6 +307,11 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if service.drainChannel != nil {
 			service.drainChannel <- tx
 		}
+
+		if overLimitErr != nil {
+			return tx, overLimitErr
+		}
+
 		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
