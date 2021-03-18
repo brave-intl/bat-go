@@ -5,6 +5,9 @@ go 1.15
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
+	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
+	github.com/alicebob/miniredis v2.5.0+incompatible // indirect
+	github.com/alicebob/miniredis/v2 v2.14.3 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
@@ -22,6 +25,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.5.3 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/vault v1.1.1
+	github.com/hexdigest/gowrap v1.1.10 // indirect
 	github.com/jmoiron/sqlx v1.3.1
 	github.com/lib/pq v1.9.0
 	github.com/linkedin/goavro v2.1.0+incompatible
@@ -44,8 +48,12 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
+	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da // indirect
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899
+	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20201029221708-28c70e62bb1d
+	golang.org/x/sys v0.0.0-20210317091845-390168757d9c // indirect
+	golang.org/x/tools v0.1.0 // indirect
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.5.1
