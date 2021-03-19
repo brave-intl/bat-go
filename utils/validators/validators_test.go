@@ -85,7 +85,7 @@ func TestIsUUID(t *testing.T) {
 
 func TestIsEmptyUUID(t *testing.T) {
 	type TestRequest struct {
-		ID uuid.UUID `valid:"requiredUUID"`
+		ID uuid.UUID `valid:"uuid"`
 	}
 
 	request := &TestRequest{uuid.FromStringOrNil("01e42e30-a823-4a91-a114-00fd0d47f7d0")}
@@ -107,12 +107,11 @@ func TestIsEmptyUUID(t *testing.T) {
 	if isValid {
 		t.Error("should not be a valid uuid")
 	}
-
 }
 
 func TestArrayFillings(t *testing.T) {
 	type TestRequest struct {
-		ID []uuid.UUID `valid:"required"`
+		ID []uuid.UUID `valid:"uuids"`
 	}
 	run := func(body TestRequest) {
 		isValid, err := govalidator.ValidateStruct(body)
@@ -123,6 +122,7 @@ func TestArrayFillings(t *testing.T) {
 			t.Error(fmt.Sprintf("body is invalid: %#v", body))
 		}
 	}
+	// empty is ok
 	run(TestRequest{
 		ID: []uuid.UUID{},
 	})

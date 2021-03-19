@@ -19,8 +19,8 @@ type Info struct {
 	AltCurrency                *altcurrency.AltCurrency `json:"altcurrency" valid:"-"`
 	PublicKey                  string                   `json:"publicKey,omitempty" valid:"hexadecimal,optional" db:"public_key"`
 	LastBalance                *Balance                 `json:"balances,omitempty" valid:"-"`
-	ProviderLinkingID          *uuid.UUID               `json:"providerLinkingId" valid:"-" db:"provider_linking_id"`
-	AnonymousAddress           *uuid.UUID               `json:"anonymousAddress" valid:"-" db:"anonymous_address"`
+	ProviderLinkingID          *uuid.UUID               `json:"providerLinkingId" valid:"uuid" db:"provider_linking_id"`
+	AnonymousAddress           *uuid.UUID               `json:"anonymousAddress" valid:"uuid" db:"anonymous_address"`
 	UserDepositAccountProvider *string                  `json:"userDepositAccountProvider" valid:"in(uphold)" db:"user_deposit_account_provider"`
 	UserDepositDestination     string                   `json:"userDepositCardId" db:"user_deposit_destination"`
 }

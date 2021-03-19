@@ -290,7 +290,7 @@ func GetTransactions(service *Service) handlers.AppHandler {
 
 // CreateTransactionRequest includes information needed to create a transaction
 type CreateTransactionRequest struct {
-	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
+	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"uuid"`
 }
 
 // CreateUpholdTransaction creates a transaction against an order
@@ -339,7 +339,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 
 // CreateAnonCardTransactionRequest includes information needed to create a anon card transaction
 type CreateAnonCardTransactionRequest struct {
-	WalletID    uuid.UUID `json:"paymentId"`
+	WalletID    uuid.UUID `json:"paymentId" valid:"uuid"`
 	Transaction string    `json:"transaction"`
 }
 
@@ -373,7 +373,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 
 // CreateOrderCredsRequest includes the item ID and blinded credentials which to be signed
 type CreateOrderCredsRequest struct {
-	ItemID       uuid.UUID `json:"itemId" valid:"-"`
+	ItemID       uuid.UUID `json:"itemId" valid:"uuid"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 

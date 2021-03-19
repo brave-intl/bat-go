@@ -213,13 +213,13 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
-	WalletID     uuid.UUID `json:"paymentId" valid:"-"`
+	WalletID     uuid.UUID `json:"paymentId" valid:"uuid"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
 // ClaimResponse includes a ClaimID which can later be used to check the status of the claim
 type ClaimResponse struct {
-	ClaimID uuid.UUID `json:"claimId"`
+	ClaimID uuid.UUID `json:"claimId" valid:"uuid"`
 }
 
 // ClaimPromotion is the handler for claiming a particular promotion by a wallet
@@ -479,7 +479,7 @@ func MakeSuggestion(service *Service) handlers.AppHandler {
 // DrainSuggestionV2Request includes the ID of the verified wallet attempting to drain suggestions
 // and returns the drain_poll uuid so the client can poll for status updates on this draining
 type DrainSuggestionV2Request struct {
-	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	WalletID    uuid.UUID           `json:"paymentId" valid:"uuid"`
 	Credentials []CredentialBinding `json:"credentials"`
 }
 
@@ -539,7 +539,7 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 
 // DrainSuggestionRequest includes the ID of the verified wallet attempting to drain suggestions
 type DrainSuggestionRequest struct {
-	WalletID    uuid.UUID           `json:"paymentId" valid:"-"`
+	WalletID    uuid.UUID           `json:"paymentId" valid:"uuid"`
 	Credentials []CredentialBinding `json:"credentials"`
 }
 
@@ -641,7 +641,7 @@ func CreatePromotion(service *Service) handlers.AppHandler {
 
 // ClobberedClaimsRequest holds the data needed to report claims that were clobbered by client bug
 type ClobberedClaimsRequest struct {
-	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
+	ClaimIDs []uuid.UUID `json:"claimIds" valid:"uuids"`
 }
 
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
@@ -730,7 +730,7 @@ type BapReportPayload struct {
 
 // BapReportResp holds the data needed to report that bat has been lost by client bug
 type BapReportResp struct {
-	ReportBapID *uuid.UUID `json:"reportBapId" valid:"required"`
+	ReportBapID *uuid.UUID `json:"reportBapId" valid:"uuid"`
 }
 
 // PostReportBAPEvent is the handler for reporting bat was lost by client bug

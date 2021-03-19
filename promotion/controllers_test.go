@@ -924,7 +924,7 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		return rr.Code
 	}
 	code := run([]uuid.UUID{})
-	suite.Require().Equal(http.StatusOK, code)
+	suite.Require().Equal(http.StatusBadRequest, code)
 
 	code = run([]uuid.UUID{
 		id0,

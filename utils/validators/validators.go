@@ -9,15 +9,15 @@ import (
 )
 
 func init() {
-	govalidator.TagMap["base64url"] = govalidator.Validator(IsBase64Url)
-	govalidator.TagMap["base64urlnopad"] = govalidator.Validator(IsBase64UrlWithoutPadding)
-	govalidator.TagMap["compactjws"] = govalidator.Validator(IsCompactJWS)
-	govalidator.TagMap["btcaddress"] = govalidator.Validator(IsBTCAddress)
-	govalidator.TagMap["ethaddressnochecksum"] = govalidator.Validator(IsETHAddressNoChecksum)
-	govalidator.TagMap["ethaddress"] = govalidator.Validator(IsETHAddress)
-	govalidator.TagMap["platform"] = govalidator.Validator(IsPlatform)
-	govalidator.CustomTypeTagMap.Set("requiredUUID", govalidator.CustomTypeValidator(IsRequiredUUID))
-
+	govalidator.CustomTypeTagMap.Set("base64url", stringParseValidator(IsBase64Url))
+	govalidator.CustomTypeTagMap.Set("base64urlnopad", stringParseValidator(IsBase64UrlWithoutPadding))
+	govalidator.CustomTypeTagMap.Set("compactjws", stringParseValidator(IsCompactJWS))
+	govalidator.CustomTypeTagMap.Set("btcaddress", stringParseValidator(IsBTCAddress))
+	govalidator.CustomTypeTagMap.Set("ethaddressnochecksum", stringParseValidator(IsETHAddressNoChecksum))
+	govalidator.CustomTypeTagMap.Set("ethaddress", stringParseValidator(IsETHAddress))
+	govalidator.CustomTypeTagMap.Set("platform", stringParseValidator(IsPlatform))
+	govalidator.CustomTypeTagMap.Set("uuid", IsRequiredUUID)
+	govalidator.CustomTypeTagMap.Set("uuids", IsRequiredUUIDs)
 }
 
 const (
@@ -35,6 +35,16 @@ var (
 	rxBTCAddress     = regexp.MustCompile(btcAddress)
 	rxETHAddress     = regexp.MustCompile(ethAddress)
 )
+
+func stringParseValidator(fn func(string) bool) func(interface{}, interface{}) bool {
+	return func(i interface{}, context interface{}) bool {
+		switch v := i.(type) {
+		case string:
+			return fn(v)
+		}
+		return false
+	}
+}
 
 // IsBase64Url returns true if the string str is base64url (encoded with the "URL and Filename safe" alphabet)
 // https://tools.ietf.org/html/rfc4648#section-5
@@ -82,14 +92,34 @@ func IsPlatform(platform string) bool {
 	return govalidator.IsIn(platform, platforms...)
 }
 
-// IsRequiredUUID checks if the uuid is present
 func IsRequiredUUID(i interface{}, context interface{}) bool {
-	switch v := i.(type) { // you can type switch on the context interface being validated
+	switch v := i.(type) {
 	case uuid.UUID:
-		return !uuid.Equal(v, uuid.Nil)
-	default:
-		panic("invalid type recieved in IsRequiredUUID")
+		return !isUUIDNil(v)
 	}
+	return false
+}
+
+func IsRequiredUUIDs(i interface{}, context interface{}) bool {
+	switch v := i.(type) {
+	case []uuid.UUID:
+		if len(v) == 0 {
+			return true
+		}
+		base := []interface{}{}
+		for _, id := range v {
+			base = append(base, id)
+		}
+		found := govalidator.Find(base, func(id_ interface{}, i int) bool {
+			return isUUIDNil(id_.(uuid.UUID))
+		})
+		return found == nil
+	}
+	return false
+}
+
+func isUUIDNil(id uuid.UUID) bool {
+	return uuid.Equal(id, uuid.Nil) || uuid.Equal(id, uuid.UUID{})
 }
 
 // IsUUID checks if the string is a valid UUID
