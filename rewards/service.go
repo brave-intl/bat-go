@@ -76,7 +76,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 	}
 
 	// if there is a default choice configured use it
-	if dc, ok := getDefaultChoice(ctx); ok {
+	if dc := getDefaultChoice(ctx); dc > 0 {
 		defaultChoice = dc
 	}
 
