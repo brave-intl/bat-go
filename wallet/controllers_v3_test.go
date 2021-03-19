@@ -100,7 +100,11 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(rows)
+	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
+	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
+
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(open)
 
 	// txHasDestination
 	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)

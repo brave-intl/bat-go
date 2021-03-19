@@ -438,7 +438,7 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	}
 	defer pg.RollbackTx(tx)
 
-	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, ID)
+	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID.String())
 	if err != nil {
 		return errorutils.Wrap(err, "error looking up max linkings for wallet")
 	}
