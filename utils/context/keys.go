@@ -28,6 +28,8 @@ const (
 	DefaultTipChoicesCTXKey CTXKey = "default_tip_choices"
 	// DefaultACChoicesCTXKey - the context key for getting the default ac choices
 	DefaultACChoicesCTXKey CTXKey = "default_ac_choices"
+	// DefaultACChoiceCTXKey - the context key for getting the default ac choice
+	DefaultACChoiceCTXKey CTXKey = "default_ac_choice"
 	// RatiosCacheExpiryDurationCTXKey - context key for ratios client cache expiry
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge

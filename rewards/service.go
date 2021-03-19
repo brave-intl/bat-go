@@ -75,6 +75,11 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		defaultChoice = choices[0]
 	}
 
+	// if there is a default choice configured use it
+	if dc, ok := getDefaultChoice(ctx); ok {
+		defaultChoice = dc
+	}
+
 	var rate, _ = rateData.Payload[currency.String()].Float64()
 
 	return &ParametersV1{
