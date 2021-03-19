@@ -17,6 +17,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/shopspring/decimal"
 )
 
 const localEnv = "local"
@@ -124,7 +125,12 @@ func (s *Service) Collect(ch chan<- prometheus.Metric) {
 	balance, err := grantWallet.GetBalance(true)
 	if err != nil {
 		sentry.CaptureException(err)
-		return
+		balance = grantWallet.LastBalance
+		if balance == nil {
+			balance = &walletutils.Balance{
+				SpendableProbi: decimal.Zero,
+			}
+		}
 	}
 
 	spendable, _ := grantWallet.GetWalletInfo().AltCurrency.FromProbi(balance.SpendableProbi).Float64()
