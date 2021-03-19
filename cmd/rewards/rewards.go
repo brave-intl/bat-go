@@ -43,6 +43,12 @@ func init() {
 		"the default ac choices for the rewards system")
 	cmd.Must(viper.BindPFlag("default-ac-choices", rewardsCmd.PersistentFlags().Lookup("default-ac-choices")))
 	cmd.Must(viper.BindEnv("default-ac-choices", "DEFAULT_AC_CHOICES"))
+
+	// defaultACChoice - defaults to empty (which causes the choices to be dynamic)
+	rewardsCmd.PersistentFlags().String("default-ac-choice", "",
+		"the default ac choice for the rewards system")
+	cmd.Must(viper.BindPFlag("default-ac-choice", rewardsCmd.PersistentFlags().Lookup("default-ac-choice")))
+	cmd.Must(viper.BindEnv("default-ac-choice", "DEFAULT_AC_CHOICE"))
 }
 
 var (
