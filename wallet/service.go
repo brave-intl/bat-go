@@ -292,10 +292,16 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}
 			// support only APIs to assist in linking limit issues
-			r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
-				middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
-			r.Get("/{custodian}/linking-info", middleware.SimpleTokenAuthorizedOnly(
-				middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
+			/*
+				TODO: currently commented out due to concerns about how to enable/disable particular
+				people from accessing this endpoint.
+				r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
+					middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
+			*/
+
+			// linking info api is okay to expose publically
+			r.Get("/{custodian}/linking-info",
+				middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
 
 			// get wallet routes
 			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
