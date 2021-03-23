@@ -300,7 +300,7 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			*/
 
 			// linking info api is okay to expose publically
-			r.Get("/{custodian}/linking-info",
+			r.Get("/linking-info",
 				middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
 
 			// get wallet routes
