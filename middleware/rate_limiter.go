@@ -6,25 +6,32 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/gomodule/redigo/redis"
 	"github.com/throttled/throttled"
 	"github.com/throttled/throttled/store/memstore"
+	"github.com/throttled/throttled/store/redigostore"
 )
 
-// RateLimiter rate limits the number of requests a
-// user from a single IP address can make
-func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.Handler {
+// IPRateLimiterWithStore rate limits based on IP using
+// a provided store and a GCRA leaky bucket algorithm.
+// This can be a simple memory store, a Redis store, or other stores for
+// multi-instance synchronization. See
+// https://github.com/throttled/throttled/tree/master/store for details.
+func IPRateLimiterWithStore(
+	ctx context.Context,
+	perMin int,
+	burst int,
+	store throttled.GCRAStore,
+) func(next http.Handler) http.Handler {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
 	return func(next http.Handler) http.Handler {
-		store, err := memstore.New(65536)
-		if err != nil {
-			logger.Fatal().Err(err)
-		}
 		quota := throttled.RateQuota{
-			MaxRate: throttled.PerMin(perMin),
+			MaxRate:  throttled.PerMin(perMin),
+			MaxBurst: burst,
 		}
 		rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
 		if err != nil {
@@ -48,4 +55,46 @@ func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.H
 			}
 		})
 	}
+}
+
+// RateLimiter rate limits the number of requests a
+// user from a single IP address can make using a simple
+// in-memory store that will not synchronize across instances.
+func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.Handler {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	store, err := memstore.New(65536)
+	if err != nil {
+		logger.Fatal().Err(err)
+	}
+	// Including burst in the existing function would break the contract so it must
+	// be 0 until a point release.
+	defaultBurst := 0
+
+	return IPRateLimiterWithStore(ctx, perMin, defaultBurst, store)
+}
+
+// RateLimiterRedisStore rate limits the number of requests a
+// user from a single IP address can make and coordinates request counts
+// between instances using Redis.
+func RateLimiterRedisStore(
+	ctx context.Context,
+	perMin int,
+	burst int,
+	redis *redis.Pool,
+	keyPrefix string,
+	db int,
+) func(next http.Handler) http.Handler {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	store, err := redigostore.New(redis, keyPrefix, db)
+	if err != nil {
+		logger.Fatal().Err(err)
+	}
+
+	return IPRateLimiterWithStore(ctx, perMin, burst, store)
 }
