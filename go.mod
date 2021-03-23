@@ -7,7 +7,7 @@ require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/alicebob/miniredis v2.5.0+incompatible // indirect
-	github.com/alicebob/miniredis/v2 v2.14.3 // indirect
+	github.com/alicebob/miniredis/v2 v2.14.3
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
@@ -18,7 +18,7 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/golang-migrate/migrate/v4 v4.14.1
 	github.com/golang/mock v1.5.0
-	github.com/gomodule/redigo v2.0.0+incompatible // indirect
+	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.0.0
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
 	github.com/hashicorp/go-plugin v1.0.0 // indirect
