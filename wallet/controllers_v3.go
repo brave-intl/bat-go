@@ -555,9 +555,10 @@ func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Requ
 func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
-			ctx               = r.Context()
-			paymentID         = new(inputs.ID)
-			providerLinkingID string
+			ctx       = r.Context()
+			paymentID = new(inputs.ID)
+			// default to a uuid that doesn't exist
+			providerLinkingID = uuid.NewV4().String()
 			custodianID       = r.URL.Query().Get("custodianId")
 		)
 		// get logger from context
@@ -580,13 +581,15 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 			}
 			// get the wallet
 			wallet, err := s.GetWallet(ctx, *paymentID.UUID())
-			if err != nil {
-				if strings.Contains(err.Error(), "looking up wallet") {
+			if err != nil || wallet == nil {
+				if wallet == nil || strings.Contains(err.Error(), "looking up wallet") {
 					return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
 				}
 				return handlers.WrapError(err, "unable to get linking limit for payment id", http.StatusServiceUnavailable)
 			}
-			providerLinkingID = wallet.ProviderLinkingID.String()
+			if wallet.ProviderLinkingID != nil {
+				providerLinkingID = wallet.ProviderLinkingID.String()
+			}
 		}
 
 		info, err := s.GetLinkingInfo(ctx, providerLinkingID, custodianID)
