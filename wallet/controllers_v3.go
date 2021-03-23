@@ -532,7 +532,6 @@ func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Requ
 		var (
 			ctx         = r.Context()
 			custodianID = chi.URLParam(r, "custodian_id")
-			custodian   = new(inputs.Custodian)
 		)
 		// get logger from context
 		logger, err := appctx.GetLogger(ctx)
@@ -541,19 +540,10 @@ func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Requ
 			ctx, logger = logging.SetupLogger(ctx)
 		}
 
-		// get custodian
-		if err := inputs.DecodeAndValidateString(ctx, custodian, chi.URLParam(r, "custodian")); err != nil {
-			logger.Warn().Str("custodian", err.Error()).Msg("failed to decode and validate custodian from url")
-			return handlers.ValidationError(
-				"error validating custodian url parameter",
-				map[string]interface{}{
-					"custodian": err.Error(),
-				},
-			)
-		}
-
+		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
 		err = s.IncreaseLinkingLimit(ctx, custodianID)
 		if err != nil {
+			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
 			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
 		}
 
@@ -569,24 +559,12 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 			paymentID         = new(inputs.ID)
 			providerLinkingID string
 			custodianID       = r.URL.Query().Get("custodianId")
-			custodian         = new(inputs.Custodian)
 		)
 		// get logger from context
 		logger, err := appctx.GetLogger(ctx)
 		if err != nil {
 			// no logger, setup
 			ctx, logger = logging.SetupLogger(ctx)
-		}
-
-		// get custodian
-		if err := inputs.DecodeAndValidateString(ctx, custodian, chi.URLParam(r, "custodian")); err != nil {
-			logger.Warn().Str("custodian", err.Error()).Msg("failed to decode and validate custodian from url")
-			return handlers.ValidationError(
-				"error validating custodian url parameter",
-				map[string]interface{}{
-					"custodian": err.Error(),
-				},
-			)
 		}
 
 		if r.URL.Query().Get("paymentId") != "" {
@@ -606,14 +584,15 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 				if strings.Contains(err.Error(), "looking up wallet") {
 					return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
 				}
-				return handlers.WrapError(err, "unable to increase linking limit", http.StatusServiceUnavailable)
+				return handlers.WrapError(err, "unable to get linking limit for payment id", http.StatusServiceUnavailable)
 			}
 			providerLinkingID = wallet.ProviderLinkingID.String()
 		}
 
 		info, err := s.GetLinkingInfo(ctx, providerLinkingID, custodianID)
 		if err != nil {
-			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
+			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to get linking info")
+			return handlers.WrapError(err, "error getting linking info", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(ctx, info, w, http.StatusOK)
