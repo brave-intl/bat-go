@@ -98,6 +98,33 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	return anonCard.SubmitTransaction(transaction, confirm)
 }
 
+// IncreaseLinkingLimit - increase this wallet's linking limit
+func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
+	// convert to provider id
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, custodianID)
+
+	if err := service.Datastore.IncreaseLinkingLimit(ctx, providerLinkingID); err != nil {
+		return fmt.Errorf("unable to increase linking limit: %w", err)
+	}
+	return nil
+}
+
+// GetLinkingInfo - Get data about the linking info
+func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, custodianID string) (LinkingInfo, error) {
+	// compute the provider linking id based on custodian id if there is one
+
+	if custodianID != "" {
+		// generate a provider linking id
+		providerLinkingID = uuid.NewV5(WalletClaimNamespace, custodianID).String()
+	}
+
+	info, err := service.Datastore.GetLinkingLimitInfo(ctx, providerLinkingID)
+	if err != nil {
+		return info, fmt.Errorf("unable to increase linking limit: %w", err)
+	}
+	return info, nil
+}
+
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutils.Info, depositID, accountHash string) error {
 	// during validation we verified that the account hash and deposit id were signed by bitflyer
@@ -264,6 +291,17 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			}
+			// support only APIs to assist in linking limit issues
+			/*
+				TODO: currently commented out due to concerns about how to enable/disable particular
+				people from accessing this endpoint.
+				r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
+					middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
+			*/
+
+			// linking info api is okay to expose publically
+			r.Get("/{custodian}/linking-info",
+				middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
 
 			// get wallet routes
 			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
@@ -315,6 +353,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	}
+
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError
