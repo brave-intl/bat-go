@@ -592,7 +592,7 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 		if r.URL.Query().Get("paymentId") != "" {
 			// get payment id
 			if err := inputs.DecodeAndValidateString(ctx, paymentID, r.URL.Query().Get("paymentId")); err != nil {
-				logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+				logger.Warn().Err(err).Str("paymentID", r.URL.Query().Get("paymentId")).Msg("failed to decode and validate paymentID from url")
 				return handlers.ValidationError(
 					"error validating paymentID url parameter",
 					map[string]interface{}{
