@@ -1117,11 +1117,14 @@ func errToDrainCode(err error) (string, bool) {
 		if codedErr, ok := err.(uphold.Coded); ok {
 			// possible wallet provider specific errors
 			errCode = codedErr.GetCode()
+		} else {
+			errCode = "unknown"
 		}
-		if codedErr, ok := err.(clients.BitflyerError); ok {
+		var bfe *clients.BitflyerError
+		if errors.As(err, &bfe) {
 			// possible wallet provider specific errors
-			if len(codedErr.ErrorIDs) > 0 {
-				errCode = codedErr.ErrorIDs[0]
+			if len(bfe.ErrorIDs) > 0 {
+				errCode = bfe.ErrorIDs[0]
 			}
 		} else {
 			errCode = "unknown"
