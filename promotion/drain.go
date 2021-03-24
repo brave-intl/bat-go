@@ -299,6 +299,16 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 						return nil, fmt.Errorf("failed to transfer funds: %w", err)
 					}
 				}
+
+				for _, v := range bfe.ErrorIDs {
+					// non-retry errors, report to sentry
+					if v == "NO_INV" {
+						logger.Error().Err(bfe).Msg("no bitflyer inventory")
+						sentry.CaptureException(bfe)
+					}
+				}
+				// runner has ability to read ErrorIDs from bfe and code it
+				return nil, bfe
 			}
 			return nil, fmt.Errorf("failed to transfer funds: %w", err)
 		}
