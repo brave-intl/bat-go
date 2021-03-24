@@ -13,6 +13,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -868,14 +869,26 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
 
+		} else if req.Type == "single-use" {
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+
+			var decodedCredential cbr.CredentialRedemption
+			err = json.Unmarshal(bytes, &decodedCredential)
+			if err != nil {
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+			if err != nil {
+				return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+			}
+
+			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 		}
-
-		// CBP redemptions can be reserved for other credential types
-
-		// err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
-		// if err != nil {
-		// 	return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
-		// }
 
 		return handlers.WrapError(err, "Unknown credential type", http.StatusBadRequest)
 	})
