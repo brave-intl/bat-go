@@ -1721,7 +1721,11 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	<-time.After(2 * time.Second)
-	//suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+
+	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
+	suite.Require().True(drainJob.Erred)
+	suite.Require().Equal(*drainJob.ErrCode, "NO_INV", "error code should be no inv")
+
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
