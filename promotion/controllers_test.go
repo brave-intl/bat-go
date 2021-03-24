@@ -1720,7 +1720,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	<-ch
+	<-time.After(2 * time.Second)
 	//suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 }
 
