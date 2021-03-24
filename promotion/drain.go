@@ -303,6 +303,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				for _, v := range bfe.ErrorIDs {
 					// non-retry errors, report to sentry
 					if v == "NO_INV" {
+						logger.Error().Err(bfe).Msg("no bitflyer inventory")
 						sentry.CaptureException(bfe)
 					}
 				}
