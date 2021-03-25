@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/sku"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	macaroon "gopkg.in/macaroon.v2"
@@ -41,34 +42,20 @@ type OrderItem struct {
 }
 
 // IsValidSKU checks to see if the token provided is one that we've previously created
-func IsValidSKU(sku string) bool {
+func IsValidSKU(skuInput string) bool {
 	env := os.Getenv("ENV")
 	if env == "production" {
-		switch sku {
-		case
-			// Production - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J",
-			// Production - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o=",
-			// Production - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlILeuqgF6G9nPczv/CLyEtAQB/evX8RGFqXAxjga4++3HCg==":
+		set := sku.ByEnv(env)
+		switch skuInput {
+		case set.UserWalletVote, set.AnonCardVote, set.FreeTrial:
 			return true
 		}
 	} else {
-		switch sku {
-		case
-			// Dev - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
-			// Dev - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
-			// Dev - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIAs+/paWWm0Kxm/do/8bPGga5ETPVRx1w6J8SPq0mzBFCg==",
-			// Staging - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W",
-			// Staging - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
-			// Staging - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
+		devSet := sku.ByEnv("dev")
+		stagingSet := sku.ByEnv("staging")
+		switch skuInput {
+		case devSet.UserWalletVote, devSet.AnonCardVote, devSet.FreeTrial,
+			stagingSet.UserWalletVote, stagingSet.AnonCardVote, stagingSet.FreeTrial:
 			return true
 		}
 	}

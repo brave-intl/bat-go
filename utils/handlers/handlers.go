@@ -9,6 +9,8 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
@@ -122,6 +124,14 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// return a 400 error here as we cannot supply the encoding type the client is asking for
 	}
 
+	// get logger from context
+	ctx := r.Context()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+	r = r.WithContext(ctx)
+
 	if e := fn(w, r); e != nil {
 		if e.Code >= 500 && e.Code <= 599 {
 			sentry.WithScope(func(scope *sentry.Scope) {
@@ -141,6 +151,10 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Combine error with message
 			e.Message = fmt.Sprintf("%s: %v", e.Message, e.Cause)
 		}
+
+		logger.Error().
+			Err(e).
+			Msg("request handler")
 
 		e.ServeHTTP(w, r)
 	}

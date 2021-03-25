@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/brave-intl/bat-go/utils/sku"
 )
 
 // NewService - create a new rewards service structure
@@ -92,5 +94,17 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
+	}, nil
+}
+
+// GetParametersV2 - respond to caller with the rewards parameters and sku token
+func (s *Service) GetParametersV2(ctx context.Context, currency *BaseCurrency) (*ParametersV2, error) {
+	parametersV1, err := s.GetParameters(ctx, currency)
+	if err != nil {
+		return nil, err
+	}
+	return &ParametersV2{
+		ParametersV1: *parametersV1,
+		SKUTokens:    sku.ByEnv(os.Getenv("env")),
 	}, nil
 }

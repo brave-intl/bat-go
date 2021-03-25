@@ -74,6 +74,8 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
+	r.Get("/v2/parameters", middleware.InstrumentHandler(
+		"GetParametersHandlerV2", rewards.GetParametersHandlerV2(s)).ServeHTTP)
 
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)

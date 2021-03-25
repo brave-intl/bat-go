@@ -248,7 +248,7 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 
 // IsOrderPaid determines if the order has been paid
 func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
-	// Now that the transaction has been created let's check to see if that fulfilled the order.
+	// Now that the transaction has been created let's check to see if that fulfilled the order
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return false, err
