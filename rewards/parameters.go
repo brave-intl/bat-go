@@ -1,6 +1,7 @@
 package rewards
 
 import (
+	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	"github.com/brave-intl/bat-go/utils/sku"
 )
 
@@ -25,6 +26,8 @@ type ParametersV1 struct {
 
 // ParametersV2 - structure of reward parameters
 type ParametersV2 struct {
-	ParametersV1
-	SKUTokens sku.Set `json:"skuTokens,omitempty"`
+	Rate           ratios.RateResponse `json:"rate,omitempty"`
+	AutoContribute AutoContribute      `json:"autocontribute,omitempty"`
+	Tips           Tips                `json:"tips,omitempty"`
+	SKUTokens      sku.Set             `json:"skuTokens,omitempty"`
 }

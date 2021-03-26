@@ -52,7 +52,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 		}
 
-		parameters, err = service.GetParameters(ctx, currency)
+		parameters, err = service.GetParametersV1(ctx, currency)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get reward parameters")
 			return handlers.WrapError(err, "failed to get parameters", http.StatusInternalServerError)
@@ -66,6 +66,13 @@ func GetParametersHandlerV2(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		// get context from request
 		ctx := r.Context()
+		// get logger from context
+		_, err := appctx.GetLogger(ctx)
+		if err != nil {
+			ctx, _ = logging.SetupLogger(ctx)
+		}
+		r = r.WithContext(ctx)
+
 		currency, appErr := checkCurrency(ctx, r.URL.Query().Get("currency"))
 		if appErr != nil {
 			return appErr

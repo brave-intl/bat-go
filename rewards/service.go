@@ -51,8 +51,8 @@ func InitService(ctx context.Context) (*Service, error) {
 	return NewService(ctx, client), nil
 }
 
-// GetParameters - respond to caller with the rewards parameters
-func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
+// GetParametersV1 - respond to caller with the rewards parameters
+func (s *Service) GetParametersV1(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -99,12 +99,44 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 // GetParametersV2 - respond to caller with the rewards parameters and sku token
 func (s *Service) GetParametersV2(ctx context.Context, currency *BaseCurrency) (*ParametersV2, error) {
-	parametersV1, err := s.GetParameters(ctx, currency)
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return nil, err
 	}
+	rateData, err := s.ratios.FetchRate(ctx, "BAT", currency.String())
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to fetch rate from ratios")
+		return nil, fmt.Errorf("failed to fetch rate from ratios: %w", err)
+	}
+	if rateData == nil {
+		logger.Error().Msg("empty response from ratios")
+		return nil, errors.New("empty response from ratios")
+	}
+
+	var choices = getChoices(ctx, rateData.Payload[currency.String()])
+	var defaultChoice float64
+	if len(choices) > 1 {
+		defaultChoice = choices[len(choices)/2]
+	} else if len(choices) > 0 {
+		defaultChoice = choices[0]
+	}
+
+	// if there is a default choice configured use it
+	if dc := getDefaultChoice(ctx); dc > 0 {
+		defaultChoice = dc
+	}
+
 	return &ParametersV2{
-		ParametersV1: *parametersV1,
-		SKUTokens:    sku.ByEnv(os.Getenv("env")),
+		Rate: *rateData,
+		AutoContribute: AutoContribute{
+			DefaultChoice: defaultChoice,
+			Choices:       choices,
+		},
+		Tips: Tips{
+			DefaultTipChoices:     getTipChoices(ctx),
+			DefaultMonthlyChoices: getMonthlyChoices(ctx),
+		},
+		SKUTokens: sku.ByEnv(os.Getenv("env")),
 	}, nil
 }
