@@ -20,6 +20,7 @@ mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
+	mockgen -source=./eyeshade/datastore.go -destination=eyeshade/mockdatastore.go -package=eyeshade
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
@@ -34,6 +35,7 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/payment -i Datastore -t ./.prom-gowrap.tmpl -o ./payment/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/eyeshade -i Datastore -t ./.prom-gowrap.tmpl -o ./eyeshade/instrumented_read_only_datastore.go
 	# fix everything called datastore...
 	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
@@ -42,6 +44,7 @@ instrumented:
 	sed -i'bak' 's/datastore_duration_seconds/payment_datastore_duration_seconds/g' ./payment/instrumented_datastore.go
 	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
+	sed -i'bak' 's/readonlydatastore_duration_seconds/eyeshade_readonly_datastore_duration_seconds/g' ./eyeshade/instrumented_read_only_datastore.go
 	# http clients
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
