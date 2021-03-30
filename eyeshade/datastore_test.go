@@ -2,9 +2,9 @@ package eyeshade
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
-	"os"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -22,17 +22,17 @@ type DatastoreMockTestSuite struct {
 	mock sqlmock.Sqlmock
 }
 
-type DatastoreTestSuite struct {
-	suite.Suite
-	ctx context.Context
-	db  Datastore
-}
+// type DatastoreTestSuite struct {
+// 	suite.Suite
+// 	ctx context.Context
+// 	db  Datastore
+// }
 
 func TestDatastoreMockTestSuite(t *testing.T) {
 	suite.Run(t, new(DatastoreMockTestSuite))
-	if os.Getenv("EYESHADE_DB_URL") != "" {
-		suite.Run(t, new(DatastoreTestSuite))
-	}
+	// if os.Getenv("EYESHADE_DB_URL") != "" {
+	// 	suite.Run(t, new(DatastoreTestSuite))
+	// }
 }
 
 func (suite *DatastoreMockTestSuite) SetupSuite() {
@@ -52,19 +52,25 @@ func (suite *DatastoreMockTestSuite) SetupSuite() {
 func SetupMockGetAccountEarnings(
 	mock sqlmock.Sqlmock,
 	options AccountEarningsOptions,
-) {
+) []AccountEarnings {
 	getRows := sqlmock.NewRows(
 		[]string{"channel", "earnings", "account_id"},
 	)
-	for i := 0; i < int(*options.Limit); i += 1 {
+	rows := []AccountEarnings{}
+	for i := 0; i < options.Limit; i++ {
+		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+		earnings := decimal.NewFromFloat(
+			float64(rand.Intn(100)),
+		).Div(
+			decimal.NewFromFloat(10),
+		)
+		channel := uuid.NewV4().String()
+		rows = append(rows, AccountEarnings{channel, earnings, accountID})
+		// append sql result rows
 		getRows = getRows.AddRow(
-			uuid.NewV4().String(),
-			decimal.NewFromFloat(
-				float64(rand.Intn(100)),
-			).Div(
-				decimal.NewFromFloat(10),
-			),
-			fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			channel,
+			earnings,
+			accountID,
 		)
 	}
 	mock.ExpectQuery(`
@@ -80,20 +86,26 @@ order by earnings (.+)
 limit (.+)`).
 		WithArgs(options.Type, options.Limit).
 		WillReturnRows(getRows)
+	return rows
 }
 
 func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
-	five := int64(5)
 	options := AccountEarningsOptions{
-		Limit:     &five,
+		Limit:     5,
 		Ascending: true,
 		Type:      "contributions",
 	}
-	SetupMockGetAccountEarnings(suite.mock, options)
+	expecting := SetupMockGetAccountEarnings(suite.mock, options)
 	earnings, err := suite.db.GetAccountEarnings(
 		suite.ctx,
 		options,
 	)
 	suite.Require().NoError(err)
-	suite.Require().Len(*earnings, int(five))
+	suite.Require().Len(*earnings, options.Limit)
+
+	expectingMarshalled, err := json.Marshal(expecting)
+	suite.Require().NoError(err)
+	earningsMarshalled, err := json.Marshal(earnings)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
 }

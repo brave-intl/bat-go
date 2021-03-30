@@ -3,6 +3,7 @@ package eyeshade
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
+)
+
+var (
+	// ErrLimitRequired signifies that the query requires a limit
+	ErrLimitRequired = errors.New("query requires a limit")
+	// ErrLimitReached signifies that the limit has been exceeded
+	ErrLimitReached = errors.New("query limit reached")
 )
 
 // AccountEarnings holds results from querying account earnings
@@ -37,9 +45,10 @@ type Postgres struct {
 type AccountEarningsOptions struct {
 	Type      string
 	Ascending bool
-	Limit     *int64
+	Limit     int
 }
 
+// NewFromConnection creates new datastores from connection objects
 func NewFromConnection(pg *grantserver.Postgres, name string) Datastore {
 	return &DatastoreWithPrometheus{
 		base:         &Postgres{*pg},
@@ -57,6 +66,7 @@ func NewDB(
 	pg, err := grantserver.NewPostgres(
 		databaseURL,
 		performMigration,
+		"eyeshade", // to follow the migration track for eyeshade
 		dbStatsPrefix...,
 	)
 	if err != nil {
@@ -104,6 +114,12 @@ func (pg Postgres) GetAccountEarnings(
 	if options.Ascending {
 		order = "asc"
 	}
+	limit := options.Limit
+	if limit < 1 {
+		return nil, ErrLimitRequired
+	} else if limit > 1000 {
+		return nil, ErrLimitReached
+	}
 	statement := fmt.Sprintf(`
 select
 	channel,
@@ -121,7 +137,7 @@ limit $2`, order)
 		&earnings,
 		statement,
 		options.Type,
-		options.Limit,
+		limit,
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
