@@ -56,3 +56,28 @@ func (suite *ControllersTestSuite) TestGetAccountEarnings() {
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(marshalled), string(body))
 }
+
+func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
+	// untilDate := time.Now()
+	options := AccountSettlementEarningsOptions{
+		Ascending: true,
+		Type:      "contributions",
+		Limit:     5,
+		// StartDate: now,
+		// untilDate: now.Add(time.Day*2),
+	}
+	expecting := SetupMockGetAccountSettlementEarnings(
+		suite.mockRO,
+		options,
+	)
+	path := fmt.Sprintf("/v1/accounts/settlements/contributions/total?limit=%d", options.Limit)
+	res, body := suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(http.StatusOK, res.StatusCode)
+	marshalled, err := json.Marshal(expecting)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(marshalled), string(body))
+}

@@ -1,7 +1,6 @@
 package eyeshade
 
 import (
-	"bytes"
 	"net/http"
 	"strings"
 
@@ -68,51 +67,42 @@ func DefunctRouter(withV1 bool) chi.Router {
 	return r
 }
 
-// StaticRouter holds static routes, not on v1 path
-func StaticRouter() chi.Router {
-	r := DefunctRouter(false)
-	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
-	}))
-	return r
-}
-
 // ReferralsRouter returns information on referral groups
-func ReferralsRouter(service *Service) chi.Router {
+func (service *Service) ReferralsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/groups", middleware.InstrumentHandler(
 		"ReferralGroups",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	return r
 }
 
 // StatsRouter holds routes having to do with collecting stats on transactions
-func StatsRouter(service *Service) chi.Router {
+func (service *Service) StatsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/grants/{type}/{start}/{until}", middleware.InstrumentHandler(
 		"StatsGrantsBounded",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	r.Method("GET", "/settlements/{type}/{start}/{until}", middleware.InstrumentHandler(
 		"StatsSettlementBounded",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	return r
 }
 
 // SettlementsRouter holds routes having to do with collecting stats on transactions
-func SettlementsRouter(service *Service) chi.Router {
+func (service *Service) SettlementsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/settlement", middleware.InstrumentHandler(
 		"SettlementsGrantsBounded",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	return r
 }
 
-// NotImplemented a placeholder for not implemented endpoints
-func NotImplemented(service *Service) handlers.AppHandler {
+// EndpointNotImplemented a placeholder for not implemented endpoints
+func (service *Service) EndpointNotImplemented() handlers.AppHandler {
 	return handlers.AppHandler(func(
 		w http.ResponseWriter,
 		r *http.Request,
