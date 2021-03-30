@@ -157,8 +157,8 @@ type Postgres struct {
 }
 
 // NewDB creates a new Postgres Datastore
-func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewDB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_datastore",
@@ -168,8 +168,8 @@ func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (
 }
 
 // NewRODB creates a new Postgres RO Datastore
-func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewRODB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_ro_datastore",
@@ -181,14 +181,14 @@ func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string)
 // NewPostgres creates new postgres connections
 func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var roPg ReadOnlyDatastore
-	pg, err := NewDB("", true, "promotion_db")
+	pg, err := NewDB("", true, "promotion", "promotion_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	roDB := os.Getenv("RO_DATABASE_URL")
 	if len(roDB) > 0 {
-		roPg, err = NewRODB(roDB, false, "promotion_read_only_db")
+		roPg, err = NewRODB(roDB, false, "promotion", "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")

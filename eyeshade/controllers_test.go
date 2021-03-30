@@ -5,6 +5,7 @@ package eyeshade
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -24,7 +26,9 @@ type ControllersTestSuite struct {
 	suite.Suite
 	ctx     context.Context
 	db      Datastore
+	rodb    Datastore
 	mock    sqlmock.Sqlmock
+	mockRO  sqlmock.Sqlmock
 	server  *httptest.Server
 	service *Service
 	router  chi.Router
@@ -39,13 +43,22 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	// setup mock DB we will inject into our pg
 	mockDB, mock, err := sqlmock.New()
 	suite.Require().NoError(err, "failed to create a sql mock")
+	mockRODB, mockRO, err := sqlmock.New()
+	suite.Require().NoError(err, "failed to create a sql mock")
 
+	suite.ctx = ctx
 	name := "sqlmock"
 	suite.db = NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockDB, name),
 	}, name)
-	suite.ctx = ctx
 	suite.mock = mock
+	suite.rodb = NewFromConnection(&grantserver.Postgres{
+		DB: sqlx.NewDb(mockRODB, name),
+	}, name)
+	suite.mock = mock
+	suite.mockRO = mockRO
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, suite.db)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, suite.rodb)
 
 	r, service, err := SetupService(ctx)
 	suite.Require().NoError(err)
@@ -53,7 +66,6 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	server := httptest.NewServer(r)
 	suite.server = server
 	suite.router = r
-
 }
 
 func (suite *ControllersTestSuite) TearDownSuite() {
@@ -95,5 +107,23 @@ func (suite *ControllersTestSuite) TestDefunctRouter() {
 }
 
 func (suite *ControllersTestSuite) TestGetAccountEarnings() {
-	suite.Require().NoError(nil)
+	options := AccountEarningsOptions{
+		Ascending: true,
+		Type:      "contributions",
+		Limit:     5,
+	}
+	expecting := SetupMockGetAccountEarnings(
+		suite.mockRO,
+		options,
+	)
+	path := fmt.Sprintf("/v1/accounts/earnings/contributions/total?limit=%d", options.Limit)
+	res, body := suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(http.StatusOK, res.StatusCode)
+	marshalled, err := json.Marshal(expecting)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(marshalled), string(body))
 }

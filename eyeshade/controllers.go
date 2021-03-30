@@ -68,6 +68,7 @@ func DefunctRouter(withV1 bool) chi.Router {
 	return r
 }
 
+// StaticRouter holds static routes, not on v1 path
 func StaticRouter() chi.Router {
 	r := DefunctRouter(false)
 	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {

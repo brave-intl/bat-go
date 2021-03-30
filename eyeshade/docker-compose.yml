@@ -31,7 +31,6 @@ services:
       - ./eyeshade:/usr/src/app/eyeshade
     environment:
       - "PORT=3002"
-      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade"
       - "SERVICE=eyeshade"
       - PPROF_ENABLED=true
       - ENV=local
@@ -84,7 +83,6 @@ services:
       - eyeshade-postgres
     environment:
       - "PORT=3002"
-      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade"
       - "SERVICE=eyeshade"
       - PPROF_ENABLED=true
       - ENV=local

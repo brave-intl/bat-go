@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/brave-intl/bat-go/utils/clients/common"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/go-chi/chi"
 )
@@ -42,6 +43,14 @@ func (service *Service) Datastore(ro bool) Datastore {
 func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
 	r := chi.NewRouter()
 	eyeshadeDB, eyeshadeRODB, err := NewConnections()
+	passedEyeshadeDB, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
+	if ok {
+		eyeshadeDB = passedEyeshadeDB
+	}
+	passedEyeshadeRODB, ok := ctx.Value(appctx.RODatastoreCTXKey).(Datastore)
+	if ok {
+		eyeshadeRODB = passedEyeshadeRODB
+	}
 	if err != nil {
 		return nil, nil, errorutils.Wrap(err, "unable connect to eyeshade db")
 	}
@@ -68,6 +77,7 @@ func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
 	return r, service, nil
 }
 
+// RouterV1 holds all of the routes under `/v1/`
 func RouterV1(service *Service) chi.Router {
 	r := DefunctRouter(true)
 	r.Mount("/accounts", AccountsRouter(service))
@@ -77,11 +87,12 @@ func RouterV1(service *Service) chi.Router {
 	return r
 }
 
-func (s *Service) AccountEarnings(
+// AccountEarnings uses the readonly connection if available to get the account earnings
+func (service *Service) AccountEarnings(
 	ctx context.Context,
 	options AccountEarningsOptions,
 ) (*[]AccountEarnings, error) {
-	return s.Datastore(true).
+	return service.Datastore(true).
 		GetAccountEarnings(
 			ctx,
 			options,

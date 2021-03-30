@@ -155,7 +155,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, pro
 }
 
 // Migrate implements Datastore
-func (_d DatastoreWithPrometheus) Migrate() (err error) {
+func (_d DatastoreWithPrometheus) Migrate(currentMigrationVersion uint) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -165,7 +165,7 @@ func (_d DatastoreWithPrometheus) Migrate() (err error) {
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Migrate", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.Migrate()
+	return _d.base.Migrate(currentMigrationVersion)
 }
 
 // NewMigrate implements Datastore

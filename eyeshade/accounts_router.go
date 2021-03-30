@@ -35,6 +35,7 @@ func AccountsRouter(service *Service) chi.Router {
 	return r
 }
 
+// AccountEarningsTotal retrieves the earnings of a limited number of accounts
 func AccountEarningsTotal(service *Service) handlers.AppHandler {
 	validTypes := map[string]bool{
 		"contributions": true,
@@ -51,10 +52,10 @@ func AccountEarningsTotal(service *Service) handlers.AppHandler {
 			)
 		}
 		query := r.URL.Query()
-		limitParsed, err := strconv.ParseInt(query.Get("limit"), 10, 64)
-		var limit *int64
+		limitParsed64, err := strconv.ParseInt(query.Get("limit"), 10, 64)
+		var limit int
 		if err == nil {
-			limit = &limitParsed
+			limit = int(limitParsed64)
 		}
 		earnings, err := service.AccountEarnings(
 			r.Context(),

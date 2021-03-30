@@ -205,7 +205,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
-	paymentPG, err := payment.NewPostgres("", true, "payment_db")
+	paymentPG, err := payment.NewPostgres("", true, "payment", "payment_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -225,7 +225,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
-		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
+		paymentDB, err := payment.NewPostgres("", true, "payment", "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
