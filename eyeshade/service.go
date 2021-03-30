@@ -98,3 +98,15 @@ func (service *Service) AccountEarnings(
 			options,
 		)
 }
+
+// AccountSettlementEarnings uses the readonly connection if available to get the account earnings
+func (service *Service) AccountSettlementEarnings(
+	ctx context.Context,
+	options AccountSettlementEarningsOptions,
+) (*[]AccountSettlementEarnings, error) {
+	return service.Datastore(true).
+		GetAccountSettlementEarnings(
+			ctx,
+			options,
+		)
+}

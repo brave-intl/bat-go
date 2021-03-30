@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/getsentry/sentry-go"
@@ -18,6 +19,8 @@ var (
 	ErrLimitRequired = errors.New("query requires a limit")
 	// ErrLimitReached signifies that the limit has been exceeded
 	ErrLimitReached = errors.New("query limit reached")
+	// ErrNeedTimeConstraints needs both a start and an end time
+	ErrNeedTimeConstraints = errors.New("need both start and end date")
 )
 
 // AccountEarnings holds results from querying account earnings
@@ -27,18 +30,11 @@ type AccountEarnings struct {
 	AccountID string          `json:"account_id" db:"account_id"`
 }
 
-// Datastore holds methods for interacting with database
-type Datastore interface {
-	grantserver.Datastore
-	GetAccountEarnings(
-		ctx context.Context,
-		options AccountEarningsOptions,
-	) (*[]AccountEarnings, error)
-}
-
-// Postgres is a Datastore wrapper around a postgres database
-type Postgres struct {
-	grantserver.Postgres
+// AccountSettlementEarnings holds results from querying account earnings
+type AccountSettlementEarnings struct {
+	Channel   string          `json:"channel" db:"channel"`
+	Paid      decimal.Decimal `json:"paid" db:"paid"`
+	AccountID string          `json:"account_id" db:"account_id"`
 }
 
 // AccountEarningsOptions receives all options pertaining to account earnings calculations
@@ -46,6 +42,33 @@ type AccountEarningsOptions struct {
 	Type      string
 	Ascending bool
 	Limit     int
+}
+
+// AccountSettlementEarningsOptions receives all options pertaining to account settlement earnings calculations
+type AccountSettlementEarningsOptions struct {
+	Type      string
+	Ascending bool
+	Limit     int
+	StartDate *time.Time
+	UntilDate *time.Time
+}
+
+// Datastore holds methods for interacting with database
+type Datastore interface {
+	grantserver.Datastore
+	GetAccountEarnings(
+		ctx context.Context,
+		options AccountEarningsOptions,
+	) (*[]AccountEarnings, error)
+	GetAccountSettlementEarnings(
+		ctx context.Context,
+		options AccountSettlementEarningsOptions,
+	) (*[]AccountSettlementEarnings, error)
+}
+
+// Postgres is a Datastore wrapper around a postgres database
+type Postgres struct {
+	grantserver.Postgres
 }
 
 // NewFromConnection creates new datastores from connection objects
@@ -120,6 +143,8 @@ func (pg Postgres) GetAccountEarnings(
 	} else if limit > 1000 {
 		return nil, ErrLimitReached
 	}
+	// remove the `s`
+	txType := options.Type[:len(options.Type)-1]
 	statement := fmt.Sprintf(`
 select
 	channel,
@@ -136,8 +161,70 @@ limit $2`, order)
 		ctx,
 		&earnings,
 		statement,
-		options.Type,
+		txType,
 		limit,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &earnings, nil
+}
+
+// GetAccountSettlementEarnings gets the account settlement earnings for a subset of ids
+func (pg Postgres) GetAccountSettlementEarnings(
+	ctx context.Context,
+	options AccountSettlementEarningsOptions,
+) (*[]AccountSettlementEarnings, error) {
+	order := "desc"
+	if options.Ascending {
+		order = "asc"
+	}
+	limit := options.Limit
+	if limit < 1 {
+		return nil, ErrLimitRequired
+	} else if limit > 1000 {
+		return nil, ErrLimitReached
+	}
+	txType := options.Type[:len(options.Type)-1]
+	txType = fmt.Sprintf(`%s_settlement`, txType)
+	timeConstraints := ""
+	constraints := []interface{}{
+		txType,
+		limit,
+	}
+	if options.UntilDate != nil {
+		// if end date exists, start date must also
+		if options.StartDate == nil {
+			return nil, ErrNeedTimeConstraints
+		}
+		constraints = append(
+			constraints,
+			*options.StartDate,
+			*options.UntilDate,
+		)
+		timeConstraints = `
+and created_at >= $3
+and created_at < $4`
+	}
+	statement := fmt.Sprintf(`
+select
+	channel,
+	coalesce(sum(-amount), 0.0) as paid,
+	account_id
+from account_transactions
+where
+		account_type = 'owner'
+and transaction_type = $1%s
+group by (account_id, channel)
+order by paid %s
+limit $2`, timeConstraints, order)
+	earnings := []AccountSettlementEarnings{}
+
+	err := pg.RawDB().SelectContext(
+		ctx,
+		&earnings,
+		statement,
+		constraints...,
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err

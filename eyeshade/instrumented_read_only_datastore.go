@@ -11,7 +11,7 @@ import (
 	"time"
 
 	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/jmoiron/sqlx"
+	sqlx "github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -52,6 +52,20 @@ func (_d DatastoreWithPrometheus) GetAccountEarnings(ctx context.Context, option
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAccountEarnings", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetAccountEarnings(ctx, options)
+}
+
+// GetAccountSettlementEarnings implements Datastore
+func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Context, options AccountSettlementEarningsOptions) (aap1 *[]AccountSettlementEarnings, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAccountSettlementEarnings", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetAccountSettlementEarnings(ctx, options)
 }
 
 // Migrate implements Datastore
