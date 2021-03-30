@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
@@ -58,13 +59,10 @@ func (suite *ControllersTestSuite) TestGetAccountEarnings() {
 }
 
 func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
-	// untilDate := time.Now()
 	options := AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
 		Limit:     5,
-		// StartDate: now,
-		// untilDate: now.Add(time.Day*2),
 	}
 	expecting := SetupMockGetAccountSettlementEarnings(
 		suite.mockRO,
@@ -78,6 +76,40 @@ func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
 	)
 	suite.Require().Equal(http.StatusOK, res.StatusCode)
 	marshalled, err := json.Marshal(expecting)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(marshalled), string(body))
+	var unmarshalledBody []AccountSettlementEarnings
+	err = json.Unmarshal(body, &unmarshalledBody)
+	suite.Require().Len(unmarshalledBody, 5)
+
+	now := time.Now()
+	startDate := now.Truncate(time.Second)
+	untilDate := startDate.Add(time.Hour * 24 * 2)
+	options = AccountSettlementEarningsOptions{
+		Ascending: true,
+		Type:      "contributions",
+		Limit:     5,
+		StartDate: &startDate,
+		UntilDate: &untilDate,
+	}
+
+	expecting = SetupMockGetAccountSettlementEarnings(
+		suite.mockRO,
+		options,
+	)
+	path = fmt.Sprintf(
+		"/v1/accounts/settlements/contributions/total?limit=%d&start=%s&until=%s",
+		options.Limit,
+		options.StartDate.Format(time.RFC3339),
+		options.UntilDate.Format(time.RFC3339),
+	)
+	res, body = suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(http.StatusOK, res.StatusCode)
+	marshalled, err = json.Marshal(expecting)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(marshalled), string(body))
 }

@@ -118,9 +118,6 @@ func SetupMockGetAccountSettlementEarnings(
 		args = append(args, untilDate)
 	}
 	for i := 0; i < options.Limit; i++ {
-		if untilDate.Before(targetTime.Add(time.Duration(i) * time.Hour * 24)) {
-			break
-		}
 		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
 		paid := decimal.NewFromFloat(
 			float64(rand.Intn(100)),
@@ -129,6 +126,9 @@ func SetupMockGetAccountSettlementEarnings(
 		)
 		channel := uuid.NewV4().String()
 
+		if untilDate.Before(targetTime.Add(time.Duration(i) * time.Hour * 24)) {
+			break
+		}
 		rows = append(rows, AccountSettlementEarnings{channel, paid, accountID})
 		// append sql result rows
 		getRows = getRows.AddRow(
