@@ -234,7 +234,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	// perform reputation check for wallet, and error accordingly if there is a reputation failure
-	reputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, "")
+	reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
 	if err != nil {
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
 		return nil, errReputationServiceFailure

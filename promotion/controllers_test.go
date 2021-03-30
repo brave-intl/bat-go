@@ -1253,7 +1253,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 		nil,
 	)
 	// drain reputation check
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1448,7 +1448,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 		true,
 		nil,
 	)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1613,7 +1613,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		nil,
 	)
 	// the drain reputation check fails
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1798,7 +1798,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 		true,
 		nil,
 	)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1977,7 +1977,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 		nil,
 	)
 	// for draining to work must be reputable
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2142,7 +2142,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		nil,
 	)
 	// for draining to work must be reputable
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2366,7 +2366,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		true,
 		nil,
 	)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
