@@ -1186,7 +1186,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
-and status not in ('complete', 'reputation-failed')
+and (status is null or status not in ('complete', 'reputation-failed', 'failed'))
 for update skip locked
 limit 1`
 
