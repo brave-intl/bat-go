@@ -63,14 +63,13 @@ func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
 		return nil, nil, errorutils.Wrap(err, "eyeshade service initialization failed")
 	}
 
-	r.Mount("/", DefunctRouter())
-	r.Mount("/v1/", RouterV1(service))
 	r.Mount("/", StaticRouter())
+	r.Mount("/v1/", RouterV1(service))
 	return r, service, nil
 }
 
 func RouterV1(service *Service) chi.Router {
-	r := chi.NewRouter()
+	r := DefunctRouter(true)
 	r.Mount("/accounts", AccountsRouter(service))
 	r.Mount("/referrals", ReferralsRouter(service))
 	r.Mount("/stats", StatsRouter(service))
