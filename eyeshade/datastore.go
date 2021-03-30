@@ -69,7 +69,7 @@ func NewDB(
 func NewConnections() (Datastore, Datastore, error) {
 	var eyeshadeRoPg Datastore
 	eyeshadePg, err := NewDB(
-		os.Getenv("DATABASE_URL"),
+		os.Getenv("EYESHADE_DB_URL"),
 		true,
 		"eyeshade_datastore",
 		"eyeshade_db",
@@ -79,7 +79,7 @@ func NewConnections() (Datastore, Datastore, error) {
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
-	roDB := os.Getenv("DATABASE_RO_URL")
+	roDB := os.Getenv("EYESHADE_DB_RO_URL")
 	if len(roDB) > 0 {
 		eyeshadeRoPg, err = NewDB(
 			roDB,

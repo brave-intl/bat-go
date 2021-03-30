@@ -3,6 +3,7 @@ package eyeshade
 import (
 	"bytes"
 	"net/http"
+	"strings"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -10,8 +11,8 @@ import (
 )
 
 type defunctRoute struct {
-	method string
-	path   string
+	Method string
+	Path   string
 }
 
 var (
@@ -30,25 +31,45 @@ var (
 	}
 )
 
+// DefunctResponse holds a defunct handlers' response
+type DefunctResponse struct {
+	StatusCode int    `json:"statusCode"`
+	Error      string `json:"error"`
+	Message    string `json:"message"`
+}
+
 // DefunctRouter for defunct eyeshade endpoints
-func DefunctRouter() chi.Router {
+func DefunctRouter(withV1 bool) chi.Router {
 	r := chi.NewRouter()
+	body := DefunctResponse{
+		StatusCode: http.StatusGone,
+		Error:      "Gone",
+		Message:    "Gone",
+	}
 	for _, routeSettings := range defunctRoutes {
-		r.Method(
-			routeSettings.method,
-			routeSettings.path,
-			handlers.AppHandler(
-				func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-					return handlers.RenderContent(r.Context(), nil, w, http.StatusGone)
-				},
-			),
-		)
+		path := routeSettings.Path
+		isV1 := strings.Contains(path, "/v1/")
+		isAndWithV1 := withV1 && isV1
+		if isAndWithV1 || (!withV1 && !isV1) {
+			if isAndWithV1 {
+				path = path[3:]
+			}
+			r.Method(
+				routeSettings.Method,
+				path,
+				handlers.AppHandler(
+					func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+						return handlers.RenderContent(r.Context(), body, w, http.StatusGone)
+					},
+				),
+			)
+		}
 	}
 	return r
 }
 
 func StaticRouter() chi.Router {
-	r := chi.NewRouter()
+	r := DefunctRouter(false)
 	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		return handlers.Render(r.Context(), *bytes.NewBufferString(".ack"), w, http.StatusOK)
 	}))

@@ -49,7 +49,8 @@ func (suite *DatastoreMockTestSuite) SetupSuite() {
 	suite.mock = mock
 }
 
-func (suite *DatastoreMockTestSuite) SetupMockGetAccountEarnings(
+func SetupMockGetAccountEarnings(
+	mock sqlmock.Sqlmock,
 	options AccountEarningsOptions,
 ) {
 	getRows := sqlmock.NewRows(
@@ -66,8 +67,8 @@ func (suite *DatastoreMockTestSuite) SetupMockGetAccountEarnings(
 			fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
 		)
 	}
-	suite.mock.ExpectQuery(`
-	select
+	mock.ExpectQuery(`
+select
 	channel,
 	(.+) as earnings,
 	account_id
@@ -88,7 +89,7 @@ func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
 		Ascending: true,
 		Type:      "contributions",
 	}
-	suite.SetupMockGetAccountEarnings(options)
+	SetupMockGetAccountEarnings(suite.mock, options)
 	earnings, err := suite.db.GetAccountEarnings(
 		suite.ctx,
 		options,
