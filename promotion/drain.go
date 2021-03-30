@@ -26,7 +26,11 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+var (
+	errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+	errReputationServiceFailure = errors.New("failed to call reputation service")
+	errWalletNotReputable       = errors.New("wallet is not reputable")
+)
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
@@ -227,6 +231,17 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+	}
+
+	// perform reputation check for wallet, and error accordingly if there is a reputation failure
+	reputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, "")
+	if err != nil {
+		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
+		return nil, errReputationServiceFailure
+	}
+
+	if !reputable {
+		return nil, errWalletNotReputable
 	}
 
 	if *wallet.UserDepositAccountProvider == "uphold" {
