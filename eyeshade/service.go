@@ -64,11 +64,18 @@ func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
 	}
 
 	r.Mount("/", DefunctRouter())
-	r.Mount("/v1/accounts", AccountsRouter(service))
-	r.Mount("/v1/referrals", ReferralsRouter(service))
-	r.Mount("/v1/stats", StatsRouter(service))
-	r.Mount("/v1/publishers", SettlementsRouter(service))
+	r.Mount("/v1/", RouterV1(service))
+	r.Mount("/", StaticRouter())
 	return r, service, nil
+}
+
+func RouterV1(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Mount("/accounts", AccountsRouter(service))
+	r.Mount("/referrals", ReferralsRouter(service))
+	r.Mount("/stats", StatsRouter(service))
+	r.Mount("/publishers", SettlementsRouter(service))
+	return r
 }
 
 func (s *Service) AccountEarnings(

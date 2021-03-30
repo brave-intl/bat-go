@@ -1,6 +1,7 @@
 package eyeshade
 
 import (
+	"bytes"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/middleware"
@@ -43,6 +44,14 @@ func DefunctRouter() chi.Router {
 			),
 		)
 	}
+	return r
+}
+
+func StaticRouter() chi.Router {
+	r := chi.NewRouter()
+	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return handlers.Render(r.Context(), *bytes.NewBufferString(".ack"), w, http.StatusOK)
+	}))
 	return r
 }
 

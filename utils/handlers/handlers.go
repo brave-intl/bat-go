@@ -82,14 +82,20 @@ func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, st
 			return WrapError(err, "Error encoding JSON", http.StatusInternalServerError)
 		}
 
-		w.WriteHeader(status)
-		_, err := w.Write(b.Bytes())
-		// Should never happen :fingers_crossed:
-		if err != nil {
-			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
-		}
+		return Render(ctx, b, w, status)
 	}
 
+	return nil
+}
+
+// Render sends back response from buffer
+func Render(ctx context.Context, b bytes.Buffer, w http.ResponseWriter, status int) *AppError {
+	w.WriteHeader(status)
+	_, err := w.Write(b.Bytes())
+	// Should never happen :fingers_crossed:
+	if err != nil {
+		return WrapError(err, "Error writing a response", http.StatusInternalServerError)
+	}
 	return nil
 }
 

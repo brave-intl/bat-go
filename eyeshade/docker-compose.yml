@@ -1,0 +1,114 @@
+version: "3.4"
+
+networks:
+  eyeshade:
+    driver: bridge
+
+services:
+  # dev-refresh service will start up a rewards server bound to host port 3343
+  # which allows one to do `docker restart rewards-dev-refresh` when the user
+  # wants to "restart" the service running new code.  This is especially helpful
+  # when you hook it up to `fswatch` type utilities, causing a re-run of `go run`
+  # every time a file changes.
+  eyeshade-dev:
+    container_name: eyeshade-dev
+    image: 045014719567.dkr.ecr.us-west-2.amazonaws.com/eyeshade:latest
+    build:
+      context: .
+      target: artifact
+      args:
+        VERSION: "${VERSION}"
+        COMMIT: "${COMMIT}"
+        BUILD_TIME: "${BUILD_TIME}"
+    ports:
+      - "3002:3002"
+    depends_on:
+      - eyeshade-redis
+      - eyeshade-postgres
+    networks:
+      - eyeshade
+    volumes:
+      - ./eyeshade:/usr/src/app/eyeshade
+    environment:
+      - "PORT=3002"
+      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade"
+      - "SERVICE=eyeshade"
+      - PPROF_ENABLED=true
+      - ENV=local
+      - DEBUG=1
+      - BAT_SETTLEMENT_ADDRESS
+      - "DATABASE_MIGRATIONS_URL=file:///src/eyeshade/migrations"
+      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade?sslmode=disable"
+      - TEST_PKG
+      - TEST_RUN
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_SSL_KEY_PASSWORD=confluent
+      - KAFKA_REQUIRED_ACKS=1
+      - TOKEN_LIST
+      - ALLOWED_STATS_TOKENS
+      - ALLOWED_REFERRALS_TOKENS
+      - ALLOWED_ADS_TOKENS
+      - ALLOWED_PUBLISHERS_TOKENS
+      - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
+      - RATIOS_TOKEN
+      - "REDIS_URL=redis://eyeshade-redis:6379"
+      - SENTRY_DSN
+      - TESTING_COHORTS
+      - IP_WHITELIST
+      - IP_GRAYLIST
+
+  eyeshade-dev-refresh:
+    container_name: eyeshade-dev-refresh
+    build:
+      context: .
+      target: artifact
+      args:
+        VERSION: "${VERSION}"
+        COMMIT: "${COMMIT}"
+        BUILD_TIME: "${BUILD_TIME}"
+    image: golang:1.15
+    ports:
+      - "3012:3002"
+      - "6062:6061"
+    command: "go run main.go serve eyeshade rest"
+    volumes:
+      - ./:/src
+    working_dir: /src
+    networks:
+      - eyeshade
+    depends_on:
+      - eyeshade-redis
+      - eyeshade-postgres
+    environment:
+      - "PORT=3002"
+      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade"
+      - "SERVICE=eyeshade"
+      - PPROF_ENABLED=true
+      - ENV=local
+      - DEBUG=1
+      - BAT_SETTLEMENT_ADDRESS
+      - "DATABASE_MIGRATIONS_URL=file:///src/eyeshade/migrations"
+      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade?sslmode=disable"
+      - TEST_PKG
+      - TEST_RUN
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_SSL_KEY_PASSWORD=confluent
+      - KAFKA_REQUIRED_ACKS=1
+      - TOKEN_LIST
+      - ALLOWED_STATS_TOKENS
+      - ALLOWED_REFERRALS_TOKENS
+      - ALLOWED_ADS_TOKENS
+      - ALLOWED_PUBLISHERS_TOKENS
+      - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
+      - RATIOS_TOKEN
+      - "REDIS_URL=redis://eyeshade-redis:6379"
+      - SENTRY_DSN
+      - TESTING_COHORTS
+      - IP_WHITELIST
+      - IP_GRAYLIST

@@ -3,6 +3,8 @@ version: "3.4"
 networks:
   grant:
     driver: bridge
+  eyeshade:
+    driver: bridge
 
 services:
   dev:
@@ -144,6 +146,27 @@ services:
     networks:
       - grant
     command: ["postgres", "-c", "log_statement=all"]
+
+  eyeshade-redis:
+    container_name: eyeshade-redis
+    image: redis:latest
+    ports:
+      - "3011:6379"
+    networks:
+      - grant
+
+  eyeshade-postgres:
+    container_name: eyeshade-postgres
+    image: postgres:10.4
+    ports:
+      - "3402:5432"
+    environment:
+      - "POSTGRES_USER=eyeshade"
+      - "POSTGRES_PASSWORD=password"
+    networks:
+      - eyeshade
+    command: ["postgres", "-c", "log_statement=all"]
+
   challenge-bypass-postgres:
     container_name: challenge-bypass-postgres
     image: postgres:10.4
@@ -175,6 +198,7 @@ services:
       - "2181:2181"
     networks:
       - grant
+      - eyeshade
   kafka:
     container_name: grant-kafka
     image: confluentinc/cp-kafka:5.2.2 # kafka version 2.2.1
@@ -199,3 +223,4 @@ services:
       - zookeeper
     networks:
       - grant
+      - eyeshade
