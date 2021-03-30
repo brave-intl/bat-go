@@ -2,10 +2,12 @@ package eyeshade
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -85,6 +87,67 @@ group by (.+)
 order by earnings (.+)
 limit (.+)`).
 		WithArgs(options.Type[:len(options.Type)-1], options.Limit).
+		WillReturnRows(getRows)
+	return rows
+}
+
+func SetupMockGetAccountSettlementEarnings(
+	mock sqlmock.Sqlmock,
+	options AccountSettlementEarningsOptions,
+) []AccountSettlementEarnings {
+	getRows := sqlmock.NewRows(
+		[]string{"channel", "paid", "account_id"},
+	)
+	rows := []AccountSettlementEarnings{}
+	args := []driver.Value{
+		fmt.Sprintf("%s_settlement", options.Type[:len(options.Type)-1]),
+		options.Limit,
+	}
+	targetTime := options.StartDate
+	if targetTime == nil {
+		now := time.Now()
+		targetTime = &now
+	} else {
+		args = append(args, targetTime)
+	}
+	untilDate := options.UntilDate
+	if untilDate == nil {
+		untilDatePrep := targetTime.Add(time.Hour * 24 * time.Duration(options.Limit))
+		untilDate = &untilDatePrep
+	} else {
+		args = append(args, untilDate)
+	}
+	for i := 0; i < options.Limit; i++ {
+		if untilDate.Before(targetTime.Add(time.Duration(i) * time.Hour * 24)) {
+			break
+		}
+		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+		paid := decimal.NewFromFloat(
+			float64(rand.Intn(100)),
+		).Div(
+			decimal.NewFromFloat(10),
+		)
+		channel := uuid.NewV4().String()
+
+		rows = append(rows, AccountSettlementEarnings{channel, paid, accountID})
+		// append sql result rows
+		getRows = getRows.AddRow(
+			channel,
+			paid,
+			accountID,
+		)
+	}
+	mock.ExpectQuery(`
+select
+	channel,
+	(.+) as paid,
+	account_id
+from account_transactions
+where (.+)
+group by (.+)
+order by paid (.+)
+limit (.+)`).
+		WithArgs(args...).
 		WillReturnRows(getRows)
 	return rows
 }

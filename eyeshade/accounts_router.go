@@ -12,33 +12,33 @@ import (
 )
 
 // AccountsRouter has all information on account info
-func AccountsRouter(service *Service) chi.Router {
+func (service *Service) AccountsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/earnings/{type}/total", middleware.InstrumentHandler(
 		"AccountEarningsTotal",
-		AccountEarningsTotal(service),
+		service.AccountEarningsTotal(),
 	))
 	r.Method("GET", "/settlements/{type}/total", middleware.InstrumentHandler(
 		"AccountSettlementEarningsTotal",
-		AccountSettlementEarningsTotal(service),
+		service.AccountSettlementEarningsTotal(),
 	))
 	r.Method("GET", "/balances/{type}/top", middleware.InstrumentHandler(
 		"AccountBalancesTop",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	r.Method("GET", "/balances", middleware.InstrumentHandler(
 		"AccountBalances",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
 		"AccountTransactions",
-		NotImplemented(service),
+		service.EndpointNotImplemented(),
 	))
 	return r
 }
 
 // AccountEarningsTotal retrieves the earnings of a limited number of accounts
-func AccountEarningsTotal(service *Service) handlers.AppHandler {
+func (service *Service) AccountEarningsTotal() handlers.AppHandler {
 	validTypes := map[string]bool{
 		"contributions": true,
 		"referrals":     true,
@@ -79,7 +79,7 @@ func AccountEarningsTotal(service *Service) handlers.AppHandler {
 }
 
 // AccountSettlementEarningsTotal retrieves the earnings of a limited number of accounts
-func AccountSettlementEarningsTotal(service *Service) handlers.AppHandler {
+func (service *Service) AccountSettlementEarningsTotal() handlers.AppHandler {
 	validTypes := map[string]bool{
 		"contributions": true,
 		"referrals":     true,

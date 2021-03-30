@@ -1,11 +1,14 @@
 package eyeshade
 
 import (
+	"bytes"
 	"context"
+	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/clients/common"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/go-chi/chi"
 )
 
@@ -72,18 +75,27 @@ func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
 		return nil, nil, errorutils.Wrap(err, "eyeshade service initialization failed")
 	}
 
-	r.Mount("/", StaticRouter())
-	r.Mount("/v1/", RouterV1(service))
+	r.Mount("/", service.StaticRouter())
+	r.Mount("/v1/", service.RouterV1())
 	return r, service, nil
 }
 
+// StaticRouter holds static routes, not on v1 path
+func (service *Service) StaticRouter() chi.Router {
+	r := DefunctRouter(false)
+	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
+	}))
+	return r
+}
+
 // RouterV1 holds all of the routes under `/v1/`
-func RouterV1(service *Service) chi.Router {
+func (service *Service) RouterV1() chi.Router {
 	r := DefunctRouter(true)
-	r.Mount("/accounts", AccountsRouter(service))
-	r.Mount("/referrals", ReferralsRouter(service))
-	r.Mount("/stats", StatsRouter(service))
-	r.Mount("/publishers", SettlementsRouter(service))
+	r.Mount("/accounts", service.AccountsRouter())
+	r.Mount("/referrals", service.ReferralsRouter())
+	r.Mount("/stats", service.StatsRouter())
+	r.Mount("/publishers", service.SettlementsRouter())
 	return r
 }
 
