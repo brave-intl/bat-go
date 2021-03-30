@@ -118,3 +118,18 @@ func (mr *MockDatastoreMockRecorder) GetAccountEarnings(ctx, options interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAccountEarnings", reflect.TypeOf((*MockDatastore)(nil).GetAccountEarnings), ctx, options)
 }
+
+// GetAccountSettlementEarnings mocks base method
+func (m *MockDatastore) GetAccountSettlementEarnings(ctx context.Context, options AccountSettlementEarningsOptions) (*[]AccountSettlementEarnings, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAccountSettlementEarnings", ctx, options)
+	ret0, _ := ret[0].(*[]AccountSettlementEarnings)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAccountSettlementEarnings indicates an expected call of GetAccountSettlementEarnings
+func (mr *MockDatastoreMockRecorder) GetAccountSettlementEarnings(ctx, options interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAccountSettlementEarnings", reflect.TypeOf((*MockDatastore)(nil).GetAccountSettlementEarnings), ctx, options)
+}

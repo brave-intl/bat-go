@@ -72,7 +72,7 @@ func DefunctRouter(withV1 bool) chi.Router {
 func StaticRouter() chi.Router {
 	r := DefunctRouter(false)
 	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.Render(r.Context(), *bytes.NewBufferString(".ack"), w, http.StatusOK)
+		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
 	}))
 	return r
 }

@@ -4,13 +4,10 @@ package eyeshade
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -18,7 +15,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -81,49 +77,4 @@ func (suite *ControllersTestSuite) DoRequest(method string, path string, body io
 	defer resp.Body.Close()
 	suite.Require().NoError(err)
 	return resp, respBody
-}
-
-func (suite *ControllersTestSuite) TestStaticRouter() {
-	_, body := suite.DoRequest("GET", "/", nil)
-	suite.Require().Equal(".ack", string(body))
-}
-
-func (suite *ControllersTestSuite) TestDefunctRouter() {
-	re := regexp.MustCompile(`\{.+\}`)
-	for _, route := range defunctRoutes {
-		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
-		rctx := chi.NewRouteContext()
-		suite.Require().True(suite.router.Match(rctx, route.Method, path))
-		_, body := suite.DoRequest(route.Method, path, nil)
-		var defunctResponse DefunctResponse
-		err := json.Unmarshal(body, &defunctResponse)
-		suite.Require().NoError(err)
-		suite.Require().Equal(DefunctResponse{
-			StatusCode: http.StatusGone,
-			Message:    "Gone",
-			Error:      "Gone",
-		}, defunctResponse)
-	}
-}
-
-func (suite *ControllersTestSuite) TestGetAccountEarnings() {
-	options := AccountEarningsOptions{
-		Ascending: true,
-		Type:      "contributions",
-		Limit:     5,
-	}
-	expecting := SetupMockGetAccountEarnings(
-		suite.mockRO,
-		options,
-	)
-	path := fmt.Sprintf("/v1/accounts/earnings/contributions/total?limit=%d", options.Limit)
-	res, body := suite.DoRequest(
-		"GET",
-		path,
-		nil,
-	)
-	suite.Require().Equal(http.StatusOK, res.StatusCode)
-	marshalled, err := json.Marshal(expecting)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(marshalled), string(body))
 }

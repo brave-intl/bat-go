@@ -84,7 +84,7 @@ where account_type = 'owner'
 group by (.+)
 order by earnings (.+)
 limit (.+)`).
-		WithArgs(options.Type, options.Limit).
+		WithArgs(options.Type[:len(options.Type)-1], options.Limit).
 		WillReturnRows(getRows)
 	return rows
 }
