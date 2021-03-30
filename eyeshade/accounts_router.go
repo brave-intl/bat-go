@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -101,18 +102,18 @@ func (service *Service) AccountSettlementEarningsTotal() handlers.AppHandler {
 			limit = int(limitParsed64)
 		}
 		// dates are optional
-		startDateInput := inputs.NewTime("2020-01-01")
+		startDateInput := inputs.NewTime(time.RFC3339)
 		inputs.DecodeAndValidateString(
 			r.Context(),
 			startDateInput,
 			query.Get("start"),
 		)
 
-		untilDateInput := inputs.NewTime("2020-01-01")
+		untilDateInput := inputs.NewTime(time.RFC3339)
 		inputs.DecodeAndValidateString(
 			r.Context(),
 			untilDateInput,
-			query.Get("start"),
+			query.Get("until"),
 		)
 		paid, err := service.AccountSettlementEarnings(
 			r.Context(),
