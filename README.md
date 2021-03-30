@@ -73,3 +73,12 @@ is installed then run `make docker`.
 
 ## Build mock files
 `make mock`
+
+## Gather eyeshade migrations
+
+In order to note the methodology for how eyeshade migrations were transformed into their current state the following `./convert-migrations.sh` file was added.
+
+run using
+```bash
+BAT_LEDGER=~/Documents/brave-intl/bat-ledger ./convert-migrations.sh
+```

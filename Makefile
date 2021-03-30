@@ -77,6 +77,10 @@ docker-up-dev-rep:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
+docker-up-dev-eyeshade:
+	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
+		-f docker-compose.yml -f eyeshade/docker-compose.yml up -d
+
 docker-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
