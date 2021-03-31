@@ -6,8 +6,6 @@ import (
 	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/clients/common"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/go-chi/chi"
 )
@@ -17,20 +15,21 @@ type Service struct {
 	datastore   Datastore
 	roDatastore Datastore
 	Clients     *common.Clients
+	router      *chi.Mux
 }
 
-// InitService initializes the service with the correct dependencies
-func InitService(
-	ctx context.Context,
-	datastore Datastore,
-	roDatastore Datastore,
-	clients *common.Clients,
+// SetupService initializes the service with the correct dependencies
+func SetupService(
+	options ...func(*Service) error,
 ) (*Service, error) {
-	return &Service{
-		datastore,
-		roDatastore,
-		clients,
-	}, nil
+	service := Service{}
+	for _, option := range options {
+		err := option(&service)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &service, nil
 }
 
 // Datastore returns a read only datastore if available
@@ -40,44 +39,6 @@ func (service *Service) Datastore(ro bool) Datastore {
 		return service.roDatastore
 	}
 	return service.datastore
-}
-
-// SetupService generates a service and gives it to routes
-func SetupService(ctx context.Context) (*chi.Mux, *Service, error) {
-	r := chi.NewRouter()
-	eyeshadeDB, eyeshadeRODB, err := NewConnections()
-	passedEyeshadeDB, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
-	if ok {
-		eyeshadeDB = passedEyeshadeDB
-	}
-	passedEyeshadeRODB, ok := ctx.Value(appctx.RODatastoreCTXKey).(Datastore)
-	if ok {
-		eyeshadeRODB = passedEyeshadeRODB
-	}
-	if err != nil {
-		return nil, nil, errorutils.Wrap(err, "unable connect to eyeshade db")
-	}
-
-	clients, err := common.New(common.Config{
-		Ratios: true,
-	})
-	if err != nil {
-		return nil, nil, errorutils.Wrap(err, "unable to generate clients")
-	}
-
-	service, err := InitService(
-		ctx,
-		eyeshadeDB,
-		eyeshadeRODB,
-		clients,
-	)
-	if err != nil {
-		return nil, nil, errorutils.Wrap(err, "eyeshade service initialization failed")
-	}
-
-	r.Mount("/", service.StaticRouter())
-	r.Mount("/v1/", service.RouterV1())
-	return r, service, nil
 }
 
 // StaticRouter holds static routes, not on v1 path
@@ -97,6 +58,50 @@ func (service *Service) RouterV1() chi.Router {
 	r.Mount("/stats", service.StatsRouter())
 	r.Mount("/publishers", service.SettlementsRouter())
 	return r
+}
+
+// WithRouter sets up a router using the service
+func WithRouter(service *Service) error {
+	r := chi.NewRouter()
+	r.Mount("/", service.StaticRouter())
+	r.Mount("/v1/", service.RouterV1())
+	service.router = r
+	return nil
+}
+
+// Router returns the router that was last setup using this service
+func (service *Service) Router() *chi.Mux {
+	return service.router
+}
+
+// WithConnections uses pre setup datastores for the service
+func WithConnections(db Datastore, rodb Datastore) func(service *Service) error {
+	return func(service *Service) error {
+		service.datastore = db
+		service.roDatastore = rodb
+		return nil
+	}
+}
+
+// WithDBs sets up datastores for the service
+func WithDBs(service *Service) error {
+	eyeshadeDB, eyeshadeRODB, err := NewConnections()
+	if err == nil {
+		service.datastore = eyeshadeDB
+		service.roDatastore = eyeshadeRODB
+	}
+	return err
+}
+
+// WithCommonClients sets up a service object with the needed clients
+func WithCommonClients(service *Service) error {
+	clients, err := common.New(common.Config{
+		Ratios: true,
+	})
+	if err == nil {
+		service.Clients = clients
+	}
+	return err
 }
 
 // AccountEarnings uses the readonly connection if available to get the account earnings
@@ -137,7 +142,6 @@ func (service *Service) Balances(
 	if err != nil {
 		return nil, err
 	}
-	allBalances := *balances
 	if includePending {
 		pendingVotes, err := d.GetPending(
 			ctx,
@@ -146,9 +150,9 @@ func (service *Service) Balances(
 		if err != nil {
 			return nil, err
 		}
-		allBalances = *mergeVotes(*pendingVotes, *balances)
+		return mergeVotes(*pendingVotes, *balances), nil
 	}
-	return &allBalances, nil
+	return balances, nil
 }
 
 func mergeVotes(votes []Votes, balances []Balance) *[]Balance {

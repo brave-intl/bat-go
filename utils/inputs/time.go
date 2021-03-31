@@ -13,25 +13,26 @@ var (
 	ErrTimeDecodeEmpty = errors.New("failed to decode timestamp: timestamp cannot be empty")
 )
 
-// ID - a generic ID type that can be used for common id based things
+// Time - a generic Time type that can be used for common time based things
 type Time struct {
 	time   *time.Time
 	raw    string
 	layout string
 }
 
+// NewTime creates a new time input
 func NewTime(layout string) *Time {
 	t := new(Time)
 	t.layout = layout
 	return t
 }
 
-// UUID - return the UUID representation of the ID
+// Time - return the time.Time representation of the parsed time
 func (id *Time) Time() *time.Time {
 	return id.time
 }
 
-// String - return the String representation of the ID
+// String - return the String representation of the time
 func (id *Time) String() string {
 	return id.raw
 }
