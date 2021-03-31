@@ -14,6 +14,7 @@ import (
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -52,6 +53,42 @@ type IsWalletReputableResponse struct {
 // IsReputableOpts - the query string options for the is reputable api call
 type IsReputableOpts struct {
 	Platform string `url:"platform"`
+}
+
+// IsWalletAdsReputable makes the request to the reputation server
+// and reutrns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsWalletAdsReputable(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	platform string,
+) (bool, error) {
+
+	var body IsReputableOpts
+	if platform != "" {
+		// pass in query string "platform" into our request
+		body = IsReputableOpts{
+			Platform: platform,
+		}
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v1/reputation/"+paymentID.String()+"/ads",
+		body,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IsWalletReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, err
+	}
+
+	return resp.IsReputable, nil
 }
 
 // IsWalletReputable makes the request to the reputation server
