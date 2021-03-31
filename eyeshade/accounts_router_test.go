@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -80,7 +81,7 @@ func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
 	suite.Require().JSONEq(string(marshalled), string(body))
 	var unmarshalledBody []AccountSettlementEarnings
 	err = json.Unmarshal(body, &unmarshalledBody)
-	suite.Require().Len(unmarshalledBody, 5)
+	suite.Require().Len(unmarshalledBody, options.Limit)
 
 	now := time.Now()
 	startDate := now.Truncate(time.Second)
@@ -112,4 +113,57 @@ func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
 	marshalled, err = json.Marshal(expecting)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(marshalled), string(body))
+}
+
+func (suite *ControllersTestSuite) TestGetBalances() {
+	accountIDs := []string{uuid.NewV4().String()}
+	accounts := SetupMockGetBalances(
+		suite.mockRO,
+		accountIDs,
+	)
+	param := "account="
+	path := fmt.Sprintf("/v1/accounts/balances?%s%s", param, strings.Join(accountIDs, "&"+param))
+	res, body := suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(http.StatusOK, res.StatusCode, string(body))
+	accountsMarshalled, err := json.Marshal(accounts)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(accountsMarshalled), string(body))
+	var unmarshalledBody []AccountSettlementEarnings
+	err = json.Unmarshal(body, &unmarshalledBody)
+	suite.Require().Len(unmarshalledBody, len(accountIDs))
+
+	// now := time.Now()
+	// startDate := now.Truncate(time.Second)
+	// untilDate := startDate.Add(time.Hour * 24 * 2)
+	// options = AccountSettlementEarningsOptions{
+	// 	Ascending: true,
+	// 	Type:      "contributions",
+	// 	Limit:     5,
+	// 	StartDate: &startDate,
+	// 	UntilDate: &untilDate,
+	// }
+
+	// expecting = SetupMockGetAccountSettlementEarnings(
+	// 	suite.mockRO,
+	// 	options,
+	// )
+	// path = fmt.Sprintf(
+	// 	"/v1/accounts/settlements/contributions/total?limit=%d&start=%s&until=%s",
+	// 	options.Limit,
+	// 	options.StartDate.Format(time.RFC3339),
+	// 	options.UntilDate.Format(time.RFC3339),
+	// )
+	// res, body = suite.DoRequest(
+	// 	"GET",
+	// 	path,
+	// 	nil,
+	// )
+	// suite.Require().Equal(http.StatusOK, res.StatusCode)
+	// marshalled, err = json.Marshal(expecting)
+	// suite.Require().NoError(err)
+	// suite.Require().JSONEq(string(marshalled), string(body))
 }

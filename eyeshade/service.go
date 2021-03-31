@@ -122,3 +122,58 @@ func (service *Service) AccountSettlementEarnings(
 			options,
 		)
 }
+
+// Balances uses the readonly connection if available to get the account earnings
+func (service *Service) Balances(
+	ctx context.Context,
+	accountIDs []string,
+	includePending bool,
+) (*[]Balance, error) {
+	d := service.Datastore(true)
+	balances, err := d.GetBalances(
+		ctx,
+		accountIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	allBalances := *balances
+	if includePending {
+		pendingVotes, err := d.GetPending(
+			ctx,
+			accountIDs,
+		)
+		if err != nil {
+			return nil, err
+		}
+		allBalances = *mergeVotes(*pendingVotes, *balances)
+	}
+	return &allBalances, nil
+}
+
+func mergeVotes(votes []Votes, balances []Balance) *[]Balance {
+	pending := []Balance{}
+	balancesByAccountID := map[string]*Balance{}
+	balanceIndex := map[string]int{}
+	for i, balance := range balances {
+		balanceIndex[balance.AccountID] = i
+		balancesByAccountID[balance.AccountID] = &balance
+	}
+	for _, vote := range votes {
+		accountID := vote.Channel
+		balance := balancesByAccountID[accountID]
+		if balance == nil {
+			pending = append(pending, Balance{
+				AccountID: accountID,
+				Balance:   vote.Balance,
+				Type:      "channel",
+			})
+		} else {
+			balance := balances[balanceIndex[accountID]]
+			balance.Balance = balance.Balance.Add(vote.Balance)
+			balances[balanceIndex[accountID]] = balance
+		}
+	}
+	allBalances := append(balances, pending...)
+	return &allBalances
+}

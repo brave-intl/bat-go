@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,4 +172,126 @@ func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
 	earningsMarshalled, err := json.Marshal(earnings)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
+}
+
+func SetupMockGetPending(
+	mock sqlmock.Sqlmock,
+	accountIDs []string,
+) []Votes {
+	getRows := sqlmock.NewRows(
+		[]string{"channel", "balance"},
+	)
+	rows := []Votes{}
+	for _, channel := range accountIDs {
+		balance := decimal.NewFromFloat(
+			float64(rand.Intn(100)),
+		).Div(
+			decimal.NewFromFloat(10),
+		)
+		rows = append(rows, Votes{channel, balance})
+		// append sql result rows
+		getRows = getRows.AddRow(
+			channel,
+			balance,
+		)
+	}
+	mock.ExpectQuery(`
+SELECT
+	V.channel,
+	(.+) as balance
+FROM votes V
+INNER JOIN surveyor_groups S
+ON V.surveyor_id = S.id
+WHERE
+	V.channel = (.+)
+	AND NOT V.transacted
+	AND NOT V.excluded
+GROUP BY channel`).
+		WithArgs(fmt.Sprintf("{%s}", strings.Join(accountIDs, ","))).
+		WillReturnRows(getRows)
+	return rows
+}
+
+func SetupMockGetBalances(
+	mock sqlmock.Sqlmock,
+	accountIDs []string,
+) []Balance {
+	getRows := sqlmock.NewRows(
+		[]string{"account_id", "account_type", "balance"},
+	)
+	rows := []Balance{}
+	for _, accountID := range accountIDs {
+		balance := decimal.NewFromFloat(
+			float64(rand.Intn(100)),
+		).Div(
+			decimal.NewFromFloat(10),
+		)
+		accountType := uuid.NewV4().String()
+		rows = append(rows, Balance{accountID, accountType, balance})
+		// append sql result rows
+		getRows = getRows.AddRow(
+			accountID,
+			accountType,
+			balance,
+		)
+	}
+	mock.ExpectQuery(`
+	SELECT
+		account_transactions.account_type as account_type,
+		account_transactions.account_id as account_id,
+		(.+) as balance
+	FROM account_transactions
+	WHERE account_id = (.+)
+	GROUP BY (.+)`).
+		WithArgs(fmt.Sprintf("{%s}", strings.Join(accountIDs, ","))).
+		WillReturnRows(getRows)
+	return rows
+}
+
+func (suite *DatastoreMockTestSuite) TestGetBalances() {
+	accountIDs := []string{
+		uuid.NewV4().String(),
+		uuid.NewV4().String(),
+	}
+
+	expectedBalances := SetupMockGetBalances(
+		suite.mock,
+		accountIDs,
+	)
+	balances, err := suite.db.GetBalances(
+		suite.ctx,
+		accountIDs,
+	)
+	suite.Require().NoError(err)
+	suite.Require().Len(*balances, len(accountIDs))
+
+	expectedBalancesMarshalled, err := json.Marshal(expectedBalances)
+	suite.Require().NoError(err)
+	balancesMarshalled, err := json.Marshal(balances)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(expectedBalancesMarshalled), string(balancesMarshalled))
+}
+
+func (suite *DatastoreMockTestSuite) TestGetPending() {
+	accountIDs := []string{
+		uuid.NewV4().String(),
+		uuid.NewV4().String(),
+	}
+
+	expectedVotes := SetupMockGetPending(
+		suite.mock,
+		accountIDs,
+	)
+	votes, err := suite.db.GetPending(
+		suite.ctx,
+		accountIDs,
+	)
+	suite.Require().NoError(err)
+	suite.Require().Len(*votes, len(accountIDs))
+
+	expectedVotesMarshalled, err := json.Marshal(expectedVotes)
+	suite.Require().NoError(err)
+	balancesMarshalled, err := json.Marshal(votes)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(expectedVotesMarshalled), string(balancesMarshalled))
 }

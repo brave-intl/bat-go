@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -53,6 +54,19 @@ type AccountSettlementEarningsOptions struct {
 	UntilDate *time.Time
 }
 
+// Balance holds information about an account id's balance
+type Balance struct {
+	AccountID string          `json:"account_id" db:"account_id"`
+	Type      string          `json:"account_type" db:"account_type"`
+	Balance   decimal.Decimal `json:"balance" db:"balance"`
+}
+
+// Votes holds information about an account id's balance
+type Votes struct {
+	Channel string          `db:"channel"`
+	Balance decimal.Decimal `db:"balance"`
+}
+
 // Datastore holds methods for interacting with database
 type Datastore interface {
 	grantserver.Datastore
@@ -64,6 +78,14 @@ type Datastore interface {
 		ctx context.Context,
 		options AccountSettlementEarningsOptions,
 	) (*[]AccountSettlementEarnings, error)
+	GetBalances(
+		ctx context.Context,
+		accountIDs []string,
+	) (*[]Balance, error)
+	GetPending(
+		ctx context.Context,
+		accountIDs []string,
+	) (*[]Votes, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -230,4 +252,62 @@ limit $2`, timeConstraints, order)
 		return nil, err
 	}
 	return &earnings, nil
+}
+
+// GetBalances gets the account settlement earnings for a subset of ids
+func (pg Postgres) GetBalances(
+	ctx context.Context,
+	accountIDs []string,
+) (*[]Balance, error) {
+	statement := `
+	SELECT
+		account_transactions.account_type as account_type,
+		account_transactions.account_id as account_id,
+		COALESCE(SUM(account_transactions.amount), 0.0) as balance
+	FROM account_transactions
+	WHERE account_id = any($1::text[])
+	GROUP BY (account_transactions.account_id, account_transactions.account_type)`
+	balances := []Balance{}
+
+	err := pg.RawDB().SelectContext(
+		ctx,
+		&balances,
+		statement,
+		fmt.Sprintf("{%s}", strings.Join(accountIDs, ",")),
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &balances, nil
+}
+
+// GetPending retrieves the pending votes tied to an account id
+func (pg Postgres) GetPending(
+	ctx context.Context,
+	accountIDs []string,
+) (*[]Votes, error) {
+	statement := `
+SELECT
+	V.channel,
+	SUM(V.tally * S.price)::TEXT as balance
+FROM votes V
+INNER JOIN surveyor_groups S
+ON V.surveyor_id = S.id
+WHERE
+	V.channel = any($1::text[])
+	AND NOT V.transacted
+	AND NOT V.excluded
+GROUP BY channel`
+	votes := []Votes{}
+
+	err := pg.RawDB().SelectContext(
+		ctx,
+		&votes,
+		statement,
+		fmt.Sprintf("{%s}", strings.Join(accountIDs, ",")),
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &votes, nil
 }
