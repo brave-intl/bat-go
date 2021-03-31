@@ -12,24 +12,27 @@ import (
 	"github.com/go-chi/chi"
 )
 
+var (
+	validTransactionTypes = map[string]bool{
+		"contributions": true,
+		"referrals":     true,
+	}
+)
+
 // AccountsRouter has all information on account info
 func (service *Service) AccountsRouter() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/earnings/{type}/total", middleware.InstrumentHandler(
-		"AccountEarningsTotal",
-		service.AccountEarningsTotal(),
+		"GetAccountEarningsTotal",
+		service.GetAccountEarningsTotal(),
 	))
 	r.Method("GET", "/settlements/{type}/total", middleware.InstrumentHandler(
-		"AccountSettlementEarningsTotal",
-		service.AccountSettlementEarningsTotal(),
-	))
-	r.Method("GET", "/balances/{type}/top", middleware.InstrumentHandler(
-		"AccountBalancesTop",
-		service.EndpointNotImplemented(),
+		"GetAccountSettlementEarningsTotal",
+		service.GetAccountSettlementEarningsTotal(),
 	))
 	r.Method("GET", "/balances", middleware.InstrumentHandler(
 		"AccountBalances",
-		service.EndpointNotImplemented(),
+		service.GetBalances(),
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
 		"AccountTransactions",
@@ -38,15 +41,11 @@ func (service *Service) AccountsRouter() chi.Router {
 	return r
 }
 
-// AccountEarningsTotal retrieves the earnings of a limited number of accounts
-func (service *Service) AccountEarningsTotal() handlers.AppHandler {
-	validTypes := map[string]bool{
-		"contributions": true,
-		"referrals":     true,
-	}
+// GetAccountEarningsTotal retrieves the earnings of a limited number of accounts
+func (service *Service) GetAccountEarningsTotal() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		txType := chi.URLParam(r, "type")
-		if !validTypes[txType] {
+		if !validTransactionTypes[txType] {
 			return handlers.ValidationError(
 				"request path",
 				map[string]interface{}{
@@ -79,15 +78,11 @@ func (service *Service) AccountEarningsTotal() handlers.AppHandler {
 	})
 }
 
-// AccountSettlementEarningsTotal retrieves the earnings of a limited number of accounts
-func (service *Service) AccountSettlementEarningsTotal() handlers.AppHandler {
-	validTypes := map[string]bool{
-		"contributions": true,
-		"referrals":     true,
-	}
+// GetAccountSettlementEarningsTotal retrieves the earnings of a limited number of accounts
+func (service *Service) GetAccountSettlementEarningsTotal() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		txType := chi.URLParam(r, "type")
-		if !validTypes[txType] {
+		if !validTransactionTypes[txType] {
 			return handlers.ValidationError(
 				"request path",
 				map[string]interface{}{
@@ -133,5 +128,18 @@ func (service *Service) AccountSettlementEarningsTotal() handlers.AppHandler {
 			return handlers.WrapError(err, "unable to check account settlement earnings", status)
 		}
 		return handlers.RenderContent(r.Context(), paid, w, http.StatusOK)
+	})
+}
+
+// GetBalances retrieves the balances for a given set of identifiers
+func (service *Service) GetBalances() handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		accountIDs := r.URL.Query()["account"] // access map directly to get all items
+		includePending := r.URL.Query().Get("pending") == "true"
+		balances, err := service.Balances(r.Context(), accountIDs, includePending)
+		if err != nil {
+			return handlers.WrapError(err, "unable to get balances for account earnings", http.StatusBadRequest)
+		}
+		return handlers.RenderContent(r.Context(), balances, w, http.StatusOK)
 	})
 }

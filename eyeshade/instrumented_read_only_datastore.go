@@ -68,6 +68,34 @@ func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Conte
 	return _d.base.GetAccountSettlementEarnings(ctx, options)
 }
 
+// GetBalances implements Datastore
+func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []string) (bap1 *[]Balance, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetBalances", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetBalances(ctx, accountIDs)
+}
+
+// GetPending implements Datastore
+func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []string) (vap1 *[]Votes, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPending", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPending(ctx, accountIDs)
+}
+
 // Migrate implements Datastore
 func (_d DatastoreWithPrometheus) Migrate(currentMigrationVersion uint) (err error) {
 	_since := time.Now()
