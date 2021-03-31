@@ -39,6 +39,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
+// IsWalletAdsReputable implements Client
+func (_d ClientWithPrometheus) IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "IsWalletAdsReputable", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IsWalletAdsReputable(ctx, id, platform)
+}
+
 // IsWalletOnPlatform implements Client
 func (_d ClientWithPrometheus) IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (b1 bool, err error) {
 	_since := time.Now()

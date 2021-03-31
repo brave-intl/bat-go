@@ -9,7 +9,7 @@ import (
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	gomock "github.com/golang/mock/gomock"
-	go_uuid "github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
 	reflect "reflect"
 )
@@ -38,7 +38,7 @@ func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 }
 
 // RedeemAndTransferFunds mocks base method
-func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID go_uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
+func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
@@ -76,7 +76,7 @@ func (m *MockMintWorker) EXPECT() *MockMintWorkerMockRecorder {
 }
 
 // MintGrant mocks base method
-func (m *MockMintWorker) MintGrant(ctx context.Context, walletID go_uuid.UUID, total decimal.Decimal, promoIDs ...go_uuid.UUID) error {
+func (m *MockMintWorker) MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, walletID, total}
 	for _, a := range promoIDs {

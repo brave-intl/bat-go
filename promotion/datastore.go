@@ -950,7 +950,7 @@ limit 1`
 				// set flag to stop this worker from running again
 				worker.PauseWorker(time.Now().Add(30 * time.Minute))
 			}
-			errCode, retriable := errToDrainCode(err)
+			_, errCode, retriable := errToDrainCode(err)
 
 			if !retriable {
 				if _, err = tx.Exec(
@@ -1092,11 +1092,19 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 }
 
 // errToDrainCode - given a drain related processing error, generate a code and retriable flag
-func errToDrainCode(err error) (string, bool) {
+func errToDrainCode(err error) (string, string, bool) {
 	var (
+		status    string
 		errCode   string
 		retriable bool
 	)
+
+	if err == nil {
+		return "", "", false
+	}
+
+	status = "failed"
+
 	// possible protocol errors
 	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
 		errCode = "marshal_transfer"
@@ -1113,6 +1121,13 @@ func errToDrainCode(err error) (string, bool) {
 	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
 		errCode = "failed_response_unmarshal"
 		retriable = true
+	} else if errors.Is(err, errReputationServiceFailure) {
+		errCode = "reputation-service-failure"
+		retriable = true
+	} else if errors.Is(err, errWalletNotReputable) {
+		errCode = "reputation-failed"
+		status = "reputation-failed"
+		retriable = false
 	} else {
 		if codedErr, ok := err.(uphold.Coded); ok {
 			// possible wallet provider specific errors
@@ -1130,7 +1145,7 @@ func errToDrainCode(err error) (string, bool) {
 			errCode = "unknown"
 		}
 	}
-	return errCode, retriable
+	return status, errCode, retriable
 }
 
 // DrainJob - definition of a drain job
@@ -1143,6 +1158,7 @@ type DrainJob struct {
 	TransactionID *string         `db:"transaction_id"`
 	Erred         bool            `db:"erred"`
 	ErrCode       *string         `db:"errcode"`
+	Status        *string         `db:"status"`
 	BatchID       *uuid.UUID      `db:"batch_id"`
 	Completed     bool            `db:"completed"`
 	CompletedAt   pq.NullTime     `db:"completed_at"`
@@ -1170,6 +1186,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
+and (status is null or status not in ('complete', 'reputation-failed', 'failed'))
 for update skip locked
 limit 1`
 
@@ -1186,6 +1203,15 @@ limit 1`
 	job := jobs[0]
 	attempted = true
 
+	// set job status to initialized
+	_, err = tx.Exec(`
+		update claim_drain set
+			status = 'initialized'
+		where id = $1`, job.ID)
+	if err != nil {
+		return attempted, err
+	}
+
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
@@ -1196,10 +1222,15 @@ limit 1`
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		errCode, retriable := errToDrainCode(err)
+		status, errCode, retriable := errToDrainCode(err)
 
 		if !retriable {
-			if _, err := tx.Exec(`update claim_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err != nil {
+			if _, err := tx.Exec(`
+				update claim_drain set
+					erred = true,
+					errcode=$1,
+					status=$3
+				where id = $2`, errCode, job.ID, status); err != nil {
 				pg.RollbackTx(tx)
 			}
 			_ = tx.Commit()
@@ -1207,7 +1238,13 @@ limit 1`
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`update claim_drain set transaction_id = $1, completed = true, completed_at = now() where id = $2`, txn.ID, job.ID)
+	_, err = tx.Exec(`
+		update claim_drain set
+			transaction_id = $1,
+			completed = true,
+			completed_at = now(),
+			status = 'complete'
+		where id = $2`, txn.ID, job.ID)
 	if err != nil {
 		return attempted, err
 	}
