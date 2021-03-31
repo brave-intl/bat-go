@@ -98,14 +98,14 @@ func (service *Service) GetAccountSettlementEarningsTotal() handlers.AppHandler 
 		}
 		// dates are optional
 		startDateInput := inputs.NewTime(time.RFC3339)
-		inputs.DecodeAndValidateString(
+		_ = inputs.DecodeAndValidateString(
 			r.Context(),
 			startDateInput,
 			query.Get("start"),
 		)
 
 		untilDateInput := inputs.NewTime(time.RFC3339)
-		inputs.DecodeAndValidateString(
+		_ = inputs.DecodeAndValidateString(
 			r.Context(),
 			untilDateInput,
 			query.Get("until"),

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -23,8 +22,6 @@ func (suite *ControllersTestSuite) TestDefunctRouter() {
 	re := regexp.MustCompile(`\{.+\}`)
 	for _, route := range defunctRoutes {
 		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
-		rctx := chi.NewRouteContext()
-		suite.Require().True(suite.router.Match(rctx, route.Method, path))
 		_, body := suite.DoRequest(route.Method, path, nil)
 		var defunctResponse DefunctResponse
 		err := json.Unmarshal(body, &defunctResponse)
@@ -136,6 +133,25 @@ func (suite *ControllersTestSuite) TestGetBalances() {
 	err = json.Unmarshal(body, &unmarshalledBody)
 	suite.Require().Len(unmarshalledBody, len(accountIDs))
 
+	accountIDs = []string{uuid.NewV4().String()}
+	accounts = SetupMockGetBalances(
+		suite.mockRO,
+		accountIDs,
+	)
+	param = "account="
+	path = fmt.Sprintf("/v1/accounts/balances?%s%s", param, strings.Join(accountIDs, "&"+param))
+	res, body = suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(http.StatusOK, res.StatusCode, string(body))
+	accountsMarshalled, err = json.Marshal(accounts)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(accountsMarshalled), string(body))
+	unmarshalledBody = []AccountSettlementEarnings{}
+	err = json.Unmarshal(body, &unmarshalledBody)
+	suite.Require().Len(unmarshalledBody, len(accountIDs))
 	// now := time.Now()
 	// startDate := now.Truncate(time.Second)
 	// untilDate := startDate.Add(time.Hour * 24 * 2)

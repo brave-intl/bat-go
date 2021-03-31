@@ -173,6 +173,26 @@ func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
 }
+func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
+	options := AccountSettlementEarningsOptions{
+		Limit:     5,
+		Ascending: true,
+		Type:      "contributions",
+	}
+	expecting := SetupMockGetAccountSettlementEarnings(suite.mock, options)
+	earnings, err := suite.db.GetAccountSettlementEarnings(
+		suite.ctx,
+		options,
+	)
+	suite.Require().NoError(err)
+	suite.Require().Len(*earnings, options.Limit)
+
+	expectingMarshalled, err := json.Marshal(expecting)
+	suite.Require().NoError(err)
+	earningsMarshalled, err := json.Marshal(earnings)
+	suite.Require().NoError(err)
+	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
+}
 
 func SetupMockGetPending(
 	mock sqlmock.Sqlmock,

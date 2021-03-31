@@ -125,12 +125,16 @@ func setupEyeshadeRouters(
 ) {
 	r := setupEyeshadeMiddleware(ctx, logger)
 
-	serviceRouter, s, err := eyeshade.SetupService(ctx)
+	s, err := eyeshade.SetupService(
+		eyeshade.WithDBs,
+		eyeshade.WithCommonClients,
+		eyeshade.WithRouter,
+	)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("unable to setup router")
 	}
-	r.Mount("/", serviceRouter)
+	r.Mount("/", s.Router())
 
 	return ctx, r, s
 }

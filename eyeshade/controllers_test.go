@@ -12,8 +12,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 )
@@ -27,7 +25,6 @@ type ControllersTestSuite struct {
 	mockRO  sqlmock.Sqlmock
 	server  *httptest.Server
 	service *Service
-	router  chi.Router
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -51,17 +48,16 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.rodb = NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockRODB, name),
 	}, name)
-	suite.mock = mock
 	suite.mockRO = mockRO
-	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, suite.db)
-	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, suite.rodb)
 
-	r, service, err := SetupService(ctx)
+	service, err := SetupService(
+		WithRouter,
+		WithConnections(suite.db, suite.rodb),
+	)
 	suite.Require().NoError(err)
 	suite.service = service
-	server := httptest.NewServer(r)
+	server := httptest.NewServer(service.Router())
 	suite.server = server
-	suite.router = r
 }
 
 func (suite *ControllersTestSuite) TearDownSuite() {

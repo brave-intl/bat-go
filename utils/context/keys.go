@@ -10,6 +10,8 @@ const (
 	DatastoreCTXKey CTXKey = "datastore"
 	// RODatastoreCTXKey - the context key for getting the datastore
 	RODatastoreCTXKey CTXKey = "ro_datastore"
+	// CommonClientsCTXKey holds clients held in common
+	CommonClientsCTXKey CTXKey = "common_clients"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key
 	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
 	// ServiceKey - the key used for service context
