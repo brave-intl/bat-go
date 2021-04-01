@@ -1343,7 +1343,8 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -1359,10 +1360,10 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	err = walletDB.InsertWallet(context.Background(), &info2)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(req.Context(), appctx.BraveTransferPromotionIDCTXKey, []string{tidpromotion.ID.String()})
+	ctx = context.WithValue(req.Context(), appctx.BraveTransferPromotionIDCTXKey, []string{tidpromotion.ID.String()})
 	req = req.WithContext(ctx)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -1523,7 +1524,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -1542,7 +1544,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -1688,7 +1690,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -1707,7 +1710,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -1873,7 +1876,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -1892,7 +1896,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -2052,7 +2056,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -2071,7 +2076,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -2219,7 +2224,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -2238,7 +2244,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)
@@ -2443,7 +2449,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	req, err := http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	var s httpsignature.Signature
@@ -2462,7 +2469,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	suite.Require().Equal(http.StatusBadRequest, rr.Code, "Wallet without payout address should fail")
 
-	req, err = http.NewRequest("POST", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	err = s.Sign(privKey, crypto.Hash(0), req)

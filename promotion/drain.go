@@ -233,17 +233,18 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
-	// perform reputation check for wallet, and error accordingly if there is a reputation failure
-	reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
-	if err != nil {
-		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
-		return nil, errReputationServiceFailure
-	}
+	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationOnDrainCTXKey); ok {
+		// perform reputation check for wallet, and error accordingly if there is a reputation failure
+		reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
+		if err != nil {
+			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
+			return nil, errReputationServiceFailure
+		}
 
-	if !reputable {
-		return nil, errWalletNotReputable
+		if !reputable {
+			return nil, errWalletNotReputable
+		}
 	}
-
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
