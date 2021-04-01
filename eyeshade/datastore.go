@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
@@ -22,6 +23,11 @@ var (
 	ErrLimitReached = errors.New("query limit reached")
 	// ErrNeedTimeConstraints needs both a start and an end time
 	ErrNeedTimeConstraints = errors.New("need both start and end date")
+
+	settlementTypes = map[string]bool{
+		"contribution_settlement": true,
+		"referral_settlement":     true,
+	}
 )
 
 // AccountEarnings holds results from querying account earnings
@@ -67,6 +73,61 @@ type Votes struct {
 	Balance decimal.Decimal `db:"balance"`
 }
 
+// Transaction holds info about a single transaction from the database
+type Transaction struct {
+	Channel            string           `db:"channel"`
+	CreatedAt          time.Time        `db:"created_at"`
+	Description        string           `db:"description"`
+	FromAccount        string           `db:"from_account"`
+	ToAccount          *string          `db:"to_account"`
+	ToAccountType      *string          `db:"to_account_type"`
+	Amount             decimal.Decimal  `db:"amount"`
+	SettlementCurrency *string          `db:"settlement_currency"`
+	SettlementAmount   *decimal.Decimal `db:"settlement_amount"`
+	TransactionType    string           `db:"transaction_type"`
+}
+
+func (tx Transaction) Backfill(account string) BackfillTransaction {
+	amount := tx.Amount
+	if tx.FromAccount == account {
+		amount = amount.Neg()
+	}
+	var settlementDestinationType *string
+	var settlementDestination *string
+	if settlementTypes[tx.TransactionType] {
+		if tx.ToAccountType != nil {
+			settlementDestinationType = tx.ToAccountType
+		}
+		if tx.ToAccount != nil {
+			settlementDestination = tx.ToAccount
+		}
+	}
+	return BackfillTransaction{
+		Amount:                    inputs.Decimal{&amount},
+		Channel:                   tx.Channel,
+		CreatedAt:                 tx.CreatedAt,
+		Description:               tx.Description,
+		SettlementCurrency:        tx.SettlementCurrency,
+		SettlementAmount:          &inputs.Decimal{tx.SettlementAmount},
+		TransactionType:           tx.TransactionType,
+		SettlementDestinationType: settlementDestinationType,
+		SettlementDestination:     settlementDestination,
+	}
+}
+
+// BackfillTransaction holds a backfilled version of the transaction
+type BackfillTransaction struct {
+	CreatedAt                 time.Time       `json:"created_at"`
+	Description               string          `json:"description"`
+	Channel                   string          `json:"channel"`
+	Amount                    inputs.Decimal  `json:"amount"`
+	SettlementCurrency        *string         `json:"settlement_currency,omitempty"`
+	SettlementAmount          *inputs.Decimal `json:"settlement_amount,omitempty"`
+	SettlementDestinationType *string         `json:"settlement_destination_type,omitempty"`
+	SettlementDestination     *string         `json:"settlement_destination,omitempty"`
+	TransactionType           string          `json:"transaction_type"`
+}
+
 // Datastore holds methods for interacting with database
 type Datastore interface {
 	grantserver.Datastore
@@ -86,6 +147,11 @@ type Datastore interface {
 		ctx context.Context,
 		accountIDs []string,
 	) (*[]Votes, error)
+	GetTransactions(
+		ctx context.Context,
+		accountID string,
+		txTypes []string,
+	) (*[]Transaction, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -310,4 +376,48 @@ GROUP BY channel`
 		return nil, err
 	}
 	return &votes, nil
+}
+
+// GetTransactions retrieves the transactions tied to an account id
+func (pg Postgres) GetTransactions(
+	ctx context.Context,
+	accountID string,
+	txTypes []string,
+) (*[]Transaction, error) {
+	typeExtension := ""
+	args := []interface{}{accountID}
+	if len(txTypes) > 0 {
+		args = append(args, txTypes)
+		typeExtension = "AND transaction_type = ANY($2::text[])"
+	}
+	statement := fmt.Sprintf(`
+SELECT
+  created_at,
+  description,
+  channel,
+  amount,
+  from_account,
+  to_account,
+  to_account_type,
+  settlement_currency,
+  settlement_amount,
+  transaction_type
+FROM transactions
+WHERE (
+  from_account = $1
+  OR to_account = $1
+) %s
+ORDER BY created_at`, typeExtension)
+	transactions := []Transaction{}
+
+	err := pg.RawDB().SelectContext(
+		ctx,
+		&transactions,
+		statement,
+		accountID,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &transactions, nil
 }

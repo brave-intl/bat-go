@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
@@ -36,7 +37,7 @@ func (service *Service) AccountsRouter() chi.Router {
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
 		"AccountTransactions",
-		service.EndpointNotImplemented(),
+		service.GetTransactions(),
 	))
 	return r
 }
@@ -141,5 +142,34 @@ func (service *Service) GetBalances() handlers.AppHandler {
 			return handlers.WrapError(err, "unable to get balances for account earnings", http.StatusBadRequest)
 		}
 		return handlers.RenderContent(r.Context(), balances, w, http.StatusOK)
+	})
+}
+
+// GetTransactions retrieves the transactions for a given set of identifiers
+func (service *Service) GetTransactions() handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		accountID := chi.URLParam(r, "account")
+		txTypes := strings.Split(
+			strings.Join(r.URL.Query()["type"], ","),
+			",",
+		)
+		transactions, err := service.Transactions(
+			r.Context(),
+			accountID,
+			txTypes,
+		)
+		if err != nil {
+			return handlers.WrapError(
+				err,
+				"unable to get transactions for account",
+				http.StatusBadRequest,
+			)
+		}
+		return handlers.RenderContent(
+			r.Context(),
+			transactions,
+			w,
+			http.StatusOK,
+		)
 	})
 }

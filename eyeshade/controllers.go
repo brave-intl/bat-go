@@ -7,6 +7,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/go-chi/chi"
+	"github.com/maikelmclauflin/go-boom"
 )
 
 type defunctRoute struct {
@@ -40,29 +41,31 @@ type DefunctResponse struct {
 // DefunctRouter for defunct eyeshade endpoints
 func DefunctRouter(withV1 bool) chi.Router {
 	r := chi.NewRouter()
-	body := DefunctResponse{
-		StatusCode: http.StatusGone,
-		Error:      "Gone",
-		Message:    "Gone",
-	}
 	for _, routeSettings := range defunctRoutes {
 		path := routeSettings.Path
 		isV1 := strings.Contains(path, "/v1/")
 		isAndWithV1 := withV1 && isV1
-		if isAndWithV1 || (!withV1 && !isV1) {
-			if isAndWithV1 {
-				path = path[3:]
-			}
-			r.Method(
-				routeSettings.Method,
-				path,
-				handlers.AppHandler(
-					func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-						return handlers.RenderContent(r.Context(), body, w, http.StatusGone)
-					},
-				),
-			)
+		if !isAndWithV1 && !(!withV1 && !isV1) {
+			continue
 		}
+		if isAndWithV1 {
+			path = path[3:]
+		}
+		r.Method(
+			routeSettings.Method,
+			path,
+			handlers.AppHandler(
+				func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+					err := boom.Gone()
+					return handlers.RenderContent(
+						r.Context(),
+						err,
+						w,
+						err.StatusCode,
+					)
+				},
+			),
+		)
 	}
 	return r
 }
@@ -107,10 +110,11 @@ func (service *Service) EndpointNotImplemented() handlers.AppHandler {
 		w http.ResponseWriter,
 		r *http.Request,
 	) *handlers.AppError {
-		return handlers.RenderContent(r.Context(), struct {
+		body := struct {
 			Payload string `json:"payload"`
 		}{
 			Payload: "not yet implemented",
-		}, w, http.StatusOK)
+		}
+		return handlers.RenderContent(r.Context(), body, w, http.StatusOK)
 	})
 }
