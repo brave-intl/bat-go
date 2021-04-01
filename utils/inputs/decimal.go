@@ -1,6 +1,10 @@
 package inputs
 
-import "github.com/shopspring/decimal"
+import (
+	"strconv"
+
+	"github.com/shopspring/decimal"
+)
 
 var (
 	defaultPrecision int32 = 18
@@ -13,15 +17,22 @@ type Decimal struct {
 }
 
 // MarshalJSON marshals the decimal to a string with a fixed amount
-func (decimal Decimal) MarshalJSON() ([]byte, error) {
-	return []byte(decimal.Decimal.StringFixed(decimal.precision)), nil
+func (d *Decimal) MarshalJSON() ([]byte, error) {
+	str := "0"
+	if d.Decimal != nil {
+		str = d.StringFixed(d.precision)
+	}
+	return []byte(strconv.Quote(str)), nil
 }
 
 // NewDecimal creates a new decimal
-func NewDecimal(decimal *decimal.Decimal, precisions ...int32) Decimal {
+func NewDecimal(d *decimal.Decimal, precisions ...int32) Decimal {
+	if d == nil {
+		return *new(Decimal)
+	}
 	precision := defaultPrecision
 	if len(precisions) > 0 {
 		precision = precisions[0]
 	}
-	return Decimal{decimal, precision}
+	return Decimal{d, precision}
 }

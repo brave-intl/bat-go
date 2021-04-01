@@ -149,10 +149,14 @@ func (service *Service) GetBalances() handlers.AppHandler {
 func (service *Service) GetTransactions() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		accountID := chi.URLParam(r, "account")
-		txTypes := strings.Split(
-			strings.Join(r.URL.Query()["type"], ","),
-			",",
-		)
+		txTypes := []string{}
+		txTypeQS := r.URL.Query()["type"]
+		if len(txTypeQS) > 0 {
+			txTypes = strings.Split(
+				strings.Join(txTypeQS, ","),
+				",",
+			)
+		}
 		transactions, err := service.Transactions(
 			r.Context(),
 			accountID,

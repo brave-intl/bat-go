@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"testing"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -182,4 +184,101 @@ func (suite *ControllersTestSuite) TestGetBalances() {
 	// marshalled, err = json.Marshal(expecting)
 	// suite.Require().NoError(err)
 	// suite.Require().JSONEq(string(marshalled), string(body))
+}
+
+func (suite *ControllersTestSuite) TestGetTransactions() {
+	unescapedAccountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+	escapedAccountID := url.PathEscape(unescapedAccountID)
+	scenarios := map[string]struct {
+		path   string
+		mock   bool
+		types  []string
+		status int
+		body   interface{}
+	}{
+		"200 success": {
+			path:   escapedAccountID,
+			mock:   true,
+			status: http.StatusOK,
+			body:   nil,
+		},
+		"404s if id not escaped": {
+			path:   unescapedAccountID,
+			mock:   false,
+			status: http.StatusNotFound,
+		},
+		"referrals only": {
+			path:   escapedAccountID,
+			mock:   true,
+			status: http.StatusOK,
+			types:  []string{"referral"},
+		},
+		"unknown type": {
+			path:   escapedAccountID,
+			mock:   true,
+			status: http.StatusOK,
+			types:  []string{"garble"},
+		},
+	}
+	for description, scenario := range scenarios {
+		testName := fmt.Sprintf(
+			"GetTransactions(%s,%d):%d",
+			description,
+			len(scenario.types),
+			scenario.status,
+		)
+		suite.T().Run(testName, func(t *testing.T) {
+			var expected interface{}
+			if scenario.mock {
+				expectedTxs := SetupMockGetTransactions(
+					suite.mockRO,
+					unescapedAccountID,
+					scenario.types...,
+				)
+				if scenario.body == nil {
+					expected = transformTransactions(unescapedAccountID, &expectedTxs)
+				}
+			}
+			if scenario.body != nil {
+				expected = scenario.body
+			}
+			actual := suite.DoGetTransactions(
+				scenario.path,
+				scenario.status,
+				scenario.types...,
+			)
+			if scenario.status != http.StatusOK {
+				return
+			}
+			suite.Require().JSONEq(
+				MustMarshal(suite.Require(), expected),
+				actual,
+			)
+		})
+	}
+}
+
+func (suite *ControllersTestSuite) DoGetTransactions(
+	accountID string,
+	status int,
+	types ...string,
+) string {
+	path := fmt.Sprintf(
+		"/v1/accounts/%s/transactions",
+		accountID,
+	)
+	if len(types) > 0 {
+		values := url.Values{}
+		for _, t := range types {
+			values.Add("type", t)
+		}
+		path += "?" + values.Encode()
+	}
+	res, body := suite.DoRequest(
+		"GET",
+		path,
+		nil,
+	)
+	suite.Require().Equal(status, res.StatusCode, string(body))
+	return string(body)
 }
