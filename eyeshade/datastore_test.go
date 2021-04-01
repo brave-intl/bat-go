@@ -223,7 +223,7 @@ func SetupMockGetBalances(
 func SetupMockGetTransactions(
 	mock sqlmock.Sqlmock,
 	accountID string,
-	txTypes *[]string,
+	txTypes ...string,
 ) []Transaction {
 	getRows := sqlmock.NewRows(
 		[]string{
@@ -241,8 +241,13 @@ func SetupMockGetTransactions(
 	)
 	rows := []Transaction{}
 	args := []driver.Value{accountID}
-	if txTypes != nil {
-		args = append(args, txTypes)
+	var txTypesHash *map[string]bool
+	if len(txTypes) > 0 {
+		args = append(args, joinStringList(txTypes))
+		txTypesHash := &map[string]bool{}
+		for _, txType := range txTypes {
+			(*txTypesHash)[txType] = true
+		}
 	}
 	channels := CreateIDs(3)
 	providerID := uuid.NewV4().String()
@@ -263,6 +268,9 @@ func SetupMockGetTransactions(
 		))
 	}
 	for _, tx := range rows {
+		if txTypesHash != nil && !(*txTypesHash)[tx.TransactionType] {
+			continue
+		}
 		getRows = getRows.AddRow(
 			tx.CreatedAt,
 			tx.Description,
@@ -469,7 +477,6 @@ func (suite *DatastoreMockTestSuite) TestGetTransactions() {
 	expectedTransactions := SetupMockGetTransactions(
 		suite.mock,
 		accountID,
-		nil,
 	)
 	actualTransaction := suite.GetTransactions(
 		len(expectedTransactions),

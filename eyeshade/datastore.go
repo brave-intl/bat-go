@@ -111,7 +111,7 @@ func (tx Transaction) Backfill(account string) BackfillTransaction {
 		CreatedAt:                 tx.CreatedAt,
 		Description:               tx.Description,
 		SettlementCurrency:        tx.SettlementCurrency,
-		SettlementAmount:          &inputSettlementAmount,
+		SettlementAmount:          inputSettlementAmount,
 		TransactionType:           tx.TransactionType,
 		SettlementDestinationType: settlementDestinationType,
 		SettlementDestination:     settlementDestination,
@@ -120,15 +120,15 @@ func (tx Transaction) Backfill(account string) BackfillTransaction {
 
 // BackfillTransaction holds a backfilled version of the transaction
 type BackfillTransaction struct {
-	CreatedAt                 time.Time       `json:"created_at"`
-	Description               string          `json:"description"`
-	Channel                   string          `json:"channel"`
-	Amount                    inputs.Decimal  `json:"amount"`
-	TransactionType           string          `json:"transaction_type"`
-	SettlementCurrency        *string         `json:"settlement_currency,omitempty"`
-	SettlementAmount          *inputs.Decimal `json:"settlement_amount,omitempty"`
-	SettlementDestinationType *string         `json:"settlement_destination_type,omitempty"`
-	SettlementDestination     *string         `json:"settlement_destination,omitempty"`
+	CreatedAt                 time.Time      `json:"created_at"`
+	Description               string         `json:"description"`
+	Channel                   string         `json:"channel"`
+	Amount                    inputs.Decimal `json:"amount"`
+	TransactionType           string         `json:"transaction_type"`
+	SettlementCurrency        *string        `json:"settlement_currency,omitempty"`
+	SettlementAmount          inputs.Decimal `json:"settlement_amount,omitempty"`
+	SettlementDestinationType *string        `json:"settlement_destination_type,omitempty"`
+	SettlementDestination     *string        `json:"settlement_destination,omitempty"`
 }
 
 // Datastore holds methods for interacting with database
@@ -342,7 +342,7 @@ func (pg Postgres) GetBalances(
 		ctx,
 		&balances,
 		statement,
-		fmt.Sprintf("{%s}", strings.Join(accountIDs, ",")),
+		joinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -373,7 +373,7 @@ GROUP BY channel`
 		ctx,
 		&votes,
 		statement,
-		fmt.Sprintf("{%s}", strings.Join(accountIDs, ",")),
+		joinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -390,7 +390,7 @@ func (pg Postgres) GetTransactions(
 	typeExtension := ""
 	args := []interface{}{accountID}
 	if len(txTypes) > 0 {
-		args = append(args, txTypes)
+		args = append(args, joinStringList(txTypes))
 		typeExtension = "AND transaction_type = ANY($2::text[])"
 	}
 	statement := fmt.Sprintf(`
@@ -423,4 +423,8 @@ ORDER BY created_at`, typeExtension)
 		return nil, err
 	}
 	return &transactions, nil
+}
+
+func joinStringList(list []string) string {
+	return fmt.Sprintf("{%s}", strings.Join(list, ","))
 }
