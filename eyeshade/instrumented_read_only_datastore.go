@@ -96,6 +96,20 @@ func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []s
 	return _d.base.GetPending(ctx, accountIDs)
 }
 
+// GetTransactions implements Datastore
+func (_d DatastoreWithPrometheus) GetTransactions(ctx context.Context, accountID string, txTypes []string) (tap1 *[]Transaction, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactions", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTransactions(ctx, accountID, txTypes)
+}
+
 // Migrate implements Datastore
 func (_d DatastoreWithPrometheus) Migrate(currentMigrationVersion uint) (err error) {
 	_since := time.Now()
