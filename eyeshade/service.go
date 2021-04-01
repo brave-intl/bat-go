@@ -155,6 +155,38 @@ func (service *Service) Balances(
 	return balances, nil
 }
 
+// Transactions uses the readonly connection if available to get the account transactions
+func (service *Service) Transactions(
+	ctx context.Context,
+	accountID string,
+	txTypes []string,
+) (*[]BackfillTransaction, error) {
+	transactions, err := service.Datastore(true).
+		GetTransactions(
+			ctx,
+			accountID,
+			txTypes,
+		)
+	if err != nil {
+		return nil, err
+	}
+	return transformTransactions(
+		accountID,
+		transactions,
+	), nil
+}
+
+func transformTransactions(account string, txs *[]Transaction) *[]BackfillTransaction {
+	backfilledTxs := []BackfillTransaction{}
+	for _, tx := range *txs {
+		backfilledTxs = append(
+			backfilledTxs,
+			tx.Backfill(account),
+		)
+	}
+	return &backfilledTxs
+}
+
 func mergeVotes(votes []Votes, balances []Balance) *[]Balance {
 	pending := []Balance{}
 	balancesByAccountID := map[string]*Balance{}
