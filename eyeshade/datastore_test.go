@@ -15,6 +15,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -153,47 +154,6 @@ limit (.+)`).
 	return rows
 }
 
-func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
-	options := AccountEarningsOptions{
-		Limit:     5,
-		Ascending: true,
-		Type:      "contributions",
-	}
-	expecting := SetupMockGetAccountEarnings(suite.mock, options)
-	earnings, err := suite.db.GetAccountEarnings(
-		suite.ctx,
-		options,
-	)
-	suite.Require().NoError(err)
-	suite.Require().Len(*earnings, options.Limit)
-
-	expectingMarshalled, err := json.Marshal(expecting)
-	suite.Require().NoError(err)
-	earningsMarshalled, err := json.Marshal(earnings)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
-}
-func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
-	options := AccountSettlementEarningsOptions{
-		Limit:     5,
-		Ascending: true,
-		Type:      "contributions",
-	}
-	expecting := SetupMockGetAccountSettlementEarnings(suite.mock, options)
-	earnings, err := suite.db.GetAccountSettlementEarnings(
-		suite.ctx,
-		options,
-	)
-	suite.Require().NoError(err)
-	suite.Require().Len(*earnings, options.Limit)
-
-	expectingMarshalled, err := json.Marshal(expecting)
-	suite.Require().NoError(err)
-	earningsMarshalled, err := json.Marshal(earnings)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(expectingMarshalled), string(earningsMarshalled))
-}
-
 func SetupMockGetPending(
 	mock sqlmock.Sqlmock,
 	accountIDs []string,
@@ -203,11 +163,7 @@ func SetupMockGetPending(
 	)
 	rows := []Votes{}
 	for _, channel := range accountIDs {
-		balance := decimal.NewFromFloat(
-			float64(rand.Intn(100)),
-		).Div(
-			decimal.NewFromFloat(10),
-		)
+		balance := RandomDecimal()
 		rows = append(rows, Votes{channel, balance})
 		// append sql result rows
 		getRows = getRows.AddRow(
@@ -241,11 +197,7 @@ func SetupMockGetBalances(
 	)
 	rows := []Balance{}
 	for _, accountID := range accountIDs {
-		balance := decimal.NewFromFloat(
-			float64(rand.Intn(100)),
-		).Div(
-			decimal.NewFromFloat(10),
-		)
+		balance := RandomDecimal()
 		accountType := uuid.NewV4().String()
 		rows = append(rows, Balance{accountID, accountType, balance})
 		// append sql result rows
@@ -268,50 +220,279 @@ func SetupMockGetBalances(
 	return rows
 }
 
-func (suite *DatastoreMockTestSuite) TestGetBalances() {
-	accountIDs := []string{
-		uuid.NewV4().String(),
-		uuid.NewV4().String(),
+func SetupMockGetTransactions(
+	mock sqlmock.Sqlmock,
+	accountID string,
+	txTypes *[]string,
+) []Transaction {
+	getRows := sqlmock.NewRows(
+		[]string{
+			"created_at",
+			"description",
+			"channel",
+			"amount",
+			"from_account",
+			"to_account",
+			"to_account_type",
+			"settlement_currency",
+			"settlement_amount",
+			"transaction_type",
+		},
+	)
+	rows := []Transaction{}
+	args := []driver.Value{accountID}
+	if txTypes != nil {
+		args = append(args, txTypes)
 	}
+	channels := CreateIDs(3)
+	providerID := uuid.NewV4().String()
+	for _, channel := range channels {
+		rows = append(rows, ContributeTransaction(channel))
+		rows = append(rows, ReferralTransaction(accountID, channel))
+	}
+	for i := range channels {
+		targetIndex := decimal.NewFromFloat(
+			float64(rand.Intn(2)),
+		).Mul(decimal.NewFromFloat(float64(i)))
+		target := rows[targetIndex.IntPart()]
+		rows = append(rows, SettlementTransaction(
+			*target.ToAccount, // fromAccount
+			target.Channel,    // channel
+			providerID,        // toAccount
+			target.TransactionType,
+		))
+	}
+	for _, tx := range rows {
+		getRows = getRows.AddRow(
+			tx.CreatedAt,
+			tx.Description,
+			tx.Channel,
+			tx.Amount,
+			tx.FromAccount,
+			tx.ToAccount,
+			tx.ToAccountType,
+			tx.SettlementCurrency,
+			tx.SettlementAmount,
+			tx.TransactionType,
+		)
+	}
+	mock.ExpectQuery(`
+SELECT
+	created_at,
+	description,
+	channel,
+	amount,
+	from_account,
+	to_account,
+	to_account_type,
+	settlement_currency,
+	settlement_amount,
+	transaction_type
+FROM transactions
+WHERE (.+)
+ORDER BY created_at`).
+		WithArgs(args...).
+		WillReturnRows(getRows)
+	return rows
+}
+
+func SettlementTransaction(fromAccount, channel, toAccountID, transactionType string) Transaction {
+	transactionType = transactionType + "_settlement"
+	provider := "uphold"
+	return Transaction{
+		Channel:         channel,
+		CreatedAt:       time.Now(),
+		Description:     uuid.NewV4().String(),
+		FromAccount:     fromAccount,
+		ToAccount:       &toAccountID,
+		ToAccountType:   &provider,
+		Amount:          RandomDecimal(),
+		TransactionType: transactionType,
+	}
+}
+func ReferralTransaction(accountID, channel string) Transaction {
+	toAccountType := "type"
+	return Transaction{
+		Channel:         channel,
+		CreatedAt:       time.Now(),
+		Description:     uuid.NewV4().String(),
+		FromAccount:     uuid.NewV4().String(),
+		ToAccount:       &accountID,
+		ToAccountType:   &toAccountType,
+		Amount:          RandomDecimal(),
+		TransactionType: "referral",
+	}
+}
+func ContributeTransaction(account string) Transaction {
+	toAccountType := "type"
+	return Transaction{
+		Channel:         uuid.NewV4().String(),
+		CreatedAt:       time.Now(),
+		Description:     uuid.NewV4().String(),
+		FromAccount:     uuid.NewV4().String(),
+		ToAccount:       &account,
+		ToAccountType:   &toAccountType,
+		Amount:          RandomDecimal(),
+		TransactionType: "contribution",
+	}
+}
+
+func RandomDecimal() decimal.Decimal {
+	return decimal.NewFromFloat(
+		float64(rand.Intn(100)),
+	).Div(
+		decimal.NewFromFloat(10),
+	)
+}
+
+func CreateIDs(count int) []string {
+	list := []string{}
+	for i := 0; i < count; i++ {
+		list = append(list, uuid.NewV4().String())
+	}
+	return list
+}
+
+func MustMarshal(
+	assertions *require.Assertions,
+	structure interface{},
+) string {
+	marshalled, err := json.Marshal(structure)
+	assertions.NoError(err)
+	return string(marshalled)
+}
+
+func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
+	options := AccountEarningsOptions{
+		Limit:     5,
+		Ascending: true,
+		Type:      "contributions",
+	}
+	expected := SetupMockGetAccountEarnings(suite.mock, options)
+	actual := suite.GetAccountEarnings(
+		options,
+	)
+
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expected),
+		MustMarshal(suite.Require(), actual),
+	)
+}
+
+func (suite *DatastoreMockTestSuite) GetAccountEarnings(
+	options AccountEarningsOptions,
+) *[]AccountEarnings {
+	earnings, err := suite.db.GetAccountEarnings(
+		suite.ctx,
+		options,
+	)
+	suite.Require().NoError(err)
+	suite.Require().Len(*earnings, options.Limit)
+	return earnings
+}
+func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
+	options := AccountSettlementEarningsOptions{
+		Limit:     5,
+		Ascending: true,
+		Type:      "contributions",
+	}
+	expectSettlementEarnings := SetupMockGetAccountSettlementEarnings(suite.mock, options)
+	actualSettlementEarnings := suite.GetAccountSettlementEarnings(options)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expectSettlementEarnings),
+		MustMarshal(suite.Require(), actualSettlementEarnings),
+	)
+}
+
+func (suite *DatastoreMockTestSuite) GetAccountSettlementEarnings(
+	options AccountSettlementEarningsOptions,
+) *[]AccountSettlementEarnings {
+	earnings, err := suite.db.GetAccountSettlementEarnings(
+		suite.ctx,
+		options,
+	)
+	suite.Require().NoError(err)
+	suite.Require().Len(*earnings, options.Limit)
+	return earnings
+}
+
+func (suite *DatastoreMockTestSuite) TestGetBalances() {
+	accountIDs := CreateIDs(3)
 
 	expectedBalances := SetupMockGetBalances(
 		suite.mock,
 		accountIDs,
 	)
+	actualBalances := suite.GetBalances(accountIDs)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expectedBalances),
+		MustMarshal(suite.Require(), actualBalances),
+	)
+}
+
+func (suite *DatastoreMockTestSuite) GetBalances(accountIDs []string) *[]Balance {
 	balances, err := suite.db.GetBalances(
 		suite.ctx,
 		accountIDs,
 	)
 	suite.Require().NoError(err)
 	suite.Require().Len(*balances, len(accountIDs))
-
-	expectedBalancesMarshalled, err := json.Marshal(expectedBalances)
-	suite.Require().NoError(err)
-	balancesMarshalled, err := json.Marshal(balances)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(expectedBalancesMarshalled), string(balancesMarshalled))
+	return balances
 }
 
 func (suite *DatastoreMockTestSuite) TestGetPending() {
-	accountIDs := []string{
-		uuid.NewV4().String(),
-		uuid.NewV4().String(),
-	}
+	accountIDs := CreateIDs(3)
 
 	expectedVotes := SetupMockGetPending(
 		suite.mock,
 		accountIDs,
 	)
+	actualVotes := suite.GetPending(accountIDs)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expectedVotes),
+		MustMarshal(suite.Require(), actualVotes),
+	)
+}
+
+func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]Votes {
 	votes, err := suite.db.GetPending(
 		suite.ctx,
 		accountIDs,
 	)
 	suite.Require().NoError(err)
 	suite.Require().Len(*votes, len(accountIDs))
+	return votes
+}
+func (suite *DatastoreMockTestSuite) TestGetTransactions() {
+	accountID := CreateIDs(1)[0]
 
-	expectedVotesMarshalled, err := json.Marshal(expectedVotes)
+	expectedTransactions := SetupMockGetTransactions(
+		suite.mock,
+		accountID,
+		nil,
+	)
+	actualTransaction := suite.GetTransactions(
+		len(expectedTransactions),
+		accountID,
+		nil,
+	)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expectedTransactions),
+		MustMarshal(suite.Require(), actualTransaction),
+	)
+}
+
+func (suite *DatastoreMockTestSuite) GetTransactions(
+	count int,
+	accountID string,
+	txTypes []string,
+) *[]Transaction {
+	transactions, err := suite.db.GetTransactions(
+		suite.ctx,
+		accountID,
+		txTypes,
+	)
 	suite.Require().NoError(err)
-	balancesMarshalled, err := json.Marshal(votes)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(expectedVotesMarshalled), string(balancesMarshalled))
+	suite.Require().Len(*transactions, count)
+	return transactions
 }

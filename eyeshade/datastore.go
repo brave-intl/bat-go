@@ -87,6 +87,7 @@ type Transaction struct {
 	TransactionType    string           `db:"transaction_type"`
 }
 
+// Backfill converts a transaction from the database to a backfill transaction
 func (tx Transaction) Backfill(account string) BackfillTransaction {
 	amount := tx.Amount
 	if tx.FromAccount == account {
@@ -102,13 +103,15 @@ func (tx Transaction) Backfill(account string) BackfillTransaction {
 			settlementDestination = tx.ToAccount
 		}
 	}
+	inputAmount := inputs.NewDecimal(&amount)
+	inputSettlementAmount := inputs.NewDecimal(tx.SettlementAmount)
 	return BackfillTransaction{
-		Amount:                    inputs.Decimal{&amount},
+		Amount:                    inputAmount,
 		Channel:                   tx.Channel,
 		CreatedAt:                 tx.CreatedAt,
 		Description:               tx.Description,
 		SettlementCurrency:        tx.SettlementCurrency,
-		SettlementAmount:          &inputs.Decimal{tx.SettlementAmount},
+		SettlementAmount:          &inputSettlementAmount,
 		TransactionType:           tx.TransactionType,
 		SettlementDestinationType: settlementDestinationType,
 		SettlementDestination:     settlementDestination,
@@ -121,11 +124,11 @@ type BackfillTransaction struct {
 	Description               string          `json:"description"`
 	Channel                   string          `json:"channel"`
 	Amount                    inputs.Decimal  `json:"amount"`
+	TransactionType           string          `json:"transaction_type"`
 	SettlementCurrency        *string         `json:"settlement_currency,omitempty"`
 	SettlementAmount          *inputs.Decimal `json:"settlement_amount,omitempty"`
 	SettlementDestinationType *string         `json:"settlement_destination_type,omitempty"`
 	SettlementDestination     *string         `json:"settlement_destination,omitempty"`
-	TransactionType           string          `json:"transaction_type"`
 }
 
 // Datastore holds methods for interacting with database
@@ -414,7 +417,7 @@ ORDER BY created_at`, typeExtension)
 		ctx,
 		&transactions,
 		statement,
-		accountID,
+		args...,
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err

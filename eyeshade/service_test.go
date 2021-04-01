@@ -4,13 +4,11 @@ package eyeshade
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/jmoiron/sqlx"
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -62,35 +60,58 @@ func (suite *ServiceMockTestSuite) SetupSuite() {
 	suite.service = service
 }
 
-func (suite ServiceMockTestSuite) TestGetBalances() {
-	accountIDs := []string{
-		uuid.NewV4().String(),
-		uuid.NewV4().String(),
-	}
+func (suite *ServiceMockTestSuite) TestGetBalances() {
+	accountIDs := CreateIDs(2)
 
+	expected := suite.SetupMockBalances(accountIDs, accountIDs)
+	balances := suite.Balances(accountIDs, true)
+	suite.Require().Len(*expected, len(accountIDs))
+	suite.Require().Len(*balances, len(*expected))
+
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expected),
+		MustMarshal(suite.Require(), balances),
+	)
+
+	expected = suite.SetupMockBalances(accountIDs)
+	balances = suite.Balances(accountIDs, false)
+	suite.Require().Len(*expected, len(accountIDs))
+	suite.Require().Len(*balances, len(*expected))
+
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expected),
+		MustMarshal(suite.Require(), balances),
+	)
+}
+
+func (suite *ServiceMockTestSuite) SetupMockBalances(
+	balanceAccountIDs []string,
+	pendingAccountIDs ...[]string,
+) *[]Balance {
 	expectedBalances := SetupMockGetBalances(
 		suite.mockRO,
-		accountIDs,
+		balanceAccountIDs,
 	)
+	if len(pendingAccountIDs) == 0 {
+		return &expectedBalances
+	}
+
 	expectedPending := SetupMockGetPending(
 		suite.mockRO,
-		accountIDs,
+		pendingAccountIDs[0],
 	)
-	expected := mergeVotes(expectedPending, expectedBalances)
+	return mergeVotes(expectedPending, expectedBalances)
+}
 
+func (suite *ServiceMockTestSuite) Balances(
+	accountIDs []string,
+	includePending bool,
+) *[]Balance {
 	balances, err := suite.service.Balances(
 		suite.ctx,
 		accountIDs,
-		true,
+		includePending,
 	)
 	suite.Require().NoError(err)
-	expectedMarshalled, err := json.Marshal(expected)
-	suite.Require().NoError(err)
-	balancesMarshalled, err := json.Marshal(balances)
-	suite.Require().NoError(err)
-
-	suite.Require().JSONEq(
-		string(expectedMarshalled),
-		string(balancesMarshalled),
-	)
+	return balances
 }
