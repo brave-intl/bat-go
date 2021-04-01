@@ -66,6 +66,11 @@ func init() {
 		Bind("wallet-on-platform-prior-to").
 		Env("WALLET_ON_PLATFORM_PRIOR_TO")
 
+	flagBuilder.Flag().Bool("reputation-on-drain", false,
+		"check wallet reputation on drain").
+		Bind("reputation-on-drain").
+		Env("REPUTATION_ON_DRAIN")
+
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
@@ -342,6 +347,7 @@ func GrantServer(
 	// add flags to context
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
