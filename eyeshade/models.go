@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	providerRE = regexp.MustCompile(`/^([A-Za-z0-9][A-Za-z0-9-]{0,62})#([A-Za-z0-9][A-Za-z0-9-]{0,62}):(([A-Za-z0-9-._~]|%[0-9A-F]{2})+)$/`)
 	// ErrConvertableFailedValidation when a transaction object fails its validation
 	ErrConvertableFailedValidation = errors.New("convertable failed validation")
 
