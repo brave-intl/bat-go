@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	"github.com/brave-intl/bat-go/utils/inputs"
+	db "github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -29,107 +28,6 @@ var (
 		"referral_settlement":     true,
 	}
 )
-
-// AccountEarnings holds results from querying account earnings
-type AccountEarnings struct {
-	Channel   string          `json:"channel" db:"channel"`
-	Earnings  decimal.Decimal `json:"earnings" db:"earnings"`
-	AccountID string          `json:"account_id" db:"account_id"`
-}
-
-// AccountSettlementEarnings holds results from querying account earnings
-type AccountSettlementEarnings struct {
-	Channel   string          `json:"channel" db:"channel"`
-	Paid      decimal.Decimal `json:"paid" db:"paid"`
-	AccountID string          `json:"account_id" db:"account_id"`
-}
-
-// AccountEarningsOptions receives all options pertaining to account earnings calculations
-type AccountEarningsOptions struct {
-	Type      string
-	Ascending bool
-	Limit     int
-}
-
-// AccountSettlementEarningsOptions receives all options pertaining to account settlement earnings calculations
-type AccountSettlementEarningsOptions struct {
-	Type      string
-	Ascending bool
-	Limit     int
-	StartDate *time.Time
-	UntilDate *time.Time
-}
-
-// Balance holds information about an account id's balance
-type Balance struct {
-	AccountID string          `json:"account_id" db:"account_id"`
-	Type      string          `json:"account_type" db:"account_type"`
-	Balance   decimal.Decimal `json:"balance" db:"balance"`
-}
-
-// Votes holds information about an account id's balance
-type Votes struct {
-	Channel string          `db:"channel"`
-	Balance decimal.Decimal `db:"balance"`
-}
-
-// Transaction holds info about a single transaction from the database
-type Transaction struct {
-	Channel            string           `db:"channel"`
-	CreatedAt          time.Time        `db:"created_at"`
-	Description        string           `db:"description"`
-	FromAccount        string           `db:"from_account"`
-	ToAccount          *string          `db:"to_account"`
-	ToAccountType      *string          `db:"to_account_type"`
-	Amount             decimal.Decimal  `db:"amount"`
-	SettlementCurrency *string          `db:"settlement_currency"`
-	SettlementAmount   *decimal.Decimal `db:"settlement_amount"`
-	TransactionType    string           `db:"transaction_type"`
-}
-
-// Backfill converts a transaction from the database to a backfill transaction
-func (tx Transaction) Backfill(account string) BackfillTransaction {
-	amount := tx.Amount
-	if tx.FromAccount == account {
-		amount = amount.Neg()
-	}
-	var settlementDestinationType *string
-	var settlementDestination *string
-	if settlementTypes[tx.TransactionType] {
-		if tx.ToAccountType != nil {
-			settlementDestinationType = tx.ToAccountType
-		}
-		if tx.ToAccount != nil {
-			settlementDestination = tx.ToAccount
-		}
-	}
-	inputAmount := inputs.NewDecimal(&amount)
-	inputSettlementAmount := inputs.NewDecimal(tx.SettlementAmount)
-	return BackfillTransaction{
-		Amount:                    inputAmount,
-		Channel:                   tx.Channel,
-		CreatedAt:                 tx.CreatedAt,
-		Description:               tx.Description,
-		SettlementCurrency:        tx.SettlementCurrency,
-		SettlementAmount:          inputSettlementAmount,
-		TransactionType:           tx.TransactionType,
-		SettlementDestinationType: settlementDestinationType,
-		SettlementDestination:     settlementDestination,
-	}
-}
-
-// BackfillTransaction holds a backfilled version of the transaction
-type BackfillTransaction struct {
-	CreatedAt                 time.Time      `json:"created_at"`
-	Description               string         `json:"description"`
-	Channel                   string         `json:"channel"`
-	Amount                    inputs.Decimal `json:"amount"`
-	TransactionType           string         `json:"transaction_type"`
-	SettlementCurrency        *string        `json:"settlement_currency,omitempty"`
-	SettlementAmount          inputs.Decimal `json:"settlement_amount,omitempty"`
-	SettlementDestinationType *string        `json:"settlement_destination_type,omitempty"`
-	SettlementDestination     *string        `json:"settlement_destination,omitempty"`
-}
 
 // Datastore holds methods for interacting with database
 type Datastore interface {
@@ -149,12 +47,28 @@ type Datastore interface {
 	GetPending(
 		ctx context.Context,
 		accountIDs []string,
-	) (*[]Votes, error)
-	GetTransactions(
+	) (*[]PendingTransaction, error)
+	GetTransactionsByAccount(
 		ctx context.Context,
 		accountID string,
 		txTypes []string,
 	) (*[]Transaction, error)
+	InsertFromSettlements(
+		ctx context.Context,
+		txs []Settlement,
+	) (sql.Result, error)
+	InsertFromReferrals(
+		ctx context.Context,
+		txs []Referral,
+	) (sql.Result, error)
+	InsertFromVoting(
+		ctx context.Context,
+		txs []Votes,
+	) (sql.Result, error)
+	InsertTransactions(
+		ctx context.Context,
+		txs []Transaction,
+	) (sql.Result, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -342,7 +256,7 @@ func (pg Postgres) GetBalances(
 		ctx,
 		&balances,
 		statement,
-		joinStringList(accountIDs),
+		db.JoinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -354,7 +268,7 @@ func (pg Postgres) GetBalances(
 func (pg Postgres) GetPending(
 	ctx context.Context,
 	accountIDs []string,
-) (*[]Votes, error) {
+) (*[]PendingTransaction, error) {
 	statement := `
 SELECT
 	V.channel,
@@ -367,13 +281,13 @@ WHERE
 	AND NOT V.transacted
 	AND NOT V.excluded
 GROUP BY channel`
-	votes := []Votes{}
+	votes := []PendingTransaction{}
 
 	err := pg.RawDB().SelectContext(
 		ctx,
 		&votes,
 		statement,
-		joinStringList(accountIDs),
+		db.JoinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -381,8 +295,8 @@ GROUP BY channel`
 	return &votes, nil
 }
 
-// GetTransactions retrieves the transactions tied to an account id
-func (pg Postgres) GetTransactions(
+// GetTransactionsByAccount retrieves the transactions tied to an account id
+func (pg Postgres) GetTransactionsByAccount(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,
@@ -390,27 +304,20 @@ func (pg Postgres) GetTransactions(
 	typeExtension := ""
 	args := []interface{}{accountID}
 	if len(txTypes) > 0 {
-		args = append(args, joinStringList(txTypes))
+		args = append(args, db.JoinStringList(txTypes))
 		typeExtension = "AND transaction_type = ANY($2::text[])"
 	}
 	statement := fmt.Sprintf(`
-SELECT
-  created_at,
-  description,
-  channel,
-  amount,
-  from_account,
-  to_account,
-  to_account_type,
-  settlement_currency,
-  settlement_amount,
-  transaction_type
+SELECT %s
 FROM transactions
 WHERE (
   from_account = $1
   OR to_account = $1
 ) %s
-ORDER BY created_at`, typeExtension)
+ORDER BY created_at`,
+		strings.Join(transactionColumns, ", "),
+		typeExtension,
+	)
 	transactions := []Transaction{}
 
 	err := pg.RawDB().SelectContext(
@@ -425,6 +332,59 @@ ORDER BY created_at`, typeExtension)
 	return &transactions, nil
 }
 
-func joinStringList(list []string) string {
-	return fmt.Sprintf("{%s}", strings.Join(list, ","))
+func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settlement) (sql.Result, error) {
+	txs, err := convertToTxs(targets)
+	if err != nil {
+		return nil, err
+	}
+	return pg.InsertTransactions(ctx, txs)
+}
+
+func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.Result, error) {
+	txs, err := convertToTxs(targets)
+	if err != nil {
+		return nil, err
+	}
+	return pg.InsertTransactions(ctx, txs)
+}
+
+func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) (sql.Result, error) {
+	txs, err := convertToTxs(targets)
+	if err != nil {
+		return nil, err
+	}
+	return pg.InsertTransactions(ctx, txs)
+}
+
+func (pg Postgres) InsertFromUserDepositFromChain(ctx context.Context, targets []UserDeposit) (sql.Result, error) {
+	txs, err := convertToTxs(targets)
+	if err != nil {
+		return nil, err
+	}
+	return pg.InsertTransactions(ctx, txs)
+}
+
+func convertToTxs(convertables []ConvertableTransaction) (*[]Transaction, error) {
+	txs := []Transaction{}
+	for _, convertable := range convertables {
+		if convertable.Validate() {
+			continue
+		}
+		tmp, err := convertable.ToTxs()
+		if err != nil {
+			return nil, err
+		}
+		txs = append(txs, *tmp...)
+	}
+	return &txs, nil
+}
+
+func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
+	statement := fmt.Sprintf(`
+INSERT INTO transactions ( %s )
+VALUES ( %s )`,
+		strings.Join(transactionColumns, ", "),
+		strings.Join(db.ColumnsToParamNames(transactionColumns), ", "),
+	)
+	return sqlx.NamedExecContext(ctx, nil, statement, txs)
 }

@@ -150,10 +150,10 @@ func (mr *MockDatastoreMockRecorder) GetBalances(ctx, accountIDs interface{}) *g
 }
 
 // GetPending mocks base method
-func (m *MockDatastore) GetPending(ctx context.Context, accountIDs []string) (*[]Votes, error) {
+func (m *MockDatastore) GetPending(ctx context.Context, accountIDs []string) (*[]PendingTransaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPending", ctx, accountIDs)
-	ret0, _ := ret[0].(*[]Votes)
+	ret0, _ := ret[0].(*[]PendingTransaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -164,17 +164,77 @@ func (mr *MockDatastoreMockRecorder) GetPending(ctx, accountIDs interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPending", reflect.TypeOf((*MockDatastore)(nil).GetPending), ctx, accountIDs)
 }
 
-// GetTransactions mocks base method
-func (m *MockDatastore) GetTransactions(ctx context.Context, accountID string, txTypes []string) (*[]Transaction, error) {
+// GetTransactionsByAccount mocks base method
+func (m *MockDatastore) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (*[]Transaction, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransactions", ctx, accountID, txTypes)
+	ret := m.ctrl.Call(m, "GetTransactionsByAccount", ctx, accountID, txTypes)
 	ret0, _ := ret[0].(*[]Transaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTransactions indicates an expected call of GetTransactions
-func (mr *MockDatastoreMockRecorder) GetTransactions(ctx, accountID, txTypes interface{}) *gomock.Call {
+// GetTransactionsByAccount indicates an expected call of GetTransactionsByAccount
+func (mr *MockDatastoreMockRecorder) GetTransactionsByAccount(ctx, accountID, txTypes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactions", reflect.TypeOf((*MockDatastore)(nil).GetTransactions), ctx, accountID, txTypes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactionsByAccount", reflect.TypeOf((*MockDatastore)(nil).GetTransactionsByAccount), ctx, accountID, txTypes)
+}
+
+// InsertFromSettlements mocks base method
+func (m *MockDatastore) InsertFromSettlements(ctx context.Context, txs []Settlement) (*[]Transaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertFromSettlements", ctx, txs)
+	ret0, _ := ret[0].(*[]Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InsertFromSettlements indicates an expected call of InsertFromSettlements
+func (mr *MockDatastoreMockRecorder) InsertFromSettlements(ctx, txs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromSettlements", reflect.TypeOf((*MockDatastore)(nil).InsertFromSettlements), ctx, txs)
+}
+
+// InsertFromReferrals mocks base method
+func (m *MockDatastore) InsertFromReferrals(ctx context.Context, txs []Referral) (*[]Transaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertFromReferrals", ctx, txs)
+	ret0, _ := ret[0].(*[]Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InsertFromReferrals indicates an expected call of InsertFromReferrals
+func (mr *MockDatastoreMockRecorder) InsertFromReferrals(ctx, txs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromReferrals", reflect.TypeOf((*MockDatastore)(nil).InsertFromReferrals), ctx, txs)
+}
+
+// InsertFromVoting mocks base method
+func (m *MockDatastore) InsertFromVoting(ctx context.Context, txs []Votes) (*[]Transaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertFromVoting", ctx, txs)
+	ret0, _ := ret[0].(*[]Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InsertFromVoting indicates an expected call of InsertFromVoting
+func (mr *MockDatastoreMockRecorder) InsertFromVoting(ctx, txs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromVoting", reflect.TypeOf((*MockDatastore)(nil).InsertFromVoting), ctx, txs)
+}
+
+// InsertTransactions mocks base method
+func (m *MockDatastore) InsertTransactions(ctx context.Context, txs []Transaction) (*[]Transaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertTransactions", ctx, txs)
+	ret0, _ := ret[0].(*[]Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InsertTransactions indicates an expected call of InsertTransactions
+func (mr *MockDatastoreMockRecorder) InsertTransactions(ctx, txs interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTransactions", reflect.TypeOf((*MockDatastore)(nil).InsertTransactions), ctx, txs)
 }

@@ -257,7 +257,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
 }
 
-func (suite *ControllersTestSuite) TestGetTransactions() {
+func (suite *ControllersTestSuite) TestGetTransactionsByAccount() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -322,7 +322,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 
 	// Get all the transactions, should only be one
 
-	handler = GetTransactions(suite.service)
+	handler = GetTransactionsByAccount(suite.service)
 	req, err = http.NewRequest("GET", "/v1/orders/{orderID}/transactions", nil)
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())

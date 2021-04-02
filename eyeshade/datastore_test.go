@@ -12,6 +12,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	db "github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -157,14 +158,14 @@ limit (.+)`).
 func SetupMockGetPending(
 	mock sqlmock.Sqlmock,
 	accountIDs []string,
-) []Votes {
+) []PendingTransaction {
 	getRows := sqlmock.NewRows(
 		[]string{"channel", "balance"},
 	)
-	rows := []Votes{}
+	rows := []PendingTransaction{}
 	for _, channel := range accountIDs {
 		balance := RandomDecimal()
-		rows = append(rows, Votes{channel, balance})
+		rows = append(rows, PendingTransaction{channel, balance})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -220,7 +221,7 @@ func SetupMockGetBalances(
 	return rows
 }
 
-func SetupMockGetTransactions(
+func SetupMockGetTransactionsByAccount(
 	mock sqlmock.Sqlmock,
 	accountID string,
 	txTypes ...string,
@@ -243,7 +244,7 @@ func SetupMockGetTransactions(
 	args := []driver.Value{accountID}
 	var txTypesHash *map[string]bool
 	if len(txTypes) > 0 {
-		args = append(args, joinStringList(txTypes))
+		args = append(args, db.JoinStringList(txTypes))
 		txTypesHash := &map[string]bool{}
 		for _, txType := range txTypes {
 			(*txTypesHash)[txType] = true
@@ -261,9 +262,9 @@ func SetupMockGetTransactions(
 		).Mul(decimal.NewFromFloat(float64(i)))
 		target := rows[targetIndex.IntPart()]
 		rows = append(rows, SettlementTransaction(
-			*target.ToAccount, // fromAccount
-			target.Channel,    // channel
-			providerID,        // toAccount
+			target.ToAccount, // fromAccount
+			target.Channel,   // channel
+			providerID,       // toAccount
 			target.TransactionType,
 		))
 	}
@@ -312,8 +313,8 @@ func SettlementTransaction(fromAccount, channel, toAccountID, transactionType st
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     fromAccount,
-		ToAccount:       &toAccountID,
-		ToAccountType:   &provider,
+		ToAccount:       toAccountID,
+		ToAccountType:   provider,
 		Amount:          RandomDecimal(),
 		TransactionType: transactionType,
 	}
@@ -325,8 +326,8 @@ func ReferralTransaction(accountID, channel string) Transaction {
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
-		ToAccount:       &accountID,
-		ToAccountType:   &toAccountType,
+		ToAccount:       accountID,
+		ToAccountType:   toAccountType,
 		Amount:          RandomDecimal(),
 		TransactionType: "referral",
 	}
@@ -338,8 +339,8 @@ func ContributeTransaction(account string) Transaction {
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
-		ToAccount:       &account,
-		ToAccountType:   &toAccountType,
+		ToAccount:       account,
+		ToAccountType:   toAccountType,
 		Amount:          RandomDecimal(),
 		TransactionType: "contribution",
 	}
@@ -462,7 +463,7 @@ func (suite *DatastoreMockTestSuite) TestGetPending() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]Votes {
+func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]PendingTransaction {
 	votes, err := suite.db.GetPending(
 		suite.ctx,
 		accountIDs,
@@ -471,14 +472,15 @@ func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]Votes {
 	suite.Require().Len(*votes, len(accountIDs))
 	return votes
 }
-func (suite *DatastoreMockTestSuite) TestGetTransactions() {
+
+func (suite *DatastoreMockTestSuite) TestGetTransactionsByAccount() {
 	accountID := CreateIDs(1)[0]
 
-	expectedTransactions := SetupMockGetTransactions(
+	expectedTransactions := SetupMockGetTransactionsByAccount(
 		suite.mock,
 		accountID,
 	)
-	actualTransaction := suite.GetTransactions(
+	actualTransaction := suite.GetTransactionsByAccount(
 		len(expectedTransactions),
 		accountID,
 		nil,
@@ -489,12 +491,12 @@ func (suite *DatastoreMockTestSuite) TestGetTransactions() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetTransactions(
+func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 	count int,
 	accountID string,
 	txTypes []string,
 ) *[]Transaction {
-	transactions, err := suite.db.GetTransactions(
+	transactions, err := suite.db.GetTransactionsByAccount(
 		suite.ctx,
 		accountID,
 		txTypes,

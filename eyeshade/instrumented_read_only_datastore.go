@@ -8,10 +8,11 @@ package eyeshade
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	migrate "github.com/golang-migrate/migrate/v4"
-	sqlx "github.com/jmoiron/sqlx"
+	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -83,7 +84,7 @@ func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []
 }
 
 // GetPending implements Datastore
-func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []string) (vap1 *[]Votes, err error) {
+func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []string) (pap1 *[]PendingTransaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -96,8 +97,8 @@ func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []s
 	return _d.base.GetPending(ctx, accountIDs)
 }
 
-// GetTransactions implements Datastore
-func (_d DatastoreWithPrometheus) GetTransactions(ctx context.Context, accountID string, txTypes []string) (tap1 *[]Transaction, err error) {
+// GetTransactionsByAccount implements Datastore
+func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (tap1 *[]Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -105,9 +106,65 @@ func (_d DatastoreWithPrometheus) GetTransactions(ctx context.Context, accountID
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactions", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactionsByAccount", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTransactions(ctx, accountID, txTypes)
+	return _d.base.GetTransactionsByAccount(ctx, accountID, txTypes)
+}
+
+// InsertFromReferrals implements Datastore
+func (_d DatastoreWithPrometheus) InsertFromReferrals(ctx context.Context, txs []Referral) (r1 sql.Result, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromReferrals", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertFromReferrals(ctx, txs)
+}
+
+// InsertFromSettlements implements Datastore
+func (_d DatastoreWithPrometheus) InsertFromSettlements(ctx context.Context, txs []Settlement) (r1 sql.Result, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromSettlements", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertFromSettlements(ctx, txs)
+}
+
+// InsertFromVoting implements Datastore
+func (_d DatastoreWithPrometheus) InsertFromVoting(ctx context.Context, txs []Votes) (r1 sql.Result, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromVoting", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertFromVoting(ctx, txs)
+}
+
+// InsertTransactions implements Datastore
+func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs []Transaction) (r1 sql.Result, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertTransactions", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertTransactions(ctx, txs)
 }
 
 // Migrate implements Datastore
