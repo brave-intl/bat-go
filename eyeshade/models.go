@@ -1,6 +1,8 @@
 package eyeshade
 
 import (
+	"errors"
+	"regexp"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -10,6 +12,10 @@ import (
 )
 
 var (
+	providerRE = regexp.MustCompile(`/^([A-Za-z0-9][A-Za-z0-9-]{0,62})#([A-Za-z0-9][A-Za-z0-9-]{0,62}):(([A-Za-z0-9-._~]|%[0-9A-F]{2})+)$/`)
+	// ErrConvertableFailedValidation when a transaction object fails its validation
+	ErrConvertableFailedValidation = errors.New("convertable failed validation")
+
 	UUIDNamespaces = map[string]uuid.UUID{
 		"contribution":            uuid.FromStringOrNil("be90c1a8-20a3-4f32-be29-ed3329ca8630"),
 		"contribution_settlement": uuid.FromStringOrNil("4208cdfc-26f3-44a2-9f9d-1f6657001706"),
@@ -37,8 +43,8 @@ var (
 
 // ConvertableTransaction allows a struct to be converted into a transaction
 type ConvertableTransaction interface {
-	ToTxs() (*[]Transaction, error)
-	Validate() bool
+	ToTxs() *[]Transaction
+	Valid() bool
 }
 
 // Settlement holds information from settlements queue
@@ -49,7 +55,7 @@ type Settlement struct {
 	Amount       decimal.Decimal // amount in settlement currency
 	Currency     string
 	Owner        string
-	Channel      string
+	Channel      Channel
 	ID           string
 	Type         string
 	SettlementID string
@@ -58,55 +64,83 @@ type Settlement struct {
 	Address      string
 }
 
-func (settlement *Settlement) ToTxs() (*[]Transaction, error) {
-	txs := []Transaction{}
-	if settlement.AltCurrency != altcurrency.BAT {
-
-	}
-	return &txs, nil
+func (settlement *Settlement) ToTxs() *[]Transaction {
+	return &[]Transaction{}
 }
 
-func (settlement *Settlement) Validate() bool {
-	return true
+func (settlement *Settlement) Valid() bool {
+	// non zero and no decimals allowed
+	return !settlement.Probi.GreaterThan(decimal.Zero) &&
+		settlement.Probi.Equal(settlement.Probi.Truncate(0)) && // no decimals
+		settlement.Fees.GreaterThanOrEqual(decimal.Zero) &&
+		settlement.Owner != "" &&
+		settlement.Channel != "" &&
+		settlement.Amount.GreaterThan(decimal.Zero) &&
+		settlement.Currency != "" &&
+		settlement.Type != "" &&
+		settlement.Address != "" &&
+		settlement.DocumentID != "" &&
+		settlement.SettlementID != ""
 }
 
 // Referral holds information from referral queue
 type Referral struct {
 	AltCurrency       altcurrency.AltCurrency
 	Probi             decimal.Decimal
-	Channel           string
+	Channel           Channel
 	TransactionID     string
 	SettlementAddress string
 	Owner             string
 	FirstID           time.Time
 }
 
-func (referral Referral) ToTxs() (*[]Transaction, error) {
-	txs := []Transaction{}
-	return &txs, nil
+func (referral Referral) ToTxs() *[]Transaction {
+	return &[]Transaction{}
 }
 
-func (referral Referral) Validate() bool {
-	return true
+func (referral Referral) Valid() bool {
+	return referral.AltCurrency.IsValid() &&
+		referral.Probi.GreaterThan(decimal.Zero) &&
+		referral.Probi.Equal(referral.Probi.Truncate(0)) && // no decimals allowed
+		referral.Channel != "" &&
+		referral.Owner != "" &&
+		!referral.FirstID.IsZero()
 }
 
 // Votes holds information from votes freezing
 type Votes struct {
 	Amount            decimal.Decimal
 	Fees              decimal.Decimal
-	Channel           string
+	Channel           Channel
 	SurveyorID        string
 	SurveyorCreatedAt time.Time
 	SettlementAddress string
 }
 
-func (votes Votes) ToTxs() (*[]Transaction, error) {
-	txs := []Transaction{}
-	return &txs, nil
+func (votes Votes) GenerateID() {
+	return uuid.NewV5(
+		UUIDNamespaces["contribution"],
+		votes.SurveyorID+votes.Channel.Normalize(),
+	)
 }
 
-func (votes Votes) Validate() bool {
-	return true
+func (votes Votes) ToTxs() *[]Transaction {
+	return &[]Transaction{
+		{
+			ID: votes.GenerateID(),
+			CreatedAt: votes.CreatedAt,
+			Description: fmt.Sprintf("votes from %s", votes.SurveyorID),
+			FromAccountType: "uphold",
+		}
+	}
+}
+
+func (votes Votes) Valid() bool {
+	return votes.Amount.GreaterThan(decimal.Zero) &&
+		votes.SurveyorID != "" &&
+		votes.SettlementAddress != "" &&
+		votes.Channel != "" &&
+		votes.Fees.GreaterThanOrEqual(decimal.Zero)
 }
 
 // UserDeposit holds information from user deposits
@@ -119,25 +153,29 @@ type UserDeposit struct {
 	Address   string
 }
 
-func (userDeposit UserDeposit) ToTxs() (*[]Transaction, error) {
-	txs := []Transaction{}
-	return &txs, nil
+func (userDeposit UserDeposit) ToTxs() *[]Transaction {
+	return &[]Transaction{}
 }
 
-func (userDeposit UserDeposit) Validate() bool {
-	return true
+func (userDeposit UserDeposit) Valid() bool {
+	return userDeposit.CardID != "" &&
+		!userDeposit.CreatedAt.IsZero() &&
+		userDeposit.Amount.GreaterThan(decimal.Zero) &&
+		userDeposit.ID != "" &&
+		userDeposit.Chain != "" &&
+		userDeposit.Address != ""
 }
 
 // AccountEarnings holds results from querying account earnings
 type AccountEarnings struct {
-	Channel   string          `json:"channel" db:"channel"`
+	Channel   Channel          `json:"channel" db:"channel"`
 	Earnings  decimal.Decimal `json:"earnings" db:"earnings"`
 	AccountID string          `json:"account_id" db:"account_id"`
 }
 
 // AccountSettlementEarnings holds results from querying account earnings
 type AccountSettlementEarnings struct {
-	Channel   string          `json:"channel" db:"channel"`
+	Channel   Channel          `json:"channel" db:"channel"`
 	Paid      decimal.Decimal `json:"paid" db:"paid"`
 	AccountID string          `json:"account_id" db:"account_id"`
 }
@@ -167,7 +205,7 @@ type Balance struct {
 
 // PendingTransaction holds information about an account id's pending transactions
 type PendingTransaction struct {
-	Channel string          `db:"channel"`
+	Channel Channel          `db:"channel"`
 	Balance decimal.Decimal `db:"balance"`
 }
 
@@ -185,7 +223,7 @@ type Transaction struct {
 	Amount             decimal.Decimal  `db:"amount"`
 	SettlementCurrency *string          `db:"settlement_currency"`
 	SettlementAmount   *decimal.Decimal `db:"settlement_amount"`
-	Channel            string           `db:"channel"`
+	Channel            Channel           `db:"channel"`
 }
 
 // Backfill converts a transaction from the database to a backfill transaction
@@ -223,7 +261,7 @@ func (tx Transaction) BackfillForCreators(account string) CreatorsTransaction {
 type CreatorsTransaction struct {
 	CreatedAt                 time.Time      `json:"created_at"`
 	Description               string         `json:"description"`
-	Channel                   string         `json:"channel"`
+	Channel                   Channel         `json:"channel"`
 	Amount                    inputs.Decimal `json:"amount"`
 	TransactionType           string         `json:"transaction_type"`
 	SettlementCurrency        *string        `json:"settlement_currency,omitempty"`

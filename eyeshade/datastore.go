@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	db "github.com/brave-intl/bat-go/utils/datastore"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
@@ -333,7 +334,7 @@ ORDER BY created_at`,
 }
 
 func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settlement) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	txs, err := convertToTxs(targets...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +342,7 @@ func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settleme
 }
 
 func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	txs, err := convertToTxs(targets...)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +350,7 @@ func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.R
 }
 
 func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	txs, err := convertToTxs(targets...)
 	if err != nil {
 		return nil, err
 	}
@@ -357,24 +358,26 @@ func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) 
 }
 
 func (pg Postgres) InsertFromUserDepositFromChain(ctx context.Context, targets []UserDeposit) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	txs, err := convertToTxs(targets...)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
-func convertToTxs(convertables []ConvertableTransaction) (*[]Transaction, error) {
+func convertToTxs(convertables ...ConvertableTransaction) (*[]Transaction, error) {
 	txs := []Transaction{}
 	for _, convertable := range convertables {
-		if convertable.Validate() {
-			continue
+		if !convertable.Valid() {
+			return nil, errorutils.Wrap(
+				ErrConvertableFailedValidation,
+				fmt.Sprintf(
+					"a convertable transaction failed validation %w",
+					convertable,
+				),
+			)
 		}
-		tmp, err := convertable.ToTxs()
-		if err != nil {
-			return nil, err
-		}
-		txs = append(txs, *tmp...)
+		txs = append(txs, *convertable.ToTxs()...)
 	}
 	return &txs, nil
 }
