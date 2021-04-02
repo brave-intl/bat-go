@@ -333,7 +333,11 @@ ORDER BY created_at`,
 }
 
 func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settlement) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	var params = []ConvertableTransaction{}
+	for _, v := range targets {
+		params = append(params, &v)
+	}
+	txs, err := convertToTxs(params...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +345,11 @@ func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settleme
 }
 
 func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	var params = []ConvertableTransaction{}
+	for _, v := range targets {
+		params = append(params, &v)
+	}
+	txs, err := convertToTxs(params...)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +357,11 @@ func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.R
 }
 
 func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+	var params = []ConvertableTransaction{}
+	for _, v := range targets {
+		params = append(params, &v)
+	}
+	txs, err := convertToTxs(params...)
 	if err != nil {
 		return nil, err
 	}
@@ -357,29 +369,35 @@ func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) 
 }
 
 func (pg Postgres) InsertFromUserDepositFromChain(ctx context.Context, targets []UserDeposit) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
+
+	var params = []ConvertableTransaction{}
+	for _, v := range targets {
+		params = append(params, &v)
+	}
+	txs, err := convertToTxs(params...)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
-func convertToTxs(convertables []ConvertableTransaction) (*[]Transaction, error) {
+func convertToTxs(convertables ...ConvertableTransaction) ([]Transaction, error) {
 	txs := []Transaction{}
 	for _, convertable := range convertables {
-		if convertable.Validate() {
+		c, _ := convertable.(ConvertableTransaction)
+		if c.Validate() {
 			continue
 		}
-		tmp, err := convertable.ToTxs()
+		tmp, err := c.ToTxs()
 		if err != nil {
 			return nil, err
 		}
-		txs = append(txs, *tmp...)
+		txs = append(txs, tmp...)
 	}
-	return &txs, nil
+	return txs, nil
 }
 
-func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
+func (pg Postgres) InsertTransactions(ctx context.Context, txs []Transaction) (sql.Result, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
 VALUES ( %s )`,

@@ -37,7 +37,7 @@ var (
 
 // ConvertableTransaction allows a struct to be converted into a transaction
 type ConvertableTransaction interface {
-	ToTxs() (*[]Transaction, error)
+	ToTxs() ([]Transaction, error)
 	Validate() bool
 }
 
@@ -58,12 +58,12 @@ type Settlement struct {
 	Address      string
 }
 
-func (settlement *Settlement) ToTxs() (*[]Transaction, error) {
+func (settlement *Settlement) ToTxs() ([]Transaction, error) {
 	txs := []Transaction{}
 	if settlement.AltCurrency != altcurrency.BAT {
 
 	}
-	return &txs, nil
+	return txs, nil
 }
 
 func (settlement *Settlement) Validate() bool {
@@ -81,12 +81,12 @@ type Referral struct {
 	FirstID           time.Time
 }
 
-func (referral Referral) ToTxs() (*[]Transaction, error) {
+func (referral *Referral) ToTxs() ([]Transaction, error) {
 	txs := []Transaction{}
-	return &txs, nil
+	return txs, nil
 }
 
-func (referral Referral) Validate() bool {
+func (referral *Referral) Validate() bool {
 	return true
 }
 
@@ -100,12 +100,12 @@ type Votes struct {
 	SettlementAddress string
 }
 
-func (votes Votes) ToTxs() (*[]Transaction, error) {
+func (votes *Votes) ToTxs() ([]Transaction, error) {
 	txs := []Transaction{}
-	return &txs, nil
+	return txs, nil
 }
 
-func (votes Votes) Validate() bool {
+func (votes *Votes) Validate() bool {
 	return true
 }
 
@@ -119,12 +119,12 @@ type UserDeposit struct {
 	Address   string
 }
 
-func (userDeposit UserDeposit) ToTxs() (*[]Transaction, error) {
+func (userDeposit *UserDeposit) ToTxs() ([]Transaction, error) {
 	txs := []Transaction{}
-	return &txs, nil
+	return txs, nil
 }
 
-func (userDeposit UserDeposit) Validate() bool {
+func (userDeposit *UserDeposit) Validate() bool {
 	return true
 }
 
