@@ -186,7 +186,7 @@ func (suite *ControllersTestSuite) TestGetBalances() {
 	// suite.Require().JSONEq(string(marshalled), string(body))
 }
 
-func (suite *ControllersTestSuite) TestGetTransactions() {
+func (suite *ControllersTestSuite) TestGetTransactionsByAccount() {
 	unescapedAccountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
 	escapedAccountID := url.PathEscape(unescapedAccountID)
 	scenarios := map[string]struct {
@@ -222,7 +222,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	}
 	for description, scenario := range scenarios {
 		testName := fmt.Sprintf(
-			"GetTransactions(%s,%d):%d",
+			"GetTransactionsByAccount(%s,%d):%d",
 			description,
 			len(scenario.types),
 			scenario.status,
@@ -230,7 +230,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 		suite.T().Run(testName, func(t *testing.T) {
 			var expected interface{}
 			if scenario.mock {
-				expectedTxs := SetupMockGetTransactions(
+				expectedTxs := SetupMockGetTransactionsByAccount(
 					suite.mockRO,
 					unescapedAccountID,
 					scenario.types...,
@@ -242,7 +242,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 			if scenario.body != nil {
 				expected = scenario.body
 			}
-			actual := suite.DoGetTransactions(
+			actual := suite.DoGetTransactionsByAccount(
 				scenario.path,
 				scenario.status,
 				scenario.types...,
@@ -258,7 +258,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	}
 }
 
-func (suite *ControllersTestSuite) DoGetTransactions(
+func (suite *ControllersTestSuite) DoGetTransactionsByAccount(
 	accountID string,
 	status int,
 	types ...string,

@@ -150,7 +150,7 @@ func (service *Service) Balances(
 		if err != nil {
 			return nil, err
 		}
-		return mergeVotes(*pendingVotes, *balances), nil
+		return mergePendingTransactions(*pendingVotes, *balances), nil
 	}
 	return balances, nil
 }
@@ -160,9 +160,9 @@ func (service *Service) Transactions(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,
-) (*[]BackfillTransaction, error) {
+) (*[]CreatorsTransaction, error) {
 	transactions, err := service.Datastore(true).
-		GetTransactions(
+		GetTransactionsByAccount(
 			ctx,
 			accountID,
 			txTypes,
@@ -176,18 +176,18 @@ func (service *Service) Transactions(
 	), nil
 }
 
-func transformTransactions(account string, txs *[]Transaction) *[]BackfillTransaction {
-	backfilledTxs := []BackfillTransaction{}
+func transformTransactions(account string, txs *[]Transaction) *[]CreatorsTransaction {
+	creatorsTxs := []CreatorsTransaction{}
 	for _, tx := range *txs {
-		backfilledTxs = append(
-			backfilledTxs,
-			tx.Backfill(account),
+		creatorsTxs = append(
+			creatorsTxs,
+			tx.BackfillForCreators(account),
 		)
 	}
-	return &backfilledTxs
+	return &creatorsTxs
 }
 
-func mergeVotes(votes []Votes, balances []Balance) *[]Balance {
+func mergePendingTransactions(votes []PendingTransaction, balances []Balance) *[]Balance {
 	pending := []Balance{}
 	balancesByAccountID := map[string]*Balance{}
 	balanceIndex := map[string]int{}

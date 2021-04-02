@@ -100,7 +100,7 @@ func (suite *ServiceMockTestSuite) SetupMockBalances(
 		suite.mockRO,
 		pendingAccountIDs[0],
 	)
-	return mergeVotes(expectedPending, expectedBalances)
+	return mergePendingTransactions(expectedPending, expectedBalances)
 }
 
 func (suite *ServiceMockTestSuite) Balances(

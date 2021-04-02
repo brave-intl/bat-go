@@ -349,7 +349,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 
 	// Get all the transactions, should only be one
 
-	handler = GetTransactions(suite.service)
+	handler = GetTransactionsByAccount(suite.service)
 	req, err = http.NewRequest("GET", "/v1/orders/{orderID}/transactions", nil)
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())

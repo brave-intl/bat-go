@@ -37,7 +37,7 @@ func (service *Service) AccountsRouter() chi.Router {
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
 		"AccountTransactions",
-		service.GetTransactions(),
+		service.GetTransactionsByAccount(),
 	))
 	return r
 }
@@ -145,8 +145,8 @@ func (service *Service) GetBalances() handlers.AppHandler {
 	})
 }
 
-// GetTransactions retrieves the transactions for a given set of identifiers
-func (service *Service) GetTransactions() handlers.AppHandler {
+// GetTransactionsByAccount retrieves the transactions for a given set of identifiers
+func (service *Service) GetTransactionsByAccount() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		accountID := chi.URLParam(r, "account")
 		txTypes := []string{}
