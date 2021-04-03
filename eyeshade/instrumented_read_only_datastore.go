@@ -11,6 +11,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade/countries"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -95,6 +97,20 @@ func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []s
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPending", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetPending(ctx, accountIDs)
+}
+
+// GetReferralGroups implements Datastore
+func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (rap1 *[]countries.ReferralGroup, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetReferralGroups", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetReferralGroups(ctx, activeAt)
 }
 
 // GetTransactionsByAccount implements Datastore

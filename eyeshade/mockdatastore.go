@@ -7,6 +7,8 @@ package eyeshade
 import (
 	context "context"
 	sql "database/sql"
+	countries "github.com/brave-intl/bat-go/eyeshade/countries"
+	inputs "github.com/brave-intl/bat-go/utils/inputs"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
@@ -238,4 +240,19 @@ func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]Transacti
 func (mr *MockDatastoreMockRecorder) InsertTransactions(ctx, txs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTransactions", reflect.TypeOf((*MockDatastore)(nil).InsertTransactions), ctx, txs)
+}
+
+// GetReferralGroups mocks base method
+func (m *MockDatastore) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]countries.ReferralGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReferralGroups", ctx, activeAt)
+	ret0, _ := ret[0].(*[]countries.ReferralGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReferralGroups indicates an expected call of GetReferralGroups
+func (mr *MockDatastoreMockRecorder) GetReferralGroups(ctx, activeAt interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReferralGroups", reflect.TypeOf((*MockDatastore)(nil).GetReferralGroups), ctx, activeAt)
 }

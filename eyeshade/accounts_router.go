@@ -4,12 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 )
 
@@ -20,30 +20,43 @@ var (
 	}
 )
 
-// AccountsRouter has all information on account info
-func (service *Service) AccountsRouter() chi.Router {
+// RouterAccounts has all information on account info
+func (service *Service) RouterAccounts() chi.Router {
 	r := chi.NewRouter()
+	scopes := []string{"publishers"}
 	r.Method("GET", "/earnings/{type}/total", middleware.InstrumentHandler(
-		"GetAccountEarningsTotal",
-		service.GetAccountEarningsTotal(),
+		"GETAccountEarningsTotal",
+		middleware.SimpleScopedTokenAuthorizedOnly(
+			service.GETAccountEarningsTotal(),
+			scopes,
+		),
 	))
 	r.Method("GET", "/settlements/{type}/total", middleware.InstrumentHandler(
-		"GetAccountSettlementEarningsTotal",
-		service.GetAccountSettlementEarningsTotal(),
+		"GETAccountSettlementEarningsTotal",
+		middleware.SimpleScopedTokenAuthorizedOnly(
+			service.GETAccountSettlementEarningsTotal(),
+			scopes,
+		),
 	))
 	r.Method("GET", "/balances", middleware.InstrumentHandler(
-		"AccountBalances",
-		service.GetBalances(),
+		"GETAccountBalances",
+		middleware.SimpleScopedTokenAuthorizedOnly(
+			service.GETBalances(),
+			scopes,
+		),
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
-		"AccountTransactions",
-		service.GetTransactionsByAccount(),
+		"GETAccountTransactions",
+		middleware.SimpleScopedTokenAuthorizedOnly(
+			service.GETTransactionsByAccount(),
+			scopes,
+		),
 	))
 	return r
 }
 
-// GetAccountEarningsTotal retrieves the earnings of a limited number of accounts
-func (service *Service) GetAccountEarningsTotal() handlers.AppHandler {
+// GETAccountEarningsTotal retrieves the earnings of a limited number of accounts
+func (service *Service) GETAccountEarningsTotal() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		txType := chi.URLParam(r, "type")
 		if !validTransactionTypes[txType] {
@@ -60,7 +73,7 @@ func (service *Service) GetAccountEarningsTotal() handlers.AppHandler {
 		if err == nil {
 			limit = int(limitParsed64)
 		}
-		earnings, err := service.AccountEarnings(
+		earnings, err := service.GetAccountEarnings(
 			r.Context(),
 			AccountEarningsOptions{
 				Type:      txType,
@@ -79,8 +92,8 @@ func (service *Service) GetAccountEarningsTotal() handlers.AppHandler {
 	})
 }
 
-// GetAccountSettlementEarningsTotal retrieves the earnings of a limited number of accounts
-func (service *Service) GetAccountSettlementEarningsTotal() handlers.AppHandler {
+// GETAccountSettlementEarningsTotal retrieves the earnings of a limited number of accounts
+func (service *Service) GETAccountSettlementEarningsTotal() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		txType := chi.URLParam(r, "type")
 		if !validTransactionTypes[txType] {
@@ -111,7 +124,7 @@ func (service *Service) GetAccountSettlementEarningsTotal() handlers.AppHandler 
 			untilDateInput,
 			query.Get("until"),
 		)
-		paid, err := service.AccountSettlementEarnings(
+		paid, err := service.GetAccountSettlementEarnings(
 			r.Context(),
 			AccountSettlementEarningsOptions{
 				Type:      txType,
@@ -132,12 +145,12 @@ func (service *Service) GetAccountSettlementEarningsTotal() handlers.AppHandler 
 	})
 }
 
-// GetBalances retrieves the balances for a given set of identifiers
-func (service *Service) GetBalances() handlers.AppHandler {
+// GETBalances retrieves the balances for a given set of identifiers
+func (service *Service) GETBalances() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		accountIDs := r.URL.Query()["account"] // access map directly to get all items
 		includePending := r.URL.Query().Get("pending") == "true"
-		balances, err := service.Balances(r.Context(), accountIDs, includePending)
+		balances, err := service.GetBalances(r.Context(), accountIDs, includePending)
 		if err != nil {
 			return handlers.WrapError(err, "unable to get balances for account earnings", http.StatusBadRequest)
 		}
@@ -145,19 +158,12 @@ func (service *Service) GetBalances() handlers.AppHandler {
 	})
 }
 
-// GetTransactionsByAccount retrieves the transactions for a given set of identifiers
-func (service *Service) GetTransactionsByAccount() handlers.AppHandler {
+// GETTransactionsByAccount retrieves the transactions for a given set of identifiers
+func (service *Service) GETTransactionsByAccount() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		accountID := chi.URLParam(r, "account")
-		txTypes := []string{}
-		txTypeQS := r.URL.Query()["type"]
-		if len(txTypeQS) > 0 {
-			txTypes = strings.Split(
-				strings.Join(txTypeQS, ","),
-				",",
-			)
-		}
-		transactions, err := service.Transactions(
+		txTypes := requestutils.ManyQueryParams(r.URL.Query()["type"])
+		transactions, err := service.GetTransactions(
 			r.Context(),
 			accountID,
 			txTypes,

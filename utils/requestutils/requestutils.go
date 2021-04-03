@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/brave-intl/bat-go/utils/closers"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -63,4 +64,20 @@ func GetRequestID(ctx context.Context) string {
 		return reqID
 	}
 	return ""
+}
+
+// ManyQueryParams condenses a query list down to a single comma separated list
+func ManyQueryParams(rawList []string, options ...string) []string {
+	list := []string{}
+	if len(rawList) > 0 {
+		delimiter := ","
+		if len(options) > 0 {
+			delimiter = options[0]
+		}
+		list = strings.Split(
+			strings.Join(rawList, delimiter),
+			delimiter,
+		)
+	}
+	return list
 }

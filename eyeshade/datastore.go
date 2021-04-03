@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade/countries"
 	db "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
@@ -70,6 +72,10 @@ type Datastore interface {
 		ctx context.Context,
 		txs *[]Transaction,
 	) (sql.Result, error)
+	GetReferralGroups(
+		ctx context.Context,
+		activeAt inputs.Time,
+	) (*[]countries.ReferralGroup, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -399,4 +405,58 @@ VALUES ( %s )`,
 		strings.Join(db.ColumnsToParamNames(transactionColumns), ", "),
 	)
 	return sqlx.NamedExecContext(ctx, nil, statement, txs)
+}
+
+// GetSettlementStats gets stats about settlements
+func (pg Postgres) GetSettlementStats(ctx context.Context, options SettlementStatOptions) (*SettlementStat, error) {
+	args := []interface{}{
+		options.Type,
+		options.Start,
+		options.Until,
+	}
+	extra := ""
+	if options.Currency != nil {
+		args = append(args, options.Currency)
+		extra = "AND settlement_currency = $4"
+	}
+	statement := fmt.Sprintf(`
+SELECT
+	sum(amount) as amount
+FROM transactions
+WHERE
+	transaction_type = $1 %s
+AND created_at >= to_timestamp($2)
+AND created_at < to_timestamp($3)`,
+		extra,
+	)
+	var stats SettlementStat
+	return &stats, pg.GetContext(ctx, &stats, statement, args...)
+}
+
+// GetReferralGroups gets referral groups active by a certain time
+func (pg Postgres) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]countries.ReferralGroup, error) {
+	statement := `
+SELECT
+  id,
+  active_at,
+  name,
+  amount,
+  currency,
+  countries.codes AS codes
+FROM geo_referral_groups, (
+  SELECT
+    group_id,
+    array_agg(country_code) AS codes
+  FROM geo_referral_countries
+  GROUP BY group_id
+) AS countries
+WHERE
+    geo_referral_groups.active_at <= $1
+AND countries.group_id = geo_referral_groups.id`
+	groups := []countries.ReferralGroup{}
+	err := pg.SelectContext(ctx, &groups, statement, activeAt)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	return &groups, nil
 }

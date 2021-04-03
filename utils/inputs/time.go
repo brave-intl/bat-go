@@ -21,41 +21,49 @@ type Time struct {
 }
 
 // NewTime creates a new time input
-func NewTime(layout string) *Time {
+func NewTime(layout string, input ...time.Time) *Time {
 	t := new(Time)
 	t.layout = layout
+	if len(input) > 0 {
+		t.SetTime(input[0])
+	}
 	return t
 }
 
+// SetTime sets the time
+func (t *Time) SetTime(current time.Time) {
+	t.time = &current
+}
+
 // Time - return the time.Time representation of the parsed time
-func (id *Time) Time() *time.Time {
-	return id.time
+func (t *Time) Time() *time.Time {
+	return t.time
 }
 
 // String - return the String representation of the time
-func (id *Time) String() string {
-	return id.raw
+func (t *Time) String() string {
+	return t.raw
 }
 
 // Validate - take raw []byte input and populate id with the ID
-func (id *Time) Validate(ctx context.Context) error {
+func (t *Time) Validate(ctx context.Context) error {
 	// this should be overloaded to validate ids are real...
 	return nil
 }
 
 // Decode - take raw []byte input and populate id with the ID
-func (id *Time) Decode(ctx context.Context, input []byte) error {
+func (t *Time) Decode(ctx context.Context, input []byte) error {
 	var err error
 
 	if len(input) == 0 {
 		return ErrTimeDecodeEmpty
 	}
-	id.raw = string(input)
+	t.raw = string(input)
 
 	var parsed time.Time
-	if parsed, err = time.Parse(id.layout, id.raw); err != nil {
+	if parsed, err = time.Parse(t.layout, t.raw); err != nil {
 		return ErrTimeDecodeNotValid
 	}
-	id.time = &parsed
+	t.SetTime(parsed)
 	return nil
 }

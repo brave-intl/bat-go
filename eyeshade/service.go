@@ -5,8 +5,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/utils/clients/common"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/go-chi/chi"
 )
 
@@ -43,7 +45,7 @@ func (service *Service) Datastore(ro bool) Datastore {
 
 // StaticRouter holds static routes, not on v1 path
 func (service *Service) StaticRouter() chi.Router {
-	r := DefunctRouter(false)
+	r := RouterDefunct(false)
 	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
 	}))
@@ -52,11 +54,11 @@ func (service *Service) StaticRouter() chi.Router {
 
 // RouterV1 holds all of the routes under `/v1/`
 func (service *Service) RouterV1() chi.Router {
-	r := DefunctRouter(true)
-	r.Mount("/accounts", service.AccountsRouter())
-	r.Mount("/referrals", service.ReferralsRouter())
-	r.Mount("/stats", service.StatsRouter())
-	r.Mount("/publishers", service.SettlementsRouter())
+	r := RouterDefunct(true)
+	r.Mount("/accounts", service.RouterAccounts())
+	r.Mount("/referrals", service.RouterReferrals())
+	r.Mount("/stats", service.RouterStats())
+	r.Mount("/publishers", service.RouterSettlements())
 	return r
 }
 
@@ -104,8 +106,8 @@ func WithCommonClients(service *Service) error {
 	return err
 }
 
-// AccountEarnings uses the readonly connection if available to get the account earnings
-func (service *Service) AccountEarnings(
+// GetAccountEarnings uses the readonly connection if available to get the account earnings
+func (service *Service) GetAccountEarnings(
 	ctx context.Context,
 	options AccountEarningsOptions,
 ) (*[]AccountEarnings, error) {
@@ -116,8 +118,8 @@ func (service *Service) AccountEarnings(
 		)
 }
 
-// AccountSettlementEarnings uses the readonly connection if available to get the account earnings
-func (service *Service) AccountSettlementEarnings(
+// GetAccountSettlementEarnings uses the readonly connection if available to get the account earnings
+func (service *Service) GetAccountSettlementEarnings(
 	ctx context.Context,
 	options AccountSettlementEarningsOptions,
 ) (*[]AccountSettlementEarnings, error) {
@@ -128,8 +130,8 @@ func (service *Service) AccountSettlementEarnings(
 		)
 }
 
-// Balances uses the readonly connection if available to get the account earnings
-func (service *Service) Balances(
+// GetBalances uses the readonly connection if available to get the account earnings
+func (service *Service) GetBalances(
 	ctx context.Context,
 	accountIDs []string,
 	includePending bool,
@@ -155,8 +157,8 @@ func (service *Service) Balances(
 	return balances, nil
 }
 
-// Transactions uses the readonly connection if available to get the account transactions
-func (service *Service) Transactions(
+// GetTransactions uses the readonly connection if available to get the account transactions
+func (service *Service) GetTransactions(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,
@@ -174,6 +176,27 @@ func (service *Service) Transactions(
 		accountID,
 		transactions,
 	), nil
+}
+
+// GetReferralGroups gets the referral groups that match the input parameters
+func (service *Service) GetReferralGroups(
+	ctx context.Context,
+	resolve bool,
+	activeAt inputs.Time,
+	fields ...string,
+) (*[]countries.ReferralGroup, error) {
+	groups, err := service.Datastore(true).
+		GetReferralGroups(ctx, activeAt)
+	if err != nil {
+		return nil, err
+	}
+	if resolve {
+		groups = countries.Resolve(*groups)
+	}
+	for _, group := range *groups {
+		group.SetKeys(fields) // will only render these keys when serializing
+	}
+	return groups, nil
 }
 
 func transformTransactions(account string, txs *[]Transaction) *[]CreatorsTransaction {

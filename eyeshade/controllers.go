@@ -3,9 +3,12 @@ package eyeshade
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 	"github.com/maikelmclauflin/go-boom"
 )
@@ -38,8 +41,8 @@ type DefunctResponse struct {
 	Message    string `json:"message"`
 }
 
-// DefunctRouter for defunct eyeshade endpoints
-func DefunctRouter(withV1 bool) chi.Router {
+// RouterDefunct for defunct eyeshade endpoints
+func RouterDefunct(withV1 bool) chi.Router {
 	r := chi.NewRouter()
 	for _, routeSettings := range defunctRoutes {
 		path := routeSettings.Path
@@ -70,18 +73,21 @@ func DefunctRouter(withV1 bool) chi.Router {
 	return r
 }
 
-// ReferralsRouter returns information on referral groups
-func (service *Service) ReferralsRouter() chi.Router {
+// RouterReferrals returns information on referral groups
+func (service *Service) RouterReferrals() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/groups", middleware.InstrumentHandler(
 		"ReferralGroups",
-		service.EndpointNotImplemented(),
+		middleware.SimpleScopedTokenAuthorizedOnly(
+			service.GETReferralGroups(),
+			[]string{"referrals"},
+		),
 	))
 	return r
 }
 
-// StatsRouter holds routes having to do with collecting stats on transactions
-func (service *Service) StatsRouter() chi.Router {
+// RouterStats holds routes having to do with collecting stats on transactions
+func (service *Service) RouterStats() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/grants/{type}/{start}/{until}", middleware.InstrumentHandler(
 		"StatsGrantsBounded",
@@ -94,8 +100,8 @@ func (service *Service) StatsRouter() chi.Router {
 	return r
 }
 
-// SettlementsRouter holds routes having to do with collecting stats on transactions
-func (service *Service) SettlementsRouter() chi.Router {
+// RouterSettlements holds routes having to do with collecting stats on transactions
+func (service *Service) RouterSettlements() chi.Router {
 	r := chi.NewRouter()
 	r.Method("GET", "/settlement", middleware.InstrumentHandler(
 		"SettlementsGrantsBounded",
@@ -114,6 +120,26 @@ func (service *Service) EndpointNotImplemented() handlers.AppHandler {
 			Payload string `json:"payload"`
 		}{
 			Payload: "not yet implemented",
+		}
+		return handlers.RenderContent(r.Context(), body, w, http.StatusOK)
+	})
+}
+
+// GETReferralGroups retrieves referral groups
+func (service *Service) GETReferralGroups() handlers.AppHandler {
+	return handlers.AppHandler(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) *handlers.AppError {
+		query := r.URL.Query()
+		resolve := query.Get("resolve") == "true"
+		activeAt := inputs.NewTime(time.RFC3339, time.Now())
+		_ = inputs.DecodeAndValidateString(r.Context(), activeAt, query.Get("activeAt"))
+		fields := requestutils.ManyQueryParams(query["fields"])
+
+		body, err := service.GetReferralGroups(r.Context(), resolve, *activeAt, fields...)
+		if err != nil {
+			return handlers.WrapError(err, "unable to get referral groups")
 		}
 		return handlers.RenderContent(r.Context(), body, w, http.StatusOK)
 	})

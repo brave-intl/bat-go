@@ -74,7 +74,7 @@ func (suite *ServiceMockTestSuite) TestGetBalances() {
 	)
 
 	expected = suite.SetupMockBalances(accountIDs)
-	balances = suite.Balances(accountIDs, false)
+	balances = suite.GetBalances(accountIDs, false)
 	suite.Require().Len(*expected, len(accountIDs))
 	suite.Require().Len(*balances, len(*expected))
 
@@ -103,11 +103,11 @@ func (suite *ServiceMockTestSuite) SetupMockBalances(
 	return mergePendingTransactions(expectedPending, expectedBalances)
 }
 
-func (suite *ServiceMockTestSuite) Balances(
+func (suite *ServiceMockTestSuite) GetBalances(
 	accountIDs []string,
 	includePending bool,
 ) *[]Balance {
-	balances, err := suite.service.Balances(
+	balances, err := suite.service.GetBalances(
 		suite.ctx,
 		accountIDs,
 		includePending,

@@ -12,15 +12,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/maikelmclauflin/go-boom"
 	uuid "github.com/satori/go.uuid"
 )
 
-func (suite *ControllersTestSuite) TestStaticRouter() {
+func (suite *ControllersTestSuite) TestRouterStatic() {
 	_, body := suite.DoRequest("GET", "/", nil)
 	suite.Require().Equal("ack.", string(body))
 }
 
-func (suite *ControllersTestSuite) TestDefunctRouter() {
+func (suite *ControllersTestSuite) TestRouterDefunct() {
 	re := regexp.MustCompile(`\{.+\}`)
 	for _, route := range defunctRoutes {
 		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
@@ -28,15 +29,11 @@ func (suite *ControllersTestSuite) TestDefunctRouter() {
 		var defunctResponse DefunctResponse
 		err := json.Unmarshal(body, &defunctResponse)
 		suite.Require().NoError(err)
-		suite.Require().Equal(DefunctResponse{
-			StatusCode: http.StatusGone,
-			Message:    "Gone",
-			Error:      "Gone",
-		}, defunctResponse)
+		suite.Require().Equal(boom.Gone(), defunctResponse)
 	}
 }
 
-func (suite *ControllersTestSuite) TestGetAccountEarnings() {
+func (suite *ControllersTestSuite) TestGETAccountEarnings() {
 	options := AccountEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
@@ -58,7 +55,7 @@ func (suite *ControllersTestSuite) TestGetAccountEarnings() {
 	suite.Require().JSONEq(string(marshalled), string(body))
 }
 
-func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
+func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
 	options := AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
@@ -114,7 +111,7 @@ func (suite *ControllersTestSuite) TestGetAccountSettlementEarnings() {
 	suite.Require().JSONEq(string(marshalled), string(body))
 }
 
-func (suite *ControllersTestSuite) TestGetBalances() {
+func (suite *ControllersTestSuite) TestGETBalances() {
 	accountIDs := []string{uuid.NewV4().String()}
 	accounts := SetupMockGetBalances(
 		suite.mockRO,
@@ -186,7 +183,7 @@ func (suite *ControllersTestSuite) TestGetBalances() {
 	// suite.Require().JSONEq(string(marshalled), string(body))
 }
 
-func (suite *ControllersTestSuite) TestGetTransactionsByAccount() {
+func (suite *ControllersTestSuite) TestGETTransactionsByAccount() {
 	unescapedAccountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
 	escapedAccountID := url.PathEscape(unescapedAccountID)
 	scenarios := map[string]struct {

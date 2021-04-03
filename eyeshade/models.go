@@ -451,3 +451,16 @@ type CreatorsTransaction struct {
 	SettlementDestinationType *string        `json:"settlement_destination_type,omitempty"`
 	SettlementDestination     *string        `json:"settlement_destination,omitempty"`
 }
+
+// SettlementStat holds settlement stats
+type SettlementStat struct {
+	Amount inputs.Decimal `json:"amount" db:"amount"`
+}
+
+// SettlementStatOptions holds options for scaling up and down settlement stats
+type SettlementStatOptions struct {
+	Type     string
+	Start    time.Time
+	Until    time.Time
+	Currency *string
+}

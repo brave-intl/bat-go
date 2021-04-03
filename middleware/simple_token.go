@@ -6,13 +6,20 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	boom "github.com/maikelmclauflin/go-boom"
 )
 
 type bearerTokenKey struct{}
 
 var (
 	// TokenList is the list of tokens that are accepted as valid
-	TokenList = strings.Split(os.Getenv("TOKEN_LIST"), ",")
+	TokenList   = strings.Split(os.Getenv("TOKEN_LIST"), ",")
+	scopesToEnv = map[string]string{
+		"referrals":  "ALLOWED_REFERRALS_TOKENS",
+		"publishers": "ALLOWED_PUBLISHERS_TOKENS",
+		"global":     "TOKEN_LIST",
+	}
 )
 
 // BearerToken is a middleware that adds the bearer token included in a request's headers to context
@@ -57,6 +64,40 @@ func SimpleTokenAuthorizedOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isSimpleTokenInContext(r.Context()) {
 			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isSimpleScopedTokenInContext(ctx context.Context, scopes []string) bool {
+	for _, scope := range scopes {
+		value := os.Getenv(scopesToEnv[scope])
+		if len(value) == 0 {
+			continue
+		}
+		tokenList := strings.Split(value, ",")
+		scopedTokens := []string{}
+		for _, token := range tokenList {
+			scopedTokens = append(scopedTokens, strings.TrimSpace(token))
+		}
+
+		token, ok := ctx.Value(bearerTokenKey{}).(string)
+		if ok && isSimpleTokenValid(scopedTokens, token) {
+			return true
+		}
+	}
+	return false
+}
+
+// SimpleScopedTokenAuthorizedOnly is a middleware that restricts access
+// to requests with a valid bearer token via context
+// NOTE the valid token is populated via BearerToken
+// the scopes passed will check the token against multiple values
+func SimpleScopedTokenAuthorizedOnly(next http.Handler, scopes []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isSimpleScopedTokenInContext(r.Context(), scopes) {
+			boom.RenderForbidden(w)
 			return
 		}
 		next.ServeHTTP(w, r)
