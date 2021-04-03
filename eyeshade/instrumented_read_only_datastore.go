@@ -154,7 +154,7 @@ func (_d DatastoreWithPrometheus) InsertFromVoting(ctx context.Context, txs []Vo
 }
 
 // InsertTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs []Transaction) (r1 sql.Result, err error) {
+func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]Transaction) (r1 sql.Result, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

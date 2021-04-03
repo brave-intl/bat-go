@@ -6,6 +6,7 @@ package eyeshade
 
 import (
 	context "context"
+	sql "database/sql"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
@@ -180,10 +181,10 @@ func (mr *MockDatastoreMockRecorder) GetTransactionsByAccount(ctx, accountID, tx
 }
 
 // InsertFromSettlements mocks base method
-func (m *MockDatastore) InsertFromSettlements(ctx context.Context, txs []Settlement) (*[]Transaction, error) {
+func (m *MockDatastore) InsertFromSettlements(ctx context.Context, txs []Settlement) (sql.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertFromSettlements", ctx, txs)
-	ret0, _ := ret[0].(*[]Transaction)
+	ret0, _ := ret[0].(sql.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -195,10 +196,10 @@ func (mr *MockDatastoreMockRecorder) InsertFromSettlements(ctx, txs interface{})
 }
 
 // InsertFromReferrals mocks base method
-func (m *MockDatastore) InsertFromReferrals(ctx context.Context, txs []Referral) (*[]Transaction, error) {
+func (m *MockDatastore) InsertFromReferrals(ctx context.Context, txs []Referral) (sql.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertFromReferrals", ctx, txs)
-	ret0, _ := ret[0].(*[]Transaction)
+	ret0, _ := ret[0].(sql.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -210,10 +211,10 @@ func (mr *MockDatastoreMockRecorder) InsertFromReferrals(ctx, txs interface{}) *
 }
 
 // InsertFromVoting mocks base method
-func (m *MockDatastore) InsertFromVoting(ctx context.Context, txs []Votes) (*[]Transaction, error) {
+func (m *MockDatastore) InsertFromVoting(ctx context.Context, txs []Votes) (sql.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertFromVoting", ctx, txs)
-	ret0, _ := ret[0].(*[]Transaction)
+	ret0, _ := ret[0].(sql.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -225,10 +226,10 @@ func (mr *MockDatastoreMockRecorder) InsertFromVoting(ctx, txs interface{}) *gom
 }
 
 // InsertTransactions mocks base method
-func (m *MockDatastore) InsertTransactions(ctx context.Context, txs []Transaction) (*[]Transaction, error) {
+func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertTransactions", ctx, txs)
-	ret0, _ := ret[0].(*[]Transaction)
+	ret0, _ := ret[0].(sql.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

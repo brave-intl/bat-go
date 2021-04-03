@@ -70,7 +70,7 @@ func SetupMockGetAccountEarnings(
 			decimal.NewFromFloat(10),
 		)
 		channel := uuid.NewV4().String()
-		rows = append(rows, AccountEarnings{channel, earnings, accountID})
+		rows = append(rows, AccountEarnings{Channel(channel), earnings, accountID})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -132,7 +132,7 @@ func SetupMockGetAccountSettlementEarnings(
 		if untilDate.Before(targetTime.Add(time.Duration(i) * time.Hour * 24)) {
 			break
 		}
-		rows = append(rows, AccountSettlementEarnings{channel, paid, accountID})
+		rows = append(rows, AccountSettlementEarnings{Channel(channel), paid, accountID})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -165,7 +165,7 @@ func SetupMockGetPending(
 	rows := []PendingTransaction{}
 	for _, channel := range accountIDs {
 		balance := RandomDecimal()
-		rows = append(rows, PendingTransaction{channel, balance})
+		rows = append(rows, PendingTransaction{Channel(channel), balance})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -254,7 +254,7 @@ func SetupMockGetTransactionsByAccount(
 	providerID := uuid.NewV4().String()
 	for _, channel := range channels {
 		rows = append(rows, ContributeTransaction(channel))
-		rows = append(rows, ReferralTransaction(accountID, channel))
+		rows = append(rows, ReferralTransaction(accountID, Channel(channel)))
 	}
 	for i := range channels {
 		targetIndex := decimal.NewFromFloat(
@@ -305,7 +305,7 @@ ORDER BY created_at`).
 	return rows
 }
 
-func SettlementTransaction(fromAccount, channel, toAccountID, transactionType string) Transaction {
+func SettlementTransaction(fromAccount string, channel *Channel, toAccountID string, transactionType string) Transaction {
 	transactionType = transactionType + "_settlement"
 	provider := "uphold"
 	return Transaction{
@@ -319,10 +319,11 @@ func SettlementTransaction(fromAccount, channel, toAccountID, transactionType st
 		TransactionType: transactionType,
 	}
 }
-func ReferralTransaction(accountID, channel string) Transaction {
+
+func ReferralTransaction(accountID string, channel Channel) Transaction {
 	toAccountType := "type"
 	return Transaction{
-		Channel:         channel,
+		Channel:         &channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
@@ -332,14 +333,15 @@ func ReferralTransaction(accountID, channel string) Transaction {
 		TransactionType: "referral",
 	}
 }
-func ContributeTransaction(account string) Transaction {
+func ContributeTransaction(toAccount string) Transaction {
 	toAccountType := "type"
+	channel := Channel(uuid.NewV4().String())
 	return Transaction{
-		Channel:         uuid.NewV4().String(),
+		Channel:         &channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
-		ToAccount:       account,
+		ToAccount:       toAccount,
 		ToAccountType:   toAccountType,
 		Amount:          RandomDecimal(),
 		TransactionType: "contribution",

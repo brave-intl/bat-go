@@ -196,7 +196,7 @@ func mergePendingTransactions(votes []PendingTransaction, balances []Balance) *[
 		balancesByAccountID[balance.AccountID] = &balance
 	}
 	for _, vote := range votes {
-		accountID := vote.Channel
+		accountID := vote.Channel.String()
 		balance := balancesByAccountID[accountID]
 		if balance == nil {
 			pending = append(pending, Balance{

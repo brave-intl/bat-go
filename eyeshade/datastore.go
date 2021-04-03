@@ -68,7 +68,7 @@ type Datastore interface {
 	) (sql.Result, error)
 	InsertTransactions(
 		ctx context.Context,
-		txs []Transaction,
+		txs *[]Transaction,
 	) (sql.Result, error)
 }
 
@@ -333,55 +333,64 @@ ORDER BY created_at`,
 	return &transactions, nil
 }
 
+// InsertFromSettlements inserts a list of settlement transactions all at the same time
 func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settlement) (sql.Result, error) {
-	txs, err := convertToTxs(targets...)
+	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
+// InsertFromVoting inserts many votes at the same time
 func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.Result, error) {
-	txs, err := convertToTxs(targets...)
+	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
+// InsertFromReferrals inserts many referral messages at the same time
 func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) (sql.Result, error) {
-	txs, err := convertToTxs(targets...)
+	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
+// InsertFromUserDepositFromChain inserts many user deposits at the same time
 func (pg Postgres) InsertFromUserDepositFromChain(ctx context.Context, targets []UserDeposit) (sql.Result, error) {
-	txs, err := convertToTxs(targets...)
+	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
-func convertToTxs(convertables ...ConvertableTransaction) (*[]Transaction, error) {
+func convertToTxs(convertables ...interface{}) (*[]Transaction, error) {
 	txs := []Transaction{}
 	for _, convertable := range convertables {
-		if !convertable.Valid() {
+		con, ok := convertable.(ConvertableTransaction)
+		if con.Ignore() {
+			continue
+		}
+		if !ok || !con.Valid() {
 			return nil, errorutils.Wrap(
 				ErrConvertableFailedValidation,
 				fmt.Sprintf(
-					"a convertable transaction failed validation %w",
-					convertable,
+					"a convertable transaction failed validation %v",
+					con,
 				),
 			)
 		}
-		txs = append(txs, *convertable.ToTxs()...)
+		txs = append(txs, *con.ToTxs()...)
 	}
 	return &txs, nil
 }
 
+// InsertTransactions is a generalizable transaction insertion function
 func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
