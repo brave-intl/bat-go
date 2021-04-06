@@ -19,7 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/outputs"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
@@ -344,7 +344,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 
 		transaction, err = service.CreateTransactionFromRequest(req, *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+			return handlers.WrapError(err, "error creating the transaction", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
@@ -363,13 +363,13 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 		var req CreateAnonCardTransactionRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
 		}
 
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
-				"Error validating request url parameter",
+				"error validating request url parameter",
 				map[string]interface{}{
 					"orderID": err.Error(),
 				},
@@ -378,7 +378,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 
 		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
+			return handlers.WrapError(err, "error creating anon card transaction", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
@@ -397,7 +397,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		var req CreateOrderCredsRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
@@ -408,7 +408,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
-				"Error validating request url parameter",
+				"error validating request url parameter",
 				map[string]interface{}{
 					"orderID": err.Error(),
 				},
@@ -417,15 +417,15 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 
 		orderCreds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), req.ItemID, false)
 		if err != nil {
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+			return handlers.WrapError(err, "error validating no credentials exist for order", http.StatusBadRequest)
 		}
 		if orderCreds != nil {
-			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			return handlers.WrapError(err, "there are existing order credentials created for this order", http.StatusConflict)
 		}
 
 		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
-			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
+			return handlers.WrapError(err, "error creating order creds", http.StatusBadRequest)
 		}
 
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
@@ -438,7 +438,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
-				"Error validating request url parameter",
+				"error validating request url parameter",
 				map[string]interface{}{
 					"orderID": err.Error(),
 				},
@@ -452,7 +452,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 
 		if creds == nil {
 			return &handlers.AppError{
-				Message: "Credentials do not exist",
+				Message: "credentials do not exist",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
 			}
@@ -519,18 +519,18 @@ func GetOrderCredsByID(service *Service) handlers.AppHandler {
 		// did we get any validation errors?
 		if len(validationPayload) > 0 {
 			return handlers.ValidationError(
-				"Error validating request url parameter",
+				"error validating request url parameter",
 				validationPayload)
 		}
 
 		creds, err := service.Datastore.GetOrderCredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+			return handlers.WrapError(err, "error getting claim", http.StatusBadRequest)
 		}
 
 		if creds == nil {
 			return &handlers.AppError{
-				Message: "Could not find credentials",
+				Message: "could not find credentials",
 				Code:    http.StatusNotFound,
 				Data:    map[string]interface{}{},
 			}
@@ -557,7 +557,7 @@ func MakeVote(service *Service) handlers.AppHandler {
 		var req VoteRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
 		}
 
 		logger, err := appctx.GetLogger(r.Context())
@@ -595,7 +595,7 @@ func MakeVote(service *Service) handlers.AppHandler {
 					return verr
 				}
 				logger.Warn().Err(err).Msg("failed to perform vote")
-				return handlers.WrapError(err, "Error making vote", http.StatusBadRequest)
+				return handlers.WrapError(err, "error making vote", http.StatusBadRequest)
 			}
 		}
 

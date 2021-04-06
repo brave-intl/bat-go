@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shengdoushi/base58"
 )

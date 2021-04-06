@@ -1,6 +1,7 @@
-package eyeshade
+package models
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -33,7 +34,13 @@ var (
 		"settlement_fees":         uuid.FromStringOrNil("1d295e60-e511-41f5-8ae0-46b6b5d33333"),
 		"user_deposit":            uuid.FromStringOrNil("f7a8b983-2383-48f2-9e4f-717f6fe3225d"),
 	}
-	transactionColumns = []string{
+	// SettlementTypes holds type values that are considered settlement types
+	SettlementTypes = map[string]bool{
+		"contribution_settlement": true,
+		"referral_settlement":     true,
+	}
+	// TransactionColumns columns for transaction queries
+	TransactionColumns = []string{
 		"id",
 		"created_at",
 		"description",
@@ -47,6 +54,10 @@ var (
 		"settlement_currency",
 		"settlement_amount",
 		"channel",
+	}
+	// ValidGrantStatTypes holds a hash of valid stat types for grants
+	ValidGrantStatTypes = map[string]bool{
+		"ads": true,
 	}
 )
 
@@ -416,7 +427,7 @@ func (tx Transaction) BackfillForCreators(account string) CreatorsTransaction {
 	}
 	var settlementDestinationType *string
 	var settlementDestination *string
-	if settlementTypes[tx.TransactionType] {
+	if SettlementTypes[tx.TransactionType] {
 		if tx.ToAccountType != "" {
 			settlementDestinationType = &tx.ToAccountType
 		}
@@ -460,7 +471,76 @@ type SettlementStat struct {
 // SettlementStatOptions holds options for scaling up and down settlement stats
 type SettlementStatOptions struct {
 	Type     string
-	Start    time.Time
-	Until    time.Time
+	Start    inputs.Time
+	Until    inputs.Time
 	Currency *string
+}
+
+// NewSettlementStatOptions creates a bundle of settlement stat options
+func NewSettlementStatOptions(
+	t, currencyInput, layout, start, until string,
+) (*SettlementStatOptions, error) {
+	startTime, untilTime, err := parseTimes(layout, start, until)
+	if err != nil {
+		return nil, err
+	}
+	var currency *string
+	if currencyInput != "" {
+		currency = &currencyInput
+	}
+	return &SettlementStatOptions{
+		Type:     t,
+		Start:    *startTime,
+		Until:    *untilTime,
+		Currency: currency,
+	}, nil
+}
+
+// GrantStat holds Grant stats
+type GrantStat struct {
+	Amount inputs.Decimal `json:"amount" db:"amount"`
+	Count  inputs.Decimal `json:"count" db:"count"`
+}
+
+// GrantStatOptions holds options for scaling up and down grant stats
+type GrantStatOptions struct {
+	Type  string
+	Start inputs.Time
+	Until inputs.Time
+}
+
+// NewGrantStatOptions creates a new grant stat options object
+func NewGrantStatOptions(
+	t, layout, start, until string,
+) (*GrantStatOptions, error) {
+	startTime, untilTime, err := parseTimes(layout, start, until)
+	if err != nil {
+		return nil, err
+	}
+	if !ValidGrantStatTypes[t] {
+		return nil, fmt.Errorf("unable to check grant stats for type %s", t)
+	}
+	return &GrantStatOptions{
+		Type:  t,
+		Start: *startTime,
+		Until: *untilTime,
+	}, nil
+}
+
+func parseTimes(
+	layout, start, until string,
+) (*inputs.Time, *inputs.Time, error) {
+	var (
+		startTime = inputs.NewTime(layout)
+		untilTime = inputs.NewTime(layout)
+		ctx       = context.Background()
+	)
+	if err := startTime.Decode(ctx, []byte(start)); err != nil {
+		return nil, nil, err
+	}
+	if err := untilTime.Decode(ctx, []byte(until)); err != nil {
+		untilSubMonth := startTime.Time().AddDate(0, -1, 0)
+		untilTime.SetTime(untilSubMonth)
+	}
+	return startTime, untilTime, nil
 }

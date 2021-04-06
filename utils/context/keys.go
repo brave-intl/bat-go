@@ -14,8 +14,8 @@ const (
 	CommonClientsCTXKey CTXKey = "common_clients"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key
 	PaginationOrderOptionsCTXKey CTXKey = "pagination_order_options"
-	// ServiceKey - the key used for service context
-	ServiceKey CTXKey = "service"
+	// ServiceCTXKey - the key used for service context
+	ServiceCTXKey CTXKey = "service"
 	// EnvironmentCTXKey - the key used for service context
 	EnvironmentCTXKey CTXKey = "environment"
 	// RatiosServerCTXKey - the context key for getting the ratios server
@@ -69,6 +69,10 @@ const (
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
+	// TxCTXKey - context key for the client secret
+	TxCTXKey CTXKey = "tx"
+	// TxRollbackCTXKey - context key for the client secret
+	TxRollbackCTXKey CTXKey = "tx_rollback"
 )
 
 var (

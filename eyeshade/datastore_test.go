@@ -12,6 +12,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	db "github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -56,12 +57,12 @@ func (suite *DatastoreMockTestSuite) SetupSuite() {
 
 func SetupMockGetAccountEarnings(
 	mock sqlmock.Sqlmock,
-	options AccountEarningsOptions,
-) []AccountEarnings {
+	options models.AccountEarningsOptions,
+) []models.AccountEarnings {
 	getRows := sqlmock.NewRows(
 		[]string{"channel", "earnings", "account_id"},
 	)
-	rows := []AccountEarnings{}
+	rows := []models.AccountEarnings{}
 	for i := 0; i < options.Limit; i++ {
 		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
 		earnings := decimal.NewFromFloat(
@@ -70,7 +71,11 @@ func SetupMockGetAccountEarnings(
 			decimal.NewFromFloat(10),
 		)
 		channel := uuid.NewV4().String()
-		rows = append(rows, AccountEarnings{Channel(channel), earnings, accountID})
+		rows = append(rows, models.AccountEarnings{
+			Channel:   models.Channel(channel),
+			Earnings:  earnings,
+			AccountID: accountID,
+		})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -96,12 +101,12 @@ limit (.+)`).
 
 func SetupMockGetAccountSettlementEarnings(
 	mock sqlmock.Sqlmock,
-	options AccountSettlementEarningsOptions,
-) []AccountSettlementEarnings {
+	options models.AccountSettlementEarningsOptions,
+) []models.AccountSettlementEarnings {
 	getRows := sqlmock.NewRows(
 		[]string{"channel", "paid", "account_id"},
 	)
-	rows := []AccountSettlementEarnings{}
+	rows := []models.AccountSettlementEarnings{}
 	args := []driver.Value{
 		fmt.Sprintf("%s_settlement", options.Type[:len(options.Type)-1]),
 		options.Limit,
@@ -132,7 +137,11 @@ func SetupMockGetAccountSettlementEarnings(
 		if untilDate.Before(targetTime.Add(time.Duration(i) * time.Hour * 24)) {
 			break
 		}
-		rows = append(rows, AccountSettlementEarnings{Channel(channel), paid, accountID})
+		rows = append(rows, models.AccountSettlementEarnings{
+			Channel:   models.Channel(channel),
+			Paid:      paid,
+			AccountID: accountID,
+		})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -158,14 +167,17 @@ limit (.+)`).
 func SetupMockGetPending(
 	mock sqlmock.Sqlmock,
 	accountIDs []string,
-) []PendingTransaction {
+) []models.PendingTransaction {
 	getRows := sqlmock.NewRows(
 		[]string{"channel", "balance"},
 	)
-	rows := []PendingTransaction{}
+	rows := []models.PendingTransaction{}
 	for _, channel := range accountIDs {
 		balance := RandomDecimal()
-		rows = append(rows, PendingTransaction{Channel(channel), balance})
+		rows = append(rows, models.PendingTransaction{
+			Channel: models.Channel(channel),
+			Balance: balance,
+		})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			channel,
@@ -192,15 +204,19 @@ GROUP BY channel`).
 func SetupMockGetBalances(
 	mock sqlmock.Sqlmock,
 	accountIDs []string,
-) []Balance {
+) []models.Balance {
 	getRows := sqlmock.NewRows(
 		[]string{"account_id", "account_type", "balance"},
 	)
-	rows := []Balance{}
+	rows := []models.Balance{}
 	for _, accountID := range accountIDs {
 		balance := RandomDecimal()
 		accountType := uuid.NewV4().String()
-		rows = append(rows, Balance{accountID, accountType, balance})
+		rows = append(rows, models.Balance{
+			AccountID: accountID,
+			Type:      accountType,
+			Balance:   balance,
+		})
 		// append sql result rows
 		getRows = getRows.AddRow(
 			accountID,
@@ -225,7 +241,7 @@ func SetupMockGetTransactionsByAccount(
 	mock sqlmock.Sqlmock,
 	accountID string,
 	txTypes ...string,
-) []Transaction {
+) []models.Transaction {
 	getRows := sqlmock.NewRows(
 		[]string{
 			"created_at",
@@ -240,7 +256,7 @@ func SetupMockGetTransactionsByAccount(
 			"transaction_type",
 		},
 	)
-	rows := []Transaction{}
+	rows := []models.Transaction{}
 	args := []driver.Value{accountID}
 	var txTypesHash *map[string]bool
 	if len(txTypes) > 0 {
@@ -254,7 +270,7 @@ func SetupMockGetTransactionsByAccount(
 	providerID := uuid.NewV4().String()
 	for _, channel := range channels {
 		rows = append(rows, ContributeTransaction(channel))
-		rows = append(rows, ReferralTransaction(accountID, Channel(channel)))
+		rows = append(rows, ReferralTransaction(accountID, models.Channel(channel)))
 	}
 	for i := range channels {
 		targetIndex := decimal.NewFromFloat(
@@ -305,10 +321,15 @@ ORDER BY created_at`).
 	return rows
 }
 
-func SettlementTransaction(fromAccount string, channel *Channel, toAccountID string, transactionType string) Transaction {
+func SettlementTransaction(
+	fromAccount string,
+	channel *models.Channel,
+	toAccountID string,
+	transactionType string,
+) models.Transaction {
 	transactionType = transactionType + "_settlement"
 	provider := "uphold"
-	return Transaction{
+	return models.Transaction{
 		Channel:         channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
@@ -320,9 +341,9 @@ func SettlementTransaction(fromAccount string, channel *Channel, toAccountID str
 	}
 }
 
-func ReferralTransaction(accountID string, channel Channel) Transaction {
+func ReferralTransaction(accountID string, channel models.Channel) models.Transaction {
 	toAccountType := "type"
-	return Transaction{
+	return models.Transaction{
 		Channel:         &channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
@@ -333,10 +354,10 @@ func ReferralTransaction(accountID string, channel Channel) Transaction {
 		TransactionType: "referral",
 	}
 }
-func ContributeTransaction(toAccount string) Transaction {
+func ContributeTransaction(toAccount string) models.Transaction {
 	toAccountType := "type"
-	channel := Channel(uuid.NewV4().String())
-	return Transaction{
+	channel := models.Channel(uuid.NewV4().String())
+	return models.Transaction{
 		Channel:         &channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
@@ -374,7 +395,7 @@ func MustMarshal(
 }
 
 func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
-	options := AccountEarningsOptions{
+	options := models.AccountEarningsOptions{
 		Limit:     5,
 		Ascending: true,
 		Type:      "contributions",
@@ -391,8 +412,8 @@ func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
 }
 
 func (suite *DatastoreMockTestSuite) GetAccountEarnings(
-	options AccountEarningsOptions,
-) *[]AccountEarnings {
+	options models.AccountEarningsOptions,
+) *[]models.AccountEarnings {
 	earnings, err := suite.db.GetAccountEarnings(
 		suite.ctx,
 		options,
@@ -402,7 +423,7 @@ func (suite *DatastoreMockTestSuite) GetAccountEarnings(
 	return earnings
 }
 func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
-	options := AccountSettlementEarningsOptions{
+	options := models.AccountSettlementEarningsOptions{
 		Limit:     5,
 		Ascending: true,
 		Type:      "contributions",
@@ -416,8 +437,8 @@ func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
 }
 
 func (suite *DatastoreMockTestSuite) GetAccountSettlementEarnings(
-	options AccountSettlementEarningsOptions,
-) *[]AccountSettlementEarnings {
+	options models.AccountSettlementEarningsOptions,
+) *[]models.AccountSettlementEarnings {
 	earnings, err := suite.db.GetAccountSettlementEarnings(
 		suite.ctx,
 		options,
@@ -441,7 +462,7 @@ func (suite *DatastoreMockTestSuite) TestGetBalances() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetBalances(accountIDs []string) *[]Balance {
+func (suite *DatastoreMockTestSuite) GetBalances(accountIDs []string) *[]models.Balance {
 	balances, err := suite.db.GetBalances(
 		suite.ctx,
 		accountIDs,
@@ -465,7 +486,7 @@ func (suite *DatastoreMockTestSuite) TestGetPending() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]PendingTransaction {
+func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]models.PendingTransaction {
 	votes, err := suite.db.GetPending(
 		suite.ctx,
 		accountIDs,
@@ -497,7 +518,7 @@ func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 	count int,
 	accountID string,
 	txTypes []string,
-) *[]Transaction {
+) *[]models.Transaction {
 	transactions, err := suite.db.GetTransactionsByAccount(
 		suite.ctx,
 		accountID,

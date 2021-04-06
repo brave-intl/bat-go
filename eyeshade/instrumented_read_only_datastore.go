@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/countries"
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -43,8 +44,22 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// Commit implements Datastore
+func (_d DatastoreWithPrometheus) Commit(ctx context.Context) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Commit", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.Commit(ctx)
+}
+
 // GetAccountEarnings implements Datastore
-func (_d DatastoreWithPrometheus) GetAccountEarnings(ctx context.Context, options AccountEarningsOptions) (aap1 *[]AccountEarnings, err error) {
+func (_d DatastoreWithPrometheus) GetAccountEarnings(ctx context.Context, options models.AccountEarningsOptions) (aap1 *[]models.AccountEarnings, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -58,7 +73,7 @@ func (_d DatastoreWithPrometheus) GetAccountEarnings(ctx context.Context, option
 }
 
 // GetAccountSettlementEarnings implements Datastore
-func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Context, options AccountSettlementEarningsOptions) (aap1 *[]AccountSettlementEarnings, err error) {
+func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Context, options models.AccountSettlementEarningsOptions) (aap1 *[]models.AccountSettlementEarnings, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -72,7 +87,7 @@ func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Conte
 }
 
 // GetBalances implements Datastore
-func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []string) (bap1 *[]Balance, err error) {
+func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []string) (bap1 *[]models.Balance, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -85,8 +100,22 @@ func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []
 	return _d.base.GetBalances(ctx, accountIDs)
 }
 
+// GetGrantStats implements Datastore
+func (_d DatastoreWithPrometheus) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (gp1 *models.GrantStat, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetGrantStats", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetGrantStats(ctx, options)
+}
+
 // GetPending implements Datastore
-func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []string) (pap1 *[]PendingTransaction, err error) {
+func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []string) (pap1 *[]models.PendingTransaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -113,8 +142,22 @@ func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeA
 	return _d.base.GetReferralGroups(ctx, activeAt)
 }
 
+// GetSettlementStats implements Datastore
+func (_d DatastoreWithPrometheus) GetSettlementStats(ctx context.Context, options models.SettlementStatOptions) (sp1 *models.SettlementStat, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSettlementStats", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetSettlementStats(ctx, options)
+}
+
 // GetTransactionsByAccount implements Datastore
-func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (tap1 *[]Transaction, err error) {
+func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -127,8 +170,8 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 	return _d.base.GetTransactionsByAccount(ctx, accountID, txTypes)
 }
 
-// InsertFromReferrals implements Datastore
-func (_d DatastoreWithPrometheus) InsertFromReferrals(ctx context.Context, txs []Referral) (r1 sql.Result, err error) {
+// InsertConvertableTransactions implements Datastore
+func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (r1 sql.Result, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -136,41 +179,13 @@ func (_d DatastoreWithPrometheus) InsertFromReferrals(ctx context.Context, txs [
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromReferrals", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertConvertableTransactions", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertFromReferrals(ctx, txs)
-}
-
-// InsertFromSettlements implements Datastore
-func (_d DatastoreWithPrometheus) InsertFromSettlements(ctx context.Context, txs []Settlement) (r1 sql.Result, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromSettlements", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.InsertFromSettlements(ctx, txs)
-}
-
-// InsertFromVoting implements Datastore
-func (_d DatastoreWithPrometheus) InsertFromVoting(ctx context.Context, txs []Votes) (r1 sql.Result, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertFromVoting", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.InsertFromVoting(ctx, txs)
+	return _d.base.InsertConvertableTransactions(ctx, txs)
 }
 
 // InsertTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]Transaction) (r1 sql.Result, err error) {
+func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (r1 sql.Result, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -221,6 +236,31 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 	return _d.base.RawDB()
 }
 
+// ResolveConnection implements Datastore
+func (_d DatastoreWithPrometheus) ResolveConnection(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ResolveConnection", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.ResolveConnection(ctx)
+}
+
+// Rollback implements Datastore
+func (_d DatastoreWithPrometheus) Rollback(ctx context.Context) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Rollback", result).Observe(time.Since(_since).Seconds())
+	}()
+	_d.base.Rollback(ctx)
+	return
+}
+
 // RollbackTx implements Datastore
 func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	_since := time.Now()
@@ -244,4 +284,18 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// WithTx implements Datastore
+func (_d DatastoreWithPrometheus) WithTx(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "WithTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.WithTx(ctx)
 }

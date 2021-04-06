@@ -33,6 +33,7 @@ func NewTime(layout string, input ...time.Time) *Time {
 // SetTime sets the time
 func (t *Time) SetTime(current time.Time) {
 	t.time = &current
+	t.raw = current.Format(t.layout)
 }
 
 // Time - return the time.Time representation of the parsed time

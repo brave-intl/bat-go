@@ -51,7 +51,8 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.mockRO = mockRO
 
 	service, err := SetupService(
-		WithRouter,
+		WithNewContext,
+		WithNewRouter,
 		WithConnections(suite.db, suite.rodb),
 	)
 	suite.Require().NoError(err)

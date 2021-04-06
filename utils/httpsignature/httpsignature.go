@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/digest"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 )
 
 // SignatureParams contains parameters needed to create and verify signatures

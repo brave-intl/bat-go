@@ -1,23 +1,26 @@
 package eyeshade
 
 import (
-	"bytes"
 	"context"
-	"net/http"
+	"os"
 
-	"github.com/brave-intl/bat-go/eyeshade/countries"
+	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/utils/clients/common"
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/inputs"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
+	"github.com/rs/zerolog"
 )
 
 // Service holds info that the eyeshade router needs to operate
 type Service struct {
+	ctx         *context.Context
+	logger      *zerolog.Logger
 	datastore   Datastore
 	roDatastore Datastore
 	Clients     *common.Clients
 	router      *chi.Mux
+	consumers   map[string]BatchMessagesConsumer
 }
 
 // SetupService initializes the service with the correct dependencies
@@ -34,46 +37,19 @@ func SetupService(
 	return &service, nil
 }
 
-// Datastore returns a read only datastore if available
-// otherwise a normal datastore
-func (service *Service) Datastore(ro bool) Datastore {
-	if ro && service.roDatastore != nil {
-		return service.roDatastore
+// WithContext allows you to provide the context
+func WithContext(ctx context.Context) func(service *Service) error {
+	return func(service *Service) error {
+		service.ctx = &ctx
+		return nil
 	}
-	return service.datastore
 }
 
-// StaticRouter holds static routes, not on v1 path
-func (service *Service) StaticRouter() chi.Router {
-	r := RouterDefunct(false)
-	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
-	}))
-	return r
-}
-
-// RouterV1 holds all of the routes under `/v1/`
-func (service *Service) RouterV1() chi.Router {
-	r := RouterDefunct(true)
-	r.Mount("/accounts", service.RouterAccounts())
-	r.Mount("/referrals", service.RouterReferrals())
-	r.Mount("/stats", service.RouterStats())
-	r.Mount("/publishers", service.RouterSettlements())
-	return r
-}
-
-// WithRouter sets up a router using the service
-func WithRouter(service *Service) error {
-	r := chi.NewRouter()
-	r.Mount("/", service.StaticRouter())
-	r.Mount("/v1/", service.RouterV1())
-	service.router = r
-	return nil
-}
-
-// Router returns the router that was last setup using this service
-func (service *Service) Router() *chi.Mux {
-	return service.router
+// WithContext wraps and replaces the service context
+func (service *Service) WithContext(ctx context.Context) context.Context {
+	nuCtx := appctx.Wrap(*service.ctx, ctx)
+	service.ctx = &nuCtx
+	return nuCtx
 }
 
 // WithConnections uses pre setup datastores for the service
@@ -85,8 +61,8 @@ func WithConnections(db Datastore, rodb Datastore) func(service *Service) error 
 	}
 }
 
-// WithDBs sets up datastores for the service
-func WithDBs(service *Service) error {
+// WithNewDBs sets up datastores for the service
+func WithNewDBs(service *Service) error {
 	eyeshadeDB, eyeshadeRODB, err := NewConnections()
 	if err == nil {
 		service.datastore = eyeshadeDB
@@ -95,8 +71,15 @@ func WithDBs(service *Service) error {
 	return err
 }
 
-// WithCommonClients sets up a service object with the needed clients
-func WithCommonClients(service *Service) error {
+// WithNewContext attaches a context to the service
+func WithNewContext(service *Service) error {
+	ctx := context.Background()
+	service.ctx = &ctx
+	return nil
+}
+
+// WithNewClients sets up a service object with the needed clients
+func WithNewClients(service *Service) error {
 	clients, err := common.New(common.Config{
 		Ratios: true,
 	})
@@ -106,133 +89,53 @@ func WithCommonClients(service *Service) error {
 	return err
 }
 
-// GetAccountEarnings uses the readonly connection if available to get the account earnings
-func (service *Service) GetAccountEarnings(
-	ctx context.Context,
-	options AccountEarningsOptions,
-) (*[]AccountEarnings, error) {
-	return service.Datastore(true).
-		GetAccountEarnings(
-			ctx,
-			options,
-		)
-}
-
-// GetAccountSettlementEarnings uses the readonly connection if available to get the account earnings
-func (service *Service) GetAccountSettlementEarnings(
-	ctx context.Context,
-	options AccountSettlementEarningsOptions,
-) (*[]AccountSettlementEarnings, error) {
-	return service.Datastore(true).
-		GetAccountSettlementEarnings(
-			ctx,
-			options,
-		)
-}
-
-// GetBalances uses the readonly connection if available to get the account earnings
-func (service *Service) GetBalances(
-	ctx context.Context,
-	accountIDs []string,
-	includePending bool,
-) (*[]Balance, error) {
-	d := service.Datastore(true)
-	balances, err := d.GetBalances(
-		ctx,
-		accountIDs,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if includePending {
-		pendingVotes, err := d.GetPending(
-			ctx,
-			accountIDs,
-		)
-		if err != nil {
-			return nil, err
+// WithConsumer sets up a consumer on the service
+func WithConsumer(
+	topicHandler avro.TopicHandler,
+) func(*Service) error {
+	return func(service *Service) error {
+		reader, config := service.NewKafkaReader(topicHandler.Topic())
+		consumer := &Consumer{
+			topicHandler: topicHandler,
+			reader:       reader,
+			config:       config,
+			service:      service,
 		}
-		return mergePendingTransactions(*pendingVotes, *balances), nil
+		service.consumers[topicHandler.Topic()] = BatchMessagesConsumer(consumer)
+		return nil
 	}
-	return balances, nil
 }
 
-// GetTransactions uses the readonly connection if available to get the account transactions
-func (service *Service) GetTransactions(
-	ctx context.Context,
-	accountID string,
-	txTypes []string,
-) (*[]CreatorsTransaction, error) {
-	transactions, err := service.Datastore(true).
-		GetTransactionsByAccount(
-			ctx,
-			accountID,
-			txTypes,
-		)
+// Consume has the service start consuming
+func (service *Service) Consume() chan error {
+	// initialize a new reader with the brokers and topic
+	// the groupID identifies the consumer and prevents
+	// it from receiving duplicate messages
+	errCh := make(chan error)
+	for _, consumer := range service.consumers {
+		go consumer.Consume(errCh)
+	}
+	return errCh
+}
+
+// WithNewLogger attaches a logger to the context on the service
+func WithNewLogger(service *Service) error {
+	ctx := *service.ctx
+	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		return nil, err
+		ctx, logger = logging.SetupLogger(ctx)
 	}
-	return transformTransactions(
-		accountID,
-		transactions,
-	), nil
+	service.ctx = &ctx
+	service.logger = logger
+	return nil
 }
 
-// GetReferralGroups gets the referral groups that match the input parameters
-func (service *Service) GetReferralGroups(
-	ctx context.Context,
-	resolve bool,
-	activeAt inputs.Time,
-	fields ...string,
-) (*[]countries.ReferralGroup, error) {
-	groups, err := service.Datastore(true).
-		GetReferralGroups(ctx, activeAt)
-	if err != nil {
-		return nil, err
-	}
-	if resolve {
-		groups = countries.Resolve(*groups)
-	}
-	for _, group := range *groups {
-		group.SetKeys(fields) // will only render these keys when serializing
-	}
-	return groups, nil
-}
-
-func transformTransactions(account string, txs *[]Transaction) *[]CreatorsTransaction {
-	creatorsTxs := []CreatorsTransaction{}
-	for _, tx := range *txs {
-		creatorsTxs = append(
-			creatorsTxs,
-			tx.BackfillForCreators(account),
-		)
-	}
-	return &creatorsTxs
-}
-
-func mergePendingTransactions(votes []PendingTransaction, balances []Balance) *[]Balance {
-	pending := []Balance{}
-	balancesByAccountID := map[string]*Balance{}
-	balanceIndex := map[string]int{}
-	for i, balance := range balances {
-		balanceIndex[balance.AccountID] = i
-		balancesByAccountID[balance.AccountID] = &balance
-	}
-	for _, vote := range votes {
-		accountID := vote.Channel.String()
-		balance := balancesByAccountID[accountID]
-		if balance == nil {
-			pending = append(pending, Balance{
-				AccountID: accountID,
-				Balance:   vote.Balance,
-				Type:      "channel",
-			})
-		} else {
-			balance := balances[balanceIndex[accountID]]
-			balance.Balance = balance.Balance.Add(vote.Balance)
-			balances[balanceIndex[accountID]] = balance
-		}
-	}
-	allBalances := append(balances, pending...)
-	return &allBalances
+// WithBuildInfo attaches build info to context
+func WithBuildInfo(service *Service) error {
+	ctx := *service.ctx
+	ctx = context.WithValue(ctx, appctx.VersionCTXKey, os.Getenv("GIT_VERSIO"))
+	ctx = context.WithValue(ctx, appctx.CommitCTXKey, os.Getenv("GIT_COMMIT"))
+	ctx = context.WithValue(ctx, appctx.BuildTimeCTXKey, os.Getenv("BUILD_TIME"))
+	service.ctx = &ctx
+	return nil
 }

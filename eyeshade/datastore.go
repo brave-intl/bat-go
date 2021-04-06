@@ -10,6 +10,8 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/countries"
+	"github.com/brave-intl/bat-go/eyeshade/models"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	db "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -25,57 +27,56 @@ var (
 	ErrLimitReached = errors.New("query limit reached")
 	// ErrNeedTimeConstraints needs both a start and an end time
 	ErrNeedTimeConstraints = errors.New("need both start and end date")
-
-	settlementTypes = map[string]bool{
-		"contribution_settlement": true,
-		"referral_settlement":     true,
-	}
 )
 
 // Datastore holds methods for interacting with database
 type Datastore interface {
 	grantserver.Datastore
+	ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error)
+	WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error)
+	Rollback(ctx context.Context)
+	Commit(ctx context.Context) error
 	GetAccountEarnings(
 		ctx context.Context,
-		options AccountEarningsOptions,
-	) (*[]AccountEarnings, error)
+		options models.AccountEarningsOptions,
+	) (*[]models.AccountEarnings, error)
 	GetAccountSettlementEarnings(
 		ctx context.Context,
-		options AccountSettlementEarningsOptions,
-	) (*[]AccountSettlementEarnings, error)
+		options models.AccountSettlementEarningsOptions,
+	) (*[]models.AccountSettlementEarnings, error)
 	GetBalances(
 		ctx context.Context,
 		accountIDs []string,
-	) (*[]Balance, error)
+	) (*[]models.Balance, error)
 	GetPending(
 		ctx context.Context,
 		accountIDs []string,
-	) (*[]PendingTransaction, error)
+	) (*[]models.PendingTransaction, error)
 	GetTransactionsByAccount(
 		ctx context.Context,
 		accountID string,
 		txTypes []string,
-	) (*[]Transaction, error)
-	InsertFromSettlements(
+	) (*[]models.Transaction, error)
+	InsertConvertableTransactions(
 		ctx context.Context,
-		txs []Settlement,
-	) (sql.Result, error)
-	InsertFromReferrals(
-		ctx context.Context,
-		txs []Referral,
-	) (sql.Result, error)
-	InsertFromVoting(
-		ctx context.Context,
-		txs []Votes,
+		txs *[]interface{},
 	) (sql.Result, error)
 	InsertTransactions(
 		ctx context.Context,
-		txs *[]Transaction,
+		txs *[]models.Transaction,
 	) (sql.Result, error)
 	GetReferralGroups(
 		ctx context.Context,
 		activeAt inputs.Time,
 	) (*[]countries.ReferralGroup, error)
+	GetSettlementStats(
+		ctx context.Context,
+		options models.SettlementStatOptions,
+	) (*models.SettlementStat, error)
+	GetGrantStats(
+		ctx context.Context,
+		options models.GrantStatOptions,
+	) (*models.GrantStat, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -140,11 +141,60 @@ func NewConnections() (Datastore, Datastore, error) {
 	return eyeshadePg, eyeshadeRoPg, err
 }
 
+// WithTx manages transaction to context attachment
+func (pg *Postgres) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return ctx, tx, err
+	}
+	return context.WithValue(ctx, appctx.TxCTXKey, tx), tx, nil
+}
+
+// Rollback rolls back a transaction if on the right level
+func (pg *Postgres) Rollback(ctx context.Context) {
+	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
+	if ok && !rollback {
+		return // this is a nested rollback call
+	}
+	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
+	if !ok {
+		return // tx on context does not exist
+	}
+	err := tx.Rollback()
+	if err == nil || err == sql.ErrTxDone {
+		return // rollback or commit was already called
+	}
+	fmt.Println(err)
+}
+
+// ResolveConnection creates a transaction or uses the in progress one
+func (pg *Postgres) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
+	if ok {
+		return context.WithValue(ctx, appctx.TxRollbackCTXKey, false), tx, nil
+	}
+	ctx, tx, err := pg.WithTx(ctx)
+	return context.WithValue(ctx, appctx.TxRollbackCTXKey, true), tx, err
+}
+
+// Commit commits a transaction on the context if on the right level
+func (pg *Postgres) Commit(ctx context.Context) error {
+	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
+	if !ok || !rollback {
+		return nil // not the right context value or not the right tx level
+	}
+	tx, ok := ctx.Value(appctx.TxRollbackCTXKey).(*sqlx.Tx)
+	if !ok {
+		return errors.New("unable to find tx")
+	}
+	return tx.Commit()
+}
+
 // GetAccountEarnings gets the account earnings for a subset of ids
 func (pg Postgres) GetAccountEarnings(
 	ctx context.Context,
-	options AccountEarningsOptions,
-) (*[]AccountEarnings, error) {
+	options models.AccountEarningsOptions,
+) (*[]models.AccountEarnings, error) {
 	order := "desc"
 	if options.Ascending {
 		order = "asc"
@@ -168,7 +218,7 @@ where account_type = 'owner'
 group by (account_id, channel)
 order by earnings %s
 limit $2`, order)
-	earnings := []AccountEarnings{}
+	earnings := []models.AccountEarnings{}
 	err := pg.RawDB().SelectContext(
 		ctx,
 		&earnings,
@@ -185,8 +235,8 @@ limit $2`, order)
 // GetAccountSettlementEarnings gets the account settlement earnings for a subset of ids
 func (pg Postgres) GetAccountSettlementEarnings(
 	ctx context.Context,
-	options AccountSettlementEarningsOptions,
-) (*[]AccountSettlementEarnings, error) {
+	options models.AccountSettlementEarningsOptions,
+) (*[]models.AccountSettlementEarnings, error) {
 	order := "desc"
 	if options.Ascending {
 		order = "asc"
@@ -230,7 +280,7 @@ and transaction_type = $1%s
 group by (account_id, channel)
 order by paid %s
 limit $2`, timeConstraints, order)
-	earnings := []AccountSettlementEarnings{}
+	earnings := []models.AccountSettlementEarnings{}
 
 	err := pg.RawDB().SelectContext(
 		ctx,
@@ -248,7 +298,7 @@ limit $2`, timeConstraints, order)
 func (pg Postgres) GetBalances(
 	ctx context.Context,
 	accountIDs []string,
-) (*[]Balance, error) {
+) (*[]models.Balance, error) {
 	statement := `
 	SELECT
 		account_transactions.account_type as account_type,
@@ -257,7 +307,7 @@ func (pg Postgres) GetBalances(
 	FROM account_transactions
 	WHERE account_id = any($1::text[])
 	GROUP BY (account_transactions.account_id, account_transactions.account_type)`
-	balances := []Balance{}
+	balances := []models.Balance{}
 
 	err := pg.RawDB().SelectContext(
 		ctx,
@@ -275,7 +325,7 @@ func (pg Postgres) GetBalances(
 func (pg Postgres) GetPending(
 	ctx context.Context,
 	accountIDs []string,
-) (*[]PendingTransaction, error) {
+) (*[]models.PendingTransaction, error) {
 	statement := `
 SELECT
 	V.channel,
@@ -288,7 +338,7 @@ WHERE
 	AND NOT V.transacted
 	AND NOT V.excluded
 GROUP BY channel`
-	votes := []PendingTransaction{}
+	votes := []models.PendingTransaction{}
 
 	err := pg.RawDB().SelectContext(
 		ctx,
@@ -307,7 +357,7 @@ func (pg Postgres) GetTransactionsByAccount(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,
-) (*[]Transaction, error) {
+) (*[]models.Transaction, error) {
 	typeExtension := ""
 	args := []interface{}{accountID}
 	if len(txTypes) > 0 {
@@ -322,10 +372,10 @@ WHERE (
   OR to_account = $1
 ) %s
 ORDER BY created_at`,
-		strings.Join(transactionColumns, ", "),
+		strings.Join(models.TransactionColumns, ", "),
 		typeExtension,
 	)
-	transactions := []Transaction{}
+	transactions := []models.Transaction{}
 
 	err := pg.RawDB().SelectContext(
 		ctx,
@@ -339,8 +389,8 @@ ORDER BY created_at`,
 	return &transactions, nil
 }
 
-// InsertFromSettlements inserts a list of settlement transactions all at the same time
-func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settlement) (sql.Result, error) {
+// InsertConvertableTransactions inserts a list of settlement transactions all at the same time
+func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets *[]interface{}) (sql.Result, error) {
 	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
@@ -348,43 +398,16 @@ func (pg Postgres) InsertFromSettlements(ctx context.Context, targets []Settleme
 	return pg.InsertTransactions(ctx, txs)
 }
 
-// InsertFromVoting inserts many votes at the same time
-func (pg Postgres) InsertFromVoting(ctx context.Context, targets []Votes) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
-	if err != nil {
-		return nil, err
-	}
-	return pg.InsertTransactions(ctx, txs)
-}
-
-// InsertFromReferrals inserts many referral messages at the same time
-func (pg Postgres) InsertFromReferrals(ctx context.Context, targets []Referral) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
-	if err != nil {
-		return nil, err
-	}
-	return pg.InsertTransactions(ctx, txs)
-}
-
-// InsertFromUserDepositFromChain inserts many user deposits at the same time
-func (pg Postgres) InsertFromUserDepositFromChain(ctx context.Context, targets []UserDeposit) (sql.Result, error) {
-	txs, err := convertToTxs(targets)
-	if err != nil {
-		return nil, err
-	}
-	return pg.InsertTransactions(ctx, txs)
-}
-
-func convertToTxs(convertables ...interface{}) (*[]Transaction, error) {
-	txs := []Transaction{}
-	for _, convertable := range convertables {
-		con, ok := convertable.(ConvertableTransaction)
+func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
+	txs := []models.Transaction{}
+	for _, convertable := range *convertables {
+		con, ok := convertable.(models.ConvertableTransaction)
 		if con.Ignore() {
 			continue
 		}
 		if !ok || !con.Valid() {
 			return nil, errorutils.Wrap(
-				ErrConvertableFailedValidation,
+				models.ErrConvertableFailedValidation,
 				fmt.Sprintf(
 					"a convertable transaction failed validation %v",
 					con,
@@ -397,18 +420,18 @@ func convertToTxs(convertables ...interface{}) (*[]Transaction, error) {
 }
 
 // InsertTransactions is a generalizable transaction insertion function
-func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
+func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (sql.Result, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
 VALUES ( %s )`,
-		strings.Join(transactionColumns, ", "),
-		strings.Join(db.ColumnsToParamNames(transactionColumns), ", "),
+		strings.Join(models.TransactionColumns, ", "),
+		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
 	return sqlx.NamedExecContext(ctx, nil, statement, txs)
 }
 
 // GetSettlementStats gets stats about settlements
-func (pg Postgres) GetSettlementStats(ctx context.Context, options SettlementStatOptions) (*SettlementStat, error) {
+func (pg Postgres) GetSettlementStats(ctx context.Context, options models.SettlementStatOptions) (*models.SettlementStat, error) {
 	args := []interface{}{
 		options.Type,
 		options.Start,
@@ -429,8 +452,30 @@ AND created_at >= to_timestamp($2)
 AND created_at < to_timestamp($3)`,
 		extra,
 	)
-	var stats SettlementStat
+	var stats models.SettlementStat
 	return &stats, pg.GetContext(ctx, &stats, statement, args...)
+}
+
+// GetGrantStats gets stats about grants
+func (pg Postgres) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (*models.GrantStat, error) {
+	statement := `
+SELECT
+	count(*) as count,
+	sum(amount) as amount
+FROM votes
+WHERE
+		cohort = $1::text
+AND created_at >= to_timestamp($2)
+AND created_at < to_timestamp($3)`
+	var stats models.GrantStat
+	return &stats, pg.GetContext(
+		ctx,
+		&stats,
+		statement,
+		options.Type,
+		options.Start,
+		options.Until,
+	)
 }
 
 // GetReferralGroups gets referral groups active by a certain time

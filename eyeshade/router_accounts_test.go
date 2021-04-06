@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/maikelmclauflin/go-boom"
 	uuid "github.com/satori/go.uuid"
 )
@@ -26,7 +27,7 @@ func (suite *ControllersTestSuite) TestRouterDefunct() {
 	for _, route := range defunctRoutes {
 		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
 		_, body := suite.DoRequest(route.Method, path, nil)
-		var defunctResponse DefunctResponse
+		var defunctResponse boom.Err
 		err := json.Unmarshal(body, &defunctResponse)
 		suite.Require().NoError(err)
 		suite.Require().Equal(boom.Gone(), defunctResponse)
@@ -34,7 +35,7 @@ func (suite *ControllersTestSuite) TestRouterDefunct() {
 }
 
 func (suite *ControllersTestSuite) TestGETAccountEarnings() {
-	options := AccountEarningsOptions{
+	options := models.AccountEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
 		Limit:     5,
@@ -56,7 +57,7 @@ func (suite *ControllersTestSuite) TestGETAccountEarnings() {
 }
 
 func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
-	options := AccountSettlementEarningsOptions{
+	options := models.AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
 		Limit:     5,
@@ -75,14 +76,14 @@ func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
 	marshalled, err := json.Marshal(expecting)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(marshalled), string(body))
-	var unmarshalledBody []AccountSettlementEarnings
+	var unmarshalledBody []models.AccountSettlementEarnings
 	err = json.Unmarshal(body, &unmarshalledBody)
 	suite.Require().Len(unmarshalledBody, options.Limit)
 
 	now := time.Now()
 	startDate := now.Truncate(time.Second)
 	untilDate := startDate.Add(time.Hour * 24 * 2)
-	options = AccountSettlementEarningsOptions{
+	options = models.AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
 		Limit:     5,
@@ -128,7 +129,7 @@ func (suite *ControllersTestSuite) TestGETBalances() {
 	accountsMarshalled, err := json.Marshal(accounts)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(accountsMarshalled), string(body))
-	var unmarshalledBody []AccountSettlementEarnings
+	var unmarshalledBody []models.AccountSettlementEarnings
 	err = json.Unmarshal(body, &unmarshalledBody)
 	suite.Require().Len(unmarshalledBody, len(accountIDs))
 
@@ -148,7 +149,7 @@ func (suite *ControllersTestSuite) TestGETBalances() {
 	accountsMarshalled, err = json.Marshal(accounts)
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(accountsMarshalled), string(body))
-	unmarshalledBody = []AccountSettlementEarnings{}
+	unmarshalledBody = []models.AccountSettlementEarnings{}
 	err = json.Unmarshal(body, &unmarshalledBody)
 	suite.Require().Len(unmarshalledBody, len(accountIDs))
 	// now := time.Now()

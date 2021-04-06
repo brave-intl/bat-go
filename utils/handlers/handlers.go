@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 )

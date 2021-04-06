@@ -1,4 +1,4 @@
-package eyeshade
+package models
 
 import (
 	"fmt"

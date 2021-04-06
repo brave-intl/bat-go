@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"golang.org/x/net/http/httpguts"
 )
 

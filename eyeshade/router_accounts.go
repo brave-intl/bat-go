@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/go-chi/chi"
 )
 
@@ -75,7 +76,7 @@ func (service *Service) GETAccountEarningsTotal() handlers.AppHandler {
 		}
 		earnings, err := service.GetAccountEarnings(
 			r.Context(),
-			AccountEarningsOptions{
+			models.AccountEarningsOptions{
 				Type:      txType,
 				Ascending: query.Get("order") == "asc",
 				Limit:     limit,
@@ -126,7 +127,7 @@ func (service *Service) GETAccountSettlementEarningsTotal() handlers.AppHandler 
 		)
 		paid, err := service.GetAccountSettlementEarnings(
 			r.Context(),
-			AccountSettlementEarningsOptions{
+			models.AccountSettlementEarningsOptions{
 				Type:      txType,
 				Ascending: query.Get("order") == "asc",
 				Limit:     limit,

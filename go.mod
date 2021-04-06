@@ -4,7 +4,6 @@ go 1.15
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/Masterminds/squirrel v1.5.0
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.14.3
 	github.com/armon/go-radix v1.0.0 // indirect

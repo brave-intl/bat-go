@@ -19,7 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"

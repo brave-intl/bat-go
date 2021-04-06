@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/closers"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 )
 
 type requestID string
@@ -69,15 +70,15 @@ func GetRequestID(ctx context.Context) string {
 // ManyQueryParams condenses a query list down to a single comma separated list
 func ManyQueryParams(rawList []string, options ...string) []string {
 	list := []string{}
-	if len(rawList) > 0 {
-		delimiter := ","
-		if len(options) > 0 {
-			delimiter = options[0]
-		}
-		list = strings.Split(
-			strings.Join(rawList, delimiter),
-			delimiter,
-		)
+	if len(rawList) == 0 {
+		return list
 	}
-	return list
+	delimiter := ","
+	if len(options) > 0 {
+		delimiter = options[0]
+	}
+	return stringutils.SplitAndTrim(
+		strings.Join(rawList, delimiter),
+		delimiter,
+	)
 }

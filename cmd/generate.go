@@ -71,7 +71,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 			// test equality of schema file with what we just generated
 			if !bytes.Equal(existingSchema, schema) {
 				if overwrite {
-					logger.Warn().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
+					logger.Warn().Msg(fmt.Sprintf("schema has changed: %s.%s", parts[0], parts[1]))
 				} else {
 					return fmt.Errorf("schema has changed: %s.%s", parts[0], parts[1])
 				}

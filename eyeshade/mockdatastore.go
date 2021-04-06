@@ -8,6 +8,7 @@ import (
 	context "context"
 	sql "database/sql"
 	countries "github.com/brave-intl/bat-go/eyeshade/countries"
+	models "github.com/brave-intl/bat-go/eyeshade/models"
 	inputs "github.com/brave-intl/bat-go/utils/inputs"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
@@ -107,11 +108,69 @@ func (mr *MockDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), tx)
 }
 
+// ResolveConnection mocks base method
+func (m *MockDatastore) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveConnection", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ResolveConnection indicates an expected call of ResolveConnection
+func (mr *MockDatastoreMockRecorder) ResolveConnection(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveConnection", reflect.TypeOf((*MockDatastore)(nil).ResolveConnection), ctx)
+}
+
+// WithTx mocks base method
+func (m *MockDatastore) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithTx", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// WithTx indicates an expected call of WithTx
+func (mr *MockDatastoreMockRecorder) WithTx(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTx", reflect.TypeOf((*MockDatastore)(nil).WithTx), ctx)
+}
+
+// Rollback mocks base method
+func (m *MockDatastore) Rollback(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Rollback", ctx)
+}
+
+// Rollback indicates an expected call of Rollback
+func (mr *MockDatastoreMockRecorder) Rollback(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rollback", reflect.TypeOf((*MockDatastore)(nil).Rollback), ctx)
+}
+
+// Commit mocks base method
+func (m *MockDatastore) Commit(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Commit", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Commit indicates an expected call of Commit
+func (mr *MockDatastoreMockRecorder) Commit(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockDatastore)(nil).Commit), ctx)
+}
+
 // GetAccountEarnings mocks base method
-func (m *MockDatastore) GetAccountEarnings(ctx context.Context, options AccountEarningsOptions) (*[]AccountEarnings, error) {
+func (m *MockDatastore) GetAccountEarnings(ctx context.Context, options models.AccountEarningsOptions) (*[]models.AccountEarnings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAccountEarnings", ctx, options)
-	ret0, _ := ret[0].(*[]AccountEarnings)
+	ret0, _ := ret[0].(*[]models.AccountEarnings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -123,10 +182,10 @@ func (mr *MockDatastoreMockRecorder) GetAccountEarnings(ctx, options interface{}
 }
 
 // GetAccountSettlementEarnings mocks base method
-func (m *MockDatastore) GetAccountSettlementEarnings(ctx context.Context, options AccountSettlementEarningsOptions) (*[]AccountSettlementEarnings, error) {
+func (m *MockDatastore) GetAccountSettlementEarnings(ctx context.Context, options models.AccountSettlementEarningsOptions) (*[]models.AccountSettlementEarnings, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAccountSettlementEarnings", ctx, options)
-	ret0, _ := ret[0].(*[]AccountSettlementEarnings)
+	ret0, _ := ret[0].(*[]models.AccountSettlementEarnings)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -138,10 +197,10 @@ func (mr *MockDatastoreMockRecorder) GetAccountSettlementEarnings(ctx, options i
 }
 
 // GetBalances mocks base method
-func (m *MockDatastore) GetBalances(ctx context.Context, accountIDs []string) (*[]Balance, error) {
+func (m *MockDatastore) GetBalances(ctx context.Context, accountIDs []string) (*[]models.Balance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBalances", ctx, accountIDs)
-	ret0, _ := ret[0].(*[]Balance)
+	ret0, _ := ret[0].(*[]models.Balance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -153,10 +212,10 @@ func (mr *MockDatastoreMockRecorder) GetBalances(ctx, accountIDs interface{}) *g
 }
 
 // GetPending mocks base method
-func (m *MockDatastore) GetPending(ctx context.Context, accountIDs []string) (*[]PendingTransaction, error) {
+func (m *MockDatastore) GetPending(ctx context.Context, accountIDs []string) (*[]models.PendingTransaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPending", ctx, accountIDs)
-	ret0, _ := ret[0].(*[]PendingTransaction)
+	ret0, _ := ret[0].(*[]models.PendingTransaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -168,10 +227,10 @@ func (mr *MockDatastoreMockRecorder) GetPending(ctx, accountIDs interface{}) *go
 }
 
 // GetTransactionsByAccount mocks base method
-func (m *MockDatastore) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (*[]Transaction, error) {
+func (m *MockDatastore) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (*[]models.Transaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTransactionsByAccount", ctx, accountID, txTypes)
-	ret0, _ := ret[0].(*[]Transaction)
+	ret0, _ := ret[0].(*[]models.Transaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -182,53 +241,23 @@ func (mr *MockDatastoreMockRecorder) GetTransactionsByAccount(ctx, accountID, tx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactionsByAccount", reflect.TypeOf((*MockDatastore)(nil).GetTransactionsByAccount), ctx, accountID, txTypes)
 }
 
-// InsertFromSettlements mocks base method
-func (m *MockDatastore) InsertFromSettlements(ctx context.Context, txs []Settlement) (sql.Result, error) {
+// InsertConvertableTransactions mocks base method
+func (m *MockDatastore) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (sql.Result, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertFromSettlements", ctx, txs)
+	ret := m.ctrl.Call(m, "InsertConvertableTransactions", ctx, txs)
 	ret0, _ := ret[0].(sql.Result)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// InsertFromSettlements indicates an expected call of InsertFromSettlements
-func (mr *MockDatastoreMockRecorder) InsertFromSettlements(ctx, txs interface{}) *gomock.Call {
+// InsertConvertableTransactions indicates an expected call of InsertConvertableTransactions
+func (mr *MockDatastoreMockRecorder) InsertConvertableTransactions(ctx, txs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromSettlements", reflect.TypeOf((*MockDatastore)(nil).InsertFromSettlements), ctx, txs)
-}
-
-// InsertFromReferrals mocks base method
-func (m *MockDatastore) InsertFromReferrals(ctx context.Context, txs []Referral) (sql.Result, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertFromReferrals", ctx, txs)
-	ret0, _ := ret[0].(sql.Result)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InsertFromReferrals indicates an expected call of InsertFromReferrals
-func (mr *MockDatastoreMockRecorder) InsertFromReferrals(ctx, txs interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromReferrals", reflect.TypeOf((*MockDatastore)(nil).InsertFromReferrals), ctx, txs)
-}
-
-// InsertFromVoting mocks base method
-func (m *MockDatastore) InsertFromVoting(ctx context.Context, txs []Votes) (sql.Result, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertFromVoting", ctx, txs)
-	ret0, _ := ret[0].(sql.Result)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// InsertFromVoting indicates an expected call of InsertFromVoting
-func (mr *MockDatastoreMockRecorder) InsertFromVoting(ctx, txs interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertFromVoting", reflect.TypeOf((*MockDatastore)(nil).InsertFromVoting), ctx, txs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertConvertableTransactions", reflect.TypeOf((*MockDatastore)(nil).InsertConvertableTransactions), ctx, txs)
 }
 
 // InsertTransactions mocks base method
-func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]Transaction) (sql.Result, error) {
+func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (sql.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertTransactions", ctx, txs)
 	ret0, _ := ret[0].(sql.Result)
@@ -255,4 +284,34 @@ func (m *MockDatastore) GetReferralGroups(ctx context.Context, activeAt inputs.T
 func (mr *MockDatastoreMockRecorder) GetReferralGroups(ctx, activeAt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReferralGroups", reflect.TypeOf((*MockDatastore)(nil).GetReferralGroups), ctx, activeAt)
+}
+
+// GetSettlementStats mocks base method
+func (m *MockDatastore) GetSettlementStats(ctx context.Context, options models.SettlementStatOptions) (*models.SettlementStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSettlementStats", ctx, options)
+	ret0, _ := ret[0].(*models.SettlementStat)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSettlementStats indicates an expected call of GetSettlementStats
+func (mr *MockDatastoreMockRecorder) GetSettlementStats(ctx, options interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSettlementStats", reflect.TypeOf((*MockDatastore)(nil).GetSettlementStats), ctx, options)
+}
+
+// GetGrantStats mocks base method
+func (m *MockDatastore) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (*models.GrantStat, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGrantStats", ctx, options)
+	ret0, _ := ret[0].(*models.GrantStat)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGrantStats indicates an expected call of GetGrantStats
+func (mr *MockDatastoreMockRecorder) GetGrantStats(ctx, options interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantStats", reflect.TypeOf((*MockDatastore)(nil).GetGrantStats), ctx, options)
 }

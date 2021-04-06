@@ -13,7 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"

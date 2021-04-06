@@ -30,7 +30,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/pindialer"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/brave-intl/bat-go/utils/validators"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/rs/zerolog"

@@ -15,7 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/requestutils"
+	requestutils "github.com/brave-intl/bat-go/utils/request"
 	"github.com/shopspring/decimal"
 	"github.com/square/go-jose/jwt"
 )

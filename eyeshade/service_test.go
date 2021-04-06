@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 )
@@ -54,6 +55,7 @@ func (suite *ServiceMockTestSuite) SetupSuite() {
 	suite.mockRO = mockRO
 
 	service, err := SetupService(
+		suite.ctx,
 		WithConnections(suite.db, suite.rodb),
 	)
 	suite.Require().NoError(err)
@@ -64,7 +66,7 @@ func (suite *ServiceMockTestSuite) TestGetBalances() {
 	accountIDs := CreateIDs(2)
 
 	expected := suite.SetupMockBalances(accountIDs, accountIDs)
-	balances := suite.Balances(accountIDs, true)
+	balances := suite.GetBalances(accountIDs, true)
 	suite.Require().Len(*expected, len(accountIDs))
 	suite.Require().Len(*balances, len(*expected))
 
@@ -87,7 +89,7 @@ func (suite *ServiceMockTestSuite) TestGetBalances() {
 func (suite *ServiceMockTestSuite) SetupMockBalances(
 	balanceAccountIDs []string,
 	pendingAccountIDs ...[]string,
-) *[]Balance {
+) *[]models.Balance {
 	expectedBalances := SetupMockGetBalances(
 		suite.mockRO,
 		balanceAccountIDs,
@@ -106,7 +108,7 @@ func (suite *ServiceMockTestSuite) SetupMockBalances(
 func (suite *ServiceMockTestSuite) GetBalances(
 	accountIDs []string,
 	includePending bool,
-) *[]Balance {
+) *[]models.Balance {
 	balances, err := suite.service.GetBalances(
 		suite.ctx,
 		accountIDs,
