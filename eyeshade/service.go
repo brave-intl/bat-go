@@ -140,6 +140,7 @@ func WithBuildInfo(service *Service) error {
 	return nil
 }
 
+// Context returns the service context
 func (service *Service) Context() context.Context {
 	return *service.ctx
 }

@@ -127,6 +127,7 @@ func (con *Consumer) Handler(msgs *[]kafka.Message) error {
 	return err
 }
 
+// Context returns the context from the service
 func (con *Consumer) Context() context.Context {
 	return con.service.Context()
 }

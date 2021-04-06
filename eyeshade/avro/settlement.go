@@ -111,7 +111,7 @@ func (s *Settlement) Decode(msg kafka.Message) (*models.Settlement, error) {
 			return &settlement, nil
 		}
 		return nil, &errorutils.MultiError{
-			Errs: []error{err, v1Err}
+			Errs: []error{err, v1Err},
 		}
 	}
 	v2Err := CodecDecode(s.codecs["v2"], msg, &settlement)
