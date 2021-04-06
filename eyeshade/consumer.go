@@ -25,7 +25,6 @@ var (
 // Consumer holds information about a single consumer
 type Consumer struct {
 	topicHandler avro.TopicHandler
-	ctx          context.Context
 	service      *Service
 	reader       *kafka.Reader
 	config       kafka.ReaderConfig
@@ -44,7 +43,7 @@ func (con *Consumer) Collect(
 	msgCh chan<- kafka.Message,
 	errCh chan<- error,
 ) {
-	msg, err := con.reader.FetchMessage(con.ctx)
+	msg, err := con.reader.FetchMessage(con.Context())
 	if err != nil {
 		errCh <- err
 	} else {
@@ -122,10 +121,14 @@ func (con *Consumer) Handler(msgs *[]kafka.Message) error {
 		return err
 	}
 	_, err = con.service.InsertConvertableTransactions(
-		*con.service.ctx,
+		con.Context(),
 		txs,
 	)
 	return err
+}
+
+func (con *Consumer) Context() context.Context {
+	return con.service.Context()
 }
 
 // Commit commits messages that have been read and inserted
@@ -133,7 +136,7 @@ func (con *Consumer) Commit(msgs *[]kafka.Message) error {
 	if msgs == nil {
 		return nil
 	}
-	return con.reader.CommitMessages(con.ctx, *msgs...)
+	return con.reader.CommitMessages(con.Context(), *msgs...)
 }
 
 // Consume starts the consumer
