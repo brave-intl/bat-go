@@ -42,9 +42,7 @@ var (
 	dbs                     = map[string]*sqlx.DB{}
 	currentMigrationVersion = uint(32)
 	migrationTracks         = map[string]uint{
-		"eyeshade":   20,
-		"payments":   0,
-		"promotions": currentMigrationVersion,
+		"eyeshade": 20,
 	}
 )
 
