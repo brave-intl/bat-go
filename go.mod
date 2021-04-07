@@ -26,6 +26,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.1
 	github.com/lib/pq v1.10.0
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/magefile/mage v1.10.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mssola/user_agent v0.5.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -37,7 +38,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.12
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
-	github.com/sirupsen/logrus v1.8.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
 	github.com/square/go-jose v2.5.1+incompatible
