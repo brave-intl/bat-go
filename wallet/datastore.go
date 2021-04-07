@@ -76,8 +76,8 @@ type Postgres struct {
 }
 
 // NewWritablePostgres creates a new Postgres Datastore
-func NewWritablePostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewWritablePostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "wallet_datastore",
@@ -87,8 +87,8 @@ func NewWritablePostgres(databaseURL string, performMigration bool, dbStatsPrefi
 }
 
 // NewReadOnlyPostgres creates a new Postgres RO Datastore
-func NewReadOnlyPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewReadOnlyPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "wallet_ro_datastore",
@@ -100,7 +100,7 @@ func NewReadOnlyPostgres(databaseURL string, performMigration bool, dbStatsPrefi
 // NewPostgres creates postgres connections
 func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var walletRODB ReadOnlyDatastore
-	walletDB, err := NewWritablePostgres("", true)
+	walletDB, err := NewWritablePostgres("", true, "wallet")
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -108,7 +108,7 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	}
 	roDB := os.Getenv("RO_DATABASE_URL")
 	if len(roDB) > 0 {
-		walletRODB, err = NewReadOnlyPostgres(roDB, false)
+		walletRODB, err = NewReadOnlyPostgres(roDB, false, "wallet")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")

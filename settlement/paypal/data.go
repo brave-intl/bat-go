@@ -24,7 +24,7 @@ var (
 // GenerateRefID converts a hex to base62
 func (pm *Metadata) GenerateRefID() error {
 	if len(pm.SettlementID) == 0 || len(pm.PayerID) == 0 {
-		return errors.New("Must populate SettlementID and PayerID to generate a ref ID")
+		return errors.New("must populate SettlementID and PayerID to generate a ref ID")
 	}
 	key := pm.SettlementID + pm.PayerID
 	bytes := sha256.Sum256([]byte(key))

@@ -65,17 +65,17 @@ func (mr *MockDatastoreMockRecorder) NewMigrate() *gomock.Call {
 }
 
 // Migrate mocks base method
-func (m *MockDatastore) Migrate() error {
+func (m *MockDatastore) Migrate(currentMigrationVersion uint) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Migrate")
+	ret := m.ctrl.Call(m, "Migrate", currentMigrationVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Migrate indicates an expected call of Migrate
-func (mr *MockDatastoreMockRecorder) Migrate() *gomock.Call {
+func (mr *MockDatastoreMockRecorder) Migrate(currentMigrationVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), currentMigrationVersion)
 }
 
 // RollbackTxAndHandle mocks base method
@@ -172,17 +172,17 @@ func (mr *MockReadOnlyDatastoreMockRecorder) NewMigrate() *gomock.Call {
 }
 
 // Migrate mocks base method
-func (m *MockReadOnlyDatastore) Migrate() error {
+func (m *MockReadOnlyDatastore) Migrate(currentMigrationVersion uint) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Migrate")
+	ret := m.ctrl.Call(m, "Migrate", currentMigrationVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Migrate indicates an expected call of Migrate
-func (mr *MockReadOnlyDatastoreMockRecorder) Migrate() *gomock.Call {
+func (mr *MockReadOnlyDatastoreMockRecorder) Migrate(currentMigrationVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Migrate))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Migrate), currentMigrationVersion)
 }
 
 // RollbackTxAndHandle mocks base method

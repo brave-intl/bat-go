@@ -17,7 +17,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	w "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -43,7 +42,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
-		return nil, errors.New("Wallet is not verified")
+		return nil, errors.New("wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
@@ -101,7 +100,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
-			return nil, errors.New("Only ads suggestions can be drained")
+			return nil, errors.New("only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
@@ -116,7 +115,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
-			return nil, errors.New("Cannot claim more funds than were earned")
+			return nil, errors.New("cannot claim more funds than were earned")
 		}
 
 		// Skip already drained promotions for idempotency
@@ -278,7 +277,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
 		}
 
-		tx := new(w.TransactionInfo)
+		tx := new(walletutils.TransactionInfo)
 
 		tx.ID = transferID
 		tx.Destination = wallet.UserDepositDestination
@@ -366,7 +365,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				return nil, fmt.Errorf("failed to set append total funds: %w", err)
 			}
 		}
-		return new(w.TransactionInfo), nil
+		return new(walletutils.TransactionInfo), nil
 	}
 
 	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
