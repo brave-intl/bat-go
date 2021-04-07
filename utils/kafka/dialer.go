@@ -73,7 +73,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 	}
 
 	keyPEM := pem.EncodeToMemory(block)
-s	if len(keyPassword) != 0 {
+	if len(keyPassword) != 0 {
 		// TODO: move away from DecryptPEM in 1.16
 		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword)) //nolint
 		if err != nil {
