@@ -39,9 +39,11 @@ var (
 		"db.r5.12xlarge": 5000,
 		"db.r5.24xlarge": 5000,
 	}
-	dbs                     = map[string]*sqlx.DB{}
-	currentMigrationVersion = uint(32)
-	migrationTracks         = map[string]uint{
+	dbs = map[string]*sqlx.DB{}
+	// CurrentMigrationVersion holds the default migration version
+	CurrentMigrationVersion = uint(32)
+	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
+	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
 	}
 )
@@ -50,7 +52,7 @@ var (
 type Datastore interface {
 	RawDB() *sqlx.DB
 	NewMigrate() (*migrate.Migrate, error)
-	Migrate(currentMigrationVersion uint) error
+	Migrate(...uint) error
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
 }
@@ -86,7 +88,7 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 }
 
 // Migrate the Postgres instance
-func (pg *Postgres) Migrate(currentMigrationVersion uint) error {
+func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
 	_, logger := logging.SetupLogger(ctx)
 
@@ -100,6 +102,10 @@ func (pg *Postgres) Migrate(currentMigrationVersion uint) error {
 
 	v, dirty, err := m.Version()
 
+	currentMigrationVersion := CurrentMigrationVersion
+	if len(currentMigrationVersions) > 0 {
+		currentMigrationVersion = currentMigrationVersions[0]
+	}
 	subLogger := logger.With().
 		Bool("dirty", dirty).
 		Int("db_version", int(v)).
@@ -201,9 +207,9 @@ func NewPostgres(
 	pg := &Postgres{db}
 
 	if performMigration {
-		migrationVersion := migrationTracks[migrationTrack]
+		migrationVersion := MigrationTracks[migrationTrack]
 		if migrationVersion == 0 {
-			migrationVersion = currentMigrationVersion
+			migrationVersion = CurrentMigrationVersion
 		}
 		err = pg.Migrate(migrationVersion)
 		if err != nil {
