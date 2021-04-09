@@ -134,8 +134,12 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	}
 	return buf, nil
 }
+func InitDialer(ctx context.Context, dialers ...*kafka.Dialer) (*kafka.Dialer, error) {
 
-func InitDialer(ctx context.Context) (*kafka.Dialer, error) {
+	var dialer *kafka.Dialer
+	if len(dialers) != 0 && dialers[0] != nil {
+		return dialers[0], nil
+	}
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {
@@ -155,15 +159,9 @@ func InitKafkaWriter(
 ) (*kafka.Writer, *kafka.Dialer, error) {
 	_, logger := logging.SetupLogger(ctx)
 
-	var dialer *kafka.Dialer
-	if len(dialers) == 0 || dialers[0] == nil {
-		d, err := InitDialer(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		dialer = d
-	} else {
-		dialer = dialers[0]
+	dialer, err := InitDialer(ctx, dialers...)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
@@ -187,15 +185,9 @@ func InitKafkaReader(
 ) (*kafka.Reader, *kafka.Dialer, error) {
 	_, logger := logging.SetupLogger(ctx)
 
-	var dialer *kafka.Dialer
-	if len(dialers) == 0 || dialers[0] == nil {
-		d, err := InitDialer(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		dialer = d
-	} else {
-		dialer = dialers[0]
+	dialer, err := InitDialer(ctx, dialers...)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
