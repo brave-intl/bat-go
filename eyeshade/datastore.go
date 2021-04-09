@@ -429,21 +429,12 @@ RETURNING *`,
 		strings.Join(models.TransactionColumns, ", "),
 		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
-	transactions := []models.Transaction{}
-	rows, err := pg.RawDB().NamedQueryContext(ctx, statement, *txs)
+	query, args, err := sqlx.Named(statement, *txs)
 	if err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		var transaction = models.Transaction{}
-		err := rows.StructScan(&transaction)
-		if err != nil {
-			return nil, err
-		}
-		transactions = append(transactions, transaction)
-	}
-	err = rows.Close()
-	return &transactions, err
+	transactions := []models.Transaction{}
+	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, query, args...)
 }
 
 // GetSettlementStats gets stats about settlements
