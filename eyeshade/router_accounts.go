@@ -164,7 +164,7 @@ func (service *Service) GETTransactionsByAccount() handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		accountID := chi.URLParam(r, "account")
 		txTypes := requestutils.ManyQueryParams(r.URL.Query()["type"])
-		transactions, err := service.GetTransactions(
+		transactions, err := service.GetTransactionsByAccount(
 			r.Context(),
 			accountID,
 			txTypes,

@@ -16,6 +16,8 @@ type Settlement struct {
 	AltCurrency    altcurrency.AltCurrency `json:"altcurrency"`
 	Probi          decimal.Decimal         `json:"probi"`
 	Fees           decimal.Decimal         `json:"fees"`
+	Fee            decimal.Decimal         `json:"fee"`
+	Commission     decimal.Decimal         `json:"commission"`
 	Amount         decimal.Decimal         `json:"amount"` // amount in settlement currency
 	Currency       string                  `json:"currency"`
 	Owner          string                  `json:"owner"`
@@ -172,6 +174,8 @@ func (settlement *Settlement) ToNative() map[string]interface{} {
 		"altcurrency":    settlement.AltCurrency.String(),
 		"probi":          settlement.Probi.String(),
 		"fees":           settlement.Fees.String(),
+		"fee":            settlement.Fee.String(),
+		"commission":     settlement.Commission.String(),
 		"amount":         settlement.Amount.String(),
 		"currency":       settlement.Currency,
 		"owner":          settlement.Owner,

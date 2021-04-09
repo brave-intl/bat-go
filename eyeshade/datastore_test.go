@@ -585,7 +585,9 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs []interface{}) *[]models.Transaction {
+func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(
+	txs []interface{},
+) *[]models.Transaction {
 	inserted, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
 	suite.Require().NoError(err)
 	return inserted

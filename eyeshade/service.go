@@ -4,10 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/utils/clients/common"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	"github.com/rs/zerolog"
@@ -93,64 +91,6 @@ func WithNewClients(service *Service) error {
 	return err
 }
 
-// WithConsumer sets up a consumer on the service
-func WithConsumer(
-	topicHandler avro.TopicHandler,
-) func(*Service) error {
-	return func(service *Service) error {
-		if service.consumers == nil {
-			// can't access consumer keys until make is called
-			service.consumers = make(map[string]BatchMessageConsumer)
-		}
-		reader, dialer, err := kafkautils.InitKafkaReader(
-			service.Context(),
-			topicHandler.Topic(),
-			service.dialer,
-		)
-		if err != nil {
-			return err
-		}
-		consumer := &MessageHandler{
-			handler: topicHandler,
-			reader:  reader,
-			dialer:  dialer,
-			service: service,
-		}
-		service.dialer = dialer
-		service.consumers[topicHandler.Topic()] = BatchMessageConsumer(consumer)
-		return nil
-	}
-}
-
-// WithProducer sets up a consumer on the service
-func WithProducer(
-	topicHandler avro.TopicHandler,
-) func(*Service) error {
-	return func(service *Service) error {
-		if service.producers == nil {
-			// can't access producer keys until make is called
-			service.producers = make(map[string]BatchMessageProducer)
-		}
-		writer, dialer, err := kafkautils.InitKafkaWriter(
-			service.Context(),
-			topicHandler.Topic(),
-			service.dialer,
-		)
-		if err != nil {
-			return err
-		}
-		producer := &MessageHandler{
-			handler: topicHandler,
-			writer:  writer,
-			dialer:  dialer,
-			service: service,
-		}
-		service.dialer = dialer
-		service.producers[topicHandler.Topic()] = BatchMessageProducer(producer)
-		return nil
-	}
-}
-
 // Consume has the service start consuming
 func (service *Service) Consume() chan error {
 	// initialize a new reader with the brokers and topic
@@ -178,7 +118,8 @@ func WithNewLogger(service *Service) error {
 // WithBuildInfo attaches build info to context
 func WithBuildInfo(service *Service) error {
 	ctx := *service.ctx
-	ctx = context.WithValue(ctx, appctx.VersionCTXKey, os.Getenv("GIT_VERSIO"))
+	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
+	ctx = context.WithValue(ctx, appctx.VersionCTXKey, os.Getenv("GIT_VERSION"))
 	ctx = context.WithValue(ctx, appctx.CommitCTXKey, os.Getenv("GIT_COMMIT"))
 	ctx = context.WithValue(ctx, appctx.BuildTimeCTXKey, os.Getenv("BUILD_TIME"))
 	service.ctx = &ctx

@@ -7,18 +7,12 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 	"github.com/segmentio/kafka-go"
 )
-
-// MessageHandler holds information about a single handler
-type MessageHandler struct {
-	handler avro.TopicHandler
-	service *Service
-	reader  *kafka.Reader
-	writer  *kafka.Writer
-	dialer  *kafka.Dialer
-}
 
 // BatchMessagesHandler handles many messages being consumed at once
 type BatchMessagesHandler interface {
@@ -36,6 +30,15 @@ type BatchMessageConsumer interface {
 // BatchMessageProducer holds methods for batch method producer
 type BatchMessageProducer interface {
 	Produce(context.Context, ...avro.KafkaMessageEncodable) error
+}
+
+// MessageHandler holds information about a single handler
+type MessageHandler struct {
+	handler avro.TopicHandler
+	service *Service
+	reader  *kafka.Reader
+	writer  *kafka.Writer
+	dialer  *kafka.Dialer
 }
 
 // Topic returns the topic of the message handler
@@ -152,7 +155,10 @@ func (con *MessageHandler) Consume(
 }
 
 // Produce produces messages
-func (con *MessageHandler) Produce(ctx context.Context, encodables ...avro.KafkaMessageEncodable) error {
+func (con *MessageHandler) Produce(
+	ctx context.Context,
+	encodables ...avro.KafkaMessageEncodable,
+) error {
 	messages := []kafka.Message{}
 	if len(encodables) == 0 {
 		return sql.ErrNoRows
@@ -166,8 +172,106 @@ func (con *MessageHandler) Produce(ctx context.Context, encodables ...avro.Kafka
 			Value: bytes,
 		})
 	}
+	fmt.Printf("writing %d messages\n", len(messages))
 	return con.writer.WriteMessages(
 		ctx,
 		messages...,
 	)
+}
+
+// WithTopicAutoCreation creates topics used by producers and consumers
+func WithTopicAutoCreation(service *Service) error {
+	topics := map[string]int{}
+	if service.producers != nil {
+		for key := range service.producers {
+			topics[key] = 0
+		}
+	}
+	if service.consumers != nil {
+		for key := range service.consumers {
+			topics[key] = 0
+		}
+	}
+
+	ctx := service.Context()
+	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+	broker := stringutils.SplitAndTrim(kafkaBrokers)[0]
+	conn, err := kafka.DialContext(ctx, "tcp", broker)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	for topic := range topics {
+		err = conn.CreateTopics(kafka.TopicConfig{
+			Topic:             topic,
+			NumPartitions:     2,
+			ReplicationFactor: 3,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WithConsumer sets up a consumer on the service
+func WithConsumer(
+	topicHandlers ...avro.TopicHandler,
+) func(*Service) error {
+	return func(service *Service) error {
+		if service.consumers == nil {
+			// can't access consumer keys until make is called
+			service.consumers = make(map[string]BatchMessageConsumer)
+		}
+		for _, topicHandler := range topicHandlers {
+			reader, dialer, err := kafkautils.InitKafkaReader(
+				service.Context(),
+				topicHandler.Topic(),
+				service.dialer,
+			)
+			if err != nil {
+				return err
+			}
+			consumer := &MessageHandler{
+				handler: topicHandler,
+				reader:  reader,
+				dialer:  dialer,
+				service: service,
+			}
+			service.dialer = dialer
+			service.consumers[topicHandler.Topic()] = BatchMessageConsumer(consumer)
+		}
+		return nil
+	}
+}
+
+// WithProducer sets up a consumer on the service
+func WithProducer(
+	topicHandlers ...avro.TopicHandler,
+) func(*Service) error {
+	return func(service *Service) error {
+		if service.producers == nil {
+			// can't access producer keys until make is called
+			service.producers = make(map[string]BatchMessageProducer)
+		}
+		for _, topicHandler := range topicHandlers {
+			writer, dialer, err := kafkautils.InitKafkaWriter(
+				service.Context(),
+				topicHandler.Topic(),
+				service.dialer,
+			)
+			if err != nil {
+				return err
+			}
+			producer := &MessageHandler{
+				handler: topicHandler,
+				writer:  writer,
+				dialer:  dialer,
+				service: service,
+			}
+			service.dialer = dialer
+			service.producers[topicHandler.Topic()] = BatchMessageProducer(producer)
+		}
+		return nil
+	}
 }

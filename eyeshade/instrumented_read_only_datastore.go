@@ -155,6 +155,20 @@ func (_d DatastoreWithPrometheus) GetSettlementStats(ctx context.Context, option
 	return _d.base.GetSettlementStats(ctx, options)
 }
 
+// GetTransactions implements Datastore
+func (_d DatastoreWithPrometheus) GetTransactions(ctx context.Context, constraints ...map[string]string) (tap1 *[]models.Transaction, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactions", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTransactions(ctx, constraints...)
+}
+
 // GetTransactionsByAccount implements Datastore
 func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()

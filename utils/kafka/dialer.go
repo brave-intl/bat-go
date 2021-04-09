@@ -19,6 +19,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 )
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires
@@ -83,6 +84,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
 	}
 
+	fmt.Println(string(certPEM), string(keyPEM))
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
 		return nil, nil, errorutils.Wrap(err, "Could not parse x509 keypair")
@@ -134,8 +136,12 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	}
 	return buf, nil
 }
-func InitDialer(ctx context.Context, dialers ...*kafka.Dialer) (*kafka.Dialer, error) {
 
+// InitDialer creates a dialer to be used by kafka
+func InitDialer(
+	ctx context.Context,
+	dialers ...*kafka.Dialer,
+) (*kafka.Dialer, error) {
 	var dialer *kafka.Dialer
 	if len(dialers) != 0 && dialers[0] != nil {
 		return dialers[0], nil
@@ -143,6 +149,7 @@ func InitDialer(ctx context.Context, dialers ...*kafka.Dialer) (*kafka.Dialer, e
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {
+		fmt.Println("tls dialer failed")
 		return nil, err
 	}
 
@@ -167,7 +174,7 @@ func InitKafkaWriter(
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  strings.Split(kafkaBrokers, ","),
+		Brokers:  stringutils.SplitAndTrim(kafkaBrokers, ","),
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,

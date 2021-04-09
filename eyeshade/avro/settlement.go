@@ -2,7 +2,6 @@ package avro
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -11,6 +10,7 @@ import (
 )
 
 var (
+	latest  = "v2"
 	schemas = map[string]string{
 		"hashonly": `{
 			"namespace": "brave.payments",
@@ -27,7 +27,7 @@ var (
 			"type": "record",
 			"name": "payout",
 			"doc": "This message is sent when settlement message is to be sent",
-			fields: [
+			"fields": [
 				{ "name": "address", "type": "string" },
 				{ "name": "settlementId", "type": "string" },
 				{ "name": "publisher", "type": "string" },
@@ -42,7 +42,7 @@ var (
 				{ "name": "type", "type": "string" }
 			]
 		}`,
-		"v2": `{
+		latest: `{
 			"namespace": "brave.payments",
 			"type": "record",
 			"name": "payout",
@@ -68,23 +68,19 @@ var (
 )
 
 // NewSettlement holds all info needed to create a settlement parser
-func NewSettlement(
-	handler func([]models.ConvertableTransaction) error,
-) *Settlement {
-	topic := os.Getenv("ENV") + ".settlement.payout"
+func NewSettlement() *Settlement {
 	codecs := map[string]*goavro.Codec{}
 	for key, schema := range schemas {
 		codec, err := goavro.NewCodec(schema)
 		if err != nil {
-			panic(fmt.Sprintf("unable to parse %s", key))
+			panic(fmt.Sprintf("unable to parse %s %v", key, err))
 		}
 		codecs[key] = codec
 	}
 	return &Settlement{
-		topic,
+		KeyToTopic["settlement"],
 		schemas,
 		codecs,
-		handler,
 	}
 }
 
@@ -93,7 +89,6 @@ type Settlement struct {
 	topic   string
 	schemas map[string]string
 	codecs  map[string]*goavro.Codec
-	handler func([]models.ConvertableTransaction) error
 }
 
 // Topic returns the settlement type's topic
@@ -103,7 +98,7 @@ func (s *Settlement) Topic() string {
 
 // ToBinary returns binary value of the encodable message
 func (s *Settlement) ToBinary(encodable KafkaMessageEncodable) ([]byte, error) {
-	return s.codecs["v2"].BinaryFromNative(nil, encodable.ToNative())
+	return s.codecs[latest].BinaryFromNative(nil, encodable.ToNative())
 }
 
 // Decode decodes a message
@@ -119,7 +114,7 @@ func (s *Settlement) Decode(msg kafka.Message) (*models.Settlement, error) {
 			Errs: []error{err, v1Err},
 		}
 	}
-	v2Err := CodecDecode(s.codecs["v2"], msg, &settlement)
+	v2Err := CodecDecode(s.codecs[latest], msg, &settlement)
 	if v2Err != nil {
 		return nil, v2Err
 	}

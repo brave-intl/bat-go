@@ -33,7 +33,7 @@ var (
 		"contribution_settlement": true,
 		"referral_settlement":     true,
 	}
-	// TransactionColumns columns for transaction queries
+	// TransactionColumns columns for transaction queries. may be useful to just pull off of struct directly
 	TransactionColumns = []string{
 		"id",
 		"created_at",

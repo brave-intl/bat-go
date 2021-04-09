@@ -68,8 +68,8 @@ func (service *Service) GetBalances(
 	return balances, nil
 }
 
-// GetTransactions uses the readonly connection if available to get the account transactions
-func (service *Service) GetTransactions(
+// GetTransactionsByAccount uses the readonly connection if available to get the account transactions
+func (service *Service) GetTransactionsByAccount(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,

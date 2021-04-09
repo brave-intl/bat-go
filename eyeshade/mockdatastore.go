@@ -229,6 +229,26 @@ func (mr *MockDatastoreMockRecorder) GetPending(ctx, accountIDs interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPending", reflect.TypeOf((*MockDatastore)(nil).GetPending), ctx, accountIDs)
 }
 
+// GetTransactions mocks base method
+func (m *MockDatastore) GetTransactions(ctx context.Context, constraints ...map[string]string) (*[]models.Transaction, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx}
+	for _, a := range constraints {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTransactions", varargs...)
+	ret0, _ := ret[0].(*[]models.Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransactions indicates an expected call of GetTransactions
+func (mr *MockDatastoreMockRecorder) GetTransactions(ctx interface{}, constraints ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, constraints...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactions", reflect.TypeOf((*MockDatastore)(nil).GetTransactions), varargs...)
+}
+
 // GetTransactionsByAccount mocks base method
 func (m *MockDatastore) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (*[]models.Transaction, error) {
 	m.ctrl.T.Helper()

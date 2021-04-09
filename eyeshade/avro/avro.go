@@ -3,10 +3,22 @@ package avro
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
+)
+
+var (
+	env = os.Getenv("ENV")
+	// KeyToTopic creates a map of simple single words, to their more complex topic
+	KeyToTopic = map[string]string{
+		"settlement": env + ".settlement.payout",
+		"suggestion": env + ".grant.suggestion",
+		"vote":       env + ".payment.vote",
+		"referral":   env + ".promo.referral",
+	}
 )
 
 // KafkaMessageEncodable encodes messages

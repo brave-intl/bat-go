@@ -52,6 +52,10 @@ type Datastore interface {
 		ctx context.Context,
 		accountIDs []string,
 	) (*[]models.PendingTransaction, error)
+	GetTransactions(
+		ctx context.Context,
+		constraints ...map[string]string,
+	) (*[]models.Transaction, error)
 	GetTransactionsByAccount(
 		ctx context.Context,
 		accountID string,
@@ -350,6 +354,20 @@ GROUP BY channel`
 		return nil, err
 	}
 	return &votes, nil
+}
+
+// GetTransactions gets transactions
+func (pg Postgres) GetTransactions(
+	ctx context.Context,
+	constraints ...map[string]string,
+) (*[]models.Transaction, error) {
+	statement := fmt.Sprintf(`
+SELECT %s
+FROM transactions`,
+		strings.Join(models.TransactionColumns, ", "),
+	)
+	transactions := []models.Transaction{}
+	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, statement)
 }
 
 // GetTransactionsByAccount retrieves the transactions tied to an account id
