@@ -94,7 +94,10 @@ func isSimpleScopedTokenInContext(ctx context.Context, scopes []string) bool {
 // to requests with a valid bearer token via context
 // NOTE the valid token is populated via BearerToken
 // the scopes passed will check the token against multiple values
-func SimpleScopedTokenAuthorizedOnly(next http.Handler, scopes []string) http.Handler {
+func SimpleScopedTokenAuthorizedOnly(next http.Handler, scopes ...string) http.Handler {
+	if len(scopes) == 0 {
+		scopes = append(scopes, "global")
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isSimpleScopedTokenInContext(r.Context(), scopes) {
 			boom.RenderForbidden(w)

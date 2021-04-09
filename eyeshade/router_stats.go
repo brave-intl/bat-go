@@ -18,14 +18,14 @@ func (service *Service) RouterStats() chi.Router {
 		"GETGrantStats",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETGrantStats(),
-			scopes,
+			scopes...,
 		),
 	))
 	r.Method("GET", "/settlements/{type}/{start}/{until}", middleware.InstrumentHandler(
 		"GETSettlementStats",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETSettlementStats(),
-			scopes,
+			scopes...,
 		),
 	))
 	return r

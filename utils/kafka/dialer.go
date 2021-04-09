@@ -160,6 +160,30 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 	return kafkaWriter, dialer, nil
 }
 
+// InitKafkaReader - create a kafka writer given a topic
+func InitKafkaReader(ctx context.Context, topic string) (*kafka.Reader, *kafka.Dialer, error) {
+	_, logger := logging.SetupLogger(ctx)
+
+	dialer, x509Cert, err := TLSDialer()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// throw the cert on the context, instrument kafka
+	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
+
+	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+
+	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: strings.Split(kafkaBrokers, ","),
+		Topic:   topic,
+		Dialer:  dialer,
+		Logger:  kafka.LoggerFunc(logger.Printf), // FIXME
+	})
+
+	return kafkaReader, dialer, nil
+}
+
 // GenerateCodecs - create a map of codec name to the avro codec
 func GenerateCodecs(codecs map[string]string) (map[string]*goavro.Codec, error) {
 	var (

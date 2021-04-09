@@ -423,11 +423,13 @@ func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
 func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (sql.Result, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
-VALUES ( %s )`,
+VALUES ( %s )
+ON CONFLICT DO NOTHING
+RETURNING *`,
 		strings.Join(models.TransactionColumns, ", "),
 		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
-	return sqlx.NamedExecContext(ctx, nil, statement, txs)
+	return sqlx.NamedExecContext(ctx, nil, statement, *txs)
 }
 
 // GetSettlementStats gets stats about settlements

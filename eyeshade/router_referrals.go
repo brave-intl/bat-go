@@ -18,7 +18,7 @@ func (service *Service) RouterReferrals() chi.Router {
 		"ReferralGroups",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETReferralGroups(),
-			[]string{"referrals"},
+			"referrals",
 		),
 	))
 	return r

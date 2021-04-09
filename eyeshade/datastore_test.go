@@ -13,6 +13,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/models"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	db "github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -527,4 +528,31 @@ func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 	suite.Require().NoError(err)
 	suite.Require().Len(*transactions, count)
 	return transactions
+}
+
+func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
+	settlement := &models.Settlement{
+		AltCurrency:    altcurrency.BAT,
+		Probi:          altcurrency.BAT.ToProbi(decimal.NewFromFloat(4.75)),
+		Fees:           altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.25)),
+		Amount:         decimal.NewFromFloat(4),
+		Currency:       "USD",
+		Owner:          fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+		Channel:        models.Channel("brave.com"),
+		Hash:           uuid.NewV4().String(),
+		Type:           "contribution",
+		SettlementID:   uuid.NewV4().String(),
+		DocumentID:     uuid.NewV4().String(),
+		Address:        uuid.NewV4().String(),
+		ExecutedAt:     nil,
+		WalletProvider: nil,
+	}
+	settlements := []interface{}{settlement}
+	err := suite.InsertConvertableTransactions(settlements...)
+	suite.Require().NoError(err)
+}
+
+func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs ...interface{}) error {
+	_, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
+	return err
 }

@@ -29,28 +29,28 @@ func (service *Service) RouterAccounts() chi.Router {
 		"GETAccountEarningsTotal",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETAccountEarningsTotal(),
-			scopes,
+			scopes...,
 		),
 	))
 	r.Method("GET", "/settlements/{type}/total", middleware.InstrumentHandler(
 		"GETAccountSettlementEarningsTotal",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETAccountSettlementEarningsTotal(),
-			scopes,
+			scopes...,
 		),
 	))
 	r.Method("GET", "/balances", middleware.InstrumentHandler(
 		"GETAccountBalances",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETBalances(),
-			scopes,
+			scopes...,
 		),
 	))
 	r.Method("GET", "/{account}/transactions", middleware.InstrumentHandler(
 		"GETAccountTransactions",
 		middleware.SimpleScopedTokenAuthorizedOnly(
 			service.GETTransactionsByAccount(),
-			scopes,
+			scopes...,
 		),
 	))
 	return r

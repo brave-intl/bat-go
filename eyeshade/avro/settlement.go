@@ -101,6 +101,11 @@ func (s *Settlement) Topic() string {
 	return s.topic
 }
 
+// ToBinary returns binary value of the encodable message
+func (s *Settlement) ToBinary(encodable KafkaMessageEncodable) ([]byte, error) {
+	return s.codecs["v2"].BinaryFromNative(nil, encodable.ToNative())
+}
+
 // Decode decodes a message
 func (s *Settlement) Decode(msg kafka.Message) (*models.Settlement, error) {
 	var settlement models.Settlement

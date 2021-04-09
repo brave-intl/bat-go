@@ -2,44 +2,50 @@ package eyeshade
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	stringutils "github.com/brave-intl/bat-go/utils/string"
 	"github.com/segmentio/kafka-go"
 )
 
-var (
-	kafkaBrokers = os.Getenv("KAFKA_BROKERS")
-	env          = os.Getenv("ENV")
-	groupID      = fmt.Sprintf(
-		"%s.%s",
-		env,
-		os.Getenv("SERVICE"),
-	)
-)
-
-// Consumer holds information about a single consumer
-type Consumer struct {
-	topicHandler avro.TopicHandler
-	service      *Service
-	reader       *kafka.Reader
-	config       kafka.ReaderConfig
+// MessageHandler holds information about a single handler
+type MessageHandler struct {
+	handler avro.TopicHandler
+	service *Service
+	reader  *kafka.Reader
+	writer  *kafka.Writer
+	dialer  *kafka.Dialer
 }
 
-// BatchMessagesConsumer handles many messages being consumed at once
-type BatchMessagesConsumer interface {
+// BatchMessagesHandler handles many messages being consumed at once
+type BatchMessagesHandler interface {
+	Topic() string
+}
+
+// BatchMessageConsumer holds methods for batch method consumption
+type BatchMessageConsumer interface {
 	Consume(erred chan error)
 	Read() (*[]kafka.Message, bool, error)
 	Handler(*[]kafka.Message) error
 	Commit(*[]kafka.Message) error
 }
 
+// BatchMessageProducer holds methods for batch method producer
+type BatchMessageProducer interface {
+	Produce(context.Context, ...avro.KafkaMessageEncodable) error
+}
+
+// Topic returns the topic of the message handler
+func (con *MessageHandler) Topic() string {
+	return con.handler.Topic()
+}
+
 // Collect collects messages from the reader
-func (con *Consumer) Collect(
+func (con *MessageHandler) Collect(
 	msgCh chan<- kafka.Message,
 	errCh chan<- error,
 ) {
@@ -52,7 +58,7 @@ func (con *Consumer) Collect(
 }
 
 // Read reads messages
-func (con *Consumer) Read() (*[]kafka.Message, bool, error) {
+func (con *MessageHandler) Read() (*[]kafka.Message, bool, error) {
 	// this method is dangerous
 	// need to check kafka implementation details
 	msgs := []kafka.Message{}
@@ -95,28 +101,12 @@ func (con *Consumer) Read() (*[]kafka.Message, bool, error) {
 	}
 }
 
-// NewKafkaReader creates a new kafka reader for a given topic
-func (service *Service) NewKafkaReader(topic string) (
-	*kafka.Reader,
-	kafka.ReaderConfig,
-) {
-	brokers := stringutils.SplitAndTrim(kafkaBrokers, ",")
-	config := kafka.ReaderConfig{
-		MaxBytes: 1e6,
-		MaxWait:  time.Second,
-		Brokers:  brokers,
-		Topic:    topic,
-		GroupID:  groupID,
-	}
-	return kafka.NewReader(config), config
-}
-
 // Handler handles the batch of messages
-func (con *Consumer) Handler(msgs *[]kafka.Message) error {
+func (con *MessageHandler) Handler(msgs *[]kafka.Message) error {
 	if msgs == nil {
 		return nil
 	}
-	txs, err := con.topicHandler.DecodeBatch(*msgs)
+	txs, err := con.handler.DecodeBatch(*msgs)
 	if err != nil {
 		return err
 	}
@@ -128,12 +118,12 @@ func (con *Consumer) Handler(msgs *[]kafka.Message) error {
 }
 
 // Context returns the context from the service
-func (con *Consumer) Context() context.Context {
+func (con *MessageHandler) Context() context.Context {
 	return con.service.Context()
 }
 
 // Commit commits messages that have been read and inserted
-func (con *Consumer) Commit(msgs *[]kafka.Message) error {
+func (con *MessageHandler) Commit(msgs *[]kafka.Message) error {
 	if msgs == nil {
 		return nil
 	}
@@ -141,7 +131,7 @@ func (con *Consumer) Commit(msgs *[]kafka.Message) error {
 }
 
 // Consume starts the consumer
-func (con *Consumer) Consume(
+func (con *MessageHandler) Consume(
 	erred chan error,
 ) {
 	for { // loop to continue consuming
@@ -160,4 +150,28 @@ func (con *Consumer) Consume(
 			break
 		}
 	}
+}
+
+// Produce produces messages
+func (con *MessageHandler) Produce(ctx context.Context, encodables ...avro.KafkaMessageEncodable) error {
+	messages := []kafka.Message{}
+	if len(encodables) == 0 {
+		return sql.ErrNoRows
+	}
+	for _, encodable := range encodables {
+		bytes, err := con.handler.Encode(encodable)
+		if err != nil {
+			return err
+		}
+		messages = append(messages, kafka.Message{
+			Value: bytes,
+		})
+	}
+	if len(messages) == 0 {
+		return errors.New("no messages encoded")
+	}
+	return con.writer.WriteMessages(
+		ctx,
+		messages...,
+	)
 }
