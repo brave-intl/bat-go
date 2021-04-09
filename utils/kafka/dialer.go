@@ -135,17 +135,36 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	return buf, nil
 }
 
-// InitKafkaWriter - create a kafka writer given a topic
-func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.Dialer, error) {
-	_, logger := logging.SetupLogger(ctx)
+func InitDialer(ctx context.Context) (*kafka.Dialer, error) {
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// throw the cert on the context, instrument kafka
 	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
+	return dialer, err
+}
+
+// InitKafkaWriter - create a kafka writer given a topic
+func InitKafkaWriter(
+	ctx context.Context,
+	topic string,
+	dialers ...*kafka.Dialer,
+) (*kafka.Writer, *kafka.Dialer, error) {
+	_, logger := logging.SetupLogger(ctx)
+
+	var dialer *kafka.Dialer
+	if len(dialers) == 0 {
+		d, err := InitDialer(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		dialer = d
+	} else {
+		dialer = dialers[0]
+	}
 
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 
@@ -161,16 +180,23 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 }
 
 // InitKafkaReader - create a kafka writer given a topic
-func InitKafkaReader(ctx context.Context, topic string) (*kafka.Reader, *kafka.Dialer, error) {
+func InitKafkaReader(
+	ctx context.Context,
+	topic string,
+	dialers ...*kafka.Dialer,
+) (*kafka.Reader, *kafka.Dialer, error) {
 	_, logger := logging.SetupLogger(ctx)
 
-	dialer, x509Cert, err := TLSDialer()
-	if err != nil {
-		return nil, nil, err
+	var dialer *kafka.Dialer
+	if len(dialers) == 0 {
+		d, err := InitDialer(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		dialer = d
+	} else {
+		dialer = dialers[0]
 	}
-
-	// throw the cert on the context, instrument kafka
-	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
 
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 

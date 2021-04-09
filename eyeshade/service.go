@@ -7,10 +7,11 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/utils/clients/common"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/kafka"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	"github.com/rs/zerolog"
+	"github.com/segmentio/kafka-go"
 )
 
 // Service holds info that the eyeshade router needs to operate
@@ -23,6 +24,7 @@ type Service struct {
 	router      *chi.Mux
 	consumers   map[string]BatchMessageConsumer
 	producers   map[string]BatchMessageProducer
+	dialer      *kafka.Dialer
 }
 
 // SetupService initializes the service with the correct dependencies
@@ -99,9 +101,10 @@ func WithConsumer(
 		if service.consumers == nil {
 			service.consumers = make(map[string]BatchMessageConsumer)
 		}
-		reader, dialer, err := kafka.InitKafkaReader(
+		reader, dialer, err := kafkautils.InitKafkaReader(
 			service.Context(),
 			topicHandler.Topic(),
+			service.dialer,
 		)
 		if err != nil {
 			return err
@@ -112,6 +115,7 @@ func WithConsumer(
 			dialer:  dialer,
 			service: service,
 		}
+		service.dialer = dialer
 		service.consumers[topicHandler.Topic()] = BatchMessageConsumer(consumer)
 		return nil
 	}
@@ -125,9 +129,10 @@ func WithProducer(
 		if service.producers == nil {
 			service.producers = make(map[string]BatchMessageProducer)
 		}
-		writer, dialer, err := kafka.InitKafkaWriter(
+		writer, dialer, err := kafkautils.InitKafkaWriter(
 			service.Context(),
 			topicHandler.Topic(),
+			service.dialer,
 		)
 		if err != nil {
 			return err
@@ -138,6 +143,7 @@ func WithProducer(
 			dialer:  dialer,
 			service: service,
 		}
+		service.dialer = dialer
 		service.producers[topicHandler.Topic()] = BatchMessageProducer(producer)
 		return nil
 	}
