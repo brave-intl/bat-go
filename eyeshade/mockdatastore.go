@@ -69,17 +69,21 @@ func (mr *MockDatastoreMockRecorder) NewMigrate() *gomock.Call {
 }
 
 // Migrate mocks base method
-func (m *MockDatastore) Migrate(currentMigrationVersion uint) error {
+func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Migrate", currentMigrationVersion)
+	varargs := []interface{}{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Migrate", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Migrate indicates an expected call of Migrate
-func (mr *MockDatastoreMockRecorder) Migrate(currentMigrationVersion interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) Migrate(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), currentMigrationVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Migrate", reflect.TypeOf((*MockDatastore)(nil).Migrate), arg0...)
 }
 
 // RollbackTxAndHandle mocks base method
