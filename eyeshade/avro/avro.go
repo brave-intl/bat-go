@@ -17,9 +17,7 @@ type KafkaMessageEncodable interface {
 // TopicHandler holds all information needed for a topic
 type TopicHandler interface {
 	Topic() string
-	Schema() string
-	Codec() *goavro.Codec
-	Encode(KafkaMessageEncodable) ([]byte, error)
+	ToBinary(KafkaMessageEncodable) ([]byte, error)
 	DecodeBatch(msgs []kafka.Message) (*[]interface{}, error)
 }
 

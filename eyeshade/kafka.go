@@ -3,7 +3,6 @@ package eyeshade
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -159,16 +158,13 @@ func (con *MessageHandler) Produce(ctx context.Context, encodables ...avro.Kafka
 		return sql.ErrNoRows
 	}
 	for _, encodable := range encodables {
-		bytes, err := con.handler.Encode(encodable)
+		bytes, err := con.handler.ToBinary(encodable)
 		if err != nil {
 			return err
 		}
 		messages = append(messages, kafka.Message{
 			Value: bytes,
 		})
-	}
-	if len(messages) == 0 {
-		return errors.New("no messages encoded")
 	}
 	return con.writer.WriteMessages(
 		ctx,
