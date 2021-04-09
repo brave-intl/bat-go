@@ -420,7 +420,10 @@ func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
 }
 
 // InsertTransactions is a generalizable transaction insertion function
-func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (*[]models.Transaction, error) {
+func (pg Postgres) InsertTransactions(
+	ctx context.Context,
+	txs *[]models.Transaction,
+) (*[]models.Transaction, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
 VALUES ( %s )
@@ -434,7 +437,12 @@ RETURNING *`,
 		return nil, err
 	}
 	transactions := []models.Transaction{}
-	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, query, args...)
+	return &transactions, pg.RawDB().SelectContext(
+		ctx,
+		&transactions,
+		query,
+		args...,
+	)
 }
 
 // GetSettlementStats gets stats about settlements

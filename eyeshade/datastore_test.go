@@ -240,7 +240,7 @@ func SetupMockGetBalances(
 
 func SetupMockInsertConvertableTransactions(
 	mock sqlmock.Sqlmock,
-	txs ...interface{},
+	txs []interface{},
 ) []models.Transaction {
 	rows := []models.Transaction{}
 	values := []driver.Value{}
@@ -564,8 +564,8 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 		Currency:       "USD",
 		Owner:          fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
 		Channel:        models.Channel("brave.com"),
-		Hash:           uuid.NewV4().String(),
 		Type:           "contribution",
+		Hash:           uuid.NewV4().String(),
 		SettlementID:   uuid.NewV4().String(),
 		DocumentID:     uuid.NewV4().String(),
 		Address:        uuid.NewV4().String(),
@@ -575,9 +575,9 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 	settlements := []interface{}{settlement}
 	expect := SetupMockInsertConvertableTransactions(
 		suite.mock,
-		settlements...,
+		settlements,
 	)
-	actual := suite.InsertConvertableTransactions(settlements...)
+	actual := suite.InsertConvertableTransactions(settlements)
 
 	suite.Require().JSONEq(
 		MustMarshal(suite.Require(), expect),
@@ -585,7 +585,7 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs ...interface{}) *[]models.Transaction {
+func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs []interface{}) *[]models.Transaction {
 	inserted, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
 	suite.Require().NoError(err)
 	return inserted
