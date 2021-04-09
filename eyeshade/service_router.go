@@ -13,17 +13,26 @@ import (
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"github.com/maikelmclauflin/go-boom"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
 
-// StaticRouter holds static routes, not on v1 path
-func (service *Service) StaticRouter() chi.Router {
+// RouterStatic holds static routes, not on v1 path
+func (service *Service) RouterStatic() chi.Router {
 	r := RouterDefunct(false)
 	r.Method("GET", "/", handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		return handlers.Render(r.Context(), *bytes.NewBufferString("ack."), w, http.StatusOK)
 	}))
 	return r
+}
+
+// HandlerNotFound holds static error routes
+func HandlerNotFound(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	boom.RenderNotFound(w)
 }
 
 // RouterV1 holds all of the routes under `/v1/`
@@ -38,8 +47,9 @@ func (service *Service) RouterV1() chi.Router {
 
 // WithRoutes sets up a router using the service
 func WithRoutes(service *Service) error {
-	service.router.Mount("/", service.StaticRouter())
+	service.router.Mount("/", service.RouterStatic())
 	service.router.Mount("/v1/", service.RouterV1())
+	service.router.NotFound(HandlerNotFound)
 	return nil
 }
 
@@ -53,9 +63,9 @@ func WithNewRouter(service *Service) error {
 func WithMiddleware(service *Service) error {
 	logger := service.logger
 	ctx := *service.ctx
-	buildTime := ctx.Value(appctx.BuildTimeCTXKey).(string)
-	commit := ctx.Value(appctx.CommitCTXKey).(string)
-	version := ctx.Value(appctx.VersionCTXKey).(string)
+	buildTime, _ := ctx.Value(appctx.BuildTimeCTXKey).(string)
+	commit, _ := ctx.Value(appctx.CommitCTXKey).(string)
+	version, _ := ctx.Value(appctx.VersionCTXKey).(string)
 
 	logger.Info().
 		Str("version", version).
@@ -65,7 +75,7 @@ func WithMiddleware(service *Service) error {
 
 	govalidator.SetFieldsRequiredByDefault(true)
 
-	r := chi.NewRouter()
+	r := service.router
 
 	if os.Getenv("ENV") != "production" {
 		r.Use(cors.Handler(cors.Options{

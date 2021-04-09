@@ -2,7 +2,6 @@ package eyeshade
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
@@ -133,7 +132,7 @@ func (service *Service) GetSettlementStats(
 func (service *Service) InsertConvertableTransactions(
 	ctx context.Context,
 	txs *[]interface{},
-) (sql.Result, error) {
+) (*[]models.Transaction, error) {
 	return service.Datastore(false).
 		InsertConvertableTransactions(ctx, txs)
 }

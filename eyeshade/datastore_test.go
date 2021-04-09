@@ -238,25 +238,54 @@ func SetupMockGetBalances(
 	return rows
 }
 
+func SetupMockInsertConvertableTransactions(
+	mock sqlmock.Sqlmock,
+	txs ...interface{},
+) []models.Transaction {
+	rows := []models.Transaction{}
+	values := []driver.Value{}
+	for _, tx := range txs {
+		c := tx.(models.ConvertableTransaction)
+		converted := c.ToTxs()
+		rows = append(rows, *converted...)
+	}
+	getRows := sqlmock.NewRows(models.TransactionColumns)
+	for _, tx := range rows {
+		vals := []driver.Value{
+			tx.ID,
+			tx.CreatedAt,
+			tx.Description,
+			tx.TransactionType,
+			tx.DocumentID,
+			tx.FromAccount,
+			tx.FromAccountType,
+			tx.ToAccount,
+			tx.ToAccountType,
+			tx.Amount,
+			tx.SettlementCurrency,
+			tx.SettlementAmount,
+			tx.Channel,
+		}
+		values = append(values, vals...)
+		getRows = getRows.AddRow(vals...)
+	}
+	query := `
+INSERT INTO transactions (.+)
+VALUES (.+)
+ON CONFLICT DO NOTHING
+RETURNING (.+)`
+	mock.ExpectQuery(query).
+		WithArgs(values...).
+		WillReturnRows(getRows)
+	return rows
+}
+
 func SetupMockGetTransactionsByAccount(
 	mock sqlmock.Sqlmock,
 	accountID string,
 	txTypes ...string,
 ) []models.Transaction {
-	getRows := sqlmock.NewRows(
-		[]string{
-			"created_at",
-			"description",
-			"channel",
-			"amount",
-			"from_account",
-			"to_account",
-			"to_account_type",
-			"settlement_currency",
-			"settlement_amount",
-			"transaction_type",
-		},
-	)
+	getRows := sqlmock.NewRows(models.TransactionColumns)
 	rows := []models.Transaction{}
 	args := []driver.Value{accountID}
 	var txTypesHash *map[string]bool
@@ -290,33 +319,27 @@ func SetupMockGetTransactionsByAccount(
 			continue
 		}
 		getRows = getRows.AddRow(
+			tx.ID,
 			tx.CreatedAt,
 			tx.Description,
-			tx.Channel,
-			tx.Amount,
+			tx.TransactionType,
+			tx.DocumentID,
 			tx.FromAccount,
+			tx.FromAccountType,
 			tx.ToAccount,
 			tx.ToAccountType,
+			tx.Amount,
 			tx.SettlementCurrency,
 			tx.SettlementAmount,
-			tx.TransactionType,
+			tx.Channel,
 		)
 	}
-	mock.ExpectQuery(`
-SELECT
-	created_at,
-	description,
-	channel,
-	amount,
-	from_account,
-	to_account,
-	to_account_type,
-	settlement_currency,
-	settlement_amount,
-	transaction_type
-FROM transactions
-WHERE (.+)
-ORDER BY created_at`).
+	query := fmt.Sprintf(`
+	SELECT %s
+	FROM transactions
+	WHERE (.+)
+	ORDER BY created_at`, strings.Join(models.TransactionColumns, ", "))
+	mock.ExpectQuery(query).
 		WithArgs(args...).
 		WillReturnRows(getRows)
 	return rows
@@ -331,6 +354,7 @@ func SettlementTransaction(
 	transactionType = transactionType + "_settlement"
 	provider := "uphold"
 	return models.Transaction{
+		ID:              uuid.NewV4().String(),
 		Channel:         channel,
 		CreatedAt:       time.Now(),
 		Description:     uuid.NewV4().String(),
@@ -531,6 +555,7 @@ func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 }
 
 func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
+	now := time.Now()
 	settlement := &models.Settlement{
 		AltCurrency:    altcurrency.BAT,
 		Probi:          altcurrency.BAT.ToProbi(decimal.NewFromFloat(4.75)),
@@ -544,15 +569,24 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 		SettlementID:   uuid.NewV4().String(),
 		DocumentID:     uuid.NewV4().String(),
 		Address:        uuid.NewV4().String(),
-		ExecutedAt:     nil,
+		ExecutedAt:     &now,
 		WalletProvider: nil,
 	}
 	settlements := []interface{}{settlement}
-	err := suite.InsertConvertableTransactions(settlements...)
-	suite.Require().NoError(err)
+	expect := SetupMockInsertConvertableTransactions(
+		suite.mock,
+		settlements...,
+	)
+	actual := suite.InsertConvertableTransactions(settlements...)
+
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
+	)
 }
 
-func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs ...interface{}) error {
-	_, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
-	return err
+func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(txs ...interface{}) *[]models.Transaction {
+	inserted, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
+	suite.Require().NoError(err)
+	return inserted
 }

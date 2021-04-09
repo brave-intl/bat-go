@@ -14,8 +14,9 @@ type bearerTokenKey struct{}
 
 var (
 	// TokenList is the list of tokens that are accepted as valid
-	TokenList   = strings.Split(os.Getenv("TOKEN_LIST"), ",")
-	scopesToEnv = map[string]string{
+	TokenList = strings.Split(os.Getenv("TOKEN_LIST"), ",")
+	// ScopesToEnv maps the scope key to the env that holds the list
+	ScopesToEnv = map[string]string{
 		"referrals":  "ALLOWED_REFERRALS_TOKENS",
 		"publishers": "ALLOWED_PUBLISHERS_TOKENS",
 		"global":     "TOKEN_LIST",
@@ -26,7 +27,6 @@ var (
 func BearerToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var token string
-
 		bearer := r.Header.Get("Authorization")
 
 		if len(bearer) > 7 && strings.ToUpper(bearer[0:6]) == "BEARER" {
@@ -72,7 +72,7 @@ func SimpleTokenAuthorizedOnly(next http.Handler) http.Handler {
 
 func isSimpleScopedTokenInContext(ctx context.Context, scopes []string) bool {
 	for _, scope := range scopes {
-		value := os.Getenv(scopesToEnv[scope])
+		value := os.Getenv(ScopesToEnv[scope])
 		if len(value) == 0 {
 			continue
 		}
@@ -81,7 +81,6 @@ func isSimpleScopedTokenInContext(ctx context.Context, scopes []string) bool {
 		for _, token := range tokenList {
 			scopedTokens = append(scopedTokens, strings.TrimSpace(token))
 		}
-
 		token, ok := ctx.Value(bearerTokenKey{}).(string)
 		if ok && isSimpleTokenValid(scopedTokens, token) {
 			return true

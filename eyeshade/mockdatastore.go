@@ -6,7 +6,6 @@ package eyeshade
 
 import (
 	context "context"
-	sql "database/sql"
 	countries "github.com/brave-intl/bat-go/eyeshade/countries"
 	models "github.com/brave-intl/bat-go/eyeshade/models"
 	inputs "github.com/brave-intl/bat-go/utils/inputs"
@@ -246,10 +245,10 @@ func (mr *MockDatastoreMockRecorder) GetTransactionsByAccount(ctx, accountID, tx
 }
 
 // InsertConvertableTransactions mocks base method
-func (m *MockDatastore) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (sql.Result, error) {
+func (m *MockDatastore) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (*[]models.Transaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertConvertableTransactions", ctx, txs)
-	ret0, _ := ret[0].(sql.Result)
+	ret0, _ := ret[0].(*[]models.Transaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -261,10 +260,10 @@ func (mr *MockDatastoreMockRecorder) InsertConvertableTransactions(ctx, txs inte
 }
 
 // InsertTransactions mocks base method
-func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (sql.Result, error) {
+func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (*[]models.Transaction, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertTransactions", ctx, txs)
-	ret0, _ := ret[0].(sql.Result)
+	ret0, _ := ret[0].(*[]models.Transaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

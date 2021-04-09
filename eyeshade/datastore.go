@@ -60,11 +60,11 @@ type Datastore interface {
 	InsertConvertableTransactions(
 		ctx context.Context,
 		txs *[]interface{},
-	) (sql.Result, error)
+	) (*[]models.Transaction, error)
 	InsertTransactions(
 		ctx context.Context,
 		txs *[]models.Transaction,
-	) (sql.Result, error)
+	) (*[]models.Transaction, error)
 	GetReferralGroups(
 		ctx context.Context,
 		activeAt inputs.Time,
@@ -390,7 +390,7 @@ ORDER BY created_at`,
 }
 
 // InsertConvertableTransactions inserts a list of settlement transactions all at the same time
-func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets *[]interface{}) (sql.Result, error) {
+func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets *[]interface{}) (*[]models.Transaction, error) {
 	txs, err := convertToTxs(targets)
 	if err != nil {
 		return nil, err
@@ -420,7 +420,7 @@ func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
 }
 
 // InsertTransactions is a generalizable transaction insertion function
-func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (sql.Result, error) {
+func (pg Postgres) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (*[]models.Transaction, error) {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
 VALUES ( %s )
@@ -429,7 +429,21 @@ RETURNING *`,
 		strings.Join(models.TransactionColumns, ", "),
 		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
-	return sqlx.NamedExecContext(ctx, nil, statement, *txs)
+	transactions := []models.Transaction{}
+	rows, err := pg.RawDB().NamedQueryContext(ctx, statement, *txs)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var transaction = models.Transaction{}
+		err := rows.StructScan(&transaction)
+		if err != nil {
+			return nil, err
+		}
+		transactions = append(transactions, transaction)
+	}
+	err = rows.Close()
+	return &transactions, err
 }
 
 // GetSettlementStats gets stats about settlements

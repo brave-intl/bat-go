@@ -137,7 +137,18 @@ func (settlement *Settlement) Ignore() bool {
 // Valid checks whether the message it has everything it needs to be inserted correctly
 func (settlement *Settlement) Valid() bool {
 	// non zero and no decimals allowed
-	return !settlement.Probi.GreaterThan(decimal.Zero) &&
+	// fmt.Println("!settlement.Probi.GreaterThan(decimal.Zero)", !settlement.Probi.GreaterThan(decimal.Zero))
+	// fmt.Println("settlement.Probi.Equal(settlement.Probi.Truncate(0))", settlement.Probi.Equal(settlement.Probi.Truncate(0)))
+	// fmt.Println("settlement.Fees.GreaterThanOrEqual(decimal.Zero)", settlement.Fees.GreaterThanOrEqual(decimal.Zero))
+	// fmt.Println("settlement.Owner != \"\"", settlement.Owner != "")
+	// fmt.Println("settlement.Channel != \"\"", settlement.Channel != "")
+	// fmt.Println("settlement.Amount.GreaterThan(decimal.Zero)", settlement.Amount.GreaterThan(decimal.Zero))
+	// fmt.Println("settlement.Currency != \"\"", settlement.Currency != "")
+	// fmt.Println("settlement.Type != \"\"", settlement.Type != "")
+	// fmt.Println("settlement.Address != \"\"", settlement.Address != "")
+	// fmt.Println("settlement.DocumentID != \"\"", settlement.DocumentID != "")
+	// fmt.Println("settlement.SettlementID != \"\"", settlement.SettlementID != "")
+	return settlement.Probi.GreaterThan(decimal.Zero) &&
 		settlement.Probi.Equal(settlement.Probi.Truncate(0)) && // no decimals
 		settlement.Fees.GreaterThanOrEqual(decimal.Zero) &&
 		settlement.Owner != "" &&

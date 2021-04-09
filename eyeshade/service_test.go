@@ -55,7 +55,7 @@ func (suite *ServiceMockTestSuite) SetupSuite() {
 	suite.mockRO = mockRO
 
 	service, err := SetupService(
-		suite.ctx,
+		WithContext(suite.ctx),
 		WithConnections(suite.db, suite.rodb),
 	)
 	suite.Require().NoError(err)

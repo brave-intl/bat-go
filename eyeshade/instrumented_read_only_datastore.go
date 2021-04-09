@@ -8,7 +8,6 @@ package eyeshade
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/countries"
@@ -171,7 +170,7 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 }
 
 // InsertConvertableTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (r1 sql.Result, err error) {
+func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -185,7 +184,7 @@ func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Cont
 }
 
 // InsertTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (r1 sql.Result, err error) {
+func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
