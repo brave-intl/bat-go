@@ -99,6 +99,7 @@ func WithConsumer(
 ) func(*Service) error {
 	return func(service *Service) error {
 		if service.consumers == nil {
+			// can't access consumer keys until make is called
 			service.consumers = make(map[string]BatchMessageConsumer)
 		}
 		reader, dialer, err := kafkautils.InitKafkaReader(
@@ -127,6 +128,7 @@ func WithProducer(
 ) func(*Service) error {
 	return func(service *Service) error {
 		if service.producers == nil {
+			// can't access producer keys until make is called
 			service.producers = make(map[string]BatchMessageProducer)
 		}
 		writer, dialer, err := kafkautils.InitKafkaWriter(

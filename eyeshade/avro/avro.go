@@ -27,11 +27,7 @@ func CodecDecode(
 	msg kafka.Message,
 	p interface{},
 ) error {
-	_, binary, err := codec.NativeFromBinary(msg.Value)
-	if err != nil {
-		return errorutils.Wrap(err, "error converting from binary")
-	}
-	native, _, err := codec.NativeFromBinary(binary)
+	native, _, err := codec.NativeFromBinary(msg.Value)
 	if err != nil {
 		return errorutils.Wrap(err, "error decoding vote")
 	}
@@ -62,7 +58,7 @@ func CodecEncode(
 	}
 	native, _, err := codec.NativeFromBinary(binary)
 	if err != nil {
-		return errorutils.Wrap(err, "error decoding vote")
+		return errorutils.Wrap(err, "error decoding")
 	}
 
 	// gross

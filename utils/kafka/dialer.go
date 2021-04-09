@@ -156,7 +156,7 @@ func InitKafkaWriter(
 	_, logger := logging.SetupLogger(ctx)
 
 	var dialer *kafka.Dialer
-	if len(dialers) == 0 {
+	if len(dialers) == 0 || dialers[0] == nil {
 		d, err := InitDialer(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -188,7 +188,7 @@ func InitKafkaReader(
 	_, logger := logging.SetupLogger(ctx)
 
 	var dialer *kafka.Dialer
-	if len(dialers) == 0 {
+	if len(dialers) == 0 || dialers[0] == nil {
 		d, err := InitDialer(ctx)
 		if err != nil {
 			return nil, nil, err
