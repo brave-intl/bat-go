@@ -905,6 +905,7 @@ type SuggestionJob struct {
 	SuggestionEvent []byte    `db:"suggestion_event"`
 	Erred           bool      `db:"erred"`
 	ErrCode         *string   `db:"errcode"`
+	CreatedAt       time.Time `db:"created_at"`
 }
 
 // RunNextSuggestionJob to process a suggestion if there is one waiting
@@ -952,6 +953,10 @@ limit 1`
 				// set flag to stop this worker from running again
 				worker.PauseWorker(time.Now().Add(30 * time.Minute))
 			}
+
+			// inform sentry about this error
+			sentry.CaptureException(err)
+
 			_, errCode, retriable := errToDrainCode(err)
 
 			if !retriable {
