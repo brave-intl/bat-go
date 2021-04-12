@@ -897,6 +897,16 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 	return nil
 }
 
+// SuggestionJob - representation of a suggestion job
+type SuggestionJob struct {
+	ID              uuid.UUID `db:"id"`
+	Credentials     string    `db:"credentials"`
+	SuggestionText  string    `db:"suggestion_text"`
+	SuggestionEvent []byte    `db:"suggestion_event"`
+	Erred           bool      `db:"erred"`
+	ErrCode         *string   `db:"errcode"`
+}
+
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 
@@ -908,14 +918,6 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 	defer pg.RollbackTx(tx)
 
 	// FIXME
-	type SuggestionJob struct {
-		ID              uuid.UUID `db:"id"`
-		Credentials     string    `db:"credentials"`
-		SuggestionText  string    `db:"suggestion_text"`
-		SuggestionEvent []byte    `db:"suggestion_event"`
-		Erred           bool      `db:"erred"`
-		ErrCode         *string   `db:"errcode"`
-	}
 
 	statement := `
 select *
@@ -1104,6 +1106,15 @@ func errToDrainCode(err error) (string, string, bool) {
 	}
 
 	status = "failed"
+
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		// if this is an error bundle, check the "data" for a codified type
+		if c, ok := eb.Data().(errorutils.Codified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, errCode, retriable
+		}
+	}
 
 	// possible protocol errors
 	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
