@@ -154,7 +154,7 @@ services:
     ports:
       - "3011:6379"
     networks:
-      - grant
+      - eyeshade
 
   eyeshade-postgres:
     container_name: eyeshade-postgres
@@ -195,6 +195,7 @@ services:
     image: confluentinc/cp-zookeeper:5.2.2
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+      TOPIC_AUTO_CREATE: "true"
     ports:
       - "2181:2181"
     networks:

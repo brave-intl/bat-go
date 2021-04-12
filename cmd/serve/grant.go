@@ -242,7 +242,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	logger.Info().
 		Str("version", version).
 		Str("commit", commit).
-		Str("buildTime", buildTime).
+		Str("build_time", buildTime).
 		Msg("server starting up")
 
 	r.Get("/health-check", handlers.HealthCheckHandler(version, buildTime, commit))

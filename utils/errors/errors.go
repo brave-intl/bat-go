@@ -65,7 +65,10 @@ func (err ErrorBundle) Unwrap() error {
 
 // Error turns into an error
 func (err ErrorBundle) Error() string {
-	return err.message
+	if err.cause == nil {
+		return err.message
+	}
+	return fmt.Sprintf("%s - %s", err.message, err.cause.Error())
 }
 
 // Wrap wraps an error

@@ -43,8 +43,8 @@ func WithService(
 ) (*eyeshade.Service, error) {
 	return eyeshade.SetupService(
 		eyeshade.WithContext(ctx),
-		// eyeshade.WithNewLogger,
-		// eyeshade.WithBuildInfo,
+		eyeshade.WithNewLogger,
+		eyeshade.WithBuildInfo,
 		eyeshade.WithNewDBs,
 		eyeshade.WithNewClients,
 		eyeshade.WithNewRouter,
@@ -55,14 +55,14 @@ func WithService(
 
 // RunEyeshadeServer is the runner for starting up the eyeshade server
 func RunEyeshadeServer(cmd *cobra.Command, args []string) error {
-	enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
-	if err != nil {
-		return err
-	}
+	// enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
+	// if err != nil {
+	// 	return err
+	// }
 	ctx := cmd.Context()
-	err = EyeshadeServer(
+	err := EyeshadeServer(
 		ctx,
-		enableJobWorkers,
+		true,
 		WithService,
 	)
 	if err == nil {
@@ -96,9 +96,6 @@ func EyeshadeServer(
 			logger.Panic().Err(err).Msg("unable to setup reporting!")
 		}
 	}
-	logger.Info().
-		Str("prefix", "main").
-		Msg("Starting server")
 
 	var service *eyeshade.Service
 	for _, setup := range params {
@@ -119,12 +116,18 @@ func EyeshadeServer(
 		}
 	}()
 
+	addr := ":3333"
 	srv := http.Server{
-		Addr:         ":3333",
+		Addr:         addr,
 		Handler:      chi.ServerBaseContext(ctx, service.Router()),
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
+	logger.Info().
+		Str("prefix", "main").
+		Str("addr", addr).
+		Msg("Starting server")
+
 	err = srv.ListenAndServe()
 	if err != nil {
 		return errorutils.Wrap(err, "HTTP server start failed!")

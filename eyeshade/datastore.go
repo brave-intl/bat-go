@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/countries"
@@ -63,12 +64,12 @@ type Datastore interface {
 	) (*[]models.Transaction, error)
 	InsertConvertableTransactions(
 		ctx context.Context,
-		txs *[]interface{},
-	) (*[]models.Transaction, error)
+		txs []models.ConvertableTransaction,
+	) error
 	InsertTransactions(
 		ctx context.Context,
 		txs *[]models.Transaction,
-	) (*[]models.Transaction, error)
+	) error
 	GetReferralGroups(
 		ctx context.Context,
 		activeAt inputs.Time,
@@ -265,8 +266,8 @@ func (pg Postgres) GetAccountSettlementEarnings(
 		}
 		constraints = append(
 			constraints,
-			*options.StartDate,
-			*options.UntilDate,
+			options.StartDate.Format(time.RFC3339),
+			options.UntilDate.Format(time.RFC3339),
 		)
 		timeConstraints = `
 and created_at >= $3
@@ -408,22 +409,21 @@ ORDER BY created_at`,
 }
 
 // InsertConvertableTransactions inserts a list of settlement transactions all at the same time
-func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets *[]interface{}) (*[]models.Transaction, error) {
+func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets []models.ConvertableTransaction) error {
 	txs, err := convertToTxs(targets)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	return pg.InsertTransactions(ctx, txs)
 }
 
-func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
+func convertToTxs(convertables []models.ConvertableTransaction) (*[]models.Transaction, error) {
 	txs := []models.Transaction{}
-	for _, convertable := range *convertables {
-		con, ok := convertable.(models.ConvertableTransaction)
+	for _, con := range convertables {
 		if con.Ignore() {
 			continue
 		}
-		if !ok || !con.Valid() {
+		if !con.Valid() {
 			return nil, errorutils.Wrap(
 				models.ErrConvertableFailedValidation,
 				fmt.Sprintf(
@@ -432,7 +432,7 @@ func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
 				),
 			)
 		}
-		txs = append(txs, *con.ToTxs()...)
+		txs = append(txs, con.ToTxs()...)
 	}
 	return &txs, nil
 }
@@ -441,26 +441,20 @@ func convertToTxs(convertables *[]interface{}) (*[]models.Transaction, error) {
 func (pg Postgres) InsertTransactions(
 	ctx context.Context,
 	txs *[]models.Transaction,
-) (*[]models.Transaction, error) {
+) error {
 	statement := fmt.Sprintf(`
 INSERT INTO transactions ( %s )
 VALUES ( %s )
-ON CONFLICT DO NOTHING
-RETURNING *`,
+ON CONFLICT DO NOTHING`,
 		strings.Join(models.TransactionColumns, ", "),
 		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
-	query, args, err := sqlx.Named(statement, *txs)
-	if err != nil {
-		return nil, err
-	}
-	transactions := []models.Transaction{}
-	return &transactions, pg.RawDB().SelectContext(
+	_, err := pg.RawDB().NamedExecContext(
 		ctx,
-		&transactions,
-		query,
-		args...,
+		statement,
+		*txs,
 	)
+	return err
 }
 
 // GetSettlementStats gets stats about settlements

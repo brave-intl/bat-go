@@ -24,11 +24,11 @@ type Settlement struct {
 	Channel        Channel                 `json:"publisher"`
 	Hash           string                  `json:"hash"`
 	Type           string                  `json:"type"`
-	SettlementID   string                  `json:"transactionId"`
+	SettlementID   string                  `json:"settlementId"`
 	DocumentID     string                  `json:"documentId"`
 	Address        string                  `json:"address"`
-	ExecutedAt     *time.Time              `json:"executedAt"`
-	WalletProvider *string                 `json:"walletProvider"`
+	ExecutedAt     *time.Time              `json:"executedAt,omitempty"`
+	WalletProvider *string                 `json:"walletProvider,omitempty"`
 }
 
 // CreatedAt computes the created at time of the settlement
@@ -59,7 +59,7 @@ func (settlement *Settlement) GenerateID(category string) string {
 }
 
 // ToTxs converts a settlement to the appropriate transactions
-func (settlement *Settlement) ToTxs() *[]Transaction {
+func (settlement *Settlement) ToTxs() []Transaction {
 	txs := []Transaction{}
 	createdAt := settlement.CreatedAt()
 	month := createdAt.Month().String()[:3]
@@ -125,7 +125,7 @@ func (settlement *Settlement) ToTxs() *[]Transaction {
 		SettlementAmount:   &settlement.Amount,
 		Channel:            &normalizedChannel,
 	})
-	return &txs
+	return txs
 }
 
 // Ignore allows us to savely ignore a message if it is malformed
@@ -165,29 +165,29 @@ func (settlement *Settlement) Valid() bool {
 
 // ToNative - convert to `native` map
 func (settlement *Settlement) ToNative() map[string]interface{} {
-	var executedAt *string = nil
+	s := map[string]interface{}{
+		"altcurrency":  settlement.AltCurrency.String(),
+		"probi":        settlement.Probi.String(),
+		"fees":         settlement.Fees.String(),
+		"fee":          settlement.Fee.String(),
+		"commission":   settlement.Commission.String(),
+		"amount":       settlement.Amount.String(),
+		"currency":     settlement.Currency,
+		"owner":        settlement.Owner,
+		"publisher":    settlement.Channel.String(),
+		"hash":         settlement.Hash,
+		"type":         settlement.Type,
+		"settlementId": settlement.SettlementID,
+		"documentId":   settlement.DocumentID,
+		"address":      settlement.Address,
+	}
 	if settlement.ExecutedAt != nil {
-		executedFormatted := settlement.ExecutedAt.Format(time.RFC3339)
-		executedAt = &executedFormatted
+		s["executedAt"] = settlement.ExecutedAt.Format(time.RFC3339)
 	}
-	return map[string]interface{}{
-		"altcurrency":    settlement.AltCurrency.String(),
-		"probi":          settlement.Probi.String(),
-		"fees":           settlement.Fees.String(),
-		"fee":            settlement.Fee.String(),
-		"commission":     settlement.Commission.String(),
-		"amount":         settlement.Amount.String(),
-		"currency":       settlement.Currency,
-		"owner":          settlement.Owner,
-		"publisher":      settlement.Channel.String(),
-		"hash":           settlement.Hash,
-		"type":           settlement.Type,
-		"settlementId":   settlement.SettlementID,
-		"documentId":     settlement.DocumentID,
-		"address":        settlement.Address,
-		"executedAt":     executedAt,
-		"walletProvider": settlement.WalletProvider,
+	if settlement.WalletProvider != nil {
+		s["walletProvider"] = settlement.WalletProvider
 	}
+	return s
 }
 
 // SettlementStat holds settlement stats

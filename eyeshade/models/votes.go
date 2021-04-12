@@ -26,8 +26,8 @@ func (votes *Votes) GenerateID() string {
 }
 
 // ToTxs converts votes to a list of transactions
-func (votes *Votes) ToTxs() *[]Transaction {
-	return &[]Transaction{{
+func (votes *Votes) ToTxs() []Transaction {
+	return []Transaction{{
 		ID:              votes.GenerateID(),
 		CreatedAt:       votes.SurveyorCreatedAt,
 		Description:     fmt.Sprintf("votes from %s", votes.SurveyorID),

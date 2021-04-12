@@ -22,6 +22,10 @@ import (
 	stringutils "github.com/brave-intl/bat-go/utils/string"
 )
 
+var (
+	groupID = os.Getenv("ENV") + "." + os.Getenv("SERVICE")
+)
+
 // TLSDialer creates a Kafka dialer over TLS. The function requires
 // KAFKA_SSL_CERTIFICATE_LOCATION and KAFKA_SSL_KEY_LOCATION environment
 // variables to be set.
@@ -84,7 +88,6 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 		keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER})
 	}
 
-	fmt.Println(string(certPEM), string(keyPEM))
 	certificate, err := tls.X509KeyPair([]byte(certPEM), keyPEM)
 	if err != nil {
 		return nil, nil, errorutils.Wrap(err, "Could not parse x509 keypair")
@@ -149,7 +152,6 @@ func InitDialer(
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {
-		fmt.Println("tls dialer failed")
 		return nil, err
 	}
 
@@ -203,6 +205,7 @@ func InitKafkaReader(
 		Brokers: strings.Split(kafkaBrokers, ","),
 		Topic:   topic,
 		Dialer:  dialer,
+		GroupID: groupID,
 		Logger:  kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 

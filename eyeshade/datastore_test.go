@@ -117,14 +117,14 @@ func SetupMockGetAccountSettlementEarnings(
 		now := time.Now()
 		targetTime = &now
 	} else {
-		args = append(args, targetTime)
+		args = append(args, targetTime.Format(time.RFC3339))
 	}
 	untilDate := options.UntilDate
 	if untilDate == nil {
 		untilDatePrep := targetTime.Add(time.Hour * 24 * time.Duration(options.Limit))
 		untilDate = &untilDatePrep
 	} else {
-		args = append(args, untilDate)
+		args = append(args, untilDate.Format(time.RFC3339))
 	}
 	for i := 0; i < options.Limit; i++ {
 		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
@@ -238,18 +238,19 @@ func SetupMockGetBalances(
 	return rows
 }
 
-func SetupMockInsertConvertableTransactions(
-	mock sqlmock.Sqlmock,
-	txs []interface{},
-) []models.Transaction {
+func collectTxValues(
+	txs []models.ConvertableTransaction,
+) (
+	[]models.Transaction,
+	*sqlmock.Rows,
+	[]driver.Value,
+) {
 	rows := []models.Transaction{}
 	values := []driver.Value{}
 	for _, tx := range txs {
-		c := tx.(models.ConvertableTransaction)
-		converted := c.ToTxs()
-		rows = append(rows, *converted...)
+		rows = append(rows, tx.ToTxs()...)
 	}
-	getRows := sqlmock.NewRows(models.TransactionColumns)
+	mockRows := sqlmock.NewRows(models.TransactionColumns)
 	for _, tx := range rows {
 		vals := []driver.Value{
 			tx.ID,
@@ -266,18 +267,39 @@ func SetupMockInsertConvertableTransactions(
 			tx.SettlementAmount,
 			tx.Channel,
 		}
-		getRows = getRows.AddRow(vals...)
+		mockRows = mockRows.AddRow(vals...)
 		vals[1] = sqlmock.AnyArg()
 		values = append(values, vals...)
 	}
-	query := `
+	return rows, mockRows, values
+}
+
+// func SetupMockGetTransactions(
+// 	mock sqlmock.Sqlmock,
+// 	txs []models.ConvertableTransaction,
+// ) []models.Transaction {
+// 	expected, mockRows, _ := collectTxValues(txs)
+// 	mock.ExpectQuery(`SELECT (.+)
+// FROM transactions`).
+// 		WillReturnRows(mockRows)
+// 	return expected
+// }
+
+func SetupMockInsertConvertableTransactions(
+	mock sqlmock.Sqlmock,
+	roMock sqlmock.Sqlmock,
+	txs []models.ConvertableTransaction,
+) []models.Transaction {
+	rows, mockRows, values := collectTxValues(txs)
+	mock.ExpectExec(`
 INSERT INTO transactions (.+)
 VALUES (.+)
-ON CONFLICT DO NOTHING
-RETURNING (.+)`
-	mock.ExpectQuery(query).
+ON CONFLICT DO NOTHING`).
 		WithArgs(values...).
-		WillReturnRows(getRows)
+		WillReturnResult(sqlmock.NewResult(2, 3))
+	roMock.ExpectQuery(`SELECT (.+)
+FROM transactions`).
+		WillReturnRows(mockRows)
 	return rows
 }
 
@@ -572,8 +594,11 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 		ExecutedAt:     nil,
 		WalletProvider: nil,
 	}
-	settlements := []interface{}{settlement}
+	settlements := []models.ConvertableTransaction{
+		models.ConvertableTransaction(settlement),
+	}
 	expect := SetupMockInsertConvertableTransactions(
+		suite.mock,
 		suite.mock,
 		settlements,
 	)
@@ -586,9 +611,11 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 }
 
 func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(
-	txs []interface{},
+	txs []models.ConvertableTransaction,
 ) *[]models.Transaction {
-	inserted, err := suite.db.InsertConvertableTransactions(suite.ctx, &txs)
+	err := suite.db.InsertConvertableTransactions(suite.ctx, txs)
 	suite.Require().NoError(err)
-	return inserted
+	transactions, err := suite.db.GetTransactions(suite.ctx)
+	suite.Require().NoError(err)
+	return transactions
 }

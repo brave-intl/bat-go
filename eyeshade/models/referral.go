@@ -28,10 +28,10 @@ func (referral *Referral) GenerateID() string {
 }
 
 // ToTxs converts a referral to the appropriate transactions
-func (referral *Referral) ToTxs() *[]Transaction {
+func (referral *Referral) ToTxs() []Transaction {
 	month := referral.FirstID.Month().String()[:3]
 	normalizedChannel := referral.Channel.Normalize()
-	return &[]Transaction{{
+	return []Transaction{{
 		ID:              referral.GenerateID(),
 		CreatedAt:       referral.FirstID,
 		Description:     fmt.Sprintf("referrals through %s", month),

@@ -5,14 +5,16 @@ package eyeshade
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/jmoiron/sqlx"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,56 +35,57 @@ func TestServiceKafkaMockTestSuite(t *testing.T) {
 	// }
 }
 
-func (suite *ServiceKafkaMockTestSuite) SetupMockDB() {
-	suite.ctx = context.Background()
-	name := "sqlmock"
-	// setup mock DB we will inject into our pg
-	mockDB, mock, err := sqlmock.New()
-	suite.Require().NoError(err, "failed to create a sql mock")
-	mockRODB, mockRO, err := sqlmock.New()
-	suite.Require().NoError(err, "failed to create a sql mock")
-
-	suite.db = NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockDB, name),
-	}, name)
-	suite.mock = mock
-	suite.rodb = NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockRODB, name),
-	}, name)
-	suite.mockRO = mockRO
-}
-
 func (suite *ServiceKafkaMockTestSuite) SetupSuite() {
-	suite.SetupMockDB()
+	suite.ctx = context.Background()
 	topicHandlers := []avro.TopicHandler{
 		avro.NewSettlement(), // add more topics here
 	}
 	service, err := SetupService(
 		WithContext(suite.ctx),
 		WithBuildInfo,
-		WithConnections(suite.db, suite.rodb),
+		WithNewDBs,
 		WithProducer(topicHandlers...),
 		WithConsumer(topicHandlers...),
-		// WithTopicAutoCreation,
+		WithTopicAutoCreation,
 	)
 	suite.Require().NoError(err)
 	suite.service = service
 }
 
 func (suite *ServiceKafkaMockTestSuite) TestSettlements() {
-	settlements := []models.Settlement{{}}
-	suite.Require().NoError(suite.service.ProduceSettlements(suite.ctx, settlements))
+	bat := decimal.NewFromFloat(5)
+	fees := bat.Mul(decimal.NewFromFloat(0.05))
+	batSubFees := bat.Sub(fees)
+	settlements := []models.Settlement{{
+		AltCurrency:  altcurrency.BAT,
+		Probi:        altcurrency.BAT.ToProbi(batSubFees),
+		Fees:         altcurrency.BAT.ToProbi(fees),
+		Fee:          decimal.Zero,
+		Commission:   decimal.Zero,
+		Amount:       bat,
+		Currency:     altcurrency.BAT.String(),
+		Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+		Channel:      models.Channel("brave.com"),
+		Hash:         uuid.NewV4().String(),
+		Type:         "contribution",
+		SettlementID: uuid.NewV4().String(),
+		DocumentID:   uuid.NewV4().String(),
+		Address:      uuid.NewV4().String(),
+	}}
+	err := suite.service.ProduceSettlements(suite.ctx, settlements)
+	suite.Require().NoError(err)
 	errChan := suite.service.Consume()
+	txsChan := suite.CheckTxs(errChan)
 	select {
 	case err := <-errChan:
 		suite.Require().NoError(err)
-	case txs := <-suite.CheckTxs():
+	case txs := <-txsChan:
 		suite.Require().Len(txs, 3)
 		return
 	}
 }
 
-func (suite *ServiceKafkaMockTestSuite) CheckTxs() <-chan []models.Transaction {
+func (suite *ServiceKafkaMockTestSuite) CheckTxs(errChan chan error) <-chan []models.Transaction {
 	ch := make(chan []models.Transaction)
 	checkTxs := func() {
 		for {
@@ -90,6 +93,13 @@ func (suite *ServiceKafkaMockTestSuite) CheckTxs() <-chan []models.Transaction {
 			txs, err := suite.service.Datastore(true).
 				GetTransactions(suite.ctx)
 			if err == sql.ErrNoRows {
+				continue
+			}
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if len(*txs) == 0 {
 				continue
 			}
 			ch <- *txs

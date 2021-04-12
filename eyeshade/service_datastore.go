@@ -131,8 +131,8 @@ func (service *Service) GetSettlementStats(
 // InsertConvertableTransactions gets the grnat stats that match the input parameters
 func (service *Service) InsertConvertableTransactions(
 	ctx context.Context,
-	txs *[]interface{},
-) (*[]models.Transaction, error) {
+	txs []models.ConvertableTransaction,
+) error {
 	return service.Datastore(false).
 		InsertConvertableTransactions(ctx, txs)
 }

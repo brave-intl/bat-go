@@ -100,8 +100,8 @@ func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
 	path = fmt.Sprintf(
 		"/v1/accounts/settlements/contributions/total?limit=%d&start=%s&until=%s",
 		options.Limit,
-		options.StartDate.Format(time.RFC3339),
-		options.UntilDate.Format(time.RFC3339),
+		url.QueryEscape(options.StartDate.Format(time.RFC3339)),
+		url.QueryEscape(options.UntilDate.Format(time.RFC3339)),
 	)
 	res, body = suite.DoRequest(
 		"GET",

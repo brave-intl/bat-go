@@ -27,8 +27,8 @@ func (userDeposit *UserDeposit) GenerateID() string {
 }
 
 // ToTxs converts a user deposit to the appropriate transaction list
-func (userDeposit *UserDeposit) ToTxs() *[]Transaction {
-	return &[]Transaction{{
+func (userDeposit *UserDeposit) ToTxs() []Transaction {
+	return []Transaction{{
 		ID:              userDeposit.GenerateID(),
 		CreatedAt:       userDeposit.CreatedAt,
 		Description:     fmt.Sprintf("deposits from %s chain", userDeposit.Chain),

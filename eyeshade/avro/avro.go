@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
@@ -30,7 +31,34 @@ type KafkaMessageEncodable interface {
 type TopicHandler interface {
 	Topic() string
 	ToBinary(KafkaMessageEncodable) ([]byte, error)
-	DecodeBatch(msgs []kafka.Message) (*[]interface{}, error)
+	DecodeBatch(msgs []kafka.Message) (*[]models.ConvertableTransaction, error)
+}
+
+// TryDecode tries to decode the message
+func TryDecode(
+	codecs map[string]*goavro.Codec,
+	checkMap map[string]string,
+	msg kafka.Message,
+	pointer interface{},
+) error {
+	errs := []error{}
+	for partialParseKey, fullSchemaKey := range checkMap {
+		hasPartial := partialParseKey != ""
+		var partialParseErr error
+		if hasPartial {
+			partialParseErr = CodecDecode(codecs[partialParseKey], msg, pointer)
+		}
+		if hasPartial && partialParseErr != nil {
+			errs = append(errs, partialParseErr)
+		} else if fullSchemaError := CodecDecode(codecs[fullSchemaKey], msg, pointer); fullSchemaError != nil {
+			errs = append(errs, fullSchemaError)
+		} else {
+			return nil
+		}
+	}
+	return &errorutils.MultiError{
+		Errs: errs,
+	}
 }
 
 // CodecDecode - Decode using avro vote codec

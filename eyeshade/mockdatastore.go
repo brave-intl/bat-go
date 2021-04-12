@@ -265,12 +265,11 @@ func (mr *MockDatastoreMockRecorder) GetTransactionsByAccount(ctx, accountID, tx
 }
 
 // InsertConvertableTransactions mocks base method
-func (m *MockDatastore) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (*[]models.Transaction, error) {
+func (m *MockDatastore) InsertConvertableTransactions(ctx context.Context, txs []models.ConvertableTransaction) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertConvertableTransactions", ctx, txs)
-	ret0, _ := ret[0].(*[]models.Transaction)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // InsertConvertableTransactions indicates an expected call of InsertConvertableTransactions
@@ -280,12 +279,11 @@ func (mr *MockDatastoreMockRecorder) InsertConvertableTransactions(ctx, txs inte
 }
 
 // InsertTransactions mocks base method
-func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (*[]models.Transaction, error) {
+func (m *MockDatastore) InsertTransactions(ctx context.Context, txs *[]models.Transaction) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InsertTransactions", ctx, txs)
-	ret0, _ := ret[0].(*[]models.Transaction)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // InsertTransactions indicates an expected call of InsertTransactions

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
@@ -22,9 +24,9 @@ type BatchMessagesHandler interface {
 // BatchMessageConsumer holds methods for batch method consumption
 type BatchMessageConsumer interface {
 	Consume(erred chan error)
-	Read() (*[]kafka.Message, bool, error)
-	Handler(*[]kafka.Message) error
-	Commit(*[]kafka.Message) error
+	Read() ([]kafka.Message, bool, error)
+	Handler([]kafka.Message) error
+	Commit([]kafka.Message) error
 }
 
 // BatchMessageProducer holds methods for batch method producer
@@ -60,7 +62,7 @@ func (con *MessageHandler) Collect(
 }
 
 // Read reads messages
-func (con *MessageHandler) Read() (*[]kafka.Message, bool, error) {
+func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
 	// this method is dangerous
 	// need to check kafka implementation details
 	msgs := []kafka.Message{}
@@ -70,53 +72,51 @@ func (con *MessageHandler) Read() (*[]kafka.Message, bool, error) {
 	finished := false
 	for {
 		if con.reader.Config().QueueCapacity == len(msgs) {
-			finished = true
-			return &msgs, finished, nil
+			finished = true //nolint
+			return msgs, false, nil
 		}
 		go con.Collect(msgCh, errCh)
 		select {
 		case err := <-errCh:
 			if len(msgs) > 0 {
 				// set back to beginning of batch
-				offsetErr := con.reader.SetOffset(msgs[0].Offset)
+				offsetErr := con.reader.SetOffset(msgs[0].Offset - 1)
 				if offsetErr != nil {
-					mErr := errorutils.MultiError{
+					err = &errorutils.MultiError{
 						Errs: []error{err, offsetErr},
 					}
-					err = error(&mErr)
 				}
 			}
-			finished = true
-			return nil, finished, fmt.Errorf("could not read message %w", err)
+			finished = true //nolint
+			return nil, false, fmt.Errorf("could not read message %w", err)
 		case msg := <-msgCh:
 			if finished {
-				err := con.reader.SetOffset(msg.Offset)
+				err := con.reader.SetOffset(msg.Offset - 1)
 				if err != nil {
-					return nil, finished, err
+					return nil, false, err
 				}
+				return nil, false, err
 			}
 			msgs = append(msgs, msg)
 		case <-time.After(timeoutDuration):
-			finished = true
-			return &msgs, finished, nil
+			return msgs, true, nil
 		}
 	}
 }
 
 // Handler handles the batch of messages
-func (con *MessageHandler) Handler(msgs *[]kafka.Message) error {
+func (con *MessageHandler) Handler(msgs []kafka.Message) error {
 	if msgs == nil {
 		return nil
 	}
-	txs, err := con.handler.DecodeBatch(*msgs)
+	txs, err := con.handler.DecodeBatch(msgs)
 	if err != nil {
 		return err
 	}
-	_, err = con.service.InsertConvertableTransactions(
+	return con.service.InsertConvertableTransactions(
 		con.Context(),
-		txs,
+		*txs,
 	)
-	return err
 }
 
 // Context returns the context from the service
@@ -125,33 +125,42 @@ func (con *MessageHandler) Context() context.Context {
 }
 
 // Commit commits messages that have been read and inserted
-func (con *MessageHandler) Commit(msgs *[]kafka.Message) error {
+func (con *MessageHandler) Commit(msgs []kafka.Message) error {
 	if msgs == nil {
 		return nil
 	}
-	return con.reader.CommitMessages(con.Context(), *msgs...)
+	return con.reader.CommitMessages(con.Context(), msgs...)
 }
 
 // Consume starts the consumer
 func (con *MessageHandler) Consume(
 	erred chan error,
 ) {
+	var err error
 	for { // loop to continue consuming
-		msgs, _, err := con.Read()
-		if err == nil {
-			err = con.Handler(msgs)
-			if err == nil {
-				err = con.Commit(msgs)
-			}
+		msgs, timedOut, e := con.Read()
+		if e != nil {
+			err = errorutils.Wrap(e, "during read")
+		}
+		if timedOut && len(msgs) == 0 {
+			continue
+		}
+		e = con.Handler(msgs)
+		if e != nil {
+			err = errorutils.Wrap(e, "during handler")
+		}
+		e = con.Commit(msgs)
+		if e != nil {
+			err = errorutils.Wrap(e, "during commit")
 		}
 		if err != nil {
-			erred <- errorutils.Wrap(
-				err,
-				fmt.Sprintf("error in topic - %s", con.reader.Config().Topic),
-			)
 			break
 		}
 	}
+	erred <- errorutils.Wrap(
+		err,
+		fmt.Sprintf("error in topic - %s", con.reader.Config().Topic),
+	)
 }
 
 // Produce produces messages
@@ -172,7 +181,6 @@ func (con *MessageHandler) Produce(
 			Value: bytes,
 		})
 	}
-	fmt.Printf("writing %d messages\n", len(messages))
 	return con.writer.WriteMessages(
 		ctx,
 		messages...,
@@ -196,16 +204,29 @@ func WithTopicAutoCreation(service *Service) error {
 	ctx := service.Context()
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 	broker := stringutils.SplitAndTrim(kafkaBrokers)[0]
-	conn, err := kafka.DialContext(ctx, "tcp", broker)
+	conn, err := service.dialer.DialContext(ctx, "tcp", broker)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			fmt.Println("connection close failed", err)
+		}
+	}()
+	reps, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATIONS"))
+	if err != nil {
+		return err
+	}
+	partitions, err := strconv.Atoi(os.Getenv("KAFKA_PARTITIONS"))
+	if err != nil {
+		return err
+	}
 	for topic := range topics {
 		err = conn.CreateTopics(kafka.TopicConfig{
 			Topic:             topic,
-			NumPartitions:     2,
-			ReplicationFactor: 3,
+			NumPartitions:     partitions,
+			ReplicationFactor: reps,
 		})
 		if err != nil {
 			return err

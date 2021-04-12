@@ -184,7 +184,7 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 }
 
 // InsertConvertableTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs *[]interface{}) (tap1 *[]models.Transaction, err error) {
+func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs []models.ConvertableTransaction) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -198,7 +198,7 @@ func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Cont
 }
 
 // InsertTransactions implements Datastore
-func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (tap1 *[]models.Transaction, err error) {
+func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[]models.Transaction) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

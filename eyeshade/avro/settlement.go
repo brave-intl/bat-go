@@ -4,15 +4,28 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
 )
 
 var (
-	latest  = "v2"
+	latest           = "v3"
+	attemptDecodeMap = map[string]string{
+		"executedAt": latest,
+		"hashOnly":   "v2",
+		"":           "v1",
+	}
 	schemas = map[string]string{
-		"hashonly": `{
+		"executedAt": `{
+			"namespace": "brave.payments",
+			"type": "record",
+			"name": "payoutExecutedAt",
+			"aliases": ["payout"],
+			"fields": [
+				{ "name": "executedAt", "type": "string" }
+			]
+		}`,
+		"hashOnly": `{
 			"namespace": "brave.payments",
 			"type": "record",
 			"name": "payoutHash",
@@ -42,6 +55,28 @@ var (
 				{ "name": "type", "type": "string" }
 			]
 		}`,
+		"v2": `{
+			"namespace": "brave.payments",
+			"type": "record",
+			"name": "payout",
+			"doc": "This message is sent when settlement message is to be sent",
+			"fields": [
+				{ "name": "address", "type": "string" },
+				{ "name": "settlementId", "type": "string" },
+				{ "name": "publisher", "type": "string" },
+				{ "name": "altcurrency", "type": "string" },
+				{ "name": "currency", "type": "string" },
+				{ "name": "owner", "type": "string" },
+				{ "name": "probi", "type": "string" },
+				{ "name": "amount", "type": "string" },
+				{ "name": "fee", "type": "string" },
+				{ "name": "commission", "type": "string" },
+				{ "name": "fees", "type": "string" },
+				{ "name": "type", "type": "string" },
+				{ "name": "hash", "type": "string", "default": "" },
+				{ "name": "documentId", "type": "string", "default": "" }
+			]
+		}`,
 		latest: `{
 			"namespace": "brave.payments",
 			"type": "record",
@@ -60,8 +95,10 @@ var (
 				{ "name": "commission", "type": "string" },
 				{ "name": "fees", "type": "string" },
 				{ "name": "type", "type": "string" },
-				{ "name": "hash", "type": "string" },
-				{ "name": "documentId", "type": "string" }
+				{ "name": "hash", "type": "string", "default": "" },
+				{ "name": "documentId", "type": "string", "default": "" },
+				{ "name": "executedAt", "type": "string", "default": "" },
+				{ "name": "walletProvider", "type": "string", "default": "" }
 			]
 		}`,
 	}
@@ -98,38 +135,36 @@ func (s *Settlement) Topic() string {
 
 // ToBinary returns binary value of the encodable message
 func (s *Settlement) ToBinary(encodable KafkaMessageEncodable) ([]byte, error) {
+	// eventJSON, err := json.Marshal(encodable)
+	// if err != nil {
+	// 	return []byte{}, err
+	// }
+	// native, _, err := s.codecs[latest].NativeFromTextual(eventJSON)
+	// if err != nil {
+	// 	return []byte{}, err
+	// }
+	// return s.codecs[latest].BinaryFromNative(nil, native)
 	return s.codecs[latest].BinaryFromNative(nil, encodable.ToNative())
 }
 
 // Decode decodes a message
 func (s *Settlement) Decode(msg kafka.Message) (*models.Settlement, error) {
 	var settlement models.Settlement
-	err := CodecDecode(s.codecs["hashonly"], msg, &settlement)
-	if err != nil {
-		v1Err := CodecDecode(s.codecs["v1"], msg, &settlement)
-		if v1Err == nil {
-			return &settlement, nil
-		}
-		return nil, &errorutils.MultiError{
-			Errs: []error{err, v1Err},
-		}
-	}
-	v2Err := CodecDecode(s.codecs[latest], msg, &settlement)
-	if v2Err != nil {
-		return nil, v2Err
+	if err := TryDecode(s.codecs, attemptDecodeMap, msg, &settlement); err != nil {
+		return nil, err
 	}
 	return &settlement, nil
 }
 
 // DecodeBatch decodes a batch of messages
-func (s *Settlement) DecodeBatch(msgs []kafka.Message) (*[]interface{}, error) {
-	txs := []interface{}{}
+func (s *Settlement) DecodeBatch(msgs []kafka.Message) (*[]models.ConvertableTransaction, error) {
+	txs := []models.ConvertableTransaction{}
 	for _, msg := range msgs {
 		result, err := s.Decode(msg)
 		if err != nil {
 			return nil, err
 		}
-		txs = append(txs, *result)
+		txs = append(txs, models.ConvertableTransaction(result))
 	}
 	return &txs, nil
 }

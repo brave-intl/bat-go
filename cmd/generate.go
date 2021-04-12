@@ -17,6 +17,7 @@ import (
 func init() {
 	RootCmd.AddCommand(GenerateCmd)
 	GenerateCmd.AddCommand(JSONSchemaCmd)
+	GenerateCmd.AddCommand(EyeshadeJSONSchemaCmd)
 
 	// overwrite - defaults to false
 	JSONSchemaCmd.Flags().Bool("overwrite", false,
@@ -35,6 +36,17 @@ var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
 	Run:   Perform("generate json schema", jsonSchemaRun),
+}
+
+// EyeshadeJSONSchemaCmd is the json schema command
+var EyeshadeJSONSchemaCmd = &cobra.Command{
+	Use:   "eyeshade-json-schema",
+	Short: "entrypoint to generate json schema for eyeshade",
+	Run:   Perform("generate json schema", eyeshadeJSONSchemaRun),
+}
+
+func eyeshadeJSONSchemaRun(command *cobra.Command, args []string) error {
+	return nil
 }
 
 // jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand

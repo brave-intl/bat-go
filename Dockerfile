@@ -6,6 +6,8 @@ ARG COMMIT
 
 WORKDIR /src/
 COPY go.mod go.sum ./
+ENV GO111MODULE=on
+
 RUN go mod download
 COPY . ./
 
