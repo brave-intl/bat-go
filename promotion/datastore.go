@@ -1240,6 +1240,9 @@ limit 1`
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
 		status, errCode, retriable := errToDrainCode(err)
 
+		// inform sentry about this error
+		sentry.CaptureException(err)
+
 		if !retriable {
 			if _, err := tx.Exec(`
 				update claim_drain set
