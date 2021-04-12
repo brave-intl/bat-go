@@ -21,6 +21,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -516,6 +517,150 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	rr = httptest.NewRecorder()
 	handler2.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
+}
+
+func (suite *ControllersTestSuite) TestSuggestCBRError() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, _, err := kafkautils.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
+	err = walletDB.UpsertWallet(context.Background(), &info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+		reputationClient: mockReputation,
+	}
+
+	err = service.InitKafka(context.Background())
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	promotion, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	issuerName := promotion.ID.String() + ":control"
+	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	err = walletDB.UpsertWallet(context.Background(), &info)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
+
+	handler := MakeSuggestion(service)
+
+	suggestion := Suggestion{
+		Type:    "oneoff-tip",
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	suggestionReq := SuggestionRequest{
+		Suggestion: suggestionPayload,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	// return a duplicate redemption error from CBR to test out our codified messages
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(suggestionPayload)).Return(
+		errorutils.New(err, "cbr duplicate redemption",
+			errorutils.Codified{
+				ErrCode: "cbr_dup_redeem",
+				Retry:   false,
+			}))
+
+	body, err := json.Marshal(&suggestionReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/suggestion", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	// wait for the job to be processed
+	<-time.After(2 * time.Second)
+	// check that the suggestion drain got the right error
+	var failedSuggestion = getSuggestionDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
+	suite.Require().Equal("cbr_dup_redeem", *failedSuggestion.ErrCode)
+	suite.Require().Equal(true, failedSuggestion.Erred)
+
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {

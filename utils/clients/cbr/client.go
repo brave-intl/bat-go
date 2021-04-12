@@ -3,9 +3,11 @@ package cbr
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 )
 
 // Client abstracts over the underlying client
@@ -104,6 +106,65 @@ type CredentialRedeemRequest struct {
 	Payload       string `json:"payload"`
 }
 
+func handleRedeemError(err error) error {
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		if hs, ok := eb.Data().(clients.HTTPState); ok {
+			// possible cbr errors:
+			// 409 - never retry (already redeemed)
+			// 400 - never retry (bad request)
+			// 5xx - retry later
+			// 429/404 - retry later
+			switch hs.Status {
+			case http.StatusConflict:
+				return errorutils.New(err, "cbr duplicate redemption",
+					errorutils.Codified{
+						ErrCode: "cbr_dup_redeem",
+						Retry:   false,
+					})
+			case http.StatusBadRequest:
+				return errorutils.New(err, "cbr bad request",
+					errorutils.Codified{
+						ErrCode: "cbr_bad_request",
+						Retry:   false,
+					})
+			case http.StatusTooManyRequests:
+				return errorutils.New(err, "cbr rate limit",
+					errorutils.Codified{
+						ErrCode: "cbr_rate_limit",
+						Retry:   true,
+					})
+			case http.StatusNotFound:
+				return errorutils.New(err, "cbr route not found",
+					errorutils.Codified{
+						ErrCode: "cbr_path_not_found",
+						Retry:   true,
+					})
+			case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
+				return errorutils.New(err, "cbr internal server error",
+					errorutils.Codified{
+						ErrCode: "cbr_server_err",
+						Retry:   true,
+					})
+			default:
+				return errorutils.New(err, "cbr unknown cbr result",
+					errorutils.Codified{
+						ErrCode: "cbr_unknown",
+						Retry:   false,
+					})
+			}
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return errorutils.New(err, "cbr timeout",
+			errorutils.Codified{
+				ErrCode: "cbr_timeout",
+				Retry:   true,
+			})
+	}
+	return err
+}
+
 // RedeemCredential that was issued by the specified issuer
 func (c *HTTPClient) RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
 	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/"+issuer+"/redemption/", &CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload})
@@ -112,8 +173,7 @@ func (c *HTTPClient) RedeemCredential(ctx context.Context, issuer string, preima
 	}
 
 	_, err = c.client.Do(ctx, req, nil)
-
-	return err
+	return handleRedeemError(err)
 }
 
 // CredentialRedemption includes info needed to redeem a single token
@@ -137,6 +197,5 @@ func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []Creden
 	}
 
 	_, err = c.client.Do(ctx, req, nil)
-
-	return err
+	return handleRedeemError(err)
 }

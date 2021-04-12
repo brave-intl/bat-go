@@ -897,6 +897,17 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 	return nil
 }
 
+// SuggestionJob - representation of a suggestion job
+type SuggestionJob struct {
+	ID              uuid.UUID `db:"id"`
+	Credentials     string    `db:"credentials"`
+	SuggestionText  string    `db:"suggestion_text"`
+	SuggestionEvent []byte    `db:"suggestion_event"`
+	Erred           bool      `db:"erred"`
+	ErrCode         *string   `db:"errcode"`
+	CreatedAt       time.Time `db:"created_at"`
+}
+
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 
@@ -908,14 +919,6 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 	defer pg.RollbackTx(tx)
 
 	// FIXME
-	type SuggestionJob struct {
-		ID              uuid.UUID `db:"id"`
-		Credentials     string    `db:"credentials"`
-		SuggestionText  string    `db:"suggestion_text"`
-		SuggestionEvent []byte    `db:"suggestion_event"`
-		Erred           bool      `db:"erred"`
-		ErrCode         *string   `db:"errcode"`
-	}
 
 	statement := `
 select *
@@ -950,6 +953,10 @@ limit 1`
 				// set flag to stop this worker from running again
 				worker.PauseWorker(time.Now().Add(30 * time.Minute))
 			}
+
+			// inform sentry about this error
+			sentry.CaptureException(err)
+
 			_, errCode, retriable := errToDrainCode(err)
 
 			if !retriable {
@@ -1105,6 +1112,15 @@ func errToDrainCode(err error) (string, string, bool) {
 
 	status = "failed"
 
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		// if this is an error bundle, check the "data" for a codified type
+		if c, ok := eb.Data().(errorutils.Codified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, errCode, retriable
+		}
+	}
+
 	// possible protocol errors
 	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
 		errCode = "marshal_transfer"
@@ -1223,6 +1239,9 @@ limit 1`
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
 		status, errCode, retriable := errToDrainCode(err)
+
+		// inform sentry about this error
+		sentry.CaptureException(err)
 
 		if !retriable {
 			if _, err := tx.Exec(`
