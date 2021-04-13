@@ -1,9 +1,11 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -50,9 +52,24 @@ func (votes *Votes) Ignore() bool {
 }
 
 // Valid checks that we have all of the information needed to insert the transaction
-func (votes *Votes) Valid() bool {
-	return votes.Amount.GreaterThan(decimal.Zero) &&
-		votes.SurveyorID != "" &&
-		votes.Channel != "" &&
-		votes.Fees.GreaterThanOrEqual(decimal.Zero)
+func (votes *Votes) Valid() error {
+	errs := []error{}
+	if !votes.Amount.GreaterThan(decimal.Zero) {
+		errs = append(errs, errors.New("vote amount is not greater than zero"))
+	}
+	if votes.SurveyorID == "" {
+		errs = append(errs, errors.New("surveyor id is not set"))
+	}
+	if votes.Channel.String() == "" {
+		errs = append(errs, errors.New("channel is not set"))
+	}
+	if !votes.Fees.GreaterThanOrEqual(decimal.Zero) {
+		errs = append(errs, errors.New("fees are negative"))
+	}
+	if len(errs) > 0 {
+		return &errorutils.MultiError{
+			Errs: errs,
+		}
+	}
+	return nil
 }

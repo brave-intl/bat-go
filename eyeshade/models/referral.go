@@ -1,10 +1,12 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -54,11 +56,30 @@ func (referral *Referral) Ignore() bool {
 }
 
 // Valid checks whether the transaction has the necessary data to be inserted correctly
-func (referral *Referral) Valid() bool {
-	return referral.AltCurrency.IsValid() &&
-		referral.Probi.GreaterThan(decimal.Zero) &&
-		referral.Probi.Equal(referral.Probi.Truncate(0)) && // no decimals allowed
-		referral.Channel != "" &&
-		referral.Owner != "" &&
-		!referral.FirstID.IsZero()
+func (referral *Referral) Valid() error {
+	errs := []error{}
+	if !referral.AltCurrency.IsValid() {
+		errs = append(errs, errors.New("altcurrency is not valid"))
+	}
+	if !referral.Probi.GreaterThan(decimal.Zero) {
+		errs = append(errs, errors.New("probi is not greater than zero"))
+	}
+	if !referral.Probi.Equal(referral.Probi.Truncate(0)) {
+		errs = append(errs, errors.New("probi is not an int"))
+	}
+	if referral.Channel.String() == "" {
+		errs = append(errs, errors.New("channel is not set"))
+	}
+	if referral.Owner == "" {
+		errs = append(errs, errors.New("owner is not set"))
+	}
+	if referral.FirstID.IsZero() {
+		errs = append(errs, errors.New("the first id from the referral is zero"))
+	}
+	if len(errs) > 0 {
+		return &errorutils.MultiError{
+			Errs: errs,
+		}
+	}
+	return nil
 }
