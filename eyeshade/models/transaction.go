@@ -15,19 +15,19 @@ type PendingTransaction struct {
 
 // Transaction holds info about a single transaction from the database
 type Transaction struct {
-	ID                 string           `db:"id"`
-	CreatedAt          time.Time        `db:"created_at"`
-	Description        string           `db:"description"`
-	TransactionType    string           `db:"transaction_type"`
-	DocumentID         string           `db:"document_id"`
-	FromAccount        string           `db:"from_account"`
-	FromAccountType    string           `db:"from_account_type"`
-	ToAccount          string           `db:"to_account"`
-	ToAccountType      string           `db:"to_account_type"`
-	Amount             decimal.Decimal  `db:"amount"`
-	SettlementCurrency *string          `db:"settlement_currency"`
-	SettlementAmount   *decimal.Decimal `db:"settlement_amount"`
-	Channel            *Channel         `db:"channel"`
+	ID                 string           `json:"id" db:"id"`
+	CreatedAt          time.Time        `json:"createdAt" db:"created_at"`
+	Description        string           `json:"description" db:"description"`
+	TransactionType    string           `json:"transactionType" db:"transaction_type"`
+	DocumentID         string           `json:"documentId" db:"document_id"`
+	FromAccount        string           `json:"fromAccount" db:"from_account"`
+	FromAccountType    string           `json:"fromAccountType" db:"from_account_type"`
+	ToAccount          string           `json:"toAccount" db:"to_account"`
+	ToAccountType      string           `json:"toAccountType" db:"to_account_type"`
+	Amount             decimal.Decimal  `json:"amount" db:"amount"`
+	SettlementCurrency *string          `json:"settlementCurrency" db:"settlement_currency"`
+	SettlementAmount   *decimal.Decimal `json:"settlementAmount" db:"settlement_amount"`
+	Channel            *Channel         `json:"channel" db:"channel"`
 }
 
 // BackfillForCreators converts a transaction from the database to a backfill transaction

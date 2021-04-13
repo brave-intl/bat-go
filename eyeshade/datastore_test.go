@@ -579,20 +579,18 @@ func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 
 func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 	settlement := &models.Settlement{
-		AltCurrency:    altcurrency.BAT,
-		Probi:          altcurrency.BAT.ToProbi(decimal.NewFromFloat(4.75)),
-		Fees:           altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.25)),
-		Amount:         decimal.NewFromFloat(4),
-		Currency:       "USD",
-		Owner:          fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
-		Channel:        models.Channel("brave.com"),
-		Type:           "contribution",
-		Hash:           uuid.NewV4().String(),
-		SettlementID:   uuid.NewV4().String(),
-		DocumentID:     uuid.NewV4().String(),
-		Address:        uuid.NewV4().String(),
-		ExecutedAt:     nil,
-		WalletProvider: nil,
+		AltCurrency:  altcurrency.BAT,
+		Probi:        altcurrency.BAT.ToProbi(decimal.NewFromFloat(4.75)),
+		Fees:         altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.25)),
+		Amount:       decimal.NewFromFloat(4),
+		Currency:     "USD",
+		Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+		Channel:      models.Channel("brave.com"),
+		Type:         "contribution",
+		Hash:         uuid.NewV4().String(),
+		SettlementID: uuid.NewV4().String(),
+		DocumentID:   uuid.NewV4().String(),
+		Address:      uuid.NewV4().String(),
 	}
 	settlements := []models.ConvertableTransaction{
 		models.ConvertableTransaction(settlement),

@@ -423,14 +423,13 @@ func convertToTxs(convertables []models.ConvertableTransaction) (*[]models.Trans
 		if con.Ignore() {
 			continue
 		}
-		if !con.Valid() {
-			return nil, errorutils.Wrap(
-				models.ErrConvertableFailedValidation,
-				fmt.Sprintf(
-					"a convertable transaction failed validation %v",
-					con,
-				),
-			)
+		if err := con.Valid(); err != nil {
+			return nil, &errorutils.MultiError{
+				Errs: []error{
+					models.ErrConvertableFailedValidation,
+					err,
+				},
+			}
 		}
 		txs = append(txs, con.ToTxs()...)
 	}

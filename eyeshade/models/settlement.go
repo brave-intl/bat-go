@@ -2,10 +2,12 @@ package models
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -27,27 +29,8 @@ type Settlement struct {
 	SettlementID   string                  `json:"settlementId"`
 	DocumentID     string                  `json:"documentId"`
 	Address        string                  `json:"address"`
-	ExecutedAt     *time.Time              `json:"executedAt,omitempty"`
-	WalletProvider *string                 `json:"walletProvider,omitempty"`
-}
-
-// CreatedAt computes the created at time of the settlement
-func (settlement *Settlement) CreatedAt() time.Time {
-	createdAt := settlement.ExecutedAt
-	if createdAt != nil {
-		return *createdAt
-	}
-	// parsed, err := time.Parse(time.RFC3339, settlement.Hash)
-	// if err == nil {
-	// 	return parsed
-	// }
-	// id := settlement.Hash
-	// hexID := hex.EncodeToString([]byte(id))[:8]
-	// parsedSec, err := strconv.ParseInt(hexID, 16, 64)
-	// if err != nil {
-	// 	return time.Unix(parsedSec, 0)
-	// }
-	return time.Now()
+	ExecutedAt     string                  `json:"executedAt"`
+	WalletProvider string                  `json:"walletProvider"`
 }
 
 // GenerateID generates an id from the settlement metadata
@@ -58,74 +41,104 @@ func (settlement *Settlement) GenerateID(category string) string {
 	).String()
 }
 
-// ToTxs converts a settlement to the appropriate transactions
-func (settlement *Settlement) ToTxs() []Transaction {
-	txs := []Transaction{}
-	createdAt := settlement.CreatedAt()
+// ToContributionTransactions creates a set of contribution transactions for settlements
+func (settlement *Settlement) ToContributionTransactions() []Transaction {
+	createdAt := settlement.GetCreatedAt()
 	month := createdAt.Month().String()[:3]
+	normalizedChannel := settlement.Channel.Normalize()
+	return []Transaction{{
+		ID:              settlement.GenerateID("settlement_from_channel"),
+		CreatedAt:       createdAt.Add(time.Second * -2),
+		Description:     fmt.Sprintf("contributions through %s", month),
+		TransactionType: "contribution",
+		DocumentID:      settlement.Hash,
+		FromAccount:     normalizedChannel.String(),
+		FromAccountType: "channel",
+		ToAccount:       settlement.Owner,
+		ToAccountType:   "owner",
+		Amount:          altcurrency.BAT.FromProbi(settlement.Probi.Add(settlement.Fees)),
+		Channel:         &normalizedChannel,
+	}, {
+		ID:              settlement.GenerateID("settlement_fees"),
+		CreatedAt:       createdAt.Add(time.Second * -1),
+		Description:     "settlement fees",
+		TransactionType: "fees",
+		DocumentID:      settlement.Hash,
+		FromAccount:     settlement.Owner,
+		FromAccountType: "owner",
+		ToAccount:       "fees-account",
+		ToAccountType:   "internal",
+		Amount:          altcurrency.BAT.FromProbi(settlement.Fees),
+		Channel:         &normalizedChannel,
+	}}
+}
+
+// GetCreatedAt gets the time the message was created at
+func (settlement *Settlement) GetCreatedAt() time.Time {
+	createdAt, _ := time.Parse(time.RFC3339, settlement.ExecutedAt)
+	return createdAt
+}
+
+// GetToAccountType gets the account type
+func (settlement *Settlement) GetToAccountType() string {
+	toAccountType := "uphold"
+	if settlement.WalletProvider != "" {
+		toAccountType = settlement.WalletProvider
+	}
+	return toAccountType
+}
+
+// ToManualTransaction creates a manual transaction
+func (settlement *Settlement) ToManualTransaction() Transaction {
+	return Transaction{
+		ID:              settlement.GenerateID(settlement.Type),
+		CreatedAt:       settlement.GetCreatedAt(), // do we want to change this?
+		Description:     "handshake agreement with business development",
+		TransactionType: settlement.Type,
+		DocumentID:      settlement.DocumentID,
+		FromAccount:     SettlementAddress,
+		FromAccountType: settlement.GetToAccountType(),
+		ToAccount:       settlement.Owner,
+		ToAccountType:   "owner",
+		Amount:          altcurrency.BAT.FromProbi(settlement.Probi),
+	}
+}
+
+// ToSettlementTransaction creates a settlement transaction
+func (settlement *Settlement) ToSettlementTransaction() Transaction {
 	normalizedChannel := settlement.Channel.Normalize()
 	settlementType := settlement.Type
 	transactionType := settlementType + "_settlement"
-	toAccountType := "uphold"
-	if settlement.WalletProvider != nil {
-		toAccountType = *settlement.WalletProvider
+	documentID := settlement.DocumentID
+	if settlement.Type != "manual" {
+		documentID = settlement.Hash
 	}
-	if settlementType == "contribution" {
-		txs = append(txs, Transaction{
-			ID:              settlement.GenerateID("settlement_from_channel"),
-			CreatedAt:       createdAt.Add(time.Second * -2),
-			Description:     fmt.Sprintf("contributions through %s", month),
-			TransactionType: "contribution",
-			DocumentID:      settlement.Hash,
-			FromAccount:     normalizedChannel.String(),
-			FromAccountType: "channel",
-			ToAccount:       settlement.Owner,
-			ToAccountType:   "owner",
-			Amount:          altcurrency.BAT.FromProbi(settlement.Probi.Add(settlement.Fees)),
-			Channel:         &normalizedChannel,
-		})
-		txs = append(txs, Transaction{
-			ID:              settlement.GenerateID("settlement_fees"),
-			CreatedAt:       createdAt.Add(time.Second * -1),
-			Description:     "settlement fees",
-			TransactionType: "fees",
-			DocumentID:      settlement.Hash,
-			FromAccount:     settlement.Owner,
-			FromAccountType: "owner",
-			ToAccount:       "fees-account",
-			ToAccountType:   "internal",
-			Amount:          altcurrency.BAT.FromProbi(settlement.Fees),
-			Channel:         &normalizedChannel,
-		})
-	} else if settlementType == "manual" {
-		txs = append(txs, Transaction{
-			ID:              settlement.GenerateID(settlementType),
-			CreatedAt:       createdAt, // do we want to change this?
-			Description:     "handshake agreement with business development",
-			TransactionType: settlementType,
-			DocumentID:      settlement.DocumentID,
-			FromAccount:     SettlementAddress,
-			FromAccountType: toAccountType,
-			ToAccount:       settlement.Owner,
-			ToAccountType:   "owner",
-			Amount:          altcurrency.BAT.FromProbi(settlement.Probi),
-		})
-	}
-	txs = append(txs, Transaction{
+	return Transaction{
 		ID:                 settlement.GenerateID(transactionType),
-		CreatedAt:          createdAt,
+		CreatedAt:          settlement.GetCreatedAt(),
 		Description:        fmt.Sprintf("payout for %s", settlement.Type),
 		TransactionType:    transactionType,
 		FromAccount:        settlement.Owner,
+		DocumentID:         documentID,
 		FromAccountType:    "owner",
 		ToAccount:          settlement.Address,
-		ToAccountType:      toAccountType, // needs to be updated
-		Amount:             altcurrency.BAT.ToProbi(settlement.Probi),
+		ToAccountType:      settlement.GetToAccountType(), // needs to be updated
+		Amount:             altcurrency.BAT.FromProbi(settlement.Probi),
 		SettlementCurrency: &settlement.Currency,
 		SettlementAmount:   &settlement.Amount,
 		Channel:            &normalizedChannel,
-	})
-	return txs
+	}
+}
+
+// ToTxs converts a settlement to the appropriate transactions
+func (settlement *Settlement) ToTxs() []Transaction {
+	txs := []Transaction{}
+	if settlement.Type == "contribution" {
+		txs = append(txs, settlement.ToContributionTransactions()...)
+	} else if settlement.Type == "manual" {
+		txs = append(txs, settlement.ToManualTransaction())
+	}
+	return append(txs, settlement.ToSettlementTransaction())
 }
 
 // Ignore allows us to savely ignore a message if it is malformed
@@ -137,57 +150,70 @@ func (settlement *Settlement) Ignore() bool {
 }
 
 // Valid checks whether the message it has everything it needs to be inserted correctly
-func (settlement *Settlement) Valid() bool {
+func (settlement *Settlement) Valid() error {
 	// non zero and no decimals allowed
-	// fmt.Println("!settlement.Probi.GreaterThan(decimal.Zero)", !settlement.Probi.GreaterThan(decimal.Zero))
-	// fmt.Println("settlement.Probi.Equal(settlement.Probi.Truncate(0))", settlement.Probi.Equal(settlement.Probi.Truncate(0)))
-	// fmt.Println("settlement.Fees.GreaterThanOrEqual(decimal.Zero)", settlement.Fees.GreaterThanOrEqual(decimal.Zero))
-	// fmt.Println("settlement.Owner != \"\"", settlement.Owner != "")
-	// fmt.Println("settlement.Channel != \"\"", settlement.Channel != "")
-	// fmt.Println("settlement.Amount.GreaterThan(decimal.Zero)", settlement.Amount.GreaterThan(decimal.Zero))
-	// fmt.Println("settlement.Currency != \"\"", settlement.Currency != "")
-	// fmt.Println("settlement.Type != \"\"", settlement.Type != "")
-	// fmt.Println("settlement.Address != \"\"", settlement.Address != "")
-	// fmt.Println("settlement.DocumentID != \"\"", settlement.DocumentID != "")
-	// fmt.Println("settlement.SettlementID != \"\"", settlement.SettlementID != "")
-	return settlement.Probi.GreaterThan(decimal.Zero) &&
-		settlement.Probi.Equal(settlement.Probi.Truncate(0)) && // no decimals
-		settlement.Fees.GreaterThanOrEqual(decimal.Zero) &&
-		settlement.Owner != "" &&
-		settlement.Channel != "" &&
-		settlement.Amount.GreaterThan(decimal.Zero) &&
-		settlement.Currency != "" &&
-		settlement.Type != "" &&
-		settlement.Address != "" &&
-		settlement.DocumentID != "" &&
-		settlement.SettlementID != ""
+	errs := []error{}
+	if !settlement.Probi.GreaterThan(decimal.Zero) {
+		errs = append(errs, errors.New("probi is not greater than zero"))
+	}
+	if !settlement.Probi.Equal(settlement.Probi.Truncate(0)) {
+		errs = append(errs, errors.New("probi is not an int"))
+	}
+	if !settlement.Fees.GreaterThanOrEqual(decimal.Zero) {
+		errs = append(errs, errors.New("fees are negative"))
+	}
+	if settlement.Owner == "" {
+		errs = append(errs, errors.New("owner not set"))
+	}
+	if settlement.Channel.String() == "" {
+		errs = append(errs, errors.New("channel not set"))
+	}
+	if !settlement.Amount.GreaterThan(decimal.Zero) {
+		errs = append(errs, errors.New("amount is not greater than zero"))
+	}
+	if settlement.Currency == "" {
+		errs = append(errs, errors.New("currency is not set"))
+	}
+	if settlement.Type == "" {
+		errs = append(errs, errors.New("transaction type is not set"))
+	}
+	if settlement.Address == "" {
+		errs = append(errs, errors.New("address is not set"))
+	}
+	if settlement.DocumentID == "" {
+		errs = append(errs, errors.New("document id is not set"))
+	}
+	if settlement.SettlementID == "" {
+		errs = append(errs, errors.New("settlement id is not set"))
+	}
+	if len(errs) != 0 {
+		return &errorutils.MultiError{
+			Errs: errs,
+		}
+	}
+	return nil
 }
 
 // ToNative - convert to `native` map
 func (settlement *Settlement) ToNative() map[string]interface{} {
-	s := map[string]interface{}{
-		"altcurrency":  settlement.AltCurrency.String(),
-		"probi":        settlement.Probi.String(),
-		"fees":         settlement.Fees.String(),
-		"fee":          settlement.Fee.String(),
-		"commission":   settlement.Commission.String(),
-		"amount":       settlement.Amount.String(),
-		"currency":     settlement.Currency,
-		"owner":        settlement.Owner,
-		"publisher":    settlement.Channel.String(),
-		"hash":         settlement.Hash,
-		"type":         settlement.Type,
-		"settlementId": settlement.SettlementID,
-		"documentId":   settlement.DocumentID,
-		"address":      settlement.Address,
+	return map[string]interface{}{
+		"altcurrency":    settlement.AltCurrency.String(),
+		"probi":          settlement.Probi.String(),
+		"fees":           settlement.Fees.String(),
+		"fee":            settlement.Fee.String(),
+		"commission":     settlement.Commission.String(),
+		"amount":         settlement.Amount.String(),
+		"currency":       settlement.Currency,
+		"owner":          settlement.Owner,
+		"publisher":      settlement.Channel.String(),
+		"hash":           settlement.Hash,
+		"type":           settlement.Type,
+		"settlementId":   settlement.SettlementID,
+		"documentId":     settlement.DocumentID,
+		"address":        settlement.Address,
+		"executedAt":     settlement.ExecutedAt,
+		"walletProvider": settlement.WalletProvider,
 	}
-	if settlement.ExecutedAt != nil {
-		s["executedAt"] = settlement.ExecutedAt.Format(time.RFC3339)
-	}
-	if settlement.WalletProvider != nil {
-		s["walletProvider"] = settlement.WalletProvider
-	}
-	return s
 }
 
 // SettlementStat holds settlement stats

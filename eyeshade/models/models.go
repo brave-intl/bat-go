@@ -58,7 +58,7 @@ var (
 // ConvertableTransaction allows a struct to be converted into a transaction
 type ConvertableTransaction interface {
 	ToTxs() []Transaction
-	Valid() bool
+	Valid() error
 	Ignore() bool
 }
 

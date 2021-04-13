@@ -37,20 +37,13 @@ type TopicHandler interface {
 // TryDecode tries to decode the message
 func TryDecode(
 	codecs map[string]*goavro.Codec,
-	checkMap map[string]string,
+	checkMap []string,
 	msg kafka.Message,
 	pointer interface{},
 ) error {
 	errs := []error{}
-	for partialParseKey, fullSchemaKey := range checkMap {
-		hasPartial := partialParseKey != ""
-		var partialParseErr error
-		if hasPartial {
-			partialParseErr = CodecDecode(codecs[partialParseKey], msg, pointer)
-		}
-		if hasPartial && partialParseErr != nil {
-			errs = append(errs, partialParseErr)
-		} else if fullSchemaError := CodecDecode(codecs[fullSchemaKey], msg, pointer); fullSchemaError != nil {
+	for _, fullSchemaKey := range checkMap {
+		if fullSchemaError := CodecDecode(codecs[fullSchemaKey], msg, pointer); fullSchemaError != nil {
 			errs = append(errs, fullSchemaError)
 		} else {
 			return nil

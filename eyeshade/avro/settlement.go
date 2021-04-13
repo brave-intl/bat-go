@@ -2,6 +2,7 @@ package avro
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/linkedin/goavro"
@@ -9,31 +10,27 @@ import (
 )
 
 var (
-	latest           = "v3"
-	attemptDecodeMap = map[string]string{
-		"executedAt": latest,
-		"hashOnly":   "v2",
-		"":           "v1",
-	}
-	schemas = map[string]string{
-		"executedAt": `{
-			"namespace": "brave.payments",
-			"type": "record",
-			"name": "payoutExecutedAt",
-			"aliases": ["payout"],
-			"fields": [
-				{ "name": "executedAt", "type": "string" }
-			]
-		}`,
-		"hashOnly": `{
-			"namespace": "brave.payments",
-			"type": "record",
-			"name": "payoutHash",
-			"aliases": ["payout"],
-			"fields": [
-				{ "name": "hash", "type": "string" }
-			]
-		}`,
+	latest            = "v3"
+	attemptDecodeList = []string{latest, "v2", "v1"}
+	schemas           = map[string]string{
+		// "executedAt": `{
+		// 	"namespace": "brave.payments",
+		// 	"type": "record",
+		// 	"name": "payoutExecutedAt",
+		// 	"aliases": ["payout"],
+		// 	"fields": [
+		// 		{ "name": "executedAt", "type": "string" }
+		// 	]
+		// }`,
+		// "hashOnly": `{
+		// 	"namespace": "brave.payments",
+		// 	"type": "record",
+		// 	"name": "payoutHash",
+		// 	"aliases": ["payout"],
+		// 	"fields": [
+		// 		{ "name": "hash", "type": "string" }
+		// 	]
+		// }`,
 		// it is important to keep this as a group that is not reported live to preserve anonymity
 		"v1": `{
 			"namespace": "brave.payments",
@@ -135,23 +132,20 @@ func (s *Settlement) Topic() string {
 
 // ToBinary returns binary value of the encodable message
 func (s *Settlement) ToBinary(encodable KafkaMessageEncodable) ([]byte, error) {
-	// eventJSON, err := json.Marshal(encodable)
-	// if err != nil {
-	// 	return []byte{}, err
-	// }
-	// native, _, err := s.codecs[latest].NativeFromTextual(eventJSON)
-	// if err != nil {
-	// 	return []byte{}, err
-	// }
-	// return s.codecs[latest].BinaryFromNative(nil, native)
 	return s.codecs[latest].BinaryFromNative(nil, encodable.ToNative())
 }
 
 // Decode decodes a message
 func (s *Settlement) Decode(msg kafka.Message) (*models.Settlement, error) {
 	var settlement models.Settlement
-	if err := TryDecode(s.codecs, attemptDecodeMap, msg, &settlement); err != nil {
+	if err := TryDecode(s.codecs, attemptDecodeList, msg, &settlement); err != nil {
 		return nil, err
+	}
+	if settlement.ExecutedAt == "" { // use the time that the message was placed on the queue if none inside of msg
+		settlement.ExecutedAt = msg.Time.Format(time.RFC3339)
+	}
+	if settlement.WalletProvider == "" {
+		settlement.WalletProvider = "uphold"
 	}
 	return &settlement, nil
 }

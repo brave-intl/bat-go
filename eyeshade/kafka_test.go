@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ServiceKafkaMockTestSuite struct {
+type ServiceKafkaTestSuite struct {
 	suite.Suite
 	ctx     context.Context
 	db      Datastore
@@ -28,14 +28,21 @@ type ServiceKafkaMockTestSuite struct {
 	service *Service
 }
 
-func TestServiceKafkaMockTestSuite(t *testing.T) {
-	suite.Run(t, new(ServiceKafkaMockTestSuite))
+func TestServiceKafkaTestSuite(t *testing.T) {
+	suite.Run(t, new(ServiceKafkaTestSuite))
 	// if os.Getenv("EYESHADE_DB_URL") != "" {
 	// 	suite.Run(t, new(DatastoreTestSuite))
 	// }
 }
 
-func (suite *ServiceKafkaMockTestSuite) SetupSuite() {
+func (suite *ServiceKafkaTestSuite) SetupTest() {
+	suite.service.Datastore(false).
+		RawDB().
+		Exec(`delete
+from transactions`)
+}
+
+func (suite *ServiceKafkaTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
 	topicHandlers := []avro.TopicHandler{
 		avro.NewSettlement(), // add more topics here
@@ -52,11 +59,11 @@ func (suite *ServiceKafkaMockTestSuite) SetupSuite() {
 	suite.service = service
 }
 
-func (suite *ServiceKafkaMockTestSuite) TestSettlements() {
+func (suite *ServiceKafkaTestSuite) TestSettlements() {
 	bat := decimal.NewFromFloat(5)
 	fees := bat.Mul(decimal.NewFromFloat(0.05))
 	batSubFees := bat.Sub(fees)
-	settlements := []models.Settlement{{
+	settlement := models.Settlement{
 		AltCurrency:  altcurrency.BAT,
 		Probi:        altcurrency.BAT.ToProbi(batSubFees),
 		Fees:         altcurrency.BAT.ToProbi(fees),
@@ -71,7 +78,8 @@ func (suite *ServiceKafkaMockTestSuite) TestSettlements() {
 		SettlementID: uuid.NewV4().String(),
 		DocumentID:   uuid.NewV4().String(),
 		Address:      uuid.NewV4().String(),
-	}}
+	}
+	settlements := []models.Settlement{settlement}
 	err := suite.service.ProduceSettlements(suite.ctx, settlements)
 	suite.Require().NoError(err)
 	errChan := suite.service.Consume()
@@ -79,13 +87,23 @@ func (suite *ServiceKafkaMockTestSuite) TestSettlements() {
 	select {
 	case err := <-errChan:
 		suite.Require().NoError(err)
-	case txs := <-txsChan:
-		suite.Require().Len(txs, 3)
+	case actual := <-txsChan:
+		settlement.ExecutedAt = actual[2].CreatedAt.Format(time.RFC3339)
+		contributionTxs := settlement.ToContributionTransactions()
+		expect := []models.Transaction{
+			contributionTxs[0],
+			contributionTxs[1],
+			settlement.ToSettlementTransaction(),
+		}
+		suite.Require().JSONEq(
+			MustMarshal(suite.Require(), expect),
+			MustMarshal(suite.Require(), actual),
+		)
 		return
 	}
 }
 
-func (suite *ServiceKafkaMockTestSuite) CheckTxs(errChan chan error) <-chan []models.Transaction {
+func (suite *ServiceKafkaTestSuite) CheckTxs(errChan chan error) <-chan []models.Transaction {
 	ch := make(chan []models.Transaction)
 	checkTxs := func() {
 		for {

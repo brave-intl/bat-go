@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -63,52 +62,38 @@ func (con *MessageHandler) Collect(
 
 // Read reads messages
 func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
-	// this method is dangerous
-	// need to check kafka implementation details
+	msg, err := con.reader.FetchMessage(con.Context())
 	msgs := []kafka.Message{}
-	msgCh := make(chan kafka.Message)
-	errCh := make(chan error)
-	timeoutDuration := time.Second
-	finished := false
-	for {
-		if con.reader.Config().QueueCapacity == len(msgs) {
-			finished = true //nolint
-			return msgs, false, nil
-		}
-		go con.Collect(msgCh, errCh)
-		select {
-		case err := <-errCh:
-			if len(msgs) > 0 {
-				// set back to beginning of batch
-				offsetErr := con.reader.SetOffset(msgs[0].Offset - 1)
-				if offsetErr != nil {
-					err = &errorutils.MultiError{
-						Errs: []error{err, offsetErr},
-					}
-				}
-			}
-			finished = true //nolint
-			return nil, false, fmt.Errorf("could not read message %w", err)
-		case msg := <-msgCh:
-			if finished {
-				err := con.reader.SetOffset(msg.Offset - 1)
-				if err != nil {
-					return nil, false, err
-				}
-				return nil, false, err
-			}
-			msgs = append(msgs, msg)
-		case <-time.After(timeoutDuration):
-			return msgs, true, nil
-		}
+	if err != nil {
+		return msgs, false, err
 	}
+	return append(msgs, msg), false, err
+	// // this method is dangerous
+	// // need to check kafka implementation details
+	// msgs := []kafka.Message{}
+	// msgCh := make(chan kafka.Message)
+	// errCh := make(chan error)
+	// timeoutDuration := time.Second
+	// for {
+	// 	if con.reader.Config().QueueCapacity == len(msgs) {
+	// 		return msgs, false, nil
+	// 	}
+	// 	go con.Collect(msgCh, errCh)
+	// 	select {
+	// 	case err := <-errCh:
+	// 		return nil, false, fmt.Errorf("could not read message %w", err)
+	// 	case msg := <-msgCh:
+	// 		msgs = append(msgs, msg)
+	// 		// limit to 1
+	// 		return msgs, false, nil
+	// 	case <-time.After(timeoutDuration):
+	// 		return msgs, true, nil
+	// 	}
+	// }
 }
 
 // Handler handles the batch of messages
 func (con *MessageHandler) Handler(msgs []kafka.Message) error {
-	if msgs == nil {
-		return nil
-	}
 	txs, err := con.handler.DecodeBatch(msgs)
 	if err != nil {
 		return err
@@ -126,9 +111,6 @@ func (con *MessageHandler) Context() context.Context {
 
 // Commit commits messages that have been read and inserted
 func (con *MessageHandler) Commit(msgs []kafka.Message) error {
-	if msgs == nil {
-		return nil
-	}
 	return con.reader.CommitMessages(con.Context(), msgs...)
 }
 
@@ -138,22 +120,22 @@ func (con *MessageHandler) Consume(
 ) {
 	var err error
 	for { // loop to continue consuming
-		msgs, timedOut, e := con.Read()
+		msgs, _, e := con.Read()
 		if e != nil {
 			err = errorutils.Wrap(e, "during read")
+			break
 		}
-		if timedOut && len(msgs) == 0 {
+		if len(msgs) == 0 {
 			continue
 		}
 		e = con.Handler(msgs)
 		if e != nil {
 			err = errorutils.Wrap(e, "during handler")
+			break
 		}
 		e = con.Commit(msgs)
 		if e != nil {
 			err = errorutils.Wrap(e, "during commit")
-		}
-		if err != nil {
 			break
 		}
 	}

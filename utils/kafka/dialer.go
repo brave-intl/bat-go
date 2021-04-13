@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/linkedin/goavro"
@@ -23,7 +22,7 @@ import (
 )
 
 var (
-	groupID = os.Getenv("ENV") + "." + os.Getenv("SERVICE")
+	groupID = fmt.Sprintf("%s.%s", os.Getenv("ENV"), os.Getenv("SERVICE"))
 )
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires
@@ -199,17 +198,39 @@ func InitKafkaReader(
 		return nil, nil, err
 	}
 
-	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+	kafkaBrokers := stringutils.SplitAndTrim(ctx.Value(appctx.KafkaBrokersCTXKey).(string))
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: strings.Split(kafkaBrokers, ","),
-		Topic:   topic,
-		Dialer:  dialer,
-		GroupID: groupID,
-		Logger:  kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:     kafkaBrokers,
+		Topic:       topic,
+		Dialer:      dialer,
+		MaxWait:     time.Second * 5,
+		GroupID:     groupID,
+		StartOffset: kafka.FirstOffset,
+		Logger:      kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
-	return kafkaReader, dialer, nil
+	return kafkaReader, dialer, TryKafkaConnection(dialer, kafkaBrokers)
+}
+
+// TryKafkaConnection tries connecting to list of brokers. If at least one
+// broker can be reached and connection is successful, error is nil.
+// Otherwise, it returns an error describing all connection errors.
+func TryKafkaConnection(dialer *kafka.Dialer, brokers []string) error {
+	var errors []string
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, broker := range brokers {
+		conn, err := dialer.DialContext(ctx, "tcp", broker)
+		if err != nil {
+			errors = append(errors, err.Error())
+		} else {
+			// at least one successful broker connection
+			return conn.Close()
+		}
+	}
+	return fmt.Errorf("%s", errors)
 }
 
 // GenerateCodecs - create a map of codec name to the avro codec
