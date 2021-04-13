@@ -30,7 +30,7 @@ func SetupService(
 	options ...func(*Service) error,
 ) (*Service, error) {
 	service := Service{}
-	for _, option := range options {
+	for i, option := range options {
 		err := option(&service)
 		if err != nil {
 			return nil, err

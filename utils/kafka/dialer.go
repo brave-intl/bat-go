@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/linkedin/goavro"
@@ -172,10 +174,10 @@ func InitKafkaWriter(
 		return nil, nil, err
 	}
 
-	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+	kafkaBrokers := Brokers(ctx)
 
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  stringutils.SplitAndTrim(kafkaBrokers, ","),
+		Brokers:  kafkaBrokers,
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
@@ -183,6 +185,10 @@ func InitKafkaWriter(
 	})
 
 	return kafkaWriter, dialer, nil
+}
+
+func Brokers(ctx context.Context) []string {
+	return stringutils.SplitAndTrim(ctx.Value(appctx.KafkaBrokersCTXKey).(string))
 }
 
 // InitKafkaReader - create a kafka writer given a topic
@@ -198,7 +204,7 @@ func InitKafkaReader(
 		return nil, nil, err
 	}
 
-	kafkaBrokers := stringutils.SplitAndTrim(ctx.Value(appctx.KafkaBrokersCTXKey).(string))
+	kafkaBrokers := Brokers(ctx)
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     kafkaBrokers,
@@ -211,6 +217,27 @@ func InitKafkaReader(
 	})
 
 	return kafkaReader, dialer, TryKafkaConnection(dialer, kafkaBrokers)
+}
+
+// NewKafkaLeader gets the kafka leader through an non topic connection
+func NewKafkaLeader(ctx context.Context, d ...*kafka.Dialer) (*kafka.Conn, *kafka.Dialer, error) {
+	broker := Brokers(ctx)[0]
+	dialer, err := InitDialer(ctx, d...)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := dialer.DialContext(ctx, "tcp", broker)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer conn.Close()
+	controller, err := conn.Controller()
+	if err != nil {
+		return nil, nil, err
+	}
+	address := net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port))
+	leader, err := kafka.DialContext(ctx, "tcp", address)
+	return leader, dialer, err
 }
 
 // TryKafkaConnection tries connecting to list of brokers. If at least one
