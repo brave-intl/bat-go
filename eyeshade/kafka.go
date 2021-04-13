@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -24,7 +23,7 @@ type BatchMessagesHandler interface {
 // BatchMessageConsumer holds methods for batch method consumption
 type BatchMessageConsumer interface {
 	Consume(erred chan error)
-	Read(*kafka.Batch) ([]kafka.Message, bool, error)
+	Read() ([]kafka.Message, bool, error)
 	Handler([]kafka.Message) error
 	Commit([]kafka.Message) error
 }
@@ -41,7 +40,6 @@ type MessageHandler struct {
 	reader  *kafka.Reader
 	writer  *kafka.Writer
 	dialer  *kafka.Dialer
-	conn    *kafka.Conn
 }
 
 // Topic returns the topic of the message handler
@@ -49,25 +47,27 @@ func (con *MessageHandler) Topic() string {
 	return con.handler.Topic()
 }
 
-// Read reads messages
-func (con *MessageHandler) Read(batch *kafka.Batch) ([]kafka.Message, bool, error) {
-	msgs := []kafka.Message{}
-	limit := 100
-	timeout := time.Second * 2
-	start := time.Now()
-	for {
-		msg, err := batch.ReadMessage()
-		if err != nil {
-			return msgs, false, err
-		}
-		msgs := append(msgs, msg)
-		if len(msgs) >= limit {
-			return msgs, false, nil
-		}
-		if time.Now().Add(timeout).After(start) {
-			return msgs, true, nil
-		}
+// Collect collects messages from the reader
+func (con *MessageHandler) Collect(
+	msgCh chan<- kafka.Message,
+	errCh chan<- error,
+) {
+	msg, err := con.reader.FetchMessage(con.Context())
+	if err != nil {
+		errCh <- err
+	} else {
+		msgCh <- msg
 	}
+}
+
+// Read reads messages
+func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
+	msg, err := con.reader.FetchMessage(con.Context())
+	msgs := []kafka.Message{}
+	if err != nil {
+		return msgs, false, err
+	}
+	return append(msgs, msg), false, err
 }
 
 // Handler handles the batch of messages
@@ -97,13 +97,8 @@ func (con *MessageHandler) Consume(
 	erred chan error,
 ) {
 	var err error
-	batch := con.conn.ReadBatchWith(kafka.ReadBatchConfig{
-		MinBytes: 1,
-		MaxBytes: 1e7,
-	})
-	defer batch.Close()
 	for { // loop to continue consuming
-		msgs, _, e := con.Read(batch)
+		msgs, _, e := con.Read()
 		if e != nil {
 			err = errorutils.Wrap(e, "during read")
 			break
@@ -209,12 +204,6 @@ func WithConsumer(
 			// can't access consumer keys until make is called
 			service.consumers = make(map[string]BatchMessageConsumer)
 		}
-		ctx := service.Context()
-		leader, dialer, err := kafkautils.NewKafkaLeader(ctx)
-		if err != nil {
-			return err
-		}
-		service.dialer = dialer
 		for _, topicHandler := range topicHandlers {
 			reader, dialer, err := kafkautils.InitKafkaReader(
 				service.Context(),
@@ -228,9 +217,9 @@ func WithConsumer(
 				handler: topicHandler,
 				reader:  reader,
 				dialer:  dialer,
-				conn:    leader,
 				service: service,
 			}
+			service.dialer = dialer
 			service.consumers[topicHandler.Topic()] = BatchMessageConsumer(consumer)
 		}
 		return nil
