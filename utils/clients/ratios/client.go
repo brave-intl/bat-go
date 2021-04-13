@@ -15,7 +15,7 @@ import (
 
 // Client abstracts over the underlying client
 type Client interface {
-	FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error)
+	FetchRate(ctx context.Context, base string, currency ...string) (*RateResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the ratios server
@@ -88,11 +88,11 @@ type RateResponse struct {
 
 // FetchOptions options for fetching rates from ratios
 type FetchOptions struct {
-	Currency string `url:"currency,omitempty"`
+	Currency []string `url:"currency,omitempty"`
 }
 
 // FetchRate fetches the rate of a currency to BAT
-func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
+func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency ...string) (*RateResponse, error) {
 	var cacheKey = fmt.Sprintf("%s_%s", base, currency)
 	// check cache for this rate
 	if rate, found := c.cache.Get(cacheKey); found {

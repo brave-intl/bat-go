@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // FetchRate implements Client
-func (_d ClientWithPrometheus) FetchRate(ctx context.Context, base string, currency string) (rp1 *RateResponse, err error) {
+func (_d ClientWithPrometheus) FetchRate(ctx context.Context, base string, currency ...string) (rp1 *RateResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -49,5 +49,5 @@ func (_d ClientWithPrometheus) FetchRate(ctx context.Context, base string, curre
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchRate", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchRate(ctx, base, currency)
+	return _d.base.FetchRate(ctx, base, currency...)
 }

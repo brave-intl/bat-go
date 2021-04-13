@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	uuid "github.com/satori/go.uuid"
@@ -44,15 +43,15 @@ from transactions`)
 
 func (suite *ServiceKafkaTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
-	topicHandlers := []avro.TopicHandler{
-		avro.NewSettlement(), // add more topics here
+	topics := []string{
+		"settlement", // add more topic keys here
 	}
 	service, err := SetupService(
 		WithContext(suite.ctx),
 		WithBuildInfo,
 		WithNewDBs,
-		WithProducer(topicHandlers...),
-		WithConsumer(topicHandlers...),
+		WithProducer(topics...),
+		WithConsumer(topics...),
 		WithTopicAutoCreation,
 	)
 	suite.Require().NoError(err)

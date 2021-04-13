@@ -85,6 +85,20 @@ func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Conte
 	return _d.base.GetAccountSettlementEarnings(ctx, options)
 }
 
+// GetActiveCountryGroups implements Datastore
+func (_d DatastoreWithPrometheus) GetActiveCountryGroups(ctx context.Context) (gap1 *[]countries.Group, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetActiveCountryGroups", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetActiveCountryGroups(ctx)
+}
+
 // GetBalances implements Datastore
 func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []string) (bap1 *[]models.Balance, err error) {
 	_since := time.Now()
@@ -195,6 +209,20 @@ func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Cont
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertConvertableTransactions", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertConvertableTransactions(ctx, txs)
+}
+
+// InsertSuggestions implements Datastore
+func (_d DatastoreWithPrometheus) InsertSuggestions(ctx context.Context, suggestions []models.Suggestion) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSuggestions", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertSuggestions(ctx, suggestions)
 }
 
 // InsertTransactions implements Datastore

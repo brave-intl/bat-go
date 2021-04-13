@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -47,19 +46,25 @@ func Resolve(rows []ReferralGroup) *[]ReferralGroup {
 	return &rowsFiltered
 }
 
-// ComputeValue computes the value of a referral group at a point in time
-func ComputeValue(
-	altcurrency altcurrency.AltCurrency,
-	passedGroupID uuid.UUID,
-	groups []ReferralGroup,
-	getRate func(string) decimal.Decimal,
-) ComputedValue {
+// FindGroup finds the matching group or reverts back to the original rate id
+func FindGroup(passedGroupID uuid.UUID, groups []Group) Group {
 	countryGroupID := passedGroupID
 	if uuid.Equal(countryGroupID, uuid.Nil) {
 		countryGroupID = originalRateID
 	}
 	group := FindByID(groups, countryGroupID)
-	rate := getRate(group.Currency)
+	if group != nil {
+		return *group
+	}
+	return *FindByID(groups, originalRateID)
+}
+
+// ComputeValue computes the value of a referral group at a point in time
+func ComputeValue(
+	group Group,
+	rates map[string]decimal.Decimal,
+) ComputedValue {
+	rate := rates[group.Currency]
 	probi := rate.Mul(group.Amount)
 	return ComputedValue{
 		Probi:    probi,
@@ -70,7 +75,7 @@ func ComputeValue(
 }
 
 // FindByID finds a referral group by its id
-func FindByID(groups []ReferralGroup, id uuid.UUID) *ReferralGroup {
+func FindByID(groups []Group, id uuid.UUID) *Group {
 	for _, group := range groups {
 		if uuid.Equal(group.ID, id) {
 			return &group
@@ -85,6 +90,15 @@ type ComputedValue struct {
 	Value    decimal.Decimal
 	Currency string
 	ID       uuid.UUID
+}
+
+// Group holds information about a given referral group
+type Group struct {
+	ID       uuid.UUID       `json:"id" db:"id"`
+	ActiveAt time.Time       `json:"activeAt" db:"active_at"`
+	Name     string          `json:"name" db:"name"`
+	Amount   decimal.Decimal `json:"amount" db:"amount"`
+	Currency string          `json:"currency" db:"currency"`
 }
 
 // ReferralGroup holds information about a given referral group

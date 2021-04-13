@@ -19,6 +19,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -70,6 +71,7 @@ type Datastore interface {
 		ctx context.Context,
 		txs *[]models.Transaction,
 	) error
+	GetActiveCountryGroups(ctx context.Context) (*[]countries.Group, error)
 	GetReferralGroups(
 		ctx context.Context,
 		activeAt inputs.Time,
@@ -82,6 +84,10 @@ type Datastore interface {
 		ctx context.Context,
 		options models.GrantStatOptions,
 	) (*models.GrantStat, error)
+	InsertSuggestions(
+		ctx context.Context,
+		suggestions []models.Suggestion,
+	) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -196,7 +202,7 @@ func (pg *Postgres) Commit(ctx context.Context) error {
 }
 
 // GetAccountEarnings gets the account earnings for a subset of ids
-func (pg Postgres) GetAccountEarnings(
+func (pg *Postgres) GetAccountEarnings(
 	ctx context.Context,
 	options models.AccountEarningsOptions,
 ) (*[]models.AccountEarnings, error) {
@@ -238,7 +244,7 @@ limit $2`, order)
 }
 
 // GetAccountSettlementEarnings gets the account settlement earnings for a subset of ids
-func (pg Postgres) GetAccountSettlementEarnings(
+func (pg *Postgres) GetAccountSettlementEarnings(
 	ctx context.Context,
 	options models.AccountSettlementEarningsOptions,
 ) (*[]models.AccountSettlementEarnings, error) {
@@ -300,7 +306,7 @@ limit $2`, timeConstraints, order)
 }
 
 // GetBalances gets the account settlement earnings for a subset of ids
-func (pg Postgres) GetBalances(
+func (pg *Postgres) GetBalances(
 	ctx context.Context,
 	accountIDs []string,
 ) (*[]models.Balance, error) {
@@ -327,7 +333,7 @@ func (pg Postgres) GetBalances(
 }
 
 // GetPending retrieves the pending votes tied to an account id
-func (pg Postgres) GetPending(
+func (pg *Postgres) GetPending(
 	ctx context.Context,
 	accountIDs []string,
 ) (*[]models.PendingTransaction, error) {
@@ -358,7 +364,7 @@ GROUP BY channel`
 }
 
 // GetTransactions gets transactions
-func (pg Postgres) GetTransactions(
+func (pg *Postgres) GetTransactions(
 	ctx context.Context,
 	constraints ...map[string]string,
 ) (*[]models.Transaction, error) {
@@ -372,7 +378,7 @@ FROM transactions`,
 }
 
 // GetTransactionsByAccount retrieves the transactions tied to an account id
-func (pg Postgres) GetTransactionsByAccount(
+func (pg *Postgres) GetTransactionsByAccount(
 	ctx context.Context,
 	accountID string,
 	txTypes []string,
@@ -409,7 +415,7 @@ ORDER BY created_at`,
 }
 
 // InsertConvertableTransactions inserts a list of settlement transactions all at the same time
-func (pg Postgres) InsertConvertableTransactions(ctx context.Context, targets []models.ConvertableTransaction) error {
+func (pg *Postgres) InsertConvertableTransactions(ctx context.Context, targets []models.ConvertableTransaction) error {
 	txs, err := convertToTxs(targets)
 	if err != nil {
 		return err
@@ -437,7 +443,7 @@ func convertToTxs(convertables []models.ConvertableTransaction) (*[]models.Trans
 }
 
 // InsertTransactions is a generalizable transaction insertion function
-func (pg Postgres) InsertTransactions(
+func (pg *Postgres) InsertTransactions(
 	ctx context.Context,
 	txs *[]models.Transaction,
 ) error {
@@ -457,7 +463,7 @@ ON CONFLICT DO NOTHING`,
 }
 
 // GetSettlementStats gets stats about settlements
-func (pg Postgres) GetSettlementStats(ctx context.Context, options models.SettlementStatOptions) (*models.SettlementStat, error) {
+func (pg *Postgres) GetSettlementStats(ctx context.Context, options models.SettlementStatOptions) (*models.SettlementStat, error) {
 	args := []interface{}{
 		options.Type,
 		options.Start,
@@ -483,7 +489,7 @@ AND created_at < to_timestamp($3)`,
 }
 
 // GetGrantStats gets stats about grants
-func (pg Postgres) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (*models.GrantStat, error) {
+func (pg *Postgres) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (*models.GrantStat, error) {
 	statement := `
 SELECT
 	count(*) as count,
@@ -504,8 +510,24 @@ AND created_at < to_timestamp($3)`
 	)
 }
 
+// GetActiveCountryGroups gets country groups to match their amount with their designated payout
+func (pg *Postgres) GetActiveCountryGroups(ctx context.Context) (*[]countries.Group, error) {
+	statement := `
+SELECT
+	id,
+	amount,
+	currency,
+	active_at AS "activeAt"
+FROM geo_referral_groups
+WHERE
+	active_at <= CURRENT_TIMESTAMP
+ORDER BY active_at DESC`
+	groups := []countries.Group{}
+	return &groups, pg.RawDB().SelectContext(ctx, &groups, statement)
+}
+
 // GetReferralGroups gets referral groups active by a certain time
-func (pg Postgres) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]countries.ReferralGroup, error) {
+func (pg *Postgres) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]countries.ReferralGroup, error) {
 	statement := `
 SELECT
   id,
@@ -530,4 +552,74 @@ AND countries.group_id = geo_referral_groups.id`
 		return nil, err
 	}
 	return &groups, nil
+}
+
+// InsertSuggestions inserts a series of suggstions into the votes table
+func (pg *Postgres) InsertSuggestions(
+	ctx context.Context,
+	suggestions []models.Suggestion,
+) error {
+	statementInsertSurveyor := `
+insert into surveyor_groups (id, price, virtual) values ($1, $2, true)
+on conflict (id) do nothing`
+	statementVotesUpdate := `
+insert into votes (id, cohort, tally, excluded, channel, surveyor_id) values ($1, $2, $3, $4, $5, $6)
+on conflict (id) do update set updated_at = current_timestamp, tally = votes.tally + $3`
+	date := time.Now().Format("2021-01-01")
+	voteValue, err := decimal.NewFromString("0.25")
+	if err != nil {
+		return err
+	}
+	promotionToSurveyor := map[string]string{}
+	type Query struct {
+		statement string
+		args      []interface{}
+	}
+	queries := []Query{}
+	for _, suggestion := range suggestions {
+		for _, funding := range suggestion.Funding {
+			surveyorID := promotionToSurveyor[funding.Promotion]
+			if surveyorID != "" {
+				continue
+			}
+			surveyorID = fmt.Sprintf("%s_%s", date, funding.Promotion)
+			promotionToSurveyor[funding.Promotion] = surveyorID
+			queries = append(queries, Query{
+				statement: statementInsertSurveyor,
+				args: []interface{}{
+					surveyorID,
+					voteValue.String(),
+				},
+			})
+		}
+	}
+	for _, suggestion := range suggestions {
+		for _, funding := range suggestion.Funding {
+			surveyorID := promotionToSurveyor[funding.Promotion]
+			tally := funding.Amount.Div(voteValue)
+			queries = append(queries, Query{
+				statement: statementVotesUpdate,
+				args: []interface{}{
+					suggestion.GenerateID(funding.Cohort, surveyorID),
+					funding.Cohort,
+					tally.String(),
+					false,
+					suggestion.Channel.Normalize().String(),
+					surveyorID,
+				},
+			})
+		}
+	}
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer pg.Rollback(ctx)
+	for _, q := range queries {
+		_, err := tx.ExecContext(ctx, q.statement, q.args...)
+		if err != nil {
+			return err
+		}
+	}
+	return pg.Commit(ctx)
 }

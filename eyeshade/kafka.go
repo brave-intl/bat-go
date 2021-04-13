@@ -2,17 +2,28 @@ package eyeshade
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
+	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
+	avrosettlement "github.com/brave-intl/bat-go/eyeshade/avro/settlement"
+	avrosuggestion "github.com/brave-intl/bat-go/eyeshade/avro/suggestion"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	stringutils "github.com/brave-intl/bat-go/utils/string"
 	"github.com/segmentio/kafka-go"
+)
+
+var (
+	// KeyToEncoder maps a key to an avro topic bundle
+	KeyToEncoder = map[string]avro.TopicBundle{
+		"settlement": avrosettlement.New(),
+		"referral":   avroreferral.New(),
+		"suggestion": avrosuggestion.New(),
+	}
 )
 
 // BatchMessagesHandler handles many messages being consumed at once
@@ -30,12 +41,16 @@ type BatchMessageConsumer interface {
 
 // BatchMessageProducer holds methods for batch method producer
 type BatchMessageProducer interface {
-	Produce(context.Context, ...avro.KafkaMessageEncodable) error
+	Produce(
+		context.Context,
+		avro.TopicBundle,
+		...avro.KafkaMessageEncodable,
+	) error
 }
 
 // MessageHandler holds information about a single handler
 type MessageHandler struct {
-	handler avro.TopicHandler
+	key     string
 	service *Service
 	reader  *kafka.Reader
 	writer  *kafka.Writer
@@ -44,7 +59,7 @@ type MessageHandler struct {
 
 // Topic returns the topic of the message handler
 func (con *MessageHandler) Topic() string {
-	return con.handler.Topic()
+	return avro.KeyToTopic[con.key]
 }
 
 // Collect collects messages from the reader
@@ -70,16 +85,23 @@ func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
 	return append(msgs, msg), false, err
 }
 
+// Modifiers returns a map of modifications that can occur on a given kafka message
+func (con *MessageHandler) Modifiers() ([]map[string]string, error) {
+	def := make([]map[string]string, 0)
+	modifier := Modifiers[con.Topic()]
+	if modifier == nil {
+		return def, nil
+	}
+	return modifier(con)
+}
+
 // Handler handles the batch of messages
 func (con *MessageHandler) Handler(msgs []kafka.Message) error {
-	txs, err := con.handler.DecodeBatch(msgs)
-	if err != nil {
-		return err
+	handler := Handlers[con.Topic()]
+	if handler == nil {
+		handler = HandlerDefault
 	}
-	return con.service.InsertConvertableTransactions(
-		con.Context(),
-		*txs,
-	)
+	return handler(con, msgs)
 }
 
 // Context returns the context from the service
@@ -126,24 +148,19 @@ func (con *MessageHandler) Consume(
 // Produce produces messages
 func (con *MessageHandler) Produce(
 	ctx context.Context,
+	encoder avro.TopicBundle,
 	encodables ...avro.KafkaMessageEncodable,
 ) error {
-	messages := []kafka.Message{}
 	if len(encodables) == 0 {
-		return sql.ErrNoRows
+		return nil
 	}
-	for _, encodable := range encodables {
-		bytes, err := con.handler.ToBinary(encodable)
-		if err != nil {
-			return err
-		}
-		messages = append(messages, kafka.Message{
-			Value: bytes,
-		})
+	messages, err := encoder.ManyToBinary(encodables...)
+	if err != nil {
+		return err
 	}
 	return con.writer.WriteMessages(
 		ctx,
-		messages...,
+		*messages...,
 	)
 }
 
@@ -197,30 +214,30 @@ func WithTopicAutoCreation(service *Service) error {
 
 // WithConsumer sets up a consumer on the service
 func WithConsumer(
-	topicHandlers ...avro.TopicHandler,
+	topicKeys ...string,
 ) func(*Service) error {
 	return func(service *Service) error {
 		if service.consumers == nil {
 			// can't access consumer keys until make is called
 			service.consumers = make(map[string]BatchMessageConsumer)
 		}
-		for _, topicHandler := range topicHandlers {
+		for _, topicKey := range topicKeys {
 			reader, dialer, err := kafkautils.InitKafkaReader(
 				service.Context(),
-				topicHandler.Topic(),
+				avro.KeyToTopic[topicKey],
 				service.dialer,
 			)
 			if err != nil {
 				return err
 			}
 			consumer := &MessageHandler{
-				handler: topicHandler,
+				key:     topicKey,
 				reader:  reader,
 				dialer:  dialer,
 				service: service,
 			}
 			service.dialer = dialer
-			service.consumers[topicHandler.Topic()] = BatchMessageConsumer(consumer)
+			service.consumers[topicKey] = BatchMessageConsumer(consumer)
 		}
 		return nil
 	}
@@ -228,30 +245,30 @@ func WithConsumer(
 
 // WithProducer sets up a consumer on the service
 func WithProducer(
-	topicHandlers ...avro.TopicHandler,
+	topicKeys ...string,
 ) func(*Service) error {
 	return func(service *Service) error {
 		if service.producers == nil {
 			// can't access producer keys until make is called
 			service.producers = make(map[string]BatchMessageProducer)
 		}
-		for _, topicHandler := range topicHandlers {
+		for _, topicKey := range topicKeys {
 			writer, dialer, err := kafkautils.InitKafkaWriter(
 				service.Context(),
-				topicHandler.Topic(),
+				avro.KeyToTopic[topicKey],
 				service.dialer,
 			)
 			if err != nil {
 				return err
 			}
 			producer := &MessageHandler{
-				handler: topicHandler,
+				key:     topicKey,
 				writer:  writer,
 				dialer:  dialer,
 				service: service,
 			}
 			service.dialer = dialer
-			service.producers[topicHandler.Topic()] = BatchMessageProducer(producer)
+			service.producers[topicKey] = BatchMessageProducer(producer)
 		}
 		return nil
 	}

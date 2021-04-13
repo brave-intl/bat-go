@@ -292,6 +292,21 @@ func (mr *MockDatastoreMockRecorder) InsertTransactions(ctx, txs interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTransactions", reflect.TypeOf((*MockDatastore)(nil).InsertTransactions), ctx, txs)
 }
 
+// GetActiveCountryGroups mocks base method
+func (m *MockDatastore) GetActiveCountryGroups(ctx context.Context) (*[]countries.Group, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveCountryGroups", ctx)
+	ret0, _ := ret[0].(*[]countries.Group)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveCountryGroups indicates an expected call of GetActiveCountryGroups
+func (mr *MockDatastoreMockRecorder) GetActiveCountryGroups(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCountryGroups", reflect.TypeOf((*MockDatastore)(nil).GetActiveCountryGroups), ctx)
+}
+
 // GetReferralGroups mocks base method
 func (m *MockDatastore) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]countries.ReferralGroup, error) {
 	m.ctrl.T.Helper()

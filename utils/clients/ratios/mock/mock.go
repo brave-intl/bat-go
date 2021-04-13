@@ -35,16 +35,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // FetchRate mocks base method
-func (m *MockClient) FetchRate(ctx context.Context, base, currency string) (*ratios.RateResponse, error) {
+func (m *MockClient) FetchRate(ctx context.Context, base string, currency ...string) (*ratios.RateResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchRate", ctx, base, currency)
+	varargs := []interface{}{ctx, base}
+	for _, a := range currency {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "FetchRate", varargs...)
 	ret0, _ := ret[0].(*ratios.RateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchRate indicates an expected call of FetchRate
-func (mr *MockClientMockRecorder) FetchRate(ctx, base, currency interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchRate(ctx, base interface{}, currency ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRate", reflect.TypeOf((*MockClient)(nil).FetchRate), ctx, base, currency)
+	varargs := append([]interface{}{ctx, base}, currency...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRate", reflect.TypeOf((*MockClient)(nil).FetchRate), varargs...)
 }

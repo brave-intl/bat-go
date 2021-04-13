@@ -27,6 +27,7 @@ var (
 		"settlement_from_channel": uuid.FromStringOrNil("eb296f6d-ab2a-489f-bc75-a34f1ff70acb"),
 		"settlement_fees":         uuid.FromStringOrNil("1d295e60-e511-41f5-8ae0-46b6b5d33333"),
 		"user_deposit":            uuid.FromStringOrNil("f7a8b983-2383-48f2-9e4f-717f6fe3225d"),
+		"votes":                   uuid.FromStringOrNil("f0ca8ff9-8399-493a-b2c2-6d4a49e5223a"),
 	}
 	// SettlementTypes holds type values that are considered settlement types
 	SettlementTypes = map[string]bool{
