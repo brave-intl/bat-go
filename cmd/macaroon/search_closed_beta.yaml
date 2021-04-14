@@ -1,7 +1,7 @@
 tokens:
   - id: "search closed beta program demo"
     version: 2
-    location: "search.bsg.brave.software"
+    location: "search.brave.software"
     first_party_caveats:
       - sku: "search-beta-access"
       - price: 0
