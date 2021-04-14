@@ -7,6 +7,7 @@ package grant
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
 
 import (
+	"context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -38,6 +39,20 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 		base:         base,
 		instanceName: instanceName,
 	}
+}
+
+// Commit implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) Commit(ctx context.Context) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Commit", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.Commit(ctx)
 }
 
 // GetGrantsOrderedByExpiry implements ReadOnlyDatastore
@@ -92,6 +107,31 @@ func (_d ReadOnlyDatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 	return _d.base.RawDB()
 }
 
+// ResolveConnection implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) ResolveConnection(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ResolveConnection", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.ResolveConnection(ctx)
+}
+
+// Rollback implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) Rollback(ctx context.Context) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Rollback", result).Observe(time.Since(_since).Seconds())
+	}()
+	_d.base.Rollback(ctx)
+	return
+}
+
 // RollbackTx implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	_since := time.Now()
@@ -115,4 +155,18 @@ func (_d ReadOnlyDatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// WithTx implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) WithTx(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "WithTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.WithTx(ctx)
 }

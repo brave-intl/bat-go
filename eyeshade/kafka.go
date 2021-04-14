@@ -2,6 +2,7 @@ package eyeshade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -97,9 +98,9 @@ func (con *MessageHandler) Modifiers() ([]map[string]string, error) {
 
 // Handler handles the batch of messages
 func (con *MessageHandler) Handler(msgs []kafka.Message) error {
-	handler := Handlers[con.Topic()]
+	handler := Handlers[con.key]
 	if handler == nil {
-		handler = HandlerDefault
+		return errors.New("unknown handler asked for during message handle")
 	}
 	return handler(con, msgs)
 }

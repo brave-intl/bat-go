@@ -2,11 +2,10 @@ package eyeshade
 
 import (
 	"github.com/brave-intl/bat-go/eyeshade/avro"
+	avrocontribution "github.com/brave-intl/bat-go/eyeshade/avro/contribution"
 	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
 	avrosettlement "github.com/brave-intl/bat-go/eyeshade/avro/settlement"
 	avrosuggestion "github.com/brave-intl/bat-go/eyeshade/avro/suggestion"
-	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -14,39 +13,49 @@ var (
 	// Handlers is a map for a topic key to point to any non standard handlers
 	// all others are handled by HandlerDefault
 	Handlers = map[string]func(con *MessageHandler, msgs []kafka.Message) error{
-		avro.KeyToTopic["suggestion"]: HandlerSuggestion,
+		"suggestion":   HandleVotes,
+		"contribution": HandleVotes,
+		"settlement":   HandlerInsertConvertableTransaction,
+		"referral":     HandlerInsertConvertableTransaction,
 	}
-	// KeyToConvertableTransactionDecoder the default handler for turning messages into convertalbe transactions
-	KeyToConvertableTransactionDecoder = map[string]func(
-		codecs map[string]*goavro.Codec,
-		msgs []kafka.Message,
-		_ ...map[string]string,
-	) (*[]models.ConvertableTransaction, error){
+	// DecodeBatchVotes a mapping to help the batch decoder find it's topic specific decoder
+	DecodeBatchVotes = map[string]avro.BatchVoteDecoder{
+		"suggestion":   avrosuggestion.DecodeBatch,
+		"contribution": avrocontribution.DecodeBatch,
+	}
+	// DecodeBatchTransactions a mapping to help the batch decoder find it's topic specific decoder
+	DecodeBatchTransactions = map[string]avro.BatchConvertableTransactionDecoder{
 		"referral":   avroreferral.DecodeBatch,
 		"settlement": avrosettlement.DecodeBatch,
 	}
 )
 
-// HandlerSuggestion handles messages from the suggestion queue that will be inserted as votes
-func HandlerSuggestion(con *MessageHandler, msgs []kafka.Message) error {
-	suggestions, err := avrosuggestion.DecodeBatch(
-		KeyToEncoder["suggestion"].Codecs(),
+// HandleVotes handles vote insertions
+func HandleVotes(
+	con *MessageHandler,
+	msgs []kafka.Message,
+) error {
+	votes, err := DecodeBatchVotes[con.key](
+		KeyToEncoder[con.key].Codecs(),
 		msgs,
 	)
 	if err != nil {
 		return err
 	}
 	return con.service.Datastore(false).
-		InsertSuggestions(con.Context(), *suggestions)
+		InsertVotes(con.Context(), *votes)
 }
 
-// HandlerDefault is the default handler for direct to transaction use cases
-func HandlerDefault(con *MessageHandler, msgs []kafka.Message) error {
+// HandlerInsertConvertableTransaction is the default handler for direct to transaction use cases
+func HandlerInsertConvertableTransaction(
+	con *MessageHandler,
+	msgs []kafka.Message,
+) error {
 	modifiers, err := con.Modifiers()
 	if err != nil {
 		return err
 	}
-	txs, err := KeyToConvertableTransactionDecoder[con.key](
+	txs, err := DecodeBatchTransactions[con.key](
 		KeyToEncoder[con.key].Codecs(),
 		msgs,
 		modifiers...,

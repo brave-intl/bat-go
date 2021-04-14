@@ -84,30 +84,18 @@ func New() *avro.Handler {
 	)
 }
 
-// Decode decodes a message
-func Decode(
-	codecs map[string]*goavro.Codec,
-	msg kafka.Message,
-) (*models.Suggestion, error) {
-	var suggestion models.Suggestion
-	if err := avro.TryDecode(codecs, attemptDecodeList, msg, &suggestion); err != nil {
-		return nil, err
-	}
-	return &suggestion, nil
-}
-
 // DecodeBatch decodes a batch of messages
 func DecodeBatch(
 	codecs map[string]*goavro.Codec,
 	msgs []kafka.Message,
-) (*[]models.Suggestion, error) {
-	suggestion := []models.Suggestion{}
+) (*[]models.Vote, error) {
+	votes := []models.Vote{}
 	for _, msg := range msgs {
-		result, err := Decode(codecs, msg)
-		if err != nil {
+		var suggestion models.Suggestion
+		if err := avro.TryDecode(codecs, attemptDecodeList, msg, &suggestion); err != nil {
 			return nil, err
 		}
-		suggestion = append(suggestion, *result)
+		votes = append(votes, models.Vote(&suggestion))
 	}
-	return &suggestion, nil
+	return &votes, nil
 }

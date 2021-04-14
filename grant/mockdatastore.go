@@ -5,6 +5,7 @@
 package grant
 
 import (
+	context "context"
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
@@ -106,6 +107,64 @@ func (m *MockDatastore) RollbackTx(tx *sqlx.Tx) {
 func (mr *MockDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockDatastore)(nil).RollbackTx), tx)
+}
+
+// ResolveConnection mocks base method
+func (m *MockDatastore) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveConnection", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ResolveConnection indicates an expected call of ResolveConnection
+func (mr *MockDatastoreMockRecorder) ResolveConnection(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveConnection", reflect.TypeOf((*MockDatastore)(nil).ResolveConnection), ctx)
+}
+
+// WithTx mocks base method
+func (m *MockDatastore) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithTx", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// WithTx indicates an expected call of WithTx
+func (mr *MockDatastoreMockRecorder) WithTx(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTx", reflect.TypeOf((*MockDatastore)(nil).WithTx), ctx)
+}
+
+// Rollback mocks base method
+func (m *MockDatastore) Rollback(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Rollback", ctx)
+}
+
+// Rollback indicates an expected call of Rollback
+func (mr *MockDatastoreMockRecorder) Rollback(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rollback", reflect.TypeOf((*MockDatastore)(nil).Rollback), ctx)
+}
+
+// Commit mocks base method
+func (m *MockDatastore) Commit(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Commit", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Commit indicates an expected call of Commit
+func (mr *MockDatastoreMockRecorder) Commit(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockDatastore)(nil).Commit), ctx)
 }
 
 // GetGrantsOrderedByExpiry mocks base method
@@ -217,6 +276,64 @@ func (m *MockReadOnlyDatastore) RollbackTx(tx *sqlx.Tx) {
 func (mr *MockReadOnlyDatastoreMockRecorder) RollbackTx(tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTx", reflect.TypeOf((*MockReadOnlyDatastore)(nil).RollbackTx), tx)
+}
+
+// ResolveConnection mocks base method
+func (m *MockReadOnlyDatastore) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveConnection", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ResolveConnection indicates an expected call of ResolveConnection
+func (mr *MockReadOnlyDatastoreMockRecorder) ResolveConnection(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveConnection", reflect.TypeOf((*MockReadOnlyDatastore)(nil).ResolveConnection), ctx)
+}
+
+// WithTx mocks base method
+func (m *MockReadOnlyDatastore) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithTx", ctx)
+	ret0, _ := ret[0].(context.Context)
+	ret1, _ := ret[1].(*sqlx.Tx)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// WithTx indicates an expected call of WithTx
+func (mr *MockReadOnlyDatastoreMockRecorder) WithTx(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTx", reflect.TypeOf((*MockReadOnlyDatastore)(nil).WithTx), ctx)
+}
+
+// Rollback mocks base method
+func (m *MockReadOnlyDatastore) Rollback(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Rollback", ctx)
+}
+
+// Rollback indicates an expected call of Rollback
+func (mr *MockReadOnlyDatastoreMockRecorder) Rollback(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rollback", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Rollback), ctx)
+}
+
+// Commit mocks base method
+func (m *MockReadOnlyDatastore) Commit(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Commit", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Commit indicates an expected call of Commit
+func (mr *MockReadOnlyDatastoreMockRecorder) Commit(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockReadOnlyDatastore)(nil).Commit), ctx)
 }
 
 // GetGrantsOrderedByExpiry mocks base method

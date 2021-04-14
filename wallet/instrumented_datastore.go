@@ -42,6 +42,20 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// Commit implements Datastore
+func (_d DatastoreWithPrometheus) Commit(ctx context.Context) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Commit", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.Commit(ctx)
+}
+
 // GetByProviderLinkingID implements Datastore
 func (_d DatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
 	_since := time.Now()
@@ -192,6 +206,31 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 	return _d.base.RawDB()
 }
 
+// ResolveConnection implements Datastore
+func (_d DatastoreWithPrometheus) ResolveConnection(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ResolveConnection", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.ResolveConnection(ctx)
+}
+
+// Rollback implements Datastore
+func (_d DatastoreWithPrometheus) Rollback(ctx context.Context) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Rollback", result).Observe(time.Since(_since).Seconds())
+	}()
+	_d.base.Rollback(ctx)
+	return
+}
+
 // RollbackTx implements Datastore
 func (_d DatastoreWithPrometheus) RollbackTx(tx *sqlx.Tx) {
 	_since := time.Now()
@@ -243,4 +282,18 @@ func (_d DatastoreWithPrometheus) UpsertWallet(ctx context.Context, wallet *wall
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpsertWallet", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpsertWallet(ctx, wallet)
+}
+
+// WithTx implements Datastore
+func (_d DatastoreWithPrometheus) WithTx(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "WithTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.WithTx(ctx)
 }

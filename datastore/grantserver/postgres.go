@@ -55,6 +55,10 @@ type Datastore interface {
 	Migrate(...uint) error
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
+	ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error)
+	WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error)
+	Rollback(ctx context.Context)
+	Commit(ctx context.Context) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -232,4 +236,53 @@ func (pg *Postgres) RollbackTxAndHandle(tx *sqlx.Tx) error {
 // RollbackTx rolls back a transaction (useful with defer)
 func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	_ = pg.RollbackTxAndHandle(tx)
+}
+
+// WithTx manages transaction to context attachment
+func (pg *Postgres) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return ctx, tx, err
+	}
+	return context.WithValue(ctx, appctx.TxCTXKey, tx), tx, nil
+}
+
+// Rollback rolls back a transaction if on the right level
+func (pg *Postgres) Rollback(ctx context.Context) {
+	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
+	if ok && !rollback {
+		return // this is a nested rollback call
+	}
+	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
+	if !ok {
+		return // tx on context does not exist
+	}
+	err := tx.Rollback()
+	if err == nil || err == sql.ErrTxDone {
+		return // rollback or commit was already called
+	}
+	fmt.Println(err)
+}
+
+// ResolveConnection creates a transaction or uses the in progress one
+func (pg *Postgres) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
+	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
+	if ok {
+		return context.WithValue(ctx, appctx.TxRollbackCTXKey, false), tx, nil
+	}
+	ctx, tx, err := pg.WithTx(ctx)
+	return context.WithValue(ctx, appctx.TxRollbackCTXKey, true), tx, err
+}
+
+// Commit commits a transaction on the context if on the right level
+func (pg *Postgres) Commit(ctx context.Context) error {
+	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
+	if !ok || !rollback {
+		return nil // not the right context value or not the right tx level
+	}
+	tx, ok := ctx.Value(appctx.TxRollbackCTXKey).(*sqlx.Tx)
+	if !ok {
+		return errors.New("unable to find tx")
+	}
+	return tx.Commit()
 }

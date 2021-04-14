@@ -14,7 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/jmoiron/sqlx"
+	sqlx "github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -197,6 +197,20 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 	return _d.base.GetTransactionsByAccount(ctx, accountID, txTypes)
 }
 
+// InsertBallots implements Datastore
+func (_d DatastoreWithPrometheus) InsertBallots(ctx context.Context, ballots *[]models.Ballot) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBallots", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertBallots(ctx, ballots)
+}
+
 // InsertConvertableTransactions implements Datastore
 func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Context, txs []models.ConvertableTransaction) (err error) {
 	_since := time.Now()
@@ -211,8 +225,8 @@ func (_d DatastoreWithPrometheus) InsertConvertableTransactions(ctx context.Cont
 	return _d.base.InsertConvertableTransactions(ctx, txs)
 }
 
-// InsertSuggestions implements Datastore
-func (_d DatastoreWithPrometheus) InsertSuggestions(ctx context.Context, suggestions []models.Suggestion) (err error) {
+// InsertSurveyors implements Datastore
+func (_d DatastoreWithPrometheus) InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -220,9 +234,9 @@ func (_d DatastoreWithPrometheus) InsertSuggestions(ctx context.Context, suggest
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSuggestions", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSurveyors", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertSuggestions(ctx, suggestions)
+	return _d.base.InsertSurveyors(ctx, surveyors)
 }
 
 // InsertTransactions implements Datastore
@@ -237,6 +251,20 @@ func (_d DatastoreWithPrometheus) InsertTransactions(ctx context.Context, txs *[
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertTransactions", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertTransactions(ctx, txs)
+}
+
+// InsertVotes implements Datastore
+func (_d DatastoreWithPrometheus) InsertVotes(ctx context.Context, votes []models.Vote) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertVotes", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertVotes(ctx, votes)
 }
 
 // Migrate implements Datastore

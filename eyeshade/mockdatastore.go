@@ -351,3 +351,45 @@ func (mr *MockDatastoreMockRecorder) GetGrantStats(ctx, options interface{}) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGrantStats", reflect.TypeOf((*MockDatastore)(nil).GetGrantStats), ctx, options)
 }
+
+// InsertVotes mocks base method
+func (m *MockDatastore) InsertVotes(ctx context.Context, votes []models.Vote) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertVotes", ctx, votes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertVotes indicates an expected call of InsertVotes
+func (mr *MockDatastoreMockRecorder) InsertVotes(ctx, votes interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertVotes", reflect.TypeOf((*MockDatastore)(nil).InsertVotes), ctx, votes)
+}
+
+// InsertSurveyors mocks base method
+func (m *MockDatastore) InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertSurveyors", ctx, surveyors)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertSurveyors indicates an expected call of InsertSurveyors
+func (mr *MockDatastoreMockRecorder) InsertSurveyors(ctx, surveyors interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSurveyors", reflect.TypeOf((*MockDatastore)(nil).InsertSurveyors), ctx, surveyors)
+}
+
+// InsertBallots mocks base method
+func (m *MockDatastore) InsertBallots(ctx context.Context, ballots *[]models.Ballot) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertBallots", ctx, ballots)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertBallots indicates an expected call of InsertBallots
+func (mr *MockDatastoreMockRecorder) InsertBallots(ctx, ballots interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBallots", reflect.TypeOf((*MockDatastore)(nil).InsertBallots), ctx, ballots)
+}

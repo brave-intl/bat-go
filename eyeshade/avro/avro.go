@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/brave-intl/bat-go/eyeshade/models"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
@@ -14,10 +15,10 @@ var (
 	env = os.Getenv("ENV")
 	// KeyToTopic creates a map of simple single words, to their more complex topic
 	KeyToTopic = map[string]string{
-		"settlement": env + ".settlement.payout",
-		"suggestion": env + ".grant.suggestion",
-		"vote":       env + ".payment.vote",
-		"referral":   env + ".promo.referral",
+		"settlement":   env + ".settlement.payout",
+		"suggestion":   env + ".grant.suggestion",
+		"contribution": env + ".payment.vote",
+		"referral":     env + ".promo.referral",
 	}
 )
 
@@ -36,6 +37,16 @@ type TopicBundle interface {
 		encodables ...KafkaMessageEncodable,
 	) (*[]kafka.Message, error)
 }
+
+// BatchVoteDecoder decodes a batch of vote objects
+type BatchVoteDecoder func(codecs map[string]*goavro.Codec, msgs []kafka.Message) (*[]models.Vote, error)
+
+// BatchConvertableTransactionDecoder decodes a batch of convertable transactions
+type BatchConvertableTransactionDecoder func(
+	codecs map[string]*goavro.Codec,
+	msgs []kafka.Message,
+	_ ...map[string]string,
+) (*[]models.ConvertableTransaction, error)
 
 // TryDecode tries to decode the message
 func TryDecode(

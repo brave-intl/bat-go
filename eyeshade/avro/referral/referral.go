@@ -43,18 +43,6 @@ func New() *avro.Handler {
 	)
 }
 
-// Decode decodes a message
-func Decode(
-	codecs map[string]*goavro.Codec,
-	msg kafka.Message,
-) (*models.Referral, error) {
-	var referral models.Referral
-	if err := avro.TryDecode(codecs, attemptDecodeList, msg, &referral); err != nil {
-		return nil, err
-	}
-	return &referral, nil
-}
-
 // DecodeBatch decodes a batch of messages
 func DecodeBatch(
 	codecs map[string]*goavro.Codec,
@@ -63,12 +51,12 @@ func DecodeBatch(
 ) (*[]models.ConvertableTransaction, error) {
 	txs := []models.ConvertableTransaction{}
 	for _, msg := range msgs {
-		result, err := Decode(codecs, msg)
-		if err != nil {
+		var referral models.Referral
+		if err := avro.TryDecode(codecs, attemptDecodeList, msg, &referral); err != nil {
 			return nil, err
 		}
 		for _, modifier := range modifiers {
-			value := modifier[result.CountryGroupID]
+			value := modifier[referral.CountryGroupID]
 			if value == "" {
 				return nil, errors.New("the country code was not found in the modifiers")
 			}
@@ -76,9 +64,9 @@ func DecodeBatch(
 			if err != nil {
 				return nil, err
 			}
-			result.Probi = probi
+			referral.Probi = probi
 		}
-		txs = append(txs, models.ConvertableTransaction(result))
+		txs = append(txs, models.ConvertableTransaction(&referral))
 	}
 	return &txs, nil
 }

@@ -91,25 +91,6 @@ func New() *avro.Handler {
 	)
 }
 
-// Decode decodes a message
-func Decode(
-	codecs map[string]*goavro.Codec,
-	msg kafka.Message,
-) (*models.Settlement, error) {
-	var settlement models.Settlement
-	if err := avro.TryDecode(codecs, attemptDecodeList, msg, &settlement); err != nil {
-		return nil, err
-	}
-	if settlement.ExecutedAt == "" {
-		// use the time that the message was placed on the queue if none inside of msg
-		settlement.ExecutedAt = msg.Time.Format(time.RFC3339)
-	}
-	if settlement.WalletProvider == "" {
-		settlement.WalletProvider = "uphold"
-	}
-	return &settlement, nil
-}
-
 // DecodeBatch decodes a batch of messages
 func DecodeBatch(
 	codecs map[string]*goavro.Codec,
@@ -118,11 +99,18 @@ func DecodeBatch(
 ) (*[]models.ConvertableTransaction, error) {
 	txs := []models.ConvertableTransaction{}
 	for _, msg := range msgs {
-		result, err := Decode(codecs, msg)
-		if err != nil {
+		var settlement models.Settlement
+		if err := avro.TryDecode(codecs, attemptDecodeList, msg, &settlement); err != nil {
 			return nil, err
 		}
-		txs = append(txs, models.ConvertableTransaction(result))
+		if settlement.ExecutedAt == "" {
+			// use the time that the message was placed on the queue if none inside of msg
+			settlement.ExecutedAt = msg.Time.Format(time.RFC3339)
+		}
+		if settlement.WalletProvider == "" {
+			settlement.WalletProvider = "uphold"
+		}
+		txs = append(txs, models.ConvertableTransaction(&settlement))
 	}
 	return &txs, nil
 }

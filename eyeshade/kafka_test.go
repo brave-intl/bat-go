@@ -44,7 +44,10 @@ from transactions`)
 func (suite *ServiceKafkaTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
 	topics := []string{
-		"settlement", // add more topic keys here
+		"settlement",
+		"contribution",
+		"referral",
+		"suggestion",
 	}
 	service, err := SetupService(
 		WithContext(suite.ctx),

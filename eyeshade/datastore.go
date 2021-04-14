@@ -12,12 +12,10 @@ import (
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	datastoreutils "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/getsentry/sentry-go"
-	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,19 +28,9 @@ var (
 	ErrNeedTimeConstraints = errors.New("need both start and end date")
 )
 
-// Query holds information to assist with doing a bunch of queries
-type Query struct {
-	statement string
-	args      []interface{}
-}
-
 // Datastore holds methods for interacting with database
 type Datastore interface {
 	grantserver.Datastore
-	ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error)
-	WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error)
-	Rollback(ctx context.Context)
-	Commit(ctx context.Context) error
 	GetAccountEarnings(
 		ctx context.Context,
 		options models.AccountEarningsOptions,
@@ -89,10 +77,9 @@ type Datastore interface {
 		ctx context.Context,
 		options models.GrantStatOptions,
 	) (*models.GrantStat, error)
-	InsertSuggestions(
-		ctx context.Context,
-		suggestions []models.Suggestion,
-	) error
+	InsertVotes(ctx context.Context, votes []models.Vote) error
+	InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error
+	InsertBallots(ctx context.Context, ballots *[]models.Ballot) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -155,55 +142,6 @@ func NewConnections() (Datastore, Datastore, error) {
 		}
 	}
 	return eyeshadePg, eyeshadeRoPg, err
-}
-
-// WithTx manages transaction to context attachment
-func (pg *Postgres) WithTx(ctx context.Context) (context.Context, *sqlx.Tx, error) {
-	tx, err := pg.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return ctx, tx, err
-	}
-	return context.WithValue(ctx, appctx.TxCTXKey, tx), tx, nil
-}
-
-// Rollback rolls back a transaction if on the right level
-func (pg *Postgres) Rollback(ctx context.Context) {
-	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
-	if ok && !rollback {
-		return // this is a nested rollback call
-	}
-	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
-	if !ok {
-		return // tx on context does not exist
-	}
-	err := tx.Rollback()
-	if err == nil || err == sql.ErrTxDone {
-		return // rollback or commit was already called
-	}
-	fmt.Println(err)
-}
-
-// ResolveConnection creates a transaction or uses the in progress one
-func (pg *Postgres) ResolveConnection(ctx context.Context) (context.Context, *sqlx.Tx, error) {
-	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
-	if ok {
-		return context.WithValue(ctx, appctx.TxRollbackCTXKey, false), tx, nil
-	}
-	ctx, tx, err := pg.WithTx(ctx)
-	return context.WithValue(ctx, appctx.TxRollbackCTXKey, true), tx, err
-}
-
-// Commit commits a transaction on the context if on the right level
-func (pg *Postgres) Commit(ctx context.Context) error {
-	rollback, ok := ctx.Value(appctx.TxRollbackCTXKey).(bool)
-	if !ok || !rollback {
-		return nil // not the right context value or not the right tx level
-	}
-	tx, ok := ctx.Value(appctx.TxRollbackCTXKey).(*sqlx.Tx)
-	if !ok {
-		return errors.New("unable to find tx")
-	}
-	return tx.Commit()
 }
 
 // GetAccountEarnings gets the account earnings for a subset of ids
@@ -586,11 +524,11 @@ func (pg *Postgres) InsertSurveyors(ctx context.Context, surveyors *[]models.Sur
 		return err
 	}
 	defer pg.Rollback(ctx)
-	columns := []string{"id", "price"}
+	columns := []string{"id", "price", "virtual"}
 	statement := fmt.Sprintf(`
-insert into surveyor_groups ( %s, virtual )
-values ( %s, true )
-on conflict (id) do nothing`,
+insert into surveyor_groups ( %s )
+values ( %s )
+on conflict ( id ) do nothing`,
 		strings.Join(columns, ", "),
 		strings.Join(datastoreutils.ColumnsToParamNames(columns), ", "),
 	)
@@ -605,7 +543,7 @@ on conflict (id) do nothing`,
 	return pg.Commit(ctx)
 }
 
-// InsertSurveyors inserts surveyors to the surveyors_groups table
+// InsertBallots inserts ballots to the votes table
 func (pg *Postgres) InsertBallots(ctx context.Context, ballots *[]models.Ballot) error {
 	ctx, tx, err := pg.ResolveConnection(ctx)
 	if err != nil {
@@ -656,8 +594,9 @@ func (pg *Postgres) convertToBallots(
 	surveyors := []models.Surveyor{}
 	surveyorIDsCollected := map[string]bool{}
 	surveyorIDs := []string{}
+	date := time.Now().Format("2021-01-01")
 	for _, vote := range votes {
-		voteSurveyors := vote.CollectSurveyors(surveyorIDsCollected)
+		voteSurveyors := vote.CollectSurveyors(surveyorIDsCollected, date)
 		for _, voteSurveyor := range voteSurveyors {
 			surveyorIDsCollected[voteSurveyor.ID] = true
 			surveyorIDs = append(surveyorIDs, voteSurveyor.ID)
@@ -670,20 +609,19 @@ func (pg *Postgres) convertToBallots(
 	}
 	frozenSurveyors := map[string]bool{}
 	for _, insertedSurveyor := range *insertedSurveyors {
-		frozenSurveyors[insertedSurveyor.ID] = true
+		// use frozen surveyors as a filter to not insert votes
+		frozenSurveyors[insertedSurveyor.ID] = insertedSurveyor.Frozen
 	}
 	surveyorIDsCollected = map[string]bool{}
 	ballots := []models.Ballot{}
 	surveyors = []models.Surveyor{}
 	for _, vote := range votes {
-		voteSurveyors, voteBallots := vote.CollectBallots(frozenSurveyors, surveyorIDsCollected)
+		voteSurveyors, voteBallots := vote.CollectBallots(frozenSurveyors, surveyorIDsCollected, date)
 		surveyors = append(surveyors, voteSurveyors...)
 		ballots = append(ballots, voteBallots...)
 		for _, voteSurveyor := range voteSurveyors {
 			surveyorIDsCollected[voteSurveyor.ID] = true
-			surveyorIDs = append(surveyorIDs, voteSurveyor.ID)
 		}
-		surveyors = append(surveyors, voteSurveyors...)
 	}
 	return &surveyors, &ballots, nil
 }
