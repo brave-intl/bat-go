@@ -413,3 +413,17 @@ func (mr *MockDatastoreMockRecorder) InsertBallots(ctx, ballots interface{}) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBallots", reflect.TypeOf((*MockDatastore)(nil).InsertBallots), ctx, ballots)
 }
+
+// SeedDB mocks base method
+func (m *MockDatastore) SeedDB(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SeedDB", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SeedDB indicates an expected call of SeedDB
+func (mr *MockDatastoreMockRecorder) SeedDB(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeedDB", reflect.TypeOf((*MockDatastore)(nil).SeedDB), arg0)
+}

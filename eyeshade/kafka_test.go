@@ -11,6 +11,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/eyeshade/avro"
+	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	uuid "github.com/satori/go.uuid"
@@ -40,6 +41,8 @@ func (suite *ServiceKafkaSuite) SetupTest() {
 		RawDB().
 		Exec(`delete
 from transactions`)
+	suite.Require().NoError(suite.service.Datastore(false).
+		SeedDB(suite.ctx))
 }
 
 func (suite *ServiceKafkaSuite) SetupSuite() {
@@ -54,6 +57,7 @@ func (suite *ServiceKafkaSuite) SetupSuite() {
 		WithContext(suite.ctx),
 		WithBuildInfo,
 		WithNewDBs,
+		WithNewClients,
 		WithProducer(topics...),
 		WithConsumer(topics...),
 		WithTopicAutoCreation,
@@ -72,11 +76,22 @@ func (suite *ServiceKafkaSuite) TestSettlements() {
 	errChan := suite.service.Consume()
 	for t := 0; t < len(settlements); t += 1 {
 		settlement := settlements[t]
-		txsChan := suite.CheckTxs(errChan, settlement.Hash)
+		ch := make(chan []models.Transaction)
+		checkErrChan := WaitFor(func() (bool, error) {
+			txs, err := suite.service.Datastore(true).
+				GetTransactionsByDocumentID(suite.ctx, settlement.Hash)
+			if len(*txs) > 0 {
+				ch <- *txs
+				return true, nil
+			}
+			return false, err
+		})
 		select {
 		case err := <-errChan:
 			suite.Require().NoError(err)
-		case actual := <-txsChan:
+		case err := <-checkErrChan:
+			suite.Require().NoError(err)
+		case actual := <-ch:
 			hashMap := map[string]models.Transaction{}
 			for j := 0; j < len(actual); j += 1 {
 				hashMap[actual[j].DocumentID] = actual[j]
@@ -98,6 +113,41 @@ func (suite *ServiceKafkaSuite) TestSettlements() {
 					settlement.ToSettlementTransaction(),
 				)
 			}
+			suite.Require().JSONEq(
+				MustMarshal(suite.Require(), expect),
+				MustMarshal(suite.Require(), actual),
+			)
+		}
+	}
+}
+
+func (suite *ServiceKafkaSuite) TestReferrals() {
+	// update when kakfa consumption happens in bulk
+	referrals := CreateReferrals(3, countries.OriginalRateID)
+	suite.Require().NoError(
+		suite.service.ProduceReferrals(suite.ctx, referrals),
+	)
+	errChan := suite.service.Consume()
+	for t := 0; t < len(referrals); t += 1 {
+		referral := referrals[t]
+		ch := make(chan []models.Transaction)
+		checkErrChan := WaitFor(func() (bool, error) {
+			txs, err := suite.service.Datastore(true).
+				GetTransactionsByDocumentID(suite.ctx, referral.GetTransactionID())
+			if len(*txs) > 0 {
+				ch <- *txs
+				return true, nil
+			}
+			return false, err
+		})
+
+		select {
+		case err := <-errChan:
+			suite.Require().NoError(err)
+		case err := <-checkErrChan:
+			suite.Require().NoError(err)
+		case actual := <-ch:
+			expect := referral.ToTxs()
 			suite.Require().JSONEq(
 				MustMarshal(suite.Require(), expect),
 				MustMarshal(suite.Require(), actual),
@@ -133,13 +183,33 @@ func CreateSettlements(count int, txType string) []models.Settlement {
 	return settlements
 }
 
-func (suite *ServiceKafkaSuite) CheckTxs(errChan chan error, ids ...string) <-chan []models.Transaction {
-	ch := make(chan []models.Transaction)
-	checkTxs := func() {
+func CreateReferrals(count int, countryGroupID uuid.UUID) []models.Referral {
+	referrals := []models.Referral{}
+	for i := 0; i < count; i += 1 {
+		now := time.Now()
+		referrals = append(referrals, models.Referral{
+			TransactionID:      uuid.NewV4().String(),
+			Channel:            models.Channel("brave.com"),
+			Owner:              fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			FinalizedTimestamp: now,
+			ReferralCode:       "ABC123",
+			DownloadID:         uuid.NewV4().String(),
+			DownloadTimestamp:  now.AddDate(0, -30, 0),
+			CountryGroupID:     countryGroupID.String(),
+			Platform:           "osx",
+		})
+	}
+	return referrals
+}
+
+func WaitFor(
+	handler func() (bool, error),
+) chan error {
+	errChan := make(chan error)
+	run := func() {
 		for {
-			<-time.After(time.Second)
-			txs, err := suite.service.Datastore(true).
-				GetTransactionsByDocumentID(suite.ctx, ids...)
+			<-time.After(time.Millisecond * 100)
+			finished, err := handler()
 			if err == sql.ErrNoRows {
 				continue
 			}
@@ -147,12 +217,12 @@ func (suite *ServiceKafkaSuite) CheckTxs(errChan chan error, ids ...string) <-ch
 				errChan <- err
 				return
 			}
-			if len(*txs) == 0 {
+			if !finished {
 				continue
 			}
-			ch <- *txs
+			return
 		}
 	}
-	go checkTxs()
-	return ch
+	go run()
+	return errChan
 }

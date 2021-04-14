@@ -16,10 +16,10 @@ type Referral struct {
 	TransactionID      string                  `json:"transactionId"`
 	Channel            Channel                 `json:"channelId"`
 	Owner              string                  `json:"ownerId"`
-	FinalizedTimestamp string                  `json:"finalizedTimestamp"`
+	FinalizedTimestamp time.Time               `json:"finalizedTimestamp"`
 	ReferralCode       string                  `json:"referralCode"`
 	DownloadID         string                  `json:"downloadId"`
-	DownloadTimestamp  string                  `json:"downloadTimestamp"`
+	DownloadTimestamp  time.Time               `json:"downloadTimestamp"`
 	CountryGroupID     string                  `json:"countryGroupId"`
 	Platform           string                  `json:"platform"`
 	Probi              decimal.Decimal         `json:"probi"`
@@ -33,12 +33,6 @@ func (referral *Referral) GetTransactionID() string {
 		txID = referral.DownloadID
 	}
 	return txID
-}
-
-// GetFinalizedTimestamp gets a time version of the finalized timestamp
-func (referral *Referral) GetFinalizedTimestamp() time.Time {
-	tsmp, _ := time.Parse(time.RFC3339, referral.FinalizedTimestamp)
-	return tsmp
 }
 
 // GenerateID creates a uuidv5 generated identifier from the referral data
@@ -59,7 +53,7 @@ func (referral *Referral) ToTxs() []Transaction {
 	if owner[:len(prefix)] != prefix {
 		owner = prefix + owner
 	}
-	createdAt := referral.GetFinalizedTimestamp()
+	createdAt := referral.FinalizedTimestamp
 	month := createdAt.Month().String()[:3]
 	channel := referral.Channel.Normalize()
 	return []Transaction{{
@@ -75,6 +69,21 @@ func (referral *Referral) ToTxs() []Transaction {
 		Amount:          altcurrency.BAT.FromProbi(referral.Probi),
 		Channel:         &channel,
 	}}
+}
+
+// ToNative - convert to `native` map
+func (referral *Referral) ToNative() map[string]interface{} {
+	return map[string]interface{}{
+		"transactionId":      referral.TransactionID,
+		"channelId":          referral.Channel.String(),
+		"ownerId":            referral.Owner,
+		"finalizedTimestamp": referral.FinalizedTimestamp.Format(time.RFC3339),
+		"referralCode":       referral.ReferralCode,
+		"downloadId":         referral.DownloadID,
+		"downloadTimestamp":  referral.DownloadTimestamp.Format(time.RFC3339),
+		"countryGroupId":     referral.CountryGroupID,
+		"platform":           referral.Platform,
+	}
 }
 
 // Ignore allows us to savely ignore the transaction if necessary
@@ -102,7 +111,7 @@ func (referral *Referral) Valid() error {
 	if referral.Owner == "" {
 		errs = append(errs, errors.New("owner is not set"))
 	}
-	if referral.GetFinalizedTimestamp().IsZero() {
+	if referral.FinalizedTimestamp.IsZero() {
 		errs = append(errs, errors.New("the finalized timestamp from the referral is zero"))
 	}
 	if len(errs) > 0 {

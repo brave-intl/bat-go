@@ -13,19 +13,19 @@ import (
 
 var (
 	env = os.Getenv("ENV")
-	// KeyToTopic creates a map of simple single words, to their more complex topic
-	KeyToTopic = map[string]string{
-		"settlement":   env + ".settlement.payout",
-		"suggestion":   env + ".grant.suggestion",
-		"contribution": env + ".payment.vote",
-		"referral":     env + ".promo.referral",
-	}
 	// TopicKeys holds human readable keys for topics
 	TopicKeys = keys{
 		Settlement:   "settlement",
 		Contribution: "contribution",
 		Referral:     "referral",
 		Suggestion:   "suggestion",
+	}
+	// KeyToTopic creates a map of simple single words, to their more complex topic
+	KeyToTopic = map[string]string{
+		TopicKeys.Settlement:   env + ".settlement.payout",
+		TopicKeys.Suggestion:   env + ".grant.suggestion",
+		TopicKeys.Contribution: env + ".payment.vote",
+		TopicKeys.Referral:     env + ".promo.referral",
 	}
 )
 

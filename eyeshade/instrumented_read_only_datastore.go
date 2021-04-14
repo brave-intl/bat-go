@@ -369,6 +369,20 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
+// SeedDB implements Datastore
+func (_d DatastoreWithPrometheus) SeedDB(ctx context.Context) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SeedDB", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SeedDB(ctx)
+}
+
 // WithTx implements Datastore
 func (_d DatastoreWithPrometheus) WithTx(ctx context.Context) (c2 context.Context, tp1 *sqlx.Tx, err error) {
 	_since := time.Now()

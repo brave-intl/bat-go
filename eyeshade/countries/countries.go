@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	originalRateID = uuid.FromStringOrNil("71341fc9-aeab-4766-acf0-d91d3ffb0bfa")
+	// OriginalRateID is the id for the original referral group
+	OriginalRateID = uuid.FromStringOrNil("71341fc9-aeab-4766-acf0-d91d3ffb0bfa")
 )
 
 // Resolve resolves the many referral groups that come back
@@ -51,13 +52,13 @@ func Resolve(rows []ReferralGroup) *[]ReferralGroup {
 func FindGroup(passedGroupID uuid.UUID, groups []Group) Group {
 	countryGroupID := passedGroupID
 	if uuid.Equal(countryGroupID, uuid.Nil) {
-		countryGroupID = originalRateID
+		countryGroupID = OriginalRateID
 	}
 	group := FindByID(groups, countryGroupID)
 	if group != nil {
 		return *group
 	}
-	return *FindByID(groups, originalRateID)
+	return *FindByID(groups, OriginalRateID)
 }
 
 // ComputeValue computes the value of a referral group at a point in time

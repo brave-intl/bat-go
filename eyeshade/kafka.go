@@ -22,10 +22,10 @@ import (
 var (
 	// KeyToEncoder maps a key to an avro topic bundle
 	KeyToEncoder = map[string]avro.TopicBundle{
-		"settlement":   avrosettlement.New(),
-		"referral":     avroreferral.New(),
-		"suggestion":   avrosuggestion.New(),
-		"contribution": avrocontribution.New(),
+		avro.TopicKeys.Settlement:   avrosettlement.New(),
+		avro.TopicKeys.Referral:     avroreferral.New(),
+		avro.TopicKeys.Suggestion:   avrosuggestion.New(),
+		avro.TopicKeys.Contribution: avrocontribution.New(),
 	}
 )
 
@@ -92,7 +92,7 @@ func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
 // Modifiers returns a map of modifications that can occur on a given kafka message
 func (con *MessageHandler) Modifiers() ([]map[string]string, error) {
 	def := make([]map[string]string, 0)
-	modifier := Modifiers[con.Topic()]
+	modifier := Modifiers[con.bundle.Key()]
 	if modifier == nil {
 		return def, nil
 	}
@@ -170,15 +170,15 @@ func (con *MessageHandler) Produce(
 
 // WithTopicAutoCreation creates topics used by producers and consumers
 func WithTopicAutoCreation(service *Service) error {
-	topics := map[string]int{}
+	keys := map[string]int{}
 	if service.producers != nil {
 		for key := range service.producers {
-			topics[key] = 0
+			keys[key] = 0
 		}
 	}
 	if service.consumers != nil {
 		for key := range service.consumers {
-			topics[key] = 0
+			keys[key] = 0
 		}
 	}
 
@@ -203,7 +203,8 @@ func WithTopicAutoCreation(service *Service) error {
 	if err != nil {
 		return err
 	}
-	for topic := range topics {
+	for key := range keys {
+		topic := avro.KeyToTopic[key]
 		err = conn.CreateTopics(kafka.TopicConfig{
 			Topic:             topic,
 			NumPartitions:     partitions,
@@ -236,6 +237,7 @@ func WithConsumer(
 			}
 			consumer := &MessageHandler{
 				key:     topicKey,
+				bundle:  KeyToEncoder[topicKey],
 				reader:  reader,
 				dialer:  dialer,
 				service: service,
@@ -266,6 +268,7 @@ func WithProducer(
 				return err
 			}
 			producer := &MessageHandler{
+				key:     topicKey,
 				bundle:  KeyToEncoder[topicKey],
 				writer:  writer,
 				dialer:  dialer,

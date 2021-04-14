@@ -85,7 +85,7 @@ var (
 // New holds all info needed to create a settlement parser
 func New() *avro.Handler {
 	return avro.NewHandler(
-		"settlement",
+		avro.TopicKeys.Settlement,
 		avro.ParseCodecs(schemas),
 		attemptDecodeList,
 	)

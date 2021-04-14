@@ -32,7 +32,7 @@ var (
 // New holds all info needed to create a contribution parser
 func New() *avro.Handler {
 	return avro.NewHandler(
-		"contribution",
+		avro.TopicKeys.Contribution,
 		avro.ParseCodecs(schemas),
 		attemptDecodeList,
 	)

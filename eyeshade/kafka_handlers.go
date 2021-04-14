@@ -13,20 +13,20 @@ var (
 	// Handlers is a map for a topic key to point to any non standard handlers
 	// all others are handled by HandlerDefault
 	Handlers = map[string]func(con *MessageHandler, msgs []kafka.Message) error{
-		"suggestion":   HandleVotes,
-		"contribution": HandleVotes,
-		"settlement":   HandlerInsertConvertableTransaction,
-		"referral":     HandlerInsertConvertableTransaction,
+		avro.TopicKeys.Suggestion:   HandleVotes,
+		avro.TopicKeys.Contribution: HandleVotes,
+		avro.TopicKeys.Settlement:   HandlerInsertConvertableTransaction,
+		avro.TopicKeys.Referral:     HandlerInsertConvertableTransaction,
 	}
 	// DecodeBatchVotes a mapping to help the batch decoder find it's topic specific decoder
 	DecodeBatchVotes = map[string]avro.BatchVoteDecoder{
-		"suggestion":   avrosuggestion.DecodeBatch,
-		"contribution": avrocontribution.DecodeBatch,
+		avro.TopicKeys.Suggestion:   avrosuggestion.DecodeBatch,
+		avro.TopicKeys.Contribution: avrocontribution.DecodeBatch,
 	}
 	// DecodeBatchTransactions a mapping to help the batch decoder find it's topic specific decoder
 	DecodeBatchTransactions = map[string]avro.BatchConvertableTransactionDecoder{
-		"referral":   avroreferral.DecodeBatch,
-		"settlement": avrosettlement.DecodeBatch,
+		avro.TopicKeys.Referral:   avroreferral.DecodeBatch,
+		avro.TopicKeys.Settlement: avrosettlement.DecodeBatch,
 	}
 )
 

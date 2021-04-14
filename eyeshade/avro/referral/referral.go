@@ -5,6 +5,7 @@ import (
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -37,7 +38,7 @@ var (
 // New holds all info needed to create a referral parser
 func New() *avro.Handler {
 	return avro.NewHandler(
-		"referral",
+		avro.TopicKeys.Referral,
 		avro.ParseCodecs(schemas),
 		attemptDecodeList,
 	)
@@ -64,7 +65,8 @@ func DecodeBatch(
 			if err != nil {
 				return nil, err
 			}
-			referral.Probi = probi
+			referral.Probi = altcurrency.BAT.ToProbi(probi)
+			referral.AltCurrency = altcurrency.BAT
 		}
 		txs = append(txs, models.ConvertableTransaction(&referral))
 	}

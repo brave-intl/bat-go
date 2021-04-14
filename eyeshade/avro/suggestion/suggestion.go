@@ -78,7 +78,7 @@ var (
 // New holds all info needed to create a suggestion parser
 func New() *avro.Handler {
 	return avro.NewHandler(
-		"suggestion",
+		avro.TopicKeys.Suggestion,
 		avro.ParseCodecs(schemas),
 		attemptDecodeList,
 	)

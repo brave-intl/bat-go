@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -85,6 +87,7 @@ type Datastore interface {
 	InsertVotes(ctx context.Context, votes []models.Vote) error
 	InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error
 	InsertBallots(ctx context.Context, ballots *[]models.Ballot) error
+	SeedDB(context.Context) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -480,7 +483,7 @@ SELECT
 	id,
 	amount,
 	currency,
-	active_at AS "activeAt"
+	active_at
 FROM geo_referral_groups
 WHERE
 	active_at <= CURRENT_TIMESTAMP
@@ -644,4 +647,28 @@ func (pg *Postgres) convertToBallots(
 		}
 	}
 	return &surveyors, &ballots, nil
+}
+
+// SeedDB seeds the db with the appropriate seed files
+func (pg *Postgres) SeedDB(ctx context.Context) error {
+	dir := "./seeds/"
+	fileInfos, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, fileInfo := range fileInfos {
+		if fileInfo.IsDir() {
+			continue
+		}
+		input := path.Join(dir, fileInfo.Name())
+		statement, err := ioutil.ReadFile(input)
+		if err != nil {
+			return err
+		}
+		_, err = pg.RawDB().ExecContext(ctx, string(statement))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

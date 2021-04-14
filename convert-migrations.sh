@@ -8,10 +8,19 @@ for i in $(ls eyeshade/migrations); do
   for j in $(ls eyeshade/migrations/$i/); do
     if [[ -f eyeshade/migrations/$i/$j ]]
     then
+      final=eyeshade/migrations-2/$i.$j
+      echo $final
       cp eyeshade/migrations/$i/$j eyeshade/migrations-2/$i.$j
     else
       for k in $(ls eyeshade/migrations/$i/$j); do
-        cp eyeshade/migrations/$i/$j/$k eyeshade/seeds/$i\_$k
+        o="1"
+        if [[ $k == "groups.sql" ]]
+        then
+          o="0"
+        fi
+        final=eyeshade/seeds/$i\_$o\_$k
+        echo $final
+        cp eyeshade/migrations/$i/$j/$k $final
       done
     fi
   done

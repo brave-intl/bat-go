@@ -9,7 +9,7 @@ import (
 var (
 	// Modifiers a map of modifiers for avro decoders
 	Modifiers = map[string]func(*MessageHandler) ([]map[string]string, error){
-		avro.KeyToTopic["referral"]: ModifierReferral,
+		avro.TopicKeys.Referral: ModifierReferral,
 	}
 )
 
