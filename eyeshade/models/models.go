@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -34,22 +35,14 @@ var (
 		"contribution_settlement": true,
 		"referral_settlement":     true,
 	}
-	// TransactionColumns columns for transaction queries. may be useful to just pull off of struct directly
-	TransactionColumns = []string{
-		"id",
-		"created_at",
-		"description",
-		"transaction_type",
-		"document_id",
-		"from_account",
-		"from_account_type",
-		"to_account",
-		"to_account_type",
-		"amount",
-		"settlement_currency",
-		"settlement_amount",
-		"channel",
-	}
+	// TransactionColumns columns for transaction queries
+	TransactionColumns = stringutils.CollectTags(&Transaction{})
+	// SurveyorColumns columns for surveyor group queries
+	SurveyorColumns = stringutils.CollectTags(&Surveyor{})
+	// TimestampColumns holds the columns that are auto generated and have no need to set
+	TimestampColumns = []string{"created_at", "updated_at"}
+	// BallotColumns holds columns for ballots
+	BallotColumns = stringutils.CollectTags(&Ballot{})
 	// ValidGrantStatTypes holds a hash of valid stat types for grants
 	ValidGrantStatTypes = map[string]bool{
 		"ads": true,

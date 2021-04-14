@@ -1,10 +1,15 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+)
+
+var (
+	voteValue = decimal.NewFromFloat(0.25)
 )
 
 // Funding holds information about suggestion funding sources
@@ -13,6 +18,19 @@ type Funding struct {
 	Amount    decimal.Decimal
 	Cohort    string
 	Promotion string
+}
+
+// GetSurveyorID returns a surveyor id for a given date
+func (funding *Funding) GetSurveyorID(date string) string {
+	return fmt.Sprintf("%s_%s", date, funding.Promotion)
+}
+
+// SurveyorParams holds parameters needed to ensure that the surveyor exists
+func (funding *Funding) SurveyorParams(date string) []interface{} {
+	return []interface{}{
+		funding.GetSurveyorID(date),
+		voteValue,
+	}
 }
 
 // Suggestion holds information from votes freezing
@@ -26,11 +44,26 @@ type Suggestion struct {
 	Funding     []Funding
 }
 
+func (funding *Funding) VoteParams(
+	suggestion Suggestion,
+	date string,
+) []interface{} {
+	surveyorID := funding.GetSurveyorID(date)
+	return []interface{}{
+		suggestion.GenerateID(funding.Cohort, surveyorID), // id
+		funding.Cohort,                          // cohort
+		funding.Amount.Div(voteValue).String(),  // tally
+		false,                                   // exclude
+		suggestion.Channel.Normalize().String(), // channel
+		surveyorID,                              // surveyor id
+	}
+}
+
 // GenerateID generates an id from the contribution namespace
-func (votes *Suggestion) GenerateID(cohort, surveyorID string) string {
+func (suggestion *Suggestion) GenerateID(cohort, surveyorID string) string {
 	return uuid.NewV5(
 		TransactionNS["votes"],
-		votes.Channel.String()+cohort+surveyorID,
+		suggestion.Channel.String()+cohort+surveyorID,
 	).String()
 }
 

@@ -28,3 +28,18 @@ func (ns *NullString) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// FilterColumns filters columns against a list
+func FilterColumns(columns, filter []string) []string {
+	filterHash := map[string]bool{}
+	for _, item := range filter {
+		filterHash[item] = true
+	}
+	filtered := []string{}
+	for _, col := range columns {
+		if !filterHash[col] {
+			filtered = append(filtered, col)
+		}
+	}
+	return filtered
+}

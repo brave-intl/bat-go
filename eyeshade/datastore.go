@@ -13,13 +13,12 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	db "github.com/brave-intl/bat-go/utils/datastore"
+	datastoreutils "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -30,6 +29,12 @@ var (
 	// ErrNeedTimeConstraints needs both a start and an end time
 	ErrNeedTimeConstraints = errors.New("need both start and end date")
 )
+
+// Query holds information to assist with doing a bunch of queries
+type Query struct {
+	statement string
+	args      []interface{}
+}
 
 // Datastore holds methods for interacting with database
 type Datastore interface {
@@ -324,7 +329,7 @@ func (pg *Postgres) GetBalances(
 		ctx,
 		&balances,
 		statement,
-		db.JoinStringList(accountIDs),
+		datastoreutils.JoinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -355,7 +360,7 @@ GROUP BY channel`
 		ctx,
 		&votes,
 		statement,
-		db.JoinStringList(accountIDs),
+		datastoreutils.JoinStringList(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -386,7 +391,7 @@ func (pg *Postgres) GetTransactionsByAccount(
 	typeExtension := ""
 	args := []interface{}{accountID}
 	if len(txTypes) > 0 {
-		args = append(args, db.JoinStringList(txTypes))
+		args = append(args, datastoreutils.JoinStringList(txTypes))
 		typeExtension = "AND transaction_type = ANY($2::text[])"
 	}
 	statement := fmt.Sprintf(`
@@ -452,7 +457,7 @@ INSERT INTO transactions ( %s )
 VALUES ( %s )
 ON CONFLICT DO NOTHING`,
 		strings.Join(models.TransactionColumns, ", "),
-		strings.Join(db.ColumnsToParamNames(models.TransactionColumns), ", "),
+		strings.Join(datastoreutils.ColumnsToParamNames(models.TransactionColumns), ", "),
 	)
 	_, err := pg.RawDB().NamedExecContext(
 		ctx,
@@ -554,72 +559,131 @@ AND countries.group_id = geo_referral_groups.id`
 	return &groups, nil
 }
 
-// InsertSuggestions inserts a series of suggstions into the votes table
-func (pg *Postgres) InsertSuggestions(
-	ctx context.Context,
-	suggestions []models.Suggestion,
-) error {
-	statementInsertSurveyor := `
-insert into surveyor_groups (id, price, virtual) values ($1, $2, true)
-on conflict (id) do nothing`
-	statementVotesUpdate := `
-insert into votes (id, cohort, tally, excluded, channel, surveyor_id) values ($1, $2, $3, $4, $5, $6)
-on conflict (id) do update set updated_at = current_timestamp, tally = votes.tally + $3`
-	date := time.Now().Format("2021-01-01")
-	voteValue, err := decimal.NewFromString("0.25")
+// InsertVotes inserts votes into the votes table after inserting surveyors
+func (pg *Postgres) InsertVotes(ctx context.Context, votes []models.Vote) error {
+	ctx, _, err := pg.ResolveConnection(ctx)
 	if err != nil {
 		return err
 	}
-	promotionToSurveyor := map[string]string{}
-	type Query struct {
-		statement string
-		args      []interface{}
+	defer pg.Rollback(ctx)
+	surveyors, ballots, err := pg.convertToBallots(ctx, votes)
+	if err != nil {
+		return err
 	}
-	queries := []Query{}
-	for _, suggestion := range suggestions {
-		for _, funding := range suggestion.Funding {
-			surveyorID := promotionToSurveyor[funding.Promotion]
-			if surveyorID != "" {
-				continue
-			}
-			surveyorID = fmt.Sprintf("%s_%s", date, funding.Promotion)
-			promotionToSurveyor[funding.Promotion] = surveyorID
-			queries = append(queries, Query{
-				statement: statementInsertSurveyor,
-				args: []interface{}{
-					surveyorID,
-					voteValue.String(),
-				},
-			})
-		}
+	if err := pg.InsertSurveyors(ctx, surveyors); err != nil {
+		return err
 	}
-	for _, suggestion := range suggestions {
-		for _, funding := range suggestion.Funding {
-			surveyorID := promotionToSurveyor[funding.Promotion]
-			tally := funding.Amount.Div(voteValue)
-			queries = append(queries, Query{
-				statement: statementVotesUpdate,
-				args: []interface{}{
-					suggestion.GenerateID(funding.Cohort, surveyorID),
-					funding.Cohort,
-					tally.String(),
-					false,
-					suggestion.Channel.Normalize().String(),
-					surveyorID,
-				},
-			})
-		}
+	if err := pg.InsertBallots(ctx, ballots); err != nil {
+		return err
 	}
+	return pg.Commit(ctx)
+}
+
+// InsertSurveyors inserts surveyors to the surveyors_groups table
+func (pg *Postgres) InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error {
 	ctx, tx, err := pg.ResolveConnection(ctx)
 	if err != nil {
 		return err
 	}
 	defer pg.Rollback(ctx)
-	for _, q := range queries {
-		_, err := tx.ExecContext(ctx, q.statement, q.args...)
-		if err != nil {
-			return err
-		}
+	columns := []string{"id", "price"}
+	statement := fmt.Sprintf(`
+insert into surveyor_groups ( %s, virtual )
+values ( %s, true )
+on conflict (id) do nothing`,
+		strings.Join(columns, ", "),
+		strings.Join(datastoreutils.ColumnsToParamNames(columns), ", "),
+	)
+	_, err = tx.NamedExecContext(
+		ctx,
+		statement,
+		*surveyors,
+	)
+	if err != nil {
+		return err
 	}
 	return pg.Commit(ctx)
+}
+
+// InsertSurveyors inserts surveyors to the surveyors_groups table
+func (pg *Postgres) InsertBallots(ctx context.Context, ballots *[]models.Ballot) error {
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer pg.Rollback(ctx)
+	statement := fmt.Sprintf(`insert into votes ( %s )
+values ( %s )
+on conflict ( id ) do update
+set updated_at = current_timestamp,
+tally = votes.tally + :tally`,
+		strings.Join(models.BallotColumns, ", "),
+		strings.Join(datastoreutils.ColumnsToParamNames(models.BallotColumns), ", "),
+	)
+	_, err = tx.NamedExecContext(
+		ctx,
+		statement,
+		*ballots,
+	)
+	if err != nil {
+		return err
+	}
+	return pg.Commit(ctx)
+}
+
+// GetSurveyorsByID gets surveyors by their id
+func (pg *Postgres) GetSurveyorsByID(ctx context.Context, ids []string) (*[]models.Surveyor, error) {
+	surveyors := []models.Surveyor{}
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.Rollback(ctx)
+	statement := fmt.Sprintf(`select %s
+from surveyor_groups
+where id = any($1::text[])`, strings.Join(models.SurveyorColumns, ", "))
+	err = tx.SelectContext(ctx, &surveyors, statement, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &surveyors, pg.Commit(ctx)
+}
+
+func (pg *Postgres) convertToBallots(
+	ctx context.Context,
+	votes []models.Vote,
+) (*[]models.Surveyor, *[]models.Ballot, error) {
+	surveyors := []models.Surveyor{}
+	surveyorIDsCollected := map[string]bool{}
+	surveyorIDs := []string{}
+	for _, vote := range votes {
+		voteSurveyors := vote.CollectSurveyors(surveyorIDsCollected)
+		for _, voteSurveyor := range voteSurveyors {
+			surveyorIDsCollected[voteSurveyor.ID] = true
+			surveyorIDs = append(surveyorIDs, voteSurveyor.ID)
+		}
+		surveyors = append(surveyors, voteSurveyors...)
+	}
+	insertedSurveyors, err := pg.GetSurveyorsByID(ctx, surveyorIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	frozenSurveyors := map[string]bool{}
+	for _, insertedSurveyor := range *insertedSurveyors {
+		frozenSurveyors[insertedSurveyor.ID] = true
+	}
+	surveyorIDsCollected = map[string]bool{}
+	ballots := []models.Ballot{}
+	surveyors = []models.Surveyor{}
+	for _, vote := range votes {
+		voteSurveyors, voteBallots := vote.CollectBallots(frozenSurveyors, surveyorIDsCollected)
+		surveyors = append(surveyors, voteSurveyors...)
+		ballots = append(ballots, voteBallots...)
+		for _, voteSurveyor := range voteSurveyors {
+			surveyorIDsCollected[voteSurveyor.ID] = true
+			surveyorIDs = append(surveyorIDs, voteSurveyor.ID)
+		}
+		surveyors = append(surveyors, voteSurveyors...)
+	}
+	return &surveyors, &ballots, nil
 }

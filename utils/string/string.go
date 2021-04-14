@@ -1,6 +1,9 @@
 package stringutils
 
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 // SplitAndTrim splits a string along a delimiter and trims it
 func SplitAndTrim(base string, options ...string) []string {
@@ -20,4 +23,28 @@ func SplitAndTrim(base string, options ...string) []string {
 		)
 	}
 	return splitAndTrimmed
+}
+
+// CollectTags collects struct tags
+func CollectTags(t interface{}, tags ...string) []string {
+	key := "db"
+	if len(tags) > 0 {
+		key = tags[0]
+	}
+	reflected := reflect.ValueOf(t).Elem()
+	list := []string{}
+	for i := 0; i < reflected.NumField(); i++ {
+		typeField := reflected.Type().Field(i)
+		tag, ok := typeField.Tag.Lookup(key)
+		if !ok {
+			continue
+		}
+		splitTag := SplitAndTrim(tag)
+		target := splitTag[0]
+		if target == "" || target == "-" {
+			continue
+		}
+		list = append(list, target)
+	}
+	return list
 }
