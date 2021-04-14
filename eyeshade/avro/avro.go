@@ -20,7 +20,20 @@ var (
 		"contribution": env + ".payment.vote",
 		"referral":     env + ".promo.referral",
 	}
+	TopicKeys = keys{
+		Settlement:   "settlement",
+		Contribution: "contribution",
+		Referral:     "referral",
+		Suggestion:   "suggestion",
+	}
 )
+
+type keys struct {
+	Settlement   string
+	Contribution string
+	Referral     string
+	Suggestion   string
+}
 
 // KafkaMessageEncodable encodes messages
 type KafkaMessageEncodable interface {
@@ -39,7 +52,10 @@ type TopicBundle interface {
 }
 
 // BatchVoteDecoder decodes a batch of vote objects
-type BatchVoteDecoder func(codecs map[string]*goavro.Codec, msgs []kafka.Message) (*[]models.Vote, error)
+type BatchVoteDecoder func(
+	codecs map[string]*goavro.Codec,
+	msgs []kafka.Message,
+) (*[]models.Vote, error)
 
 // BatchConvertableTransactionDecoder decodes a batch of convertable transactions
 type BatchConvertableTransactionDecoder func(

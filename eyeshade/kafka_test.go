@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	uuid "github.com/satori/go.uuid"
@@ -44,10 +45,10 @@ from transactions`)
 func (suite *ServiceKafkaTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
 	topics := []string{
-		"settlement",
-		"contribution",
-		"referral",
-		"suggestion",
+		avro.TopicKeys.Settlement,
+		avro.TopicKeys.Contribution,
+		avro.TopicKeys.Referral,
+		avro.TopicKeys.Suggestion,
 	}
 	service, err := SetupService(
 		WithContext(suite.ctx),
