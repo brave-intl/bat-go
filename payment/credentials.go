@@ -149,6 +149,10 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 			return errorutils.Wrap(err, "error finding issuer")
 		}
 
+		if len(blindedCreds) > orderItem.Quantity {
+			blindedCreds = blindedCreds[:orderItem.Quantity]
+		}
+
 		orderCreds := OrderCreds{
 			ID:           itemID,
 			OrderID:      orderID,
