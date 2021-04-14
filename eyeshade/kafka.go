@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
+	avrocontribution "github.com/brave-intl/bat-go/eyeshade/avro/contribution"
 	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
 	avrosettlement "github.com/brave-intl/bat-go/eyeshade/avro/settlement"
 	avrosuggestion "github.com/brave-intl/bat-go/eyeshade/avro/suggestion"
@@ -21,9 +22,10 @@ import (
 var (
 	// KeyToEncoder maps a key to an avro topic bundle
 	KeyToEncoder = map[string]avro.TopicBundle{
-		"settlement": avrosettlement.New(),
-		"referral":   avroreferral.New(),
-		"suggestion": avrosuggestion.New(),
+		"settlement":   avrosettlement.New(),
+		"referral":     avroreferral.New(),
+		"suggestion":   avrosuggestion.New(),
+		"contribution": avrocontribution.New(),
 	}
 )
 
@@ -52,6 +54,7 @@ type BatchMessageProducer interface {
 // MessageHandler holds information about a single handler
 type MessageHandler struct {
 	key     string
+	bundle  avro.TopicBundle
 	service *Service
 	reader  *kafka.Reader
 	writer  *kafka.Writer
@@ -60,7 +63,7 @@ type MessageHandler struct {
 
 // Topic returns the topic of the message handler
 func (con *MessageHandler) Topic() string {
-	return avro.KeyToTopic[con.key]
+	return avro.KeyToTopic[con.bundle.Key()]
 }
 
 // Collect collects messages from the reader
@@ -98,7 +101,7 @@ func (con *MessageHandler) Modifiers() ([]map[string]string, error) {
 
 // Handler handles the batch of messages
 func (con *MessageHandler) Handler(msgs []kafka.Message) error {
-	handler := Handlers[con.key]
+	handler := Handlers[con.bundle.Key()]
 	if handler == nil {
 		return errors.New("unknown handler asked for during message handle")
 	}
@@ -263,7 +266,7 @@ func WithProducer(
 				return err
 			}
 			producer := &MessageHandler{
-				key:     topicKey,
+				bundle:  KeyToEncoder[topicKey],
 				writer:  writer,
 				dialer:  dialer,
 				service: service,

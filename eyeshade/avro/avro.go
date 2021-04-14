@@ -44,6 +44,7 @@ type KafkaMessageEncodable interface {
 // TopicBundle holds all information needed for a topic
 type TopicBundle interface {
 	Topic() string
+	Key() string
 	ToBinary(KafkaMessageEncodable) ([]byte, error)
 	Codecs() map[string]*goavro.Codec
 	SchemaList() []string

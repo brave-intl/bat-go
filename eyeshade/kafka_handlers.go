@@ -35,8 +35,8 @@ func HandleVotes(
 	con *MessageHandler,
 	msgs []kafka.Message,
 ) error {
-	votes, err := DecodeBatchVotes[con.key](
-		KeyToEncoder[con.key].Codecs(),
+	votes, err := DecodeBatchVotes[con.bundle.Key()](
+		con.bundle.Codecs(),
 		msgs,
 	)
 	if err != nil {
@@ -55,8 +55,8 @@ func HandlerInsertConvertableTransaction(
 	if err != nil {
 		return err
 	}
-	txs, err := DecodeBatchTransactions[con.key](
-		KeyToEncoder[con.key].Codecs(),
+	txs, err := DecodeBatchTransactions[con.bundle.Key()](
+		con.bundle.Codecs(),
 		msgs,
 		modifiers...,
 	)
