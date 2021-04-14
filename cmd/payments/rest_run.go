@@ -29,7 +29,7 @@ func PaymentRestRun(command *cobra.Command, args []string) {
 	if os.Getenv("ENV") != "production" {
 		r.Use(cors.Handler(cors.Options{
 			Debug:            true,
-			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software", "https://search.bsg.brave.software", "http://localhost:8080"},
+			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software", "https://search.bsg.brave.software", "https://search.brave.software", "http://localhost:8080"},
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
 			ExposedHeaders:   []string{"Link"},
