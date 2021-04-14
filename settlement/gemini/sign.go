@@ -24,8 +24,8 @@ func SignRequests(
 		return nil, errors.New("a client id was missing during the gemini settlement signing process")
 	}
 
-	for _, privateRequestRequirements := range *privateRequests {
-		privateRequestRequirements := privateRequestRequirements
+	for i := range *privateRequests {
+		privateRequestRequirements := (*privateRequests)[i]
 		base := gemini.NewBulkPayoutPayload(
 			nil,
 			clientID,
