@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ServiceKafkaTestSuite struct {
+type ServiceKafkaSuite struct {
 	suite.Suite
 	ctx     context.Context
 	db      Datastore
@@ -28,21 +28,21 @@ type ServiceKafkaTestSuite struct {
 	service *Service
 }
 
-func TestServiceKafkaTestSuite(t *testing.T) {
-	suite.Run(t, new(ServiceKafkaTestSuite))
+func TestServiceKafkaSuite(t *testing.T) {
+	suite.Run(t, new(ServiceKafkaSuite))
 	// if os.Getenv("EYESHADE_DB_URL") != "" {
 	// 	suite.Run(t, new(DatastoreTestSuite))
 	// }
 }
 
-func (suite *ServiceKafkaTestSuite) SetupTest() {
+func (suite *ServiceKafkaSuite) SetupTest() {
 	suite.service.Datastore(false).
 		RawDB().
 		Exec(`delete
 from transactions`)
 }
 
-func (suite *ServiceKafkaTestSuite) SetupSuite() {
+func (suite *ServiceKafkaSuite) SetupSuite() {
 	suite.ctx = context.Background()
 	topics := []string{
 		avro.TopicKeys.Settlement,
@@ -62,57 +62,84 @@ func (suite *ServiceKafkaTestSuite) SetupSuite() {
 	suite.service = service
 }
 
-func (suite *ServiceKafkaTestSuite) TestSettlements() {
-	bat := decimal.NewFromFloat(5)
-	fees := bat.Mul(decimal.NewFromFloat(0.05))
-	batSubFees := bat.Sub(fees)
-	settlement := models.Settlement{
-		AltCurrency:  altcurrency.BAT,
-		Probi:        altcurrency.BAT.ToProbi(batSubFees),
-		Fees:         altcurrency.BAT.ToProbi(fees),
-		Fee:          decimal.Zero,
-		Commission:   decimal.Zero,
-		Amount:       bat,
-		Currency:     altcurrency.BAT.String(),
-		Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
-		Channel:      models.Channel("brave.com"),
-		Hash:         uuid.NewV4().String(),
-		Type:         "contribution",
-		SettlementID: uuid.NewV4().String(),
-		DocumentID:   uuid.NewV4().String(),
-		Address:      uuid.NewV4().String(),
-	}
-	settlements := []models.Settlement{settlement}
+func (suite *ServiceKafkaSuite) TestSettlements() {
+	// update when kakfa consumption happens in bulk
+	contributions := CreateSettlements(3, "contribution")
+	referrals := CreateSettlements(3, "referral")
+	settlements := append(contributions, referrals...)
 	err := suite.service.ProduceSettlements(suite.ctx, settlements)
 	suite.Require().NoError(err)
 	errChan := suite.service.Consume()
-	txsChan := suite.CheckTxs(errChan)
-	select {
-	case err := <-errChan:
-		suite.Require().NoError(err)
-	case actual := <-txsChan:
-		settlement.ExecutedAt = actual[2].CreatedAt.Format(time.RFC3339)
-		contributionTxs := settlement.ToContributionTransactions()
-		expect := []models.Transaction{
-			contributionTxs[0],
-			contributionTxs[1],
-			settlement.ToSettlementTransaction(),
+	for t := 0; t < len(settlements); t += 1 {
+		settlement := settlements[t]
+		txsChan := suite.CheckTxs(errChan, settlement.Hash)
+		select {
+		case err := <-errChan:
+			suite.Require().NoError(err)
+		case actual := <-txsChan:
+			hashMap := map[string]models.Transaction{}
+			for j := 0; j < len(actual); j += 1 {
+				hashMap[actual[j].DocumentID] = actual[j]
+			}
+			expect := []models.Transaction{}
+			target := hashMap[settlement.Hash]
+			settlement.ExecutedAt = target.CreatedAt.Format(time.RFC3339)
+			if settlement.Type == "contribution" {
+				contributionTxs := settlement.ToContributionTransactions()
+				expect = append(
+					expect,
+					contributionTxs[0],
+					contributionTxs[1],
+					settlement.ToSettlementTransaction(),
+				)
+			} else {
+				expect = append(
+					expect,
+					settlement.ToSettlementTransaction(),
+				)
+			}
+			suite.Require().JSONEq(
+				MustMarshal(suite.Require(), expect),
+				MustMarshal(suite.Require(), actual),
+			)
 		}
-		suite.Require().JSONEq(
-			MustMarshal(suite.Require(), expect),
-			MustMarshal(suite.Require(), actual),
-		)
-		return
 	}
 }
 
-func (suite *ServiceKafkaTestSuite) CheckTxs(errChan chan error) <-chan []models.Transaction {
+func CreateSettlements(count int, txType string) []models.Settlement {
+	settlements := []models.Settlement{}
+	for i := 0; i < count; i += 1 {
+		bat := decimal.NewFromFloat(5)
+		fees := bat.Mul(decimal.NewFromFloat(0.05))
+		batSubFees := bat.Sub(fees)
+		settlement := models.Settlement{
+			AltCurrency:  altcurrency.BAT,
+			Probi:        altcurrency.BAT.ToProbi(batSubFees),
+			Fees:         altcurrency.BAT.ToProbi(fees),
+			Fee:          decimal.Zero,
+			Commission:   decimal.Zero,
+			Amount:       bat,
+			Currency:     altcurrency.BAT.String(),
+			Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			Channel:      models.Channel("brave.com"),
+			Hash:         uuid.NewV4().String(),
+			Type:         txType,
+			SettlementID: uuid.NewV4().String(),
+			DocumentID:   uuid.NewV4().String(),
+			Address:      uuid.NewV4().String(),
+		}
+		settlements = append(settlements, settlement)
+	}
+	return settlements
+}
+
+func (suite *ServiceKafkaSuite) CheckTxs(errChan chan error, ids ...string) <-chan []models.Transaction {
 	ch := make(chan []models.Transaction)
 	checkTxs := func() {
 		for {
-			<-time.After(time.Millisecond * 100)
+			<-time.After(time.Second)
 			txs, err := suite.service.Datastore(true).
-				GetTransactions(suite.ctx)
+				GetTransactionsByDocumentID(suite.ctx, ids...)
 			if err == sql.ErrNoRows {
 				continue
 			}

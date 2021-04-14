@@ -19,7 +19,8 @@ func (service *Service) ProduceSettlements(
 ) error {
 	encodable := []avro.KafkaMessageEncodable{}
 	for _, msg := range messages {
-		encodable = append(encodable, avro.KafkaMessageEncodable(&msg))
+		msg := msg
+		encodable = append(encodable, &msg)
 	}
 	key := "settlement"
 	return service.Producer(key).

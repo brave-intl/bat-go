@@ -20,6 +20,7 @@ var (
 		"contribution": env + ".payment.vote",
 		"referral":     env + ".promo.referral",
 	}
+	// TopicKeys holds human readable keys for topics
 	TopicKeys = keys{
 		Settlement:   "settlement",
 		Contribution: "contribution",

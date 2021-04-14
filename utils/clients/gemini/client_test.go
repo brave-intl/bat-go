@@ -78,7 +78,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 	bulkPayoutRequest := suite.preparePrivateRequest(NewBulkPayoutPayload(
 		accountKey,
 		os.Getenv("GEMINI_CLIENT_ID"),
-		&payouts,
+		payouts,
 	))
 
 	bulkPayoutResponse, err := client.UploadBulkPayout(ctx, suite.apikey, suite.secret, bulkPayoutRequest)

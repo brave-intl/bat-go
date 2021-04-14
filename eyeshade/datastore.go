@@ -16,6 +16,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/getsentry/sentry-go"
+	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 )
 
@@ -50,6 +51,10 @@ type Datastore interface {
 	GetTransactions(
 		ctx context.Context,
 		constraints ...map[string]string,
+	) (*[]models.Transaction, error)
+	GetTransactionsByDocumentID(
+		ctx context.Context,
+		documentIDs ...string,
 	) (*[]models.Transaction, error)
 	GetTransactionsByAccount(
 		ctx context.Context,
@@ -318,6 +323,21 @@ FROM transactions`,
 	)
 	transactions := []models.Transaction{}
 	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, statement)
+}
+
+// GetTransactionsByDocumentID retrieves transactions by a document id
+func (pg *Postgres) GetTransactionsByDocumentID(
+	ctx context.Context,
+	ids ...string,
+) (*[]models.Transaction, error) {
+	statement := fmt.Sprintf(`
+SELECT %s
+FROM transactions
+WHERE document_id = any($1::text[])`,
+		strings.Join(models.TransactionColumns, ", "),
+	)
+	transactions := []models.Transaction{}
+	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, statement, pq.Array(ids))
 }
 
 // GetTransactionsByAccount retrieves the transactions tied to an account id

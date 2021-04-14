@@ -39,6 +39,7 @@ func Resolve(rows []ReferralGroup) *[]ReferralGroup {
 		codesByID[group.ID] = append(codesByID[group.ID], country)
 	}
 	for id, codes := range codesByID {
+		codes := codes
 		group := groupsByID[id]
 		group.Codes = &codes
 		rowsFiltered = append(rowsFiltered, group)

@@ -197,6 +197,20 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 	return _d.base.GetTransactionsByAccount(ctx, accountID, txTypes)
 }
 
+// GetTransactionsByDocumentID implements Datastore
+func (_d DatastoreWithPrometheus) GetTransactionsByDocumentID(ctx context.Context, documentIDs ...string) (tap1 *[]models.Transaction, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactionsByDocumentID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTransactionsByDocumentID(ctx, documentIDs...)
+}
+
 // InsertBallots implements Datastore
 func (_d DatastoreWithPrometheus) InsertBallots(ctx context.Context, ballots *[]models.Ballot) (err error) {
 	_since := time.Now()

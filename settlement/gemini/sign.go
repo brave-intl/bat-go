@@ -29,7 +29,7 @@ func SignRequests(
 		base := gemini.NewBulkPayoutPayload(
 			nil,
 			clientID,
-			&privateRequestRequirements,
+			privateRequestRequirements,
 		)
 		signatures := []string{}
 		// store the original nonce
