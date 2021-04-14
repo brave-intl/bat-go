@@ -373,7 +373,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	start := time.Now()
-	numVotes := 20
+	numVotes := 1
 
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
@@ -494,7 +494,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	issuerName := "brave.com?sku=anon-card-vote"
 	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
-	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY=", "XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
 	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
 	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
@@ -523,7 +524,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 		Name:      issuerName,
 		PublicKey: issuerPublicKey,
 	}, nil)
-	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
 		BatchProof:   proof,
 		SignedTokens: signedCreds,
 	}, nil)
@@ -589,6 +590,12 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	log.Printf("!!! time to finish loop for status ok: %+v\n", time.Now().Sub(start))
 
 	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+
+	var ordercreds []OrderCreds
+	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
 
 	// Test getting the same order by item ID
 	handler = GetOrderCredsByID(service)
