@@ -113,6 +113,20 @@ func (_d DatastoreWithPrometheus) GetBalances(ctx context.Context, accountIDs []
 	return _d.base.GetBalances(ctx, accountIDs)
 }
 
+// GetBallotsByID implements Datastore
+func (_d DatastoreWithPrometheus) GetBallotsByID(ctx context.Context, p1 ...string) (bap1 *[]models.Ballot, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetBallotsByID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetBallotsByID(ctx, p1...)
+}
+
 // GetGrantStats implements Datastore
 func (_d DatastoreWithPrometheus) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (gp1 *models.GrantStat, err error) {
 	_since := time.Now()
@@ -197,8 +211,8 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 	return _d.base.GetTransactionsByAccount(ctx, accountID, txTypes)
 }
 
-// GetTransactionsByDocumentID implements Datastore
-func (_d DatastoreWithPrometheus) GetTransactionsByDocumentID(ctx context.Context, documentIDs ...string) (tap1 *[]models.Transaction, err error) {
+// GetTransactionsByID implements Datastore
+func (_d DatastoreWithPrometheus) GetTransactionsByID(ctx context.Context, documentIDs ...string) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -206,9 +220,9 @@ func (_d DatastoreWithPrometheus) GetTransactionsByDocumentID(ctx context.Contex
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactionsByDocumentID", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactionsByID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTransactionsByDocumentID(ctx, documentIDs...)
+	return _d.base.GetTransactionsByID(ctx, documentIDs...)
 }
 
 // InsertBallots implements Datastore

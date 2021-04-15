@@ -9,15 +9,27 @@ import (
 )
 
 var (
-	voteValue = decimal.NewFromFloat(0.25)
+	// VoteValue holds the bat value of a single vote
+	VoteValue = decimal.NewFromFloat(0.25)
 )
 
 // Funding holds information about suggestion funding sources
 type Funding struct {
-	Type      string
-	Amount    decimal.Decimal
-	Cohort    string
-	Promotion string
+	Type      string          `json:"type"`
+	Amount    decimal.Decimal `json:"amount"`
+	Cohort    string          `json:"cohort"`
+	Promotion string          `json:"promotion"`
+}
+
+// Suggestion holds information from votes freezing
+type Suggestion struct {
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	Channel     Channel         `json:"channel"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	TotalAmount decimal.Decimal `json:"totalAmount"`
+	OrderID     string          `json:"orderId"`
+	Funding     []Funding       `json:"funding"`
 }
 
 // GetSurveyorID returns a surveyor id for a given date
@@ -25,15 +37,13 @@ func (funding *Funding) GetSurveyorID(date string) string {
 	return fmt.Sprintf("%s_%s", date, funding.Promotion)
 }
 
-// Suggestion holds information from votes freezing
-type Suggestion struct {
-	ID          string
-	Type        string
-	Channel     Channel
-	CreatedAt   time.Time
-	TotalAmount decimal.Decimal
-	OrderID     string
-	Funding     []Funding
+// GetBallotIDs gets the ids that the votes will be stored under
+func (suggestion *Suggestion) GetBallotIDs(date string) []string {
+	ids := []string{}
+	for _, funding := range suggestion.Funding {
+		ids = append(ids, funding.GenerateID(suggestion.Channel, date))
+	}
+	return ids
 }
 
 // ToBallot converts a funding object to a ballot
@@ -45,7 +55,7 @@ func (funding *Funding) ToBallot(
 	return Ballot{
 		ID:         funding.GenerateID(suggestion.Channel, date),
 		Cohort:     funding.Cohort,
-		Tally:      funding.Amount.Div(voteValue),
+		Tally:      funding.Amount.Div(VoteValue),
 		Excluded:   false,
 		Channel:    suggestion.Channel.Normalize(),
 		SurveyorID: surveyorID,
@@ -60,7 +70,7 @@ func (funding *Funding) ToSurveyor(
 	// minimum values to be inserted into db
 	return Surveyor{
 		ID:      funding.GetSurveyorID(date),
-		Price:   voteValue,
+		Price:   VoteValue,
 		Virtual: true,
 	}
 }
@@ -86,12 +96,20 @@ func (funding *Funding) GenerateID(channel Channel, date string) string {
 
 // CollectBallots collects ballots and surveyors from suggestion
 func (suggestion *Suggestion) CollectBallots(
-	surveyorFrozen, surveyorSeen map[string]bool,
 	date string,
+	filters ...map[string]bool,
 ) ([]Surveyor, []Ballot) {
 	surveyors := []Surveyor{}
 	ballots := []Ballot{}
 	s := *suggestion
+	surveyorFrozen := map[string]bool{}
+	surveyorSeen := map[string]bool{}
+	if len(filters) > 0 {
+		surveyorFrozen = filters[0]
+		if len(filters) > 1 {
+			surveyorSeen = filters[1]
+		}
+	}
 	for _, funding := range suggestion.Funding {
 		surveyor := funding.ToSurveyor(s, date)
 		if !surveyorFrozen[surveyor.ID] && !surveyorSeen[surveyor.ID] {
@@ -108,10 +126,14 @@ func (suggestion *Suggestion) CollectBallots(
 
 // CollectSurveyors collects surveyors from the suggestion
 func (suggestion *Suggestion) CollectSurveyors(
-	surveyorSeen map[string]bool,
 	date string,
+	filters ...map[string]bool,
 ) []Surveyor {
 	surveyors := []Surveyor{}
+	surveyorSeen := map[string]bool{}
+	if len(filters) > 0 {
+		surveyorSeen = filters[0]
+	}
 	for _, funding := range suggestion.Funding {
 		surveyor := funding.ToSurveyor(*suggestion, date)
 		if surveyorSeen[surveyor.ID] {

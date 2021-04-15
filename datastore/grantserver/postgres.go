@@ -280,7 +280,7 @@ func (pg *Postgres) Commit(ctx context.Context) error {
 	if !ok || !rollback {
 		return nil // not the right context value or not the right tx level
 	}
-	tx, ok := ctx.Value(appctx.TxRollbackCTXKey).(*sqlx.Tx)
+	tx, ok := ctx.Value(appctx.TxCTXKey).(*sqlx.Tx)
 	if !ok {
 		return errors.New("unable to find tx")
 	}

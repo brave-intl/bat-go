@@ -36,20 +36,15 @@ type keys struct {
 	Suggestion   string
 }
 
-// KafkaMessageEncodable encodes messages
-type KafkaMessageEncodable interface {
-	ToNative() map[string]interface{}
-}
-
 // TopicBundle holds all information needed for a topic
 type TopicBundle interface {
 	Topic() string
 	Key() string
-	ToBinary(KafkaMessageEncodable) ([]byte, error)
+	ToBinary(interface{}) ([]byte, error)
 	Codecs() map[string]*goavro.Codec
 	SchemaList() []string
 	ManyToBinary(
-		encodables ...KafkaMessageEncodable,
+		encodables ...interface{},
 	) (*[]kafka.Message, error)
 }
 
@@ -184,13 +179,15 @@ func (h *Handler) Topic() string {
 }
 
 // ToBinary returns binary value of the encodable message
-func (h *Handler) ToBinary(encodable KafkaMessageEncodable) ([]byte, error) {
-	return h.codecs[h.SchemaList()[0]].BinaryFromNative(nil, encodable.ToNative())
+func (h *Handler) ToBinary(encodable interface{}) ([]byte, error) {
+	encoded := ToNative(encodable)
+	codec := h.codecs[h.SchemaList()[0]]
+	return codec.BinaryFromNative(nil, encoded)
 }
 
 // ManyToBinary converts a series of kafka encodable messages to kafka.Messages
 func (h *Handler) ManyToBinary(
-	encodables ...KafkaMessageEncodable,
+	encodables ...interface{},
 ) (*[]kafka.Message, error) {
 	messages := []kafka.Message{}
 	for _, encodable := range encodables {

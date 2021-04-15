@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
@@ -71,19 +72,9 @@ func (referral *Referral) ToTxs() []Transaction {
 	}}
 }
 
-// ToNative - convert to `native` map
-func (referral *Referral) ToNative() map[string]interface{} {
-	return map[string]interface{}{
-		"transactionId":      referral.TransactionID,
-		"channelId":          referral.Channel.String(),
-		"ownerId":            referral.Owner,
-		"finalizedTimestamp": referral.FinalizedTimestamp.Format(time.RFC3339),
-		"referralCode":       referral.ReferralCode,
-		"downloadId":         referral.DownloadID,
-		"downloadTimestamp":  referral.DownloadTimestamp.Format(time.RFC3339),
-		"countryGroupId":     referral.CountryGroupID,
-		"platform":           referral.Platform,
-	}
+// ToTxIDs create transaction id from a referral
+func (referral *Referral) ToTxIDs() []string {
+	return []string{referral.GenerateID()}
 }
 
 // Ignore allows us to savely ignore the transaction if necessary
@@ -117,4 +108,53 @@ func (referral *Referral) Valid() error {
 		}
 	}
 	return nil
+}
+
+// ReferralBackfill backfills a single referral document with information
+// that we do not want to exist on the kafka message
+func ReferralBackfill(
+	referral *Referral,
+	createdAt time.Time,
+	group countries.Group,
+	rates map[string]decimal.Decimal,
+) *Referral {
+	referral.FinalizedTimestamp = createdAt
+	referral.Amount = group.Amount.Div(rates[group.Currency])
+	referral.AltCurrency = altcurrency.BAT
+	return referral
+}
+
+// ReferralBackfillMany backfills data about settlements from a group and rates
+func ReferralBackfillMany(
+	referrals *[]Referral,
+	groups *[]countries.Group,
+	rates map[string]decimal.Decimal,
+) (*[]Referral, error) {
+	set := []Referral{}
+	groupByID := countries.GroupByID(*groups...)
+	for _, referral := range *referrals {
+		group := groupByID[referral.CountryGroupID]
+		if group.Amount.Equal(decimal.Zero) {
+			return nil, fmt.Errorf("the country code %s was not found", referral.CountryGroupID)
+		}
+		set = append(set, *ReferralBackfill(&referral, referral.FinalizedTimestamp, group, rates))
+	}
+	return &set, nil
+}
+
+// ReferralBackfillFromTransactions backfills data about settlements from pre existing transactions
+func ReferralBackfillFromTransactions(
+	referrals []Referral,
+	filled []Transaction,
+) []Referral {
+	set := []Referral{}
+	filledIDMap := map[string]Transaction{}
+	for _, tx := range filled {
+		filledIDMap[tx.ID] = tx
+	}
+	for _, referral := range referrals {
+		referral.FinalizedTimestamp = filledIDMap[referral.GenerateID()].CreatedAt
+		set = append(set, referral)
+	}
+	return set
 }

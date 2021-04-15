@@ -48,6 +48,11 @@ func (contribution *Contribution) GetExcluded() bool {
 	return false
 }
 
+// GetBallotIDs gets the ids to be used in the votes row
+func (contribution *Contribution) GetBallotIDs(date string) []string {
+	return []string{contribution.GenerateID(date)}
+}
+
 // ToBallot creates a ballot from the contribution
 func (contribution *Contribution) ToBallot(date string) Ballot {
 	return Ballot{
@@ -71,11 +76,19 @@ func (contribution *Contribution) GenerateID(date string) string {
 // CollectBallots collects surveyors and ballot types
 // filters can be passed to exclude the surveyor or both
 func (contribution *Contribution) CollectBallots(
-	surveyorFrozen, surveyorSeen map[string]bool,
 	date string,
+	filters ...map[string]bool,
 ) ([]Surveyor, []Ballot) {
 	surveyors := []Surveyor{}
 	ballots := []Ballot{}
+	surveyorFrozen := map[string]bool{}
+	surveyorSeen := map[string]bool{}
+	if len(filters) > 0 {
+		surveyorFrozen = filters[0]
+		if len(filters) > 1 {
+			surveyorSeen = filters[1]
+		}
+	}
 	surveyor := contribution.ToSurveyor(date)
 	if !surveyorFrozen[surveyor.ID] && !surveyorSeen[surveyor.ID] {
 		surveyors = []Surveyor{surveyor}
@@ -89,10 +102,14 @@ func (contribution *Contribution) CollectBallots(
 
 // CollectSurveyors collects the surveyors from the contribution
 func (contribution *Contribution) CollectSurveyors(
-	surveyorSeen map[string]bool,
 	date string,
+	filters ...map[string]bool,
 ) []Surveyor {
 	surveyor := contribution.ToSurveyor(date)
+	surveyorSeen := map[string]bool{}
+	if len(filters) > 0 {
+		surveyorSeen = filters[0]
+	}
 	if surveyorSeen[surveyor.ID] {
 		return []Surveyor{}
 	}

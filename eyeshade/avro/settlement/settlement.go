@@ -1,8 +1,6 @@
 package settlement
 
 import (
-	"time"
-
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/linkedin/goavro"
@@ -96,20 +94,17 @@ func DecodeBatch(
 	codecs map[string]*goavro.Codec,
 	msgs []kafka.Message,
 ) (*[]models.ConvertableTransaction, error) {
-	txs := []models.ConvertableTransaction{}
+	settlements := []models.Settlement{}
 	for _, msg := range msgs {
 		var settlement models.Settlement
 		if err := avro.TryDecode(codecs, attemptDecodeList, msg, &settlement); err != nil {
 			return nil, err
 		}
-		if settlement.ExecutedAt == "" {
-			// use the time that the message was placed on the queue if none inside of msg
-			settlement.ExecutedAt = msg.Time.Format(time.RFC3339)
-		}
-		if settlement.WalletProvider == "" {
-			settlement.WalletProvider = "uphold"
-		}
-		txs = append(txs, models.ConvertableTransaction(&settlement))
+		settlements = append(
+			settlements,
+			models.SettlementBackfill(settlement, msg.Time),
+		)
 	}
+	txs := models.SettlementsToConvertableTransactions(settlements...)
 	return &txs, nil
 }

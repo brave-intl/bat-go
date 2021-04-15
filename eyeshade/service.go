@@ -2,6 +2,7 @@ package eyeshade
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients/common"
@@ -15,10 +16,11 @@ import (
 // Service holds info that the eyeshade router needs to operate
 type Service struct {
 	ctx         *context.Context
+	errChannel  *chan error
 	logger      *zerolog.Logger
 	datastore   Datastore
 	roDatastore Datastore
-	Clients     *common.Clients
+	clients     *common.Clients
 	router      *chi.Mux
 	consumers   map[string]BatchMessageConsumer
 	producers   map[string]BatchMessageProducer
@@ -63,6 +65,18 @@ func WithConnections(db Datastore, rodb Datastore) func(service *Service) error 
 	}
 }
 
+// Clients returns the clients needed for this service
+// if not already setup, WithNewClients is run on the service
+func (service *Service) Clients() *common.Clients {
+	if service.clients == nil {
+		err := WithNewClients(service)
+		if err != nil {
+			panic(fmt.Errorf("unable to setup clients, try setting up before using %v", err))
+		}
+	}
+	return service.clients
+}
+
 // WithNewDBs sets up datastores for the service
 func WithNewDBs(service *Service) error {
 	eyeshadeDB, eyeshadeRODB, err := NewConnections()
@@ -82,11 +96,11 @@ func WithNewContext(service *Service) error {
 
 // WithNewClients sets up a service object with the needed clients
 func WithNewClients(service *Service) error {
-	clients, err := common.New(common.Config{
-		Ratios: true,
-	})
+	clients, err := common.New(
+		common.WithRatios,
+	)
 	if err == nil {
-		service.Clients = clients
+		service.clients = clients
 	}
 	return err
 }
@@ -96,10 +110,14 @@ func (service *Service) Consume() chan error {
 	// initialize a new reader with the brokers and topic
 	// the groupID identifies the consumer and prevents
 	// it from receiving duplicate messages
+	if service.errChannel != nil {
+		return *service.errChannel
+	}
 	errCh := make(chan error)
 	for _, consumer := range service.consumers {
 		go consumer.Consume(errCh)
 	}
+	service.errChannel = &errCh
 	return errCh
 }
 

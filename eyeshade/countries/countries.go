@@ -139,7 +139,31 @@ func (rg ReferralGroup) MarshalJSON() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// SetKeys sets the keys property
+// SetKeys sets the keys property to allow for a subset of the group
+// to be serialized during a json marshal
 func (rg ReferralGroup) SetKeys(keys []string) {
 	rg.keys = keys
+}
+
+// GroupByID creates a mapping of groups accessable by their id
+func GroupByID(groups ...Group) map[string]Group {
+	modifiers := map[string]Group{}
+	for _, group := range groups {
+		modifiers[group.ID.String()] = group
+	}
+	return modifiers
+}
+
+// CollectCurrencies collects the currencies from the
+func CollectCurrencies(groups ...Group) []string {
+	currencies := []string{}
+	hash := map[string]bool{}
+	for _, group := range groups {
+		if hash[group.Currency] {
+			continue
+		}
+		hash[group.Currency] = true
+		currencies = append(currencies, group.Currency)
+	}
+	return currencies
 }

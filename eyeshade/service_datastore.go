@@ -10,8 +10,8 @@ import (
 
 // Datastore returns a read only datastore if available
 // otherwise a normal datastore
-func (service *Service) Datastore(ro bool) Datastore {
-	if ro && service.roDatastore != nil {
+func (service *Service) Datastore(ro ...bool) Datastore {
+	if len(ro) > 0 && ro[0] && service.roDatastore != nil {
 		return service.roDatastore
 	}
 	return service.datastore
@@ -133,7 +133,7 @@ func (service *Service) InsertConvertableTransactions(
 	ctx context.Context,
 	txs []models.ConvertableTransaction,
 ) error {
-	return service.Datastore(false).
+	return service.Datastore().
 		InsertConvertableTransactions(ctx, txs)
 }
 

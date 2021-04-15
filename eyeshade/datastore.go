@@ -54,10 +54,6 @@ type Datastore interface {
 		ctx context.Context,
 		constraints ...map[string]string,
 	) (*[]models.Transaction, error)
-	GetTransactionsByDocumentID(
-		ctx context.Context,
-		documentIDs ...string,
-	) (*[]models.Transaction, error)
 	GetTransactionsByAccount(
 		ctx context.Context,
 		accountID string,
@@ -88,6 +84,11 @@ type Datastore interface {
 	InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error
 	InsertBallots(ctx context.Context, ballots *[]models.Ballot) error
 	SeedDB(context.Context) error
+	GetBallotsByID(context.Context, ...string) (*[]models.Ballot, error)
+	GetTransactionsByID(
+		ctx context.Context,
+		documentIDs ...string,
+	) (*[]models.Transaction, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -267,7 +268,7 @@ func (pg *Postgres) GetBalances(
 		account_transactions.account_id as account_id,
 		COALESCE(SUM(account_transactions.amount), 0.0) as balance
 	FROM account_transactions
-	WHERE account_id = any($1::text[])
+	WHERE account_id = any($1::TEXT[])
 	GROUP BY (account_transactions.account_id, account_transactions.account_type)`
 	balances := []models.Balance{}
 
@@ -275,7 +276,7 @@ func (pg *Postgres) GetBalances(
 		ctx,
 		&balances,
 		statement,
-		datastoreutils.JoinStringList(accountIDs),
+		pq.Array(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -296,7 +297,7 @@ FROM votes V
 INNER JOIN surveyor_groups S
 ON V.surveyor_id = S.id
 WHERE
-	V.channel = any($1::text[])
+	V.channel = any($1::TEXT[])
 	AND NOT V.transacted
 	AND NOT V.excluded
 GROUP BY channel`
@@ -306,7 +307,7 @@ GROUP BY channel`
 		ctx,
 		&votes,
 		statement,
-		datastoreutils.JoinStringList(accountIDs),
+		pq.Array(accountIDs),
 	)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
@@ -328,15 +329,16 @@ FROM transactions`,
 	return &transactions, pg.RawDB().SelectContext(ctx, &transactions, statement)
 }
 
-// GetTransactionsByDocumentID retrieves transactions by a document id
-func (pg *Postgres) GetTransactionsByDocumentID(
+// GetTransactionsByID retrieves transactions by a document id
+func (pg *Postgres) GetTransactionsByID(
 	ctx context.Context,
 	ids ...string,
 ) (*[]models.Transaction, error) {
 	statement := fmt.Sprintf(`
 SELECT %s
 FROM transactions
-WHERE document_id = any($1::text[])`,
+WHERE id = any($1::UUID[])
+ORDER BY id ASC`,
 		strings.Join(models.TransactionColumns, ", "),
 	)
 	transactions := []models.Transaction{}
@@ -352,8 +354,8 @@ func (pg *Postgres) GetTransactionsByAccount(
 	typeExtension := ""
 	args := []interface{}{accountID}
 	if len(txTypes) > 0 {
-		args = append(args, datastoreutils.JoinStringList(txTypes))
-		typeExtension = "AND transaction_type = ANY($2::text[])"
+		args = append(args, pq.Array(txTypes))
+		typeExtension = "AND transaction_type = ANY($2::TEXT[])"
 	}
 	statement := fmt.Sprintf(`
 SELECT %s
@@ -462,7 +464,7 @@ SELECT
 	sum(amount) as amount
 FROM votes
 WHERE
-		cohort = $1::text
+		cohort = $1::TEXT
 AND created_at >= to_timestamp($2)
 AND created_at < to_timestamp($3)`
 	var stats models.GrantStat
@@ -520,6 +522,19 @@ AND countries.group_id = geo_referral_groups.id`
 	return &groups, nil
 }
 
+// GetBallotsByID gets vote rows by id
+func (pg *Postgres) GetBallotsByID(ctx context.Context, ids ...string) (*[]models.Ballot, error) {
+	statement := fmt.Sprintf(`
+SELECT %s
+FROM votes
+WHERE id = any($1::UUID[])
+ORDER BY (id) asc`,
+		strings.Join(models.BallotColumns, ", "),
+	)
+	ballots := []models.Ballot{}
+	return &ballots, pg.RawDB().SelectContext(ctx, &ballots, statement, pq.Array(ids))
+}
+
 // InsertVotes inserts votes into the votes table after inserting surveyors
 func (pg *Postgres) InsertVotes(ctx context.Context, votes []models.Vote) error {
 	ctx, _, err := pg.ResolveConnection(ctx)
@@ -534,6 +549,7 @@ func (pg *Postgres) InsertVotes(ctx context.Context, votes []models.Vote) error 
 	if err := pg.InsertSurveyors(ctx, surveyors); err != nil {
 		return err
 	}
+	ballots = models.CondenseBallots(ballots)
 	if err := pg.InsertBallots(ctx, ballots); err != nil {
 		return err
 	}
@@ -541,7 +557,10 @@ func (pg *Postgres) InsertVotes(ctx context.Context, votes []models.Vote) error 
 }
 
 // InsertSurveyors inserts surveyors to the surveyors_groups table
-func (pg *Postgres) InsertSurveyors(ctx context.Context, surveyors *[]models.Surveyor) error {
+func (pg *Postgres) InsertSurveyors(
+	ctx context.Context,
+	surveyors *[]models.Surveyor,
+) error {
 	ctx, tx, err := pg.ResolveConnection(ctx)
 	if err != nil {
 		return err
@@ -549,9 +568,9 @@ func (pg *Postgres) InsertSurveyors(ctx context.Context, surveyors *[]models.Sur
 	defer pg.Rollback(ctx)
 	columns := []string{"id", "price", "virtual"}
 	statement := fmt.Sprintf(`
-insert into surveyor_groups ( %s )
-values ( %s )
-on conflict ( id ) do nothing`,
+INSERT INTO surveyor_groups ( %s )
+VALUES ( %s )
+ON CONFLICT ( id ) DO NOTHING`,
 		strings.Join(columns, ", "),
 		strings.Join(datastoreutils.ColumnsToParamNames(columns), ", "),
 	)
@@ -573,11 +592,12 @@ func (pg *Postgres) InsertBallots(ctx context.Context, ballots *[]models.Ballot)
 		return err
 	}
 	defer pg.Rollback(ctx)
-	statement := fmt.Sprintf(`insert into votes ( %s )
-values ( %s )
-on conflict ( id ) do update
-set updated_at = current_timestamp,
-tally = votes.tally + :tally`,
+	statement := fmt.Sprintf(`INSERT INTO votes ( %s )
+VALUES ( %s )
+ON CONFLICT ( id ) DO UPDATE
+SET updated_at = CURRENT_TIMESTAMP,
+tally = votes.tally + EXCLUDED.tally
+WHERE votes.id = EXCLUDED.id`,
 		strings.Join(models.BallotColumns, ", "),
 		strings.Join(datastoreutils.ColumnsToParamNames(models.BallotColumns), ", "),
 	)
@@ -587,7 +607,7 @@ tally = votes.tally + :tally`,
 		*ballots,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("multi votes insert failed %v", err)
 	}
 	return pg.Commit(ctx)
 }
@@ -600,10 +620,10 @@ func (pg *Postgres) GetSurveyorsByID(ctx context.Context, ids []string) (*[]mode
 		return nil, err
 	}
 	defer pg.Rollback(ctx)
-	statement := fmt.Sprintf(`select %s
-from surveyor_groups
-where id = any($1::text[])`, strings.Join(models.SurveyorColumns, ", "))
-	err = tx.SelectContext(ctx, &surveyors, statement, ids)
+	statement := fmt.Sprintf(`SELECT %s
+FROM surveyor_groups
+WHERE id = ANY($1::TEXT[])`, strings.Join(models.SurveyorColumns, ", "))
+	err = tx.SelectContext(ctx, &surveyors, statement, pq.Array(ids))
 	if err != nil {
 		return nil, err
 	}
@@ -614,38 +634,14 @@ func (pg *Postgres) convertToBallots(
 	ctx context.Context,
 	votes []models.Vote,
 ) (*[]models.Surveyor, *[]models.Ballot, error) {
-	surveyors := []models.Surveyor{}
-	surveyorIDsCollected := map[string]bool{}
-	surveyorIDs := []string{}
 	date := time.Now().Format("2021-01-01")
-	for _, vote := range votes {
-		voteSurveyors := vote.CollectSurveyors(surveyorIDsCollected, date)
-		for _, voteSurveyor := range voteSurveyors {
-			surveyorIDsCollected[voteSurveyor.ID] = true
-			surveyorIDs = append(surveyorIDs, voteSurveyor.ID)
-		}
-		surveyors = append(surveyors, voteSurveyors...)
-	}
+	_, surveyorIDs := models.CollectSurveyorIDs(date, votes)
 	insertedSurveyors, err := pg.GetSurveyorsByID(ctx, surveyorIDs)
 	if err != nil {
 		return nil, nil, err
 	}
-	frozenSurveyors := map[string]bool{}
-	for _, insertedSurveyor := range *insertedSurveyors {
-		// use frozen surveyors as a filter to not insert votes
-		frozenSurveyors[insertedSurveyor.ID] = insertedSurveyor.Frozen
-	}
-	surveyorIDsCollected = map[string]bool{}
-	ballots := []models.Ballot{}
-	surveyors = []models.Surveyor{}
-	for _, vote := range votes {
-		voteSurveyors, voteBallots := vote.CollectBallots(frozenSurveyors, surveyorIDsCollected, date)
-		surveyors = append(surveyors, voteSurveyors...)
-		ballots = append(ballots, voteBallots...)
-		for _, voteSurveyor := range voteSurveyors {
-			surveyorIDsCollected[voteSurveyor.ID] = true
-		}
-	}
+	frozenSurveyors := models.SurveyorIDsToFrozen(*insertedSurveyors)
+	surveyors, ballots := models.CollectBallots(date, votes, frozenSurveyors)
 	return &surveyors, &ballots, nil
 }
 

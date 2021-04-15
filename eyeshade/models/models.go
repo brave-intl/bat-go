@@ -49,13 +49,6 @@ var (
 	}
 )
 
-// ConvertableTransaction allows a struct to be converted into a transaction
-type ConvertableTransaction interface {
-	ToTxs() []Transaction
-	Valid() error
-	Ignore() bool
-}
-
 // AccountEarnings holds results from querying account earnings
 type AccountEarnings struct {
 	Channel   Channel         `json:"channel" db:"channel"`

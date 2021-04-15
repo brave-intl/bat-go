@@ -17,10 +17,9 @@ func (service *Service) ProduceSettlements(
 	ctx context.Context,
 	messages []models.Settlement,
 ) error {
-	encodable := []avro.KafkaMessageEncodable{}
+	encodable := []interface{}{}
 	for _, msg := range messages {
-		msg := msg
-		encodable = append(encodable, &msg)
+		encodable = append(encodable, msg)
 	}
 	return service.Producer(avro.TopicKeys.Settlement).
 		Produce(
@@ -35,15 +34,31 @@ func (service *Service) ProduceReferrals(
 	ctx context.Context,
 	messages []models.Referral,
 ) error {
-	encodable := []avro.KafkaMessageEncodable{}
+	encodable := []interface{}{}
 	for _, msg := range messages {
-		msg := msg
-		encodable = append(encodable, &msg)
+		encodable = append(encodable, msg)
 	}
 	return service.Producer(avro.TopicKeys.Referral).
 		Produce(
 			ctx,
 			KeyToEncoder[avro.TopicKeys.Referral],
+			encodable...,
+		)
+}
+
+// ProduceSuggestions produces settlments onto the topic
+func (service *Service) ProduceSuggestions(
+	ctx context.Context,
+	messages []models.Suggestion,
+) error {
+	encodable := []interface{}{}
+	for _, msg := range messages {
+		encodable = append(encodable, msg)
+	}
+	return service.Producer(avro.TopicKeys.Suggestion).
+		Produce(
+			ctx,
+			KeyToEncoder[avro.TopicKeys.Suggestion],
 			encodable...,
 		)
 }

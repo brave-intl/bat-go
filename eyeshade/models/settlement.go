@@ -13,6 +13,23 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	// SettlementKeys holds settlement keys to make using them foolproof
+	SettlementKeys = keys{
+		SettlementFromChannel: "settlement_from_channel",
+		SettlementFees:        "settlement_fees",
+	}
+)
+
+type keys struct {
+	SettlementFromChannel string
+	SettlementFees        string
+}
+
+func (k *keys) AddSuffix(key string) string {
+	return key + "_settlement"
+}
+
 // Settlement holds information from settlements queue
 type Settlement struct {
 	AltCurrency    altcurrency.AltCurrency `json:"altcurrency"`
@@ -41,13 +58,36 @@ func (settlement *Settlement) GenerateID(category string) string {
 	).String()
 }
 
+// ToTxIDs create transaction ids from a settlemen
+func (settlement *Settlement) ToTxIDs() []string {
+	keys := []string{
+		SettlementKeys.AddSuffix(settlement.Type),
+	}
+	if settlement.Type == "contribution" {
+		keys = append(
+			keys,
+			SettlementKeys.SettlementFromChannel,
+			SettlementKeys.SettlementFees,
+		)
+	} else if settlement.Type == "manual" {
+		// be careful when using manual transactions this will fail
+		// TransactionNS does not have the appropriate key
+		keys = append(keys, settlement.Type) // straight pass through
+	}
+	ids := []string{}
+	for _, key := range keys {
+		ids = append(ids, settlement.GenerateID(key))
+	}
+	return ids
+}
+
 // ToContributionTransactions creates a set of contribution transactions for settlements
 func (settlement *Settlement) ToContributionTransactions() []Transaction {
 	createdAt := settlement.GetCreatedAt()
 	month := createdAt.Month().String()[:3]
 	normalizedChannel := settlement.Channel.Normalize()
 	return []Transaction{{
-		ID:              settlement.GenerateID("settlement_from_channel"),
+		ID:              settlement.GenerateID(SettlementKeys.SettlementFromChannel),
 		CreatedAt:       createdAt.Add(time.Second * -2),
 		Description:     fmt.Sprintf("contributions through %s", month),
 		TransactionType: "contribution",
@@ -59,7 +99,7 @@ func (settlement *Settlement) ToContributionTransactions() []Transaction {
 		Amount:          altcurrency.BAT.FromProbi(settlement.Probi.Add(settlement.Fees)),
 		Channel:         &normalizedChannel,
 	}, {
-		ID:              settlement.GenerateID("settlement_fees"),
+		ID:              settlement.GenerateID(SettlementKeys.SettlementFees),
 		CreatedAt:       createdAt.Add(time.Second * -1),
 		Description:     "settlement fees",
 		TransactionType: "fees",
@@ -108,7 +148,7 @@ func (settlement *Settlement) ToManualTransaction() Transaction {
 func (settlement *Settlement) ToSettlementTransaction() Transaction {
 	normalizedChannel := settlement.Channel.Normalize()
 	settlementType := settlement.Type
-	transactionType := settlementType + "_settlement"
+	transactionType := SettlementKeys.AddSuffix(settlementType)
 	documentID := settlement.DocumentID
 	if settlement.Type != "manual" {
 		documentID = settlement.Hash
@@ -194,28 +234,6 @@ func (settlement *Settlement) Valid() error {
 	return nil
 }
 
-// ToNative - convert to `native` map
-func (settlement *Settlement) ToNative() map[string]interface{} {
-	return map[string]interface{}{
-		"altcurrency":    settlement.AltCurrency.String(),
-		"probi":          settlement.Probi.String(),
-		"fees":           settlement.Fees.String(),
-		"fee":            settlement.Fee.String(),
-		"commission":     settlement.Commission.String(),
-		"amount":         settlement.Amount.String(),
-		"currency":       settlement.Currency,
-		"owner":          settlement.Owner,
-		"publisher":      settlement.Channel.String(),
-		"hash":           settlement.Hash,
-		"type":           settlement.Type,
-		"settlementId":   settlement.SettlementID,
-		"documentId":     settlement.DocumentID,
-		"address":        settlement.Address,
-		"executedAt":     settlement.ExecutedAt,
-		"walletProvider": settlement.WalletProvider,
-	}
-}
-
 // SettlementStat holds settlement stats
 type SettlementStat struct {
 	Amount inputs.Decimal `json:"amount" db:"amount"`
@@ -296,4 +314,36 @@ func parseTimes(
 		untilTime.SetTime(untilSubMonth)
 	}
 	return startTime, untilTime, nil
+}
+
+// SettlementBackfill backfills data on the settlement object
+func SettlementBackfill(settlement Settlement, t ...time.Time) Settlement {
+	if settlement.ExecutedAt == "" {
+		if len(t) > 0 {
+			// use the time that the message was placed on the queue if none inside of msg
+			settlement.ExecutedAt = t[0].Format(time.RFC3339)
+		}
+	}
+	if settlement.WalletProvider == "" {
+		settlement.WalletProvider = "uphold"
+	}
+	return settlement
+}
+
+// SettlementBackfillFromTransactions backfills data about settlements from pre existing transactions
+func SettlementBackfillFromTransactions(
+	settlements []Settlement,
+	filled []Transaction,
+) []Settlement {
+	set := []Settlement{}
+	filledIDMap := map[string]Transaction{}
+	for _, tx := range filled {
+		filledIDMap[tx.ID] = tx
+	}
+	for _, settlement := range settlements {
+		transactionType := SettlementKeys.AddSuffix(settlement.Type)
+		filledTx := filledIDMap[settlement.GenerateID(transactionType)]
+		set = append(set, SettlementBackfill(settlement, filledTx.CreatedAt))
+	}
+	return set
 }

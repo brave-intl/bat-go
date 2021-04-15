@@ -1,8 +1,6 @@
 package eyeshade
 
 import (
-	"errors"
-
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	avrocontribution "github.com/brave-intl/bat-go/eyeshade/avro/contribution"
 	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
@@ -12,7 +10,6 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/segmentio/kafka-go"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -43,7 +40,7 @@ func HandleVotes(
 	if err != nil {
 		return err
 	}
-	return con.service.Datastore(false).
+	return con.service.Datastore().
 		InsertVotes(con.Context(), *votes)
 }
 
@@ -77,7 +74,7 @@ func HandlerInsertReferrals(
 	if err != nil {
 		return err
 	}
-	referrals, err = ModifyReferrals(con, *referrals)
+	referrals, err = con.service.ModifyReferrals(referrals)
 	if err != nil {
 		return err
 	}
@@ -92,42 +89,23 @@ func HandlerInsertReferrals(
 }
 
 // ModifyReferrals holds the information needed to modify referral messages correctly
-func ModifyReferrals(
-	con *MessageHandler,
-	referrals []models.Referral,
+func (service *Service) ModifyReferrals(
+	referrals *[]models.Referral,
 ) (*[]models.Referral, error) {
-	groups, err := con.service.Datastore(true).
-		GetActiveCountryGroups(con.Context())
+	groups, err := service.Datastore(true).
+		GetActiveCountryGroups(service.Context())
 	if err != nil {
 		return nil, err
 	}
-	modifiers := map[string]countries.Group{}
-	currencies := []string{}
-	for _, group := range *groups {
-		currencies = append(currencies, group.Currency)
-	}
-	rates, err := con.service.Clients.Ratios.FetchRate(
-		con.Context(),
+	currencies := countries.CollectCurrencies(*groups...)
+	rates, err := service.Clients().Ratios().FetchRate(
+		service.Context(),
 		altcurrency.BAT.String(),
 		currencies...,
 	)
 	if err != nil {
 		return nil, err
 	}
-	for _, group := range *groups {
-		modifiers[group.ID.String()] = group
-	}
 
-	modified := []models.Referral{}
-	for i := range referrals {
-		referral := referrals[i]
-		group := modifiers[referral.CountryGroupID]
-		if group.Amount.Equal(decimal.Zero) {
-			return nil, errors.New("the country code was not found in the modifiers")
-		}
-		referral.Amount = group.Amount.Div(rates.Payload[group.Currency])
-		referral.AltCurrency = altcurrency.BAT
-		modified = append(modified, referral)
-	}
-	return &modified, nil
+	return models.ReferralBackfillMany(referrals, groups, rates.Payload)
 }

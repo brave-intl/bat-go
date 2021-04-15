@@ -249,26 +249,6 @@ func (mr *MockDatastoreMockRecorder) GetTransactions(ctx interface{}, constraint
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactions", reflect.TypeOf((*MockDatastore)(nil).GetTransactions), varargs...)
 }
 
-// GetTransactionsByDocumentID mocks base method
-func (m *MockDatastore) GetTransactionsByDocumentID(ctx context.Context, documentIDs ...string) (*[]models.Transaction, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx}
-	for _, a := range documentIDs {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "GetTransactionsByDocumentID", varargs...)
-	ret0, _ := ret[0].(*[]models.Transaction)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTransactionsByDocumentID indicates an expected call of GetTransactionsByDocumentID
-func (mr *MockDatastoreMockRecorder) GetTransactionsByDocumentID(ctx interface{}, documentIDs ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx}, documentIDs...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactionsByDocumentID", reflect.TypeOf((*MockDatastore)(nil).GetTransactionsByDocumentID), varargs...)
-}
-
 // GetTransactionsByAccount mocks base method
 func (m *MockDatastore) GetTransactionsByAccount(ctx context.Context, accountID string, txTypes []string) (*[]models.Transaction, error) {
 	m.ctrl.T.Helper()
@@ -426,4 +406,44 @@ func (m *MockDatastore) SeedDB(arg0 context.Context) error {
 func (mr *MockDatastoreMockRecorder) SeedDB(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SeedDB", reflect.TypeOf((*MockDatastore)(nil).SeedDB), arg0)
+}
+
+// GetBallotsByID mocks base method
+func (m *MockDatastore) GetBallotsByID(arg0 context.Context, arg1 ...string) (*[]models.Ballot, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetBallotsByID", varargs...)
+	ret0, _ := ret[0].(*[]models.Ballot)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBallotsByID indicates an expected call of GetBallotsByID
+func (mr *MockDatastoreMockRecorder) GetBallotsByID(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBallotsByID", reflect.TypeOf((*MockDatastore)(nil).GetBallotsByID), varargs...)
+}
+
+// GetTransactionsByID mocks base method
+func (m *MockDatastore) GetTransactionsByID(ctx context.Context, documentIDs ...string) (*[]models.Transaction, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx}
+	for _, a := range documentIDs {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTransactionsByID", varargs...)
+	ret0, _ := ret[0].(*[]models.Transaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransactionsByID indicates an expected call of GetTransactionsByID
+func (mr *MockDatastoreMockRecorder) GetTransactionsByID(ctx interface{}, documentIDs ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, documentIDs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactionsByID", reflect.TypeOf((*MockDatastore)(nil).GetTransactionsByID), varargs...)
 }

@@ -37,6 +37,7 @@ type BatchMessagesHandler interface {
 // BatchMessageConsumer holds methods for batch method consumption
 type BatchMessageConsumer interface {
 	Consume(erred chan error)
+	IsConsuming() bool
 	Read() ([]kafka.Message, bool, error)
 	Handler([]kafka.Message) error
 	Commit([]kafka.Message) error
@@ -47,18 +48,24 @@ type BatchMessageProducer interface {
 	Produce(
 		context.Context,
 		avro.TopicBundle,
-		...avro.KafkaMessageEncodable,
+		...interface{},
 	) error
 }
 
 // MessageHandler holds information about a single handler
 type MessageHandler struct {
-	key     string
-	bundle  avro.TopicBundle
-	service *Service
-	reader  *kafka.Reader
-	writer  *kafka.Writer
-	dialer  *kafka.Dialer
+	key         string
+	isConsuming bool
+	bundle      avro.TopicBundle
+	service     *Service
+	reader      *kafka.Reader
+	writer      *kafka.Writer
+	dialer      *kafka.Dialer
+}
+
+// IsConsuming checks if the message handler is consuming
+func (con *MessageHandler) IsConsuming() bool {
+	return con.isConsuming
 }
 
 // Topic returns the topic of the message handler
@@ -113,7 +120,11 @@ func (con *MessageHandler) Consume(
 	erred chan error,
 ) {
 	var err error
+	con.isConsuming = true
 	for { // loop to continue consuming
+		if !con.isConsuming {
+			break
+		}
 		msgs, _, e := con.Read()
 		if e != nil {
 			err = errorutils.Wrap(e, "during read")
@@ -133,17 +144,20 @@ func (con *MessageHandler) Consume(
 			break
 		}
 	}
-	erred <- errorutils.Wrap(
-		err,
-		fmt.Sprintf("error in topic - %s", con.reader.Config().Topic),
-	)
+	con.isConsuming = false
+	if err != nil {
+		erred <- errorutils.Wrap(
+			err,
+			fmt.Sprintf("error in topic - %s", con.reader.Config().Topic),
+		)
+	}
 }
 
 // Produce produces messages
 func (con *MessageHandler) Produce(
 	ctx context.Context,
 	encoder avro.TopicBundle,
-	encodables ...avro.KafkaMessageEncodable,
+	encodables ...interface{},
 ) error {
 	if len(encodables) == 0 {
 		return nil
