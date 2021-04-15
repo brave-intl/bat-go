@@ -148,6 +148,14 @@ func (suite *ServiceKafkaSuite) TestReferrals() {
 			suite.Require().NoError(err)
 		case actual := <-ch:
 			expect := referral.ToTxs()
+			actualIDMap := map[string]models.Transaction{}
+			for _, tx := range actual {
+				actualIDMap[tx.ID] = tx
+			}
+			for i := range expect {
+				expect[i].CreatedAt = actualIDMap[expect[i].ID].CreatedAt
+				expect[i].Amount = actualIDMap[expect[i].ID].Amount
+			}
 			suite.Require().JSONEq(
 				MustMarshal(suite.Require(), expect),
 				MustMarshal(suite.Require(), actual),
@@ -162,7 +170,7 @@ func CreateSettlements(count int, txType string) []models.Settlement {
 		bat := decimal.NewFromFloat(5)
 		fees := bat.Mul(decimal.NewFromFloat(0.05))
 		batSubFees := bat.Sub(fees)
-		settlement := models.Settlement{
+		settlements = append(settlements, models.Settlement{
 			AltCurrency:  altcurrency.BAT,
 			Probi:        altcurrency.BAT.ToProbi(batSubFees),
 			Fees:         altcurrency.BAT.ToProbi(fees),
@@ -177,8 +185,7 @@ func CreateSettlements(count int, txType string) []models.Settlement {
 			SettlementID: uuid.NewV4().String(),
 			DocumentID:   uuid.NewV4().String(),
 			Address:      uuid.NewV4().String(),
-		}
-		settlements = append(settlements, settlement)
+		})
 	}
 	return settlements
 }
@@ -194,7 +201,7 @@ func CreateReferrals(count int, countryGroupID uuid.UUID) []models.Referral {
 			FinalizedTimestamp: now,
 			ReferralCode:       "ABC123",
 			DownloadID:         uuid.NewV4().String(),
-			DownloadTimestamp:  now.AddDate(0, -30, 0),
+			DownloadTimestamp:  now.AddDate(0, 0, -30),
 			CountryGroupID:     countryGroupID.String(),
 			Platform:           "osx",
 		})

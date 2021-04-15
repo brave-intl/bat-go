@@ -22,7 +22,7 @@ type Referral struct {
 	DownloadTimestamp  time.Time               `json:"downloadTimestamp"`
 	CountryGroupID     string                  `json:"countryGroupId"`
 	Platform           string                  `json:"platform"`
-	Probi              decimal.Decimal         `json:"probi"`
+	Amount             decimal.Decimal         `json:"amount"`
 	AltCurrency        altcurrency.AltCurrency `json:"altcurrency"`
 }
 
@@ -66,7 +66,7 @@ func (referral *Referral) ToTxs() []Transaction {
 		FromAccountType: "uphold",
 		ToAccount:       owner,
 		ToAccountType:   "owner",
-		Amount:          altcurrency.BAT.FromProbi(referral.Probi),
+		Amount:          referral.Amount,
 		Channel:         &channel,
 	}}
 }
@@ -89,7 +89,7 @@ func (referral *Referral) ToNative() map[string]interface{} {
 // Ignore allows us to savely ignore the transaction if necessary
 func (referral *Referral) Ignore() bool {
 	props := referral.Channel.Normalize().Props()
-	return altcurrency.BAT.FromProbi(referral.Probi).GreaterThan(largeBAT) ||
+	return referral.Amount.GreaterThan(largeBAT) ||
 		(props.ProviderName == "youtube" && props.ProviderSuffix == "user")
 }
 
@@ -99,11 +99,8 @@ func (referral *Referral) Valid() error {
 	if !referral.AltCurrency.IsValid() {
 		errs = append(errs, errors.New("altcurrency is not valid"))
 	}
-	if !referral.Probi.GreaterThan(decimal.Zero) {
-		errs = append(errs, errors.New("probi is not greater than zero"))
-	}
-	if !referral.Probi.Equal(referral.Probi.Truncate(0)) {
-		errs = append(errs, errors.New("probi is not an int"))
+	if !referral.Amount.GreaterThan(decimal.Zero) {
+		errs = append(errs, errors.New("amount is not greater than zero"))
 	}
 	if referral.Channel.String() == "" {
 		errs = append(errs, errors.New("channel is not set"))

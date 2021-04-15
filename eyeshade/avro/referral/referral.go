@@ -1,14 +1,10 @@
 package referral
 
 import (
-	"errors"
-
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/linkedin/goavro"
 	"github.com/segmentio/kafka-go"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -48,27 +44,14 @@ func New() *avro.Handler {
 func DecodeBatch(
 	codecs map[string]*goavro.Codec,
 	msgs []kafka.Message,
-	modifiers ...map[string]string,
-) (*[]models.ConvertableTransaction, error) {
-	txs := []models.ConvertableTransaction{}
+) (*[]models.Referral, error) {
+	referrals := []models.Referral{}
 	for _, msg := range msgs {
 		var referral models.Referral
 		if err := avro.TryDecode(codecs, attemptDecodeList, msg, &referral); err != nil {
 			return nil, err
 		}
-		for _, modifier := range modifiers {
-			value := modifier[referral.CountryGroupID]
-			if value == "" {
-				return nil, errors.New("the country code was not found in the modifiers")
-			}
-			probi, err := decimal.NewFromString(value)
-			if err != nil {
-				return nil, err
-			}
-			referral.Probi = altcurrency.BAT.ToProbi(probi)
-			referral.AltCurrency = altcurrency.BAT
-		}
-		txs = append(txs, models.ConvertableTransaction(&referral))
+		referrals = append(referrals, referral)
 	}
-	return &txs, nil
+	return &referrals, nil
 }

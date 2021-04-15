@@ -95,7 +95,6 @@ func New() *avro.Handler {
 func DecodeBatch(
 	codecs map[string]*goavro.Codec,
 	msgs []kafka.Message,
-	_ ...map[string]string,
 ) (*[]models.ConvertableTransaction, error) {
 	txs := []models.ConvertableTransaction{}
 	for _, msg := range msgs {

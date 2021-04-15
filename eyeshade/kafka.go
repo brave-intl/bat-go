@@ -89,16 +89,6 @@ func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
 	return append(msgs, msg), false, err
 }
 
-// Modifiers returns a map of modifications that can occur on a given kafka message
-func (con *MessageHandler) Modifiers() ([]map[string]string, error) {
-	def := make([]map[string]string, 0)
-	modifier := Modifiers[con.bundle.Key()]
-	if modifier == nil {
-		return def, nil
-	}
-	return modifier(con)
-}
-
 // Handler handles the batch of messages
 func (con *MessageHandler) Handler(msgs []kafka.Message) error {
 	handler := Handlers[con.bundle.Key()]

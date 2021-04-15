@@ -61,21 +61,6 @@ func FindGroup(passedGroupID uuid.UUID, groups []Group) Group {
 	return *FindByID(groups, OriginalRateID)
 }
 
-// ComputeValue computes the value of a referral group at a point in time
-func ComputeValue(
-	group Group,
-	rates map[string]decimal.Decimal,
-) ComputedValue {
-	rate := rates[group.Currency]
-	probi := rate.Mul(group.Amount)
-	return ComputedValue{
-		Probi:    probi,
-		Value:    group.Amount,
-		Currency: group.Currency,
-		ID:       group.ID,
-	}
-}
-
 // FindByID finds a referral group by its id
 func FindByID(groups []Group, id uuid.UUID) *Group {
 	for _, group := range groups {
