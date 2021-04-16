@@ -180,7 +180,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 
 		nstmt, _ := tx.PrepareNamed(`
 			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, credential_type)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
 			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])

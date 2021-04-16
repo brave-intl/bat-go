@@ -147,7 +147,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	// If order consists of free trials, we can consider it paid
+	// If order consists entirely of zero cost items ( e.g. trials ), we can consider it paid
 	if totalPrice.IsZero() {
 		status = "paid"
 	} else {

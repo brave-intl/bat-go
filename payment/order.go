@@ -38,7 +38,7 @@ type OrderItem struct {
 	Subtotal       decimal.Decimal      `json:"subtotal" db:"subtotal"`
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
-	CredentialType string               `json:"credential_type" db:"credential_type"`
+	CredentialType string               `json:"credentialType" db:"credential_type"`
 }
 
 // IsValidSKU checks to see if the token provided is one that we've previously created
@@ -70,6 +70,13 @@ func IsValidSKU(sku string) bool {
 			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
 			// Staging - Free Trial
 			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
+			return true
+		}
+	}
+
+	whitelistedSKUs := strings.Split(os.Getenv("SKUS_WHITELIST"), ",")
+	for _, whitelistedSKU := range whitelistedSKUs {
+		if sku == whitelistedSKU {
 			return true
 		}
 	}
