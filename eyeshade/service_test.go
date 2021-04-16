@@ -1,4 +1,4 @@
-// +build integration
+// +build test,integration
 
 package eyeshade
 

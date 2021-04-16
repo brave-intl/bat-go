@@ -14,20 +14,93 @@ import (
 )
 
 var (
+	suffix = "_settlement"
 	// SettlementKeys holds settlement keys to make using them foolproof
 	SettlementKeys = keys{
 		SettlementFromChannel: "settlement_from_channel",
 		SettlementFees:        "settlement_fees",
 	}
+	// TransactionTypes holds different settlement types that eyeshade can handle
+	TransactionTypes = transactionTypes{
+		Contribution: "contribution",
+		Referral:     "referral",
+		Manual:       "manual",
+		Fees:         "fees",
+		UserDeposit:  "user_deposit",
+		Scaleup:      "scaleup",
+		Ad:           "ad",
+	}
+	// AccountTypes holds possible account types
+	AccountTypes = accountTypes{
+		Channel:   "channel",
+		Owner:     "owner",
+		Uphold:    "uphold",
+		Internal:  "internal",
+		PaymentID: "payment_id",
+		Bitcoin:   "bitcoin",
+		Litecoin:  "litecoin",
+		Ethereum:  "ethereum",
+	}
+	// Providers holds possible known providers
+	Providers = providers{
+		Uphold:   "uphold",
+		Gemini:   "gemini",
+		BitFlyer: "bitflyer",
+	}
+	// KnownAccounts holds accounts that are fixed values
+	KnownAccounts = knownAccounts{
+		FeesAccount:       "fees-account",
+		SettlementAddress: SettlementAddress,
+	}
 )
+
+type knownAccounts struct {
+	FeesAccount       string
+	SettlementAddress string
+}
+
+type providers struct {
+	Uphold   string
+	Gemini   string
+	BitFlyer string
+}
+
+type accountTypes struct {
+	Owner     string
+	Channel   string
+	Internal  string
+	Uphold    string
+	PaymentID string
+	Bitcoin   string
+	Litecoin  string
+	Ethereum  string
+}
+
+type transactionTypes struct {
+	Manual       string
+	Contribution string
+	Referral     string
+	Fees         string
+	UserDeposit  string
+	Scaleup      string
+	Ad           string
+}
 
 type keys struct {
 	SettlementFromChannel string
 	SettlementFees        string
 }
 
+// AddSuffix adds the settlement suffix to a string
 func (k *keys) AddSuffix(key string) string {
-	return key + "_settlement"
+	return key + suffix
+}
+
+// IsSettlementTypeSuffixPresent checks if the value has the _settlement suffix
+func IsSettlementTypeSuffixPresent(t string) bool {
+	lenT := len(t)
+	lenS := len(suffix)
+	return lenT >= lenS && suffix == t[lenT-lenS:]
 }
 
 // Settlement holds information from settlements queue
@@ -63,13 +136,13 @@ func (settlement *Settlement) ToTxIDs() []string {
 	keys := []string{
 		SettlementKeys.AddSuffix(settlement.Type),
 	}
-	if settlement.Type == "contribution" {
+	if settlement.Type == TransactionTypes.Contribution {
 		keys = append(
 			keys,
 			SettlementKeys.SettlementFromChannel,
 			SettlementKeys.SettlementFees,
 		)
-	} else if settlement.Type == "manual" {
+	} else if settlement.Type == TransactionTypes.Manual {
 		// be careful when using manual transactions this will fail
 		// TransactionNS does not have the appropriate key
 		keys = append(keys, settlement.Type) // straight pass through
@@ -90,24 +163,24 @@ func (settlement *Settlement) ToContributionTransactions() []Transaction {
 		ID:              settlement.GenerateID(SettlementKeys.SettlementFromChannel),
 		CreatedAt:       createdAt.Add(time.Second * -2),
 		Description:     fmt.Sprintf("contributions through %s", month),
-		TransactionType: "contribution",
+		TransactionType: TransactionTypes.Contribution,
 		DocumentID:      settlement.Hash,
 		FromAccount:     normalizedChannel.String(),
-		FromAccountType: "channel",
+		FromAccountType: AccountTypes.Channel,
 		ToAccount:       settlement.Owner,
-		ToAccountType:   "owner",
+		ToAccountType:   AccountTypes.Owner,
 		Amount:          altcurrency.BAT.FromProbi(settlement.Probi.Add(settlement.Fees)),
 		Channel:         &normalizedChannel,
 	}, {
 		ID:              settlement.GenerateID(SettlementKeys.SettlementFees),
 		CreatedAt:       createdAt.Add(time.Second * -1),
 		Description:     "settlement fees",
-		TransactionType: "fees",
+		TransactionType: TransactionTypes.Fees,
 		DocumentID:      settlement.Hash,
 		FromAccount:     settlement.Owner,
-		FromAccountType: "owner",
-		ToAccount:       "fees-account",
-		ToAccountType:   "internal",
+		FromAccountType: AccountTypes.Owner,
+		ToAccount:       KnownAccounts.FeesAccount,
+		ToAccountType:   AccountTypes.Internal,
 		Amount:          altcurrency.BAT.FromProbi(settlement.Fees),
 		Channel:         &normalizedChannel,
 	}}
@@ -121,7 +194,7 @@ func (settlement *Settlement) GetCreatedAt() time.Time {
 
 // GetToAccountType gets the account type
 func (settlement *Settlement) GetToAccountType() string {
-	toAccountType := "uphold"
+	toAccountType := AccountTypes.Uphold
 	if settlement.WalletProvider != "" {
 		toAccountType = settlement.WalletProvider
 	}
@@ -136,10 +209,10 @@ func (settlement *Settlement) ToManualTransaction() Transaction {
 		Description:     "handshake agreement with business development",
 		TransactionType: settlement.Type,
 		DocumentID:      settlement.DocumentID,
-		FromAccount:     SettlementAddress,
+		FromAccount:     KnownAccounts.SettlementAddress,
 		FromAccountType: settlement.GetToAccountType(),
 		ToAccount:       settlement.Owner,
-		ToAccountType:   "owner",
+		ToAccountType:   AccountTypes.Owner,
 		Amount:          altcurrency.BAT.FromProbi(settlement.Probi),
 	}
 }
@@ -150,7 +223,7 @@ func (settlement *Settlement) ToSettlementTransaction() Transaction {
 	settlementType := settlement.Type
 	transactionType := SettlementKeys.AddSuffix(settlementType)
 	documentID := settlement.DocumentID
-	if settlement.Type != "manual" {
+	if settlement.Type != TransactionTypes.Manual {
 		documentID = settlement.Hash
 	}
 	return Transaction{
@@ -160,7 +233,7 @@ func (settlement *Settlement) ToSettlementTransaction() Transaction {
 		TransactionType:    transactionType,
 		FromAccount:        settlement.Owner,
 		DocumentID:         documentID,
-		FromAccountType:    "owner",
+		FromAccountType:    AccountTypes.Owner,
 		ToAccount:          settlement.Address,
 		ToAccountType:      settlement.GetToAccountType(), // needs to be updated
 		Amount:             altcurrency.BAT.FromProbi(settlement.Probi),
@@ -173,9 +246,9 @@ func (settlement *Settlement) ToSettlementTransaction() Transaction {
 // ToTxs converts a settlement to the appropriate transactions
 func (settlement *Settlement) ToTxs() []Transaction {
 	txs := []Transaction{}
-	if settlement.Type == "contribution" {
+	if settlement.Type == TransactionTypes.Contribution {
 		txs = append(txs, settlement.ToContributionTransactions()...)
-	} else if settlement.Type == "manual" {
+	} else if settlement.Type == TransactionTypes.Manual {
 		txs = append(txs, settlement.ToManualTransaction())
 	}
 	return append(txs, settlement.ToSettlementTransaction())
@@ -325,7 +398,7 @@ func SettlementBackfill(settlement Settlement, t ...time.Time) Settlement {
 		}
 	}
 	if settlement.WalletProvider == "" {
-		settlement.WalletProvider = "uphold"
+		settlement.WalletProvider = Providers.Uphold
 	}
 	return settlement
 }

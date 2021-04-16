@@ -30,11 +30,6 @@ var (
 		"user_deposit":            uuid.FromStringOrNil("f7a8b983-2383-48f2-9e4f-717f6fe3225d"),
 		"votes":                   uuid.FromStringOrNil("f0ca8ff9-8399-493a-b2c2-6d4a49e5223a"),
 	}
-	// SettlementTypes holds type values that are considered settlement types
-	SettlementTypes = map[string]bool{
-		"contribution_settlement": true,
-		"referral_settlement":     true,
-	}
 	// TransactionColumns columns for transaction queries
 	TransactionColumns = stringutils.CollectTags(&Transaction{})
 	// SurveyorColumns columns for surveyor group queries

@@ -1,4 +1,4 @@
-// +build integration
+// +build test,integration
 
 package eyeshade
 
@@ -9,15 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"math/rand"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -248,32 +243,6 @@ func WaitFor(
 	}
 }
 
-func CreateSettlements(count int, txType string) []models.Settlement {
-	settlements := []models.Settlement{}
-	for i := 0; i < count; i++ {
-		bat := decimal.NewFromFloat(5)
-		fees := bat.Mul(decimal.NewFromFloat(0.05))
-		batSubFees := bat.Sub(fees)
-		settlements = append(settlements, models.Settlement{
-			AltCurrency:  altcurrency.BAT,
-			Probi:        altcurrency.BAT.ToProbi(batSubFees),
-			Fees:         altcurrency.BAT.ToProbi(fees),
-			Fee:          decimal.Zero,
-			Commission:   decimal.Zero,
-			Amount:       bat,
-			Currency:     altcurrency.BAT.String(),
-			Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
-			Channel:      models.Channel("brave.com"),
-			Hash:         uuid.NewV4().String(),
-			Type:         txType,
-			SettlementID: uuid.NewV4().String(),
-			DocumentID:   uuid.NewV4().String(),
-			Address:      uuid.NewV4().String(),
-		})
-	}
-	return settlements
-}
-
 func CreateReferrals(count int, countryGroupID uuid.UUID) []models.Referral {
 	referrals := []models.Referral{}
 	for i := 0; i < count; i++ {
@@ -308,7 +277,7 @@ func CreateSuggestions(count int) []models.Suggestion {
 		total := decimal.Zero
 		rand.Seed(int64(i))
 		for _, suggestionType := range suggestionTypes {
-			for j := 0; j < 5; j += 1 {
+			for j := 0; j < 5; j++ {
 				random := rand.Int()
 				promotionIDIndex := random % promotionLimit
 				amount := decimal.NewFromFloat(float64(random%10 + 1)).Mul(models.VoteValue)

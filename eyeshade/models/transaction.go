@@ -38,7 +38,7 @@ func (tx *Transaction) BackfillForCreators(account string) CreatorsTransaction {
 	}
 	var settlementDestinationType *string
 	var settlementDestination *string
-	if SettlementTypes[tx.TransactionType] {
+	if IsSettlementTypeSuffixPresent(tx.TransactionType) {
 		if tx.ToAccountType != "" {
 			settlementDestinationType = &tx.ToAccountType
 		}

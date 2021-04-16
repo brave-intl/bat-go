@@ -1,3 +1,5 @@
+// +build test
+
 package eyeshade
 
 import (
@@ -14,35 +16,29 @@ import (
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	db "github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-type DatastoreMockTestSuite struct {
+type DatastoreMockSuite struct {
 	suite.Suite
 	ctx  context.Context
 	db   Datastore
 	mock sqlmock.Sqlmock
 }
 
-// type DatastoreTestSuite struct {
-// 	suite.Suite
-// 	ctx context.Context
-// 	db  Datastore
-// }
-
-func TestDatastoreMockTestSuite(t *testing.T) {
-	suite.Run(t, new(DatastoreMockTestSuite))
+func TestDatastoreMockSuite(t *testing.T) {
+	suite.Run(t, new(DatastoreMockSuite))
 	// if os.Getenv("EYESHADE_DB_URL") != "" {
-	// 	suite.Run(t, new(DatastoreTestSuite))
+	// 	suite.Run(t, new(DatastoreSuite))
 	// }
 }
 
-func (suite *DatastoreMockTestSuite) SetupSuite() {
+func (suite *DatastoreMockSuite) SetupSuite() {
 	ctx := context.Background()
 	// setup mock DB we will inject into our pg
 	mockDB, mock, err := sqlmock.New()
@@ -85,16 +81,16 @@ func SetupMockGetAccountEarnings(
 		)
 	}
 	mock.ExpectQuery(`
-select
+SELECT
 	channel,
-	(.+) as earnings,
+	(.+) AS earnings,
 	account_id
-from account_transactions
-where account_type = 'owner'
-	and transaction_type = (.+)
-group by (.+)
-order by earnings (.+)
-limit (.+)`).
+FROM account_transactions
+WHERE account_type = 'owner'
+	AND transaction_type = (.+)
+GROUP BY (.+)
+ORDER BY earnings (.+)
+LIMIT (.+)`).
 		WithArgs(options.Type[:len(options.Type)-1], options.Limit).
 		WillReturnRows(getRows)
 	return rows
@@ -151,15 +147,15 @@ func SetupMockGetAccountSettlementEarnings(
 		)
 	}
 	mock.ExpectQuery(`
-select
+SELECT
 	channel,
-	(.+) as paid,
+	(.+) AS paid,
 	account_id
-from account_transactions
-where (.+)
-group by (.+)
-order by paid (.+)
-limit (.+)`).
+FROM account_transactions
+WHERE (.+)
+GROUP BY (.+)
+ORDER BY paid (.+)
+LIMIT (.+)`).
 		WithArgs(args...).
 		WillReturnRows(getRows)
 	return rows
@@ -188,7 +184,7 @@ func SetupMockGetPending(
 	mock.ExpectQuery(`
 SELECT
 	V.channel,
-	(.+) as balance
+	(.+) AS balance
 FROM votes V
 INNER JOIN surveyor_groups S
 ON V.surveyor_id = S.id
@@ -197,7 +193,7 @@ WHERE
 	AND NOT V.transacted
 	AND NOT V.excluded
 GROUP BY channel`).
-		WithArgs(fmt.Sprintf("{%s}", strings.Join(accountIDs, ","))).
+		WithArgs(pq.Array(accountIDs)).
 		WillReturnRows(getRows)
 	return rows
 }
@@ -227,13 +223,13 @@ func SetupMockGetBalances(
 	}
 	mock.ExpectQuery(`
 	SELECT
-		account_transactions.account_type as account_type,
-		account_transactions.account_id as account_id,
-		(.+) as balance
+		account_transactions.account_type AS account_type,
+		account_transactions.account_id AS account_id,
+		(.+) AS balance
 	FROM account_transactions
 	WHERE account_id = (.+)
 	GROUP BY (.+)`).
-		WithArgs(fmt.Sprintf("{%s}", strings.Join(accountIDs, ","))).
+		WithArgs(pq.Array(accountIDs)).
 		WillReturnRows(getRows)
 	return rows
 }
@@ -274,17 +270,6 @@ func collectTxValues(
 	return rows, mockRows, values
 }
 
-// func SetupMockGetTransactions(
-// 	mock sqlmock.Sqlmock,
-// 	txs []models.ConvertableTransaction,
-// ) []models.Transaction {
-// 	expected, mockRows, _ := collectTxValues(txs)
-// 	mock.ExpectQuery(`SELECT (.+)
-// FROM transactions`).
-// 		WillReturnRows(mockRows)
-// 	return expected
-// }
-
 func SetupMockInsertConvertableTransactions(
 	mock sqlmock.Sqlmock,
 	roMock sqlmock.Sqlmock,
@@ -313,7 +298,7 @@ func SetupMockGetTransactionsByAccount(
 	args := []driver.Value{accountID}
 	var txTypesHash *map[string]bool
 	if len(txTypes) > 0 {
-		args = append(args, db.JoinStringList(txTypes))
+		args = append(args, pq.Array(txTypes))
 		txTypesHash := &map[string]bool{}
 		for _, txType := range txTypes {
 			(*txTypesHash)[txType] = true
@@ -358,10 +343,10 @@ func SetupMockGetTransactionsByAccount(
 		)
 	}
 	query := fmt.Sprintf(`
-	SELECT %s
-	FROM transactions
-	WHERE (.+)
-	ORDER BY created_at`, strings.Join(models.TransactionColumns, ", "))
+SELECT %s
+FROM transactions
+WHERE (.+)
+ORDER BY created_at`, strings.Join(models.TransactionColumns, ", "))
 	mock.ExpectQuery(query).
 		WithArgs(args...).
 		WillReturnRows(getRows)
@@ -374,8 +359,6 @@ func SettlementTransaction(
 	toAccountID string,
 	transactionType string,
 ) models.Transaction {
-	transactionType = transactionType + "_settlement"
-	provider := "uphold"
 	return models.Transaction{
 		ID:              uuid.NewV4().String(),
 		Channel:         channel,
@@ -383,9 +366,9 @@ func SettlementTransaction(
 		Description:     uuid.NewV4().String(),
 		FromAccount:     fromAccount,
 		ToAccount:       toAccountID,
-		ToAccountType:   provider,
+		ToAccountType:   models.Providers.Uphold,
 		Amount:          RandomDecimal(),
-		TransactionType: transactionType,
+		TransactionType: models.SettlementKeys.AddSuffix(transactionType),
 	}
 }
 
@@ -399,7 +382,7 @@ func ReferralTransaction(accountID string, channel models.Channel) models.Transa
 		ToAccount:       accountID,
 		ToAccountType:   toAccountType,
 		Amount:          RandomDecimal(),
-		TransactionType: "referral",
+		TransactionType: models.TransactionTypes.Referral,
 	}
 }
 func ContributeTransaction(toAccount string) models.Transaction {
@@ -413,7 +396,7 @@ func ContributeTransaction(toAccount string) models.Transaction {
 		ToAccount:       toAccount,
 		ToAccountType:   toAccountType,
 		Amount:          RandomDecimal(),
-		TransactionType: "contribution",
+		TransactionType: models.TransactionTypes.Contribution,
 	}
 }
 
@@ -442,24 +425,24 @@ func MustMarshal(
 	return string(marshalled)
 }
 
-func (suite *DatastoreMockTestSuite) TestGetAccountEarnings() {
+func (suite *DatastoreMockSuite) TestGetAccountEarnings() {
 	options := models.AccountEarningsOptions{
 		Limit:     5,
 		Ascending: true,
-		Type:      "contributions",
+		Type:      models.TransactionTypes.Contribution,
 	}
-	expected := SetupMockGetAccountEarnings(suite.mock, options)
+	expect := SetupMockGetAccountEarnings(suite.mock, options)
 	actual := suite.GetAccountEarnings(
 		options,
 	)
 
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expected),
+		MustMarshal(suite.Require(), expect),
 		MustMarshal(suite.Require(), actual),
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetAccountEarnings(
+func (suite *DatastoreMockSuite) GetAccountEarnings(
 	options models.AccountEarningsOptions,
 ) *[]models.AccountEarnings {
 	earnings, err := suite.db.GetAccountEarnings(
@@ -470,7 +453,7 @@ func (suite *DatastoreMockTestSuite) GetAccountEarnings(
 	suite.Require().Len(*earnings, options.Limit)
 	return earnings
 }
-func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
+func (suite *DatastoreMockSuite) TestGetAccountSettlementEarnings() {
 	options := models.AccountSettlementEarningsOptions{
 		Limit:     5,
 		Ascending: true,
@@ -484,7 +467,7 @@ func (suite *DatastoreMockTestSuite) TestGetAccountSettlementEarnings() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetAccountSettlementEarnings(
+func (suite *DatastoreMockSuite) GetAccountSettlementEarnings(
 	options models.AccountSettlementEarningsOptions,
 ) *[]models.AccountSettlementEarnings {
 	earnings, err := suite.db.GetAccountSettlementEarnings(
@@ -496,21 +479,21 @@ func (suite *DatastoreMockTestSuite) GetAccountSettlementEarnings(
 	return earnings
 }
 
-func (suite *DatastoreMockTestSuite) TestGetBalances() {
+func (suite *DatastoreMockSuite) TestGetBalances() {
 	accountIDs := CreateIDs(3)
 
-	expectedBalances := SetupMockGetBalances(
+	expect := SetupMockGetBalances(
 		suite.mock,
 		accountIDs,
 	)
-	actualBalances := suite.GetBalances(accountIDs)
+	actual := suite.GetBalances(accountIDs)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expectedBalances),
-		MustMarshal(suite.Require(), actualBalances),
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetBalances(accountIDs []string) *[]models.Balance {
+func (suite *DatastoreMockSuite) GetBalances(accountIDs []string) *[]models.Balance {
 	balances, err := suite.db.GetBalances(
 		suite.ctx,
 		accountIDs,
@@ -520,21 +503,21 @@ func (suite *DatastoreMockTestSuite) GetBalances(accountIDs []string) *[]models.
 	return balances
 }
 
-func (suite *DatastoreMockTestSuite) TestGetPending() {
+func (suite *DatastoreMockSuite) TestGetPending() {
 	accountIDs := CreateIDs(3)
 
-	expectedVotes := SetupMockGetPending(
+	expect := SetupMockGetPending(
 		suite.mock,
 		accountIDs,
 	)
-	actualVotes := suite.GetPending(accountIDs)
+	actual := suite.GetPending(accountIDs)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expectedVotes),
-		MustMarshal(suite.Require(), actualVotes),
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]models.PendingTransaction {
+func (suite *DatastoreMockSuite) GetPending(accountIDs []string) *[]models.PendingTransaction {
 	votes, err := suite.db.GetPending(
 		suite.ctx,
 		accountIDs,
@@ -544,7 +527,7 @@ func (suite *DatastoreMockTestSuite) GetPending(accountIDs []string) *[]models.P
 	return votes
 }
 
-func (suite *DatastoreMockTestSuite) TestGetTransactionsByAccount() {
+func (suite *DatastoreMockSuite) TestGetTransactionsByAccount() {
 	accountID := CreateIDs(1)[0]
 
 	expectedTransactions := SetupMockGetTransactionsByAccount(
@@ -562,7 +545,7 @@ func (suite *DatastoreMockTestSuite) TestGetTransactionsByAccount() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
+func (suite *DatastoreMockSuite) GetTransactionsByAccount(
 	count int,
 	accountID string,
 	txTypes []string,
@@ -577,30 +560,15 @@ func (suite *DatastoreMockTestSuite) GetTransactionsByAccount(
 	return transactions
 }
 
-func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
-	settlement := &models.Settlement{
-		AltCurrency:  altcurrency.BAT,
-		Probi:        altcurrency.BAT.ToProbi(decimal.NewFromFloat(4.75)),
-		Fees:         altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.25)),
-		Amount:       decimal.NewFromFloat(4),
-		Currency:     "USD",
-		Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
-		Channel:      models.Channel("brave.com"),
-		Type:         "contribution",
-		Hash:         uuid.NewV4().String(),
-		SettlementID: uuid.NewV4().String(),
-		DocumentID:   uuid.NewV4().String(),
-		Address:      uuid.NewV4().String(),
-	}
-	settlements := []models.ConvertableTransaction{
-		models.ConvertableTransaction(settlement),
-	}
+func (suite *DatastoreMockSuite) TestInsertSettlement() {
+	settlements := CreateSettlements(1, models.TransactionTypes.Contribution)
+	convertableTransactions := models.SettlementsToConvertableTransactions(settlements...)
 	expect := SetupMockInsertConvertableTransactions(
 		suite.mock,
 		suite.mock,
-		settlements,
+		convertableTransactions,
 	)
-	actual := suite.InsertConvertableTransactions(settlements)
+	actual := suite.InsertConvertableTransactions(convertableTransactions)
 
 	suite.Require().JSONEq(
 		MustMarshal(suite.Require(), expect),
@@ -608,7 +576,7 @@ func (suite *DatastoreMockTestSuite) TestInsertSettlement() {
 	)
 }
 
-func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(
+func (suite *DatastoreMockSuite) InsertConvertableTransactions(
 	txs []models.ConvertableTransaction,
 ) *[]models.Transaction {
 	err := suite.db.InsertConvertableTransactions(suite.ctx, txs)
@@ -616,4 +584,30 @@ func (suite *DatastoreMockTestSuite) InsertConvertableTransactions(
 	transactions, err := suite.db.GetTransactions(suite.ctx)
 	suite.Require().NoError(err)
 	return transactions
+}
+
+func CreateSettlements(count int, txType string) []models.Settlement {
+	settlements := []models.Settlement{}
+	for i := 0; i < count; i++ {
+		bat := decimal.NewFromFloat(5)
+		fees := bat.Mul(decimal.NewFromFloat(0.05))
+		batSubFees := bat.Sub(fees)
+		settlements = append(settlements, models.Settlement{
+			AltCurrency:  altcurrency.BAT,
+			Probi:        altcurrency.BAT.ToProbi(batSubFees),
+			Fees:         altcurrency.BAT.ToProbi(fees),
+			Fee:          decimal.Zero,
+			Commission:   decimal.Zero,
+			Amount:       bat,
+			Currency:     altcurrency.BAT.String(),
+			Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			Channel:      models.Channel("brave.com"),
+			Hash:         uuid.NewV4().String(),
+			Type:         txType,
+			SettlementID: uuid.NewV4().String(),
+			DocumentID:   uuid.NewV4().String(),
+			Address:      uuid.NewV4().String(),
+		})
+	}
+	return settlements
 }

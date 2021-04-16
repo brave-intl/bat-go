@@ -1,4 +1,4 @@
-// +build integration
+// +build test,integration
 
 package eyeshade
 
@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type ControllersTestSuite struct {
+type ControllersSuite struct {
 	suite.Suite
 	tokens  map[string]string
 	ctx     context.Context
@@ -31,11 +31,11 @@ type ControllersTestSuite struct {
 	service *Service
 }
 
-func TestControllersTestSuite(t *testing.T) {
-	suite.Run(t, new(ControllersTestSuite))
+func TestControllersSuite(t *testing.T) {
+	suite.Run(t, new(ControllersSuite))
 }
 
-func (suite *ControllersTestSuite) SetupSuite() {
+func (suite *ControllersSuite) SetupSuite() {
 	ctx := context.Background()
 	// setup mock DB we will inject into our pg
 	mockDB, mock, err := sqlmock.New()
@@ -77,11 +77,11 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.server = server
 }
 
-func (suite *ControllersTestSuite) TearDownSuite() {
+func (suite *ControllersSuite) TearDownSuite() {
 	defer suite.server.Close()
 }
 
-func (suite *ControllersTestSuite) DoRequest(
+func (suite *ControllersSuite) DoRequest(
 	method string,
 	path string,
 	body io.Reader,

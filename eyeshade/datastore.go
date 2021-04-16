@@ -171,16 +171,16 @@ func (pg *Postgres) GetAccountEarnings(
 	// remove the `s`
 	txType := options.Type[:len(options.Type)-1]
 	statement := fmt.Sprintf(`
-select
+SELECT
 	channel,
-	coalesce(sum(amount), 0.0) as earnings,
+	COALESCE(SUM(amount), 0.0) AS earnings,
 	account_id
-from account_transactions
-where account_type = 'owner'
-	and transaction_type = $1
-group by (account_id, channel)
-order by earnings %s
-limit $2`, order)
+FROM account_transactions
+WHERE account_type = 'owner'
+	AND transaction_type = $1
+GROUP BY (account_id, channel)
+ORDER BY earnings %s
+LIMIT $2`, order)
 	earnings := []models.AccountEarnings{}
 	err := pg.RawDB().SelectContext(
 		ctx,
@@ -228,21 +228,21 @@ func (pg *Postgres) GetAccountSettlementEarnings(
 			options.UntilDate.Format(time.RFC3339),
 		)
 		timeConstraints = `
-and created_at >= $3
-and created_at < $4`
+AND created_at >= $3
+AND created_at < $4`
 	}
 	statement := fmt.Sprintf(`
-select
+SELECT
 	channel,
-	coalesce(sum(-amount), 0.0) as paid,
+	COALESCE(SUM(-amount), 0.0) AS paid,
 	account_id
-from account_transactions
-where
+FROM account_transactions
+WHERE
 		account_type = 'owner'
-and transaction_type = $1%s
-group by (account_id, channel)
-order by paid %s
-limit $2`, timeConstraints, order)
+AND transaction_type = $1%s
+GROUP BY (account_id, channel)
+ORDER BY paid %s
+LIMIT $2`, timeConstraints, order)
 	earnings := []models.AccountSettlementEarnings{}
 
 	err := pg.RawDB().SelectContext(
@@ -263,13 +263,13 @@ func (pg *Postgres) GetBalances(
 	accountIDs []string,
 ) (*[]models.Balance, error) {
 	statement := `
-	SELECT
-		account_transactions.account_type as account_type,
-		account_transactions.account_id as account_id,
-		COALESCE(SUM(account_transactions.amount), 0.0) as balance
-	FROM account_transactions
-	WHERE account_id = any($1::TEXT[])
-	GROUP BY (account_transactions.account_id, account_transactions.account_type)`
+SELECT
+	account_transactions.account_type AS account_type,
+	account_transactions.account_id AS account_id,
+	COALESCE(SUM(account_transactions.amount), 0.0) AS balance
+FROM account_transactions
+WHERE account_id = ANY($1::TEXT[])
+GROUP BY (account_transactions.account_id, account_transactions.account_type)`
 	balances := []models.Balance{}
 
 	err := pg.RawDB().SelectContext(
@@ -292,12 +292,12 @@ func (pg *Postgres) GetPending(
 	statement := `
 SELECT
 	V.channel,
-	SUM(V.tally * S.price)::TEXT as balance
+	SUM(V.tally * S.price)::TEXT AS balance
 FROM votes V
 INNER JOIN surveyor_groups S
 ON V.surveyor_id = S.id
 WHERE
-	V.channel = any($1::TEXT[])
+	V.channel = ANY($1::TEXT[])
 	AND NOT V.transacted
 	AND NOT V.excluded
 GROUP BY channel`
@@ -337,7 +337,7 @@ func (pg *Postgres) GetTransactionsByID(
 	statement := fmt.Sprintf(`
 SELECT %s
 FROM transactions
-WHERE id = any($1::UUID[])
+WHERE id = ANY($1::UUID[])
 ORDER BY id ASC`,
 		strings.Join(models.TransactionColumns, ", "),
 	)
@@ -444,12 +444,12 @@ func (pg *Postgres) GetSettlementStats(ctx context.Context, options models.Settl
 	}
 	statement := fmt.Sprintf(`
 SELECT
-	sum(amount) as amount
+	sum(amount) AS amount
 FROM transactions
 WHERE
 	transaction_type = $1 %s
-AND created_at >= to_timestamp($2)
-AND created_at < to_timestamp($3)`,
+AND created_at >= $2
+AND created_at < $3`,
 		extra,
 	)
 	var stats models.SettlementStat
@@ -460,13 +460,13 @@ AND created_at < to_timestamp($3)`,
 func (pg *Postgres) GetGrantStats(ctx context.Context, options models.GrantStatOptions) (*models.GrantStat, error) {
 	statement := `
 SELECT
-	count(*) as count,
-	sum(amount) as amount
+	count(*) AS count,
+	sum(amount) AS amount
 FROM votes
 WHERE
 		cohort = $1::TEXT
-AND created_at >= to_timestamp($2)
-AND created_at < to_timestamp($3)`
+AND created_at >= $2
+AND created_at < $3`
 	var stats models.GrantStat
 	return &stats, pg.GetContext(
 		ctx,
@@ -527,7 +527,7 @@ func (pg *Postgres) GetBallotsByID(ctx context.Context, ids ...string) (*[]model
 	statement := fmt.Sprintf(`
 SELECT %s
 FROM votes
-WHERE id = any($1::UUID[])
+WHERE id = ANY($1::UUID[])
 ORDER BY (id) asc`,
 		strings.Join(models.BallotColumns, ", "),
 	)
@@ -592,7 +592,8 @@ func (pg *Postgres) InsertBallots(ctx context.Context, ballots *[]models.Ballot)
 		return err
 	}
 	defer pg.Rollback(ctx)
-	statement := fmt.Sprintf(`INSERT INTO votes ( %s )
+	statement := fmt.Sprintf(`
+INSERT INTO votes ( %s )
 VALUES ( %s )
 ON CONFLICT ( id ) DO UPDATE
 SET updated_at = CURRENT_TIMESTAMP,
@@ -620,7 +621,8 @@ func (pg *Postgres) GetSurveyorsByID(ctx context.Context, ids []string) (*[]mode
 		return nil, err
 	}
 	defer pg.Rollback(ctx)
-	statement := fmt.Sprintf(`SELECT %s
+	statement := fmt.Sprintf(`
+SELECT %s
 FROM surveyor_groups
 WHERE id = ANY($1::TEXT[])`, strings.Join(models.SurveyorColumns, ", "))
 	err = tx.SelectContext(ctx, &surveyors, statement, pq.Array(ids))

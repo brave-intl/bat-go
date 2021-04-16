@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,12 +16,12 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-func (suite *ControllersTestSuite) TestRouterStatic() {
+func (suite *ControllersSuite) TestRouterStatic() {
 	_, body := suite.DoRequest("GET", "/", nil, "")
 	suite.Require().Equal(".", string(body))
 }
 
-func (suite *ControllersTestSuite) TestRouterDefunct() {
+func (suite *ControllersSuite) TestRouterDefunct() {
 	re := regexp.MustCompile(`\{.+\}`)
 	for _, route := range defunctRoutes {
 		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
@@ -34,7 +33,7 @@ func (suite *ControllersTestSuite) TestRouterDefunct() {
 	}
 }
 
-func (suite *ControllersTestSuite) TestGETAccountEarnings() {
+func (suite *ControllersSuite) TestGETAccountEarnings() {
 	options := models.AccountEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
@@ -57,34 +56,31 @@ func (suite *ControllersTestSuite) TestGETAccountEarnings() {
 	suite.Require().JSONEq(string(marshalled), string(body))
 }
 
-func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
+func (suite *ControllersSuite) TestGETAccountSettlementEarnings() {
+	actual := []models.AccountSettlementEarnings{}
 	options := models.AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
 		Limit:     5,
 	}
-	expecting := SetupMockGetAccountSettlementEarnings(
+	expect := SetupMockGetAccountSettlementEarnings(
 		suite.mockRO,
 		options,
 	)
-	path := fmt.Sprintf("/v1/accounts/settlements/contributions/total?limit=%d", options.Limit)
-	res, body := suite.DoRequest(
-		"GET",
-		path,
-		nil,
+	suite.DoGETAccountSettlementEarnings(
+		options,
 		suite.tokens["publishers"],
+		&actual,
 	)
-	suite.Require().Equal(http.StatusOK, res.StatusCode)
-	marshalled, err := json.Marshal(expecting)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(marshalled), string(body))
-	var unmarshalledBody []models.AccountSettlementEarnings
-	err = json.Unmarshal(body, &unmarshalledBody)
-	suite.Require().Len(unmarshalledBody, options.Limit)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
+	)
 
+	actual = []models.AccountSettlementEarnings{}
 	now := time.Now()
 	startDate := now.Truncate(time.Second)
-	untilDate := startDate.Add(time.Hour * 24 * 2)
+	untilDate := startDate.AddDate(0, 0, 2)
 	options = models.AccountSettlementEarningsOptions{
 		Ascending: true,
 		Type:      "contributions",
@@ -93,103 +89,109 @@ func (suite *ControllersTestSuite) TestGETAccountSettlementEarnings() {
 		UntilDate: &untilDate,
 	}
 
-	expecting = SetupMockGetAccountSettlementEarnings(
+	expect = SetupMockGetAccountSettlementEarnings(
 		suite.mockRO,
 		options,
 	)
-	path = fmt.Sprintf(
-		"/v1/accounts/settlements/contributions/total?limit=%d&start=%s&until=%s",
-		options.Limit,
-		url.QueryEscape(options.StartDate.Format(time.RFC3339)),
-		url.QueryEscape(options.UntilDate.Format(time.RFC3339)),
-	)
-	res, body = suite.DoRequest(
-		"GET",
-		path,
-		nil,
+	suite.DoGETAccountSettlementEarnings(
+		options,
 		suite.tokens["publishers"],
+		&actual,
 	)
-	suite.Require().Equal(http.StatusOK, res.StatusCode)
-	marshalled, err = json.Marshal(expecting)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(marshalled), string(body))
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
+	)
 }
 
-func (suite *ControllersTestSuite) TestGETBalances() {
-	accountIDs := []string{uuid.NewV4().String()}
-	accounts := SetupMockGetBalances(
-		suite.mockRO,
-		accountIDs,
+func (suite *ControllersSuite) DoGETAccountSettlementEarnings(
+	options models.AccountSettlementEarningsOptions,
+	token string,
+	p interface{},
+	status ...int,
+) {
+	values := url.Values{}
+	values.Add("limit", fmt.Sprint(options.Limit))
+	if options.StartDate != nil {
+		values.Add("start", options.StartDate.Format(time.RFC3339))
+		if options.UntilDate != nil {
+			values.Add("until", options.UntilDate.Format(time.RFC3339))
+		}
+	}
+	path := fmt.Sprintf(
+		"/v1/accounts/settlements/contributions/total?%s",
+		values.Encode(),
 	)
-	param := "account="
-	path := fmt.Sprintf("/v1/accounts/balances?%s%s", param, strings.Join(accountIDs, "&"+param))
 	res, body := suite.DoRequest(
 		"GET",
 		path,
 		nil,
-		suite.tokens["publishers"],
+		token,
 	)
-	suite.Require().Equal(http.StatusOK, res.StatusCode, string(body))
-	accountsMarshalled, err := json.Marshal(accounts)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(accountsMarshalled), string(body))
-	var unmarshalledBody []models.AccountSettlementEarnings
-	err = json.Unmarshal(body, &unmarshalledBody)
-	suite.Require().Len(unmarshalledBody, len(accountIDs))
+	suite.CheckAndUnmarshal(p, body, res.StatusCode, status...)
+}
 
-	accountIDs = []string{uuid.NewV4().String()}
-	accounts = SetupMockGetBalances(
-		suite.mockRO,
-		accountIDs,
-	)
-	param = "account="
-	path = fmt.Sprintf("/v1/accounts/balances?%s%s", param, strings.Join(accountIDs, "&"+param))
-	res, body = suite.DoRequest(
+func (suite *ControllersSuite) CheckAndUnmarshal(
+	p interface{},
+	body []byte,
+	resStatusCode int,
+	status ...int,
+) {
+	s := http.StatusOK
+	if len(status) > 0 {
+		s = status[0]
+	}
+	suite.Require().Equal(s, resStatusCode, string(body))
+	MustUnmarshal(suite.Require(), body, p)
+}
+
+func MustUnmarshal(
+	assertions *require.Assertions,
+	bytes []byte,
+	structure interface{},
+) {
+	assertions.NoError(json.Unmarshal(bytes, structure))
+}
+
+func (suite *ControllersSuite) DoGETAccountBalances(
+	accountIDs []string,
+	token string,
+	p interface{},
+	status ...int,
+) {
+	values := url.Values{}
+	for _, accountID := range accountIDs {
+		values.Add("account", accountID)
+	}
+	path := fmt.Sprintf("/v1/accounts/balances?%s", values.Encode())
+	res, body := suite.DoRequest(
 		"GET",
 		path,
 		nil,
-		suite.tokens["publishers"],
+		token,
 	)
-	suite.Require().Equal(http.StatusOK, res.StatusCode, string(body))
-	accountsMarshalled, err = json.Marshal(accounts)
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(string(accountsMarshalled), string(body))
-	unmarshalledBody = []models.AccountSettlementEarnings{}
-	err = json.Unmarshal(body, &unmarshalledBody)
-	suite.Require().Len(unmarshalledBody, len(accountIDs))
-	// now := time.Now()
-	// startDate := now.Truncate(time.Second)
-	// untilDate := startDate.Add(time.Hour * 24 * 2)
-	// options = AccountSettlementEarningsOptions{
-	// 	Ascending: true,
-	// 	Type:      "contributions",
-	// 	Limit:     5,
-	// 	StartDate: &startDate,
-	// 	UntilDate: &untilDate,
-	// }
-
-	// expecting = SetupMockGetAccountSettlementEarnings(
-	// 	suite.mockRO,
-	// 	options,
-	// )
-	// path = fmt.Sprintf(
-	// 	"/v1/accounts/settlements/contributions/total?limit=%d&start=%s&until=%s",
-	// 	options.Limit,
-	// 	options.StartDate.Format(time.RFC3339),
-	// 	options.UntilDate.Format(time.RFC3339),
-	// )
-	// res, body = suite.DoRequest(
-	// 	"GET",
-	// 	path,
-	// 	nil,
-	// )
-	// suite.Require().Equal(http.StatusOK, res.StatusCode)
-	// marshalled, err = json.Marshal(expecting)
-	// suite.Require().NoError(err)
-	// suite.Require().JSONEq(string(marshalled), string(body))
+	suite.CheckAndUnmarshal(p, body, res.StatusCode, status...)
 }
 
-func (suite *ControllersTestSuite) TestGETTransactionsByAccount() {
+func (suite *ControllersSuite) TestGETBalances() {
+	accountIDs := []string{uuid.NewV4().String()}
+	expect := SetupMockGetBalances(
+		suite.mockRO,
+		accountIDs,
+	)
+	var actual []models.Balance
+	suite.DoGETAccountBalances(
+		accountIDs,
+		suite.tokens["publishers"],
+		&actual,
+	)
+	suite.Require().JSONEq(
+		MustMarshal(suite.Require(), expect),
+		MustMarshal(suite.Require(), actual),
+	)
+}
+
+func (suite *ControllersSuite) TestGETTransactionsByAccount() {
 	unescapedAccountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
 	escapedAccountID := url.PathEscape(unescapedAccountID)
 	scenarios := map[string]struct {
@@ -258,7 +260,7 @@ func (suite *ControllersTestSuite) TestGETTransactionsByAccount() {
 			if scenario.body != nil {
 				expected = scenario.body
 			}
-			actual := suite.DoGetTransactionsByAccount(
+			actual := suite.DoGETTransactionsByAccount(
 				scenario.path,
 				scenario.status,
 				scenario.auth,
@@ -275,7 +277,7 @@ func (suite *ControllersTestSuite) TestGETTransactionsByAccount() {
 	}
 }
 
-func (suite *ControllersTestSuite) DoGetTransactionsByAccount(
+func (suite *ControllersSuite) DoGETTransactionsByAccount(
 	accountID string,
 	status int,
 	auth string,
