@@ -29,7 +29,7 @@ func (service *Service) ProduceSettlements(
 		)
 }
 
-// ProduceReferrals produces settlments onto the topic
+// ProduceReferrals produces referrals onto the topic
 func (service *Service) ProduceReferrals(
 	ctx context.Context,
 	messages []models.Referral,
@@ -46,7 +46,7 @@ func (service *Service) ProduceReferrals(
 		)
 }
 
-// ProduceSuggestions produces settlments onto the topic
+// ProduceSuggestions produces suggestions onto the topic
 func (service *Service) ProduceSuggestions(
 	ctx context.Context,
 	messages []models.Suggestion,
@@ -59,6 +59,23 @@ func (service *Service) ProduceSuggestions(
 		Produce(
 			ctx,
 			KeyToEncoder[avro.TopicKeys.Suggestion],
+			encodable...,
+		)
+}
+
+// ProduceContributions produces contributions onto the topic
+func (service *Service) ProduceContributions(
+	ctx context.Context,
+	messages []models.Contribution,
+) error {
+	encodable := []interface{}{}
+	for _, msg := range messages {
+		encodable = append(encodable, msg)
+	}
+	return service.Producer(avro.TopicKeys.Contribution).
+		Produce(
+			ctx,
+			KeyToEncoder[avro.TopicKeys.Contribution],
 			encodable...,
 		)
 }

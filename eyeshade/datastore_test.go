@@ -1,5 +1,3 @@
-// +build test
-
 package eyeshade
 
 import (
@@ -362,7 +360,7 @@ func SettlementTransaction(
 	return models.Transaction{
 		ID:              uuid.NewV4().String(),
 		Channel:         channel,
-		CreatedAt:       time.Now(),
+		CreatedAt:       time.Now().UTC(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     fromAccount,
 		ToAccount:       toAccountID,
@@ -376,7 +374,7 @@ func ReferralTransaction(accountID string, channel models.Channel) models.Transa
 	toAccountType := "type"
 	return models.Transaction{
 		Channel:         &channel,
-		CreatedAt:       time.Now(),
+		CreatedAt:       time.Now().UTC(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
 		ToAccount:       accountID,
@@ -390,7 +388,7 @@ func ContributeTransaction(toAccount string) models.Transaction {
 	channel := models.Channel(uuid.NewV4().String())
 	return models.Transaction{
 		Channel:         &channel,
-		CreatedAt:       time.Now(),
+		CreatedAt:       time.Now().UTC(),
 		Description:     uuid.NewV4().String(),
 		FromAccount:     uuid.NewV4().String(),
 		ToAccount:       toAccount,

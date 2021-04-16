@@ -6,6 +6,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	stringutils "github.com/brave-intl/bat-go/utils/string"
+	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -40,6 +41,8 @@ func ToNative(value interface{}, tagNames ...string) interface{} {
 		return val.String()
 	case time.Time:
 		return val.Format(time.RFC3339)
+	case uuid.UUID:
+		return val.String()
 	case altcurrency.AltCurrency:
 		return val.String()
 	}

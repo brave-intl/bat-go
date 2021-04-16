@@ -55,7 +55,7 @@ func (funding *Funding) ToBallot(
 	return Ballot{
 		ID:         funding.GenerateID(suggestion.Channel, date),
 		Cohort:     funding.Cohort,
-		Tally:      funding.Amount.Div(VoteValue),
+		Tally:      int(funding.Amount.Div(VoteValue).IntPart()),
 		Excluded:   false,
 		Channel:    suggestion.Channel.Normalize(),
 		SurveyorID: surveyorID,

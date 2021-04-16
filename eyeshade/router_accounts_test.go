@@ -1,4 +1,4 @@
-// +build integration
+// +build test,integration
 
 package eyeshade
 
@@ -14,6 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/maikelmclauflin/go-boom"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func (suite *ControllersSuite) TestRouterStatic() {

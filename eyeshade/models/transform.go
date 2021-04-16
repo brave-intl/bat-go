@@ -66,7 +66,7 @@ func CondenseBallots(ballots *[]Ballot, order ...bool) *[]Ballot {
 			ids = append(ids, ballot.ID)
 			hash[ballot.ID] = &ballot
 		} else {
-			hash[ballot.ID].Tally = hash[ballot.ID].Tally.Add(ballot.Tally)
+			hash[ballot.ID].Tally = hash[ballot.ID].Tally + ballot.Tally
 		}
 	}
 	if len(order) > 0 && order[0] {

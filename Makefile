@@ -3,9 +3,17 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
 TEST_PKG?=./...
-TEST_FLAGS= --tags=$(TEST_TAGS) $(TEST_PKG)
+ifdef TEST_TAGS
+	ifneq (,$(findstring test,$(TEST_TAGS)))
+	else
+		TEST_TAGS:=test,$(TEST_TAGS)
+	endif
+else
+	TEST_TAGS=test
+endif
+TEST_FLAGS= -tags $(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
-	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
+	TEST_FLAGS = -tags $(TEST_TAGS) $(TEST_PKG) -run $(TEST_RUN)
 endif
 
 .PHONY: all buildcmd docker test create-json-schema lint clean

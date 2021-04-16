@@ -8,6 +8,29 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	// ContributionTypes holds the different possible contribution types
+	ContributionTypes = contributionTypes{
+		AutoContribute: "auto-contribute",
+		OneoffTip:      "oneoff-tip",
+		RecurringTip:   "recurring-tip",
+	}
+)
+
+type contributionTypes struct {
+	AutoContribute string
+	OneoffTip      string
+	RecurringTip   string
+}
+
+func (ct *contributionTypes) All() []string {
+	return []string{
+		ct.AutoContribute,
+		ct.OneoffTip,
+		ct.RecurringTip,
+	}
+}
+
 // Contribution holds information from user contribution
 type Contribution struct {
 	ID            string          `json:"id"`
@@ -15,8 +38,8 @@ type Contribution struct {
 	Channel       Channel         `json:"channel"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	BaseVoteValue decimal.Decimal `json:"baseVoteValue"`
-	VoteTally     decimal.Decimal `json:"voteTally"`
-	FundingSource string          `json:"fundingSource"`
+	VoteTally     int             `json:"voteTally"`
+	FundingSource uuid.UUID       `json:"fundingSource"`
 }
 
 // GetSurveyorID gets the surveyor id
