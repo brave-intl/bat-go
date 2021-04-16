@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"strconv"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -24,35 +25,43 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
+	debug, err := strconv.ParseBool(os.Getenv("DEBUG"))
+	if err != nil {
+		debug = false
+	}
+	return cors.Handler(cors.Options{
+		Debug:            debug,
+		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
+		AllowedMethods:   allowedMethods,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{""},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	})
+}
+
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
-	// TODO - Scope down CORS to origins / methods we'll need.
-	if os.Getenv("ENV") != "production" {
-		r.Use(cors.Handler(cors.Options{
-			Debug:          true,
-			AllowedOrigins: []string{"https://confab.bsg.brave.software"}, // Use this to allow specific origin hosts
-			//AllowedOrigins: []string{"*"},
-			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
-			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
-			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: false,
-			MaxAge:           300, // Maximum value not ignored by any of major browsers
-		}))
-	}
 
 	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
-	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(service)))
+	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
-	r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
-	r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-	r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+	r.Route("/{orderID}/credentials", func(cr chi.Router) {
+		cr.Use(corsMiddleware([]string{"GET", "POST"}))
+		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
+		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
+		// TODO authorization should be merchant specific, however currently this is only used internally
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", middleware.SimpleTokenAuthorizedOnly(DeleteOrderCreds(service))))
+
+		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+	})
 
 	return r
 }
@@ -60,9 +69,7 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	if os.Getenv("ENV") != "production" {
-		r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(service)))
-	}
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", middleware.SimpleTokenAuthorizedOnly(VerifyCredential(service))))
 	return r
 }
 
@@ -262,6 +269,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 		if order == nil {
 			status = http.StatusNotFound
 		}
+
 		return handlers.RenderContent(r.Context(), order, w, status)
 	})
 }
@@ -456,6 +464,28 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 	})
 }
 
+// DeleteOrderCreds is the handler for deleting order credentials
+func DeleteOrderCreds(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		err := service.Datastore.DeleteOrderCreds(*orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(r.Context(), "Order credentials successfully deleted", w, http.StatusOK)
+	})
+}
+
 // GetOrderCredsByID is the handler for fetching order credentials by an item id
 func GetOrderCredsByID(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -613,7 +643,10 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 
 // VerifyCredentialRequest includes an opaque subscription credential blob
 type VerifyCredentialRequest struct {
-	Credential string `json:"credential" valid:"base64"`
+	Type         string  `json:"type"`
+	Version      float64 `json:"version"`
+	SKU          string  `json:"sku"`
+	Presentation string  `json:"presentation" valid:"base64"`
 }
 
 // VerifyCredential is the handler for verifying subscription credentials
@@ -631,23 +664,27 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
-		var bytes []byte
-		bytes, err = base64.StdEncoding.DecodeString(req.Credential)
-		if err != nil {
-			return handlers.WrapError(err, "Error in decoding credential", http.StatusBadRequest)
+		if req.Type == "single-use" {
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+
+			var decodedCredential cbr.CredentialRedemption
+			err = json.Unmarshal(bytes, &decodedCredential)
+			if err != nil {
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+			if err != nil {
+				return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+			}
+
+			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 		}
 
-		var decodedCredential cbr.CredentialRedemption
-		err = json.Unmarshal(bytes, &decodedCredential)
-		if err != nil {
-			return handlers.WrapError(err, "Error in decoded credential formatting", http.StatusBadRequest)
-		}
-
-		err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
-		if err != nil {
-			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusCreated)
+		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
 	})
 }
