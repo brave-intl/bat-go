@@ -1,9 +1,10 @@
-package eyeshade
+// +build integration
+
+package test
 
 import (
 	"context"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -12,20 +13,20 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/eyeshade/must"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 type DatastoreMockSuite struct {
 	suite.Suite
 	ctx  context.Context
-	db   Datastore
+	db   datastore.Datastore
 	mock sqlmock.Sqlmock
 }
 
@@ -43,7 +44,7 @@ func (suite *DatastoreMockSuite) SetupSuite() {
 	suite.Require().NoError(err, "failed to create a sql mock")
 
 	name := "sqlmock"
-	suite.db = NewFromConnection(&grantserver.Postgres{
+	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockDB, name),
 	}, name)
 	suite.ctx = ctx
@@ -103,7 +104,7 @@ func SetupMockGetAccountSettlementEarnings(
 	)
 	rows := []models.AccountSettlementEarnings{}
 	args := []driver.Value{
-		fmt.Sprintf("%s_settlement", options.Type[:len(options.Type)-1]),
+		models.SettlementKeys.AddSuffix(options.Type[:len(options.Type)-1]),
 		options.Limit,
 	}
 	targetTime := options.StartDate
@@ -168,7 +169,7 @@ func SetupMockGetPending(
 	)
 	rows := []models.PendingTransaction{}
 	for _, channel := range accountIDs {
-		balance := RandomDecimal()
+		balance := must.RandomDecimal()
 		rows = append(rows, models.PendingTransaction{
 			Channel: models.Channel(channel),
 			Balance: balance,
@@ -205,7 +206,7 @@ func SetupMockGetBalances(
 	)
 	rows := []models.Balance{}
 	for _, accountID := range accountIDs {
-		balance := RandomDecimal()
+		balance := must.RandomDecimal()
 		accountType := uuid.NewV4().String()
 		rows = append(rows, models.Balance{
 			AccountID: accountID,
@@ -302,7 +303,7 @@ func SetupMockGetTransactionsByAccount(
 			(*txTypesHash)[txType] = true
 		}
 	}
-	channels := CreateIDs(3)
+	channels := must.UUIDsToString(must.RandomIDs(3, true)...)
 	providerID := uuid.NewV4().String()
 	for _, channel := range channels {
 		rows = append(rows, ContributeTransaction(channel))
@@ -365,7 +366,7 @@ func SettlementTransaction(
 		FromAccount:     fromAccount,
 		ToAccount:       toAccountID,
 		ToAccountType:   models.Providers.Uphold,
-		Amount:          RandomDecimal(),
+		Amount:          must.RandomDecimal(),
 		TransactionType: models.SettlementKeys.AddSuffix(transactionType),
 	}
 }
@@ -379,7 +380,7 @@ func ReferralTransaction(accountID string, channel models.Channel) models.Transa
 		FromAccount:     uuid.NewV4().String(),
 		ToAccount:       accountID,
 		ToAccountType:   toAccountType,
-		Amount:          RandomDecimal(),
+		Amount:          must.RandomDecimal(),
 		TransactionType: models.TransactionTypes.Referral,
 	}
 }
@@ -393,34 +394,9 @@ func ContributeTransaction(toAccount string) models.Transaction {
 		FromAccount:     uuid.NewV4().String(),
 		ToAccount:       toAccount,
 		ToAccountType:   toAccountType,
-		Amount:          RandomDecimal(),
+		Amount:          must.RandomDecimal(),
 		TransactionType: models.TransactionTypes.Contribution,
 	}
-}
-
-func RandomDecimal() decimal.Decimal {
-	return decimal.NewFromFloat(
-		float64(rand.Intn(100)),
-	).Div(
-		decimal.NewFromFloat(10),
-	)
-}
-
-func CreateIDs(count int) []string {
-	list := []string{}
-	for i := 0; i < count; i++ {
-		list = append(list, uuid.NewV4().String())
-	}
-	return list
-}
-
-func MustMarshal(
-	assertions *require.Assertions,
-	structure interface{},
-) string {
-	marshalled, err := json.Marshal(structure)
-	assertions.NoError(err)
-	return string(marshalled)
 }
 
 func (suite *DatastoreMockSuite) TestGetAccountEarnings() {
@@ -435,8 +411,8 @@ func (suite *DatastoreMockSuite) TestGetAccountEarnings() {
 	)
 
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -460,8 +436,8 @@ func (suite *DatastoreMockSuite) TestGetAccountSettlementEarnings() {
 	expectSettlementEarnings := SetupMockGetAccountSettlementEarnings(suite.mock, options)
 	actualSettlementEarnings := suite.GetAccountSettlementEarnings(options)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expectSettlementEarnings),
-		MustMarshal(suite.Require(), actualSettlementEarnings),
+		must.Marshal(suite.Require(), expectSettlementEarnings),
+		must.Marshal(suite.Require(), actualSettlementEarnings),
 	)
 }
 
@@ -478,7 +454,7 @@ func (suite *DatastoreMockSuite) GetAccountSettlementEarnings(
 }
 
 func (suite *DatastoreMockSuite) TestGetBalances() {
-	accountIDs := CreateIDs(3)
+	accountIDs := must.UUIDsToString(must.RandomIDs(3, true)...)
 
 	expect := SetupMockGetBalances(
 		suite.mock,
@@ -486,8 +462,8 @@ func (suite *DatastoreMockSuite) TestGetBalances() {
 	)
 	actual := suite.GetBalances(accountIDs)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -502,7 +478,7 @@ func (suite *DatastoreMockSuite) GetBalances(accountIDs []string) *[]models.Bala
 }
 
 func (suite *DatastoreMockSuite) TestGetPending() {
-	accountIDs := CreateIDs(3)
+	accountIDs := must.UUIDsToString(must.RandomIDs(3)...)
 
 	expect := SetupMockGetPending(
 		suite.mock,
@@ -510,8 +486,8 @@ func (suite *DatastoreMockSuite) TestGetPending() {
 	)
 	actual := suite.GetPending(accountIDs)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -526,7 +502,7 @@ func (suite *DatastoreMockSuite) GetPending(accountIDs []string) *[]models.Pendi
 }
 
 func (suite *DatastoreMockSuite) TestGetTransactionsByAccount() {
-	accountID := CreateIDs(1)[0]
+	accountID := must.UUIDsToString(must.RandomIDs(1)...)[0]
 
 	expectedTransactions := SetupMockGetTransactionsByAccount(
 		suite.mock,
@@ -538,8 +514,8 @@ func (suite *DatastoreMockSuite) TestGetTransactionsByAccount() {
 		nil,
 	)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expectedTransactions),
-		MustMarshal(suite.Require(), actualTransaction),
+		must.Marshal(suite.Require(), expectedTransactions),
+		must.Marshal(suite.Require(), actualTransaction),
 	)
 }
 
@@ -559,7 +535,7 @@ func (suite *DatastoreMockSuite) GetTransactionsByAccount(
 }
 
 func (suite *DatastoreMockSuite) TestInsertSettlement() {
-	settlements := CreateSettlements(1, models.TransactionTypes.Contribution)
+	settlements := must.CreateSettlements(1, models.TransactionTypes.Contribution)
 	convertableTransactions := models.SettlementsToConvertableTransactions(settlements...)
 	expect := SetupMockInsertConvertableTransactions(
 		suite.mock,
@@ -569,8 +545,8 @@ func (suite *DatastoreMockSuite) TestInsertSettlement() {
 	actual := suite.InsertConvertableTransactions(convertableTransactions)
 
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -582,30 +558,4 @@ func (suite *DatastoreMockSuite) InsertConvertableTransactions(
 	transactions, err := suite.db.GetTransactions(suite.ctx)
 	suite.Require().NoError(err)
 	return transactions
-}
-
-func CreateSettlements(count int, txType string) []models.Settlement {
-	settlements := []models.Settlement{}
-	for i := 0; i < count; i++ {
-		bat := decimal.NewFromFloat(5)
-		fees := bat.Mul(decimal.NewFromFloat(0.05))
-		batSubFees := bat.Sub(fees)
-		settlements = append(settlements, models.Settlement{
-			AltCurrency:  altcurrency.BAT,
-			Probi:        altcurrency.BAT.ToProbi(batSubFees),
-			Fees:         altcurrency.BAT.ToProbi(fees),
-			Fee:          decimal.Zero,
-			Commission:   decimal.Zero,
-			Amount:       bat,
-			Currency:     altcurrency.BAT.String(),
-			Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
-			Channel:      models.Channel("brave.com"),
-			Hash:         uuid.NewV4().String(),
-			Type:         txType,
-			SettlementID: uuid.NewV4().String(),
-			DocumentID:   uuid.NewV4().String(),
-			Address:      uuid.NewV4().String(),
-		})
-	}
-	return settlements
 }

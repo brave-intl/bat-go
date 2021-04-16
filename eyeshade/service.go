@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/utils/clients/common"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -18,8 +19,8 @@ type Service struct {
 	ctx         *context.Context
 	errChannel  *chan error
 	logger      *zerolog.Logger
-	datastore   Datastore
-	roDatastore Datastore
+	datastore   datastore.Datastore
+	roDatastore datastore.Datastore
 	clients     *common.Clients
 	router      *chi.Mux
 	consumers   map[string]BatchMessageConsumer
@@ -57,7 +58,10 @@ func (service *Service) WithContext(ctx context.Context) context.Context {
 }
 
 // WithConnections uses pre setup datastores for the service
-func WithConnections(db Datastore, rodb Datastore) func(service *Service) error {
+func WithConnections(
+	db datastore.Datastore,
+	rodb datastore.Datastore,
+) func(service *Service) error {
 	return func(service *Service) error {
 		service.datastore = db
 		service.roDatastore = rodb
@@ -79,7 +83,7 @@ func (service *Service) Clients() *common.Clients {
 
 // WithNewDBs sets up datastores for the service
 func WithNewDBs(service *Service) error {
-	eyeshadeDB, eyeshadeRODB, err := NewConnections()
+	eyeshadeDB, eyeshadeRODB, err := datastore.NewConnections()
 	if err == nil {
 		service.datastore = eyeshadeDB
 		service.roDatastore = eyeshadeRODB

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -84,7 +85,7 @@ func (service *Service) GETAccountEarningsTotal() handlers.AppHandler {
 		)
 		if err != nil {
 			status := http.StatusBadRequest
-			if !errors.Is(err, ErrLimitReached) && !errors.Is(err, ErrLimitRequired) {
+			if !errors.Is(err, datastore.ErrLimitReached) && !errors.Is(err, datastore.ErrLimitRequired) {
 				status = http.StatusInternalServerError
 			}
 			return handlers.WrapError(err, "unable to check account earnings", status)
@@ -137,7 +138,7 @@ func (service *Service) GETAccountSettlementEarningsTotal() handlers.AppHandler 
 		)
 		if err != nil {
 			status := http.StatusBadRequest
-			if !errors.Is(err, ErrLimitReached) && !errors.Is(err, ErrLimitRequired) {
+			if !errors.Is(err, datastore.ErrLimitReached) && !errors.Is(err, datastore.ErrLimitRequired) {
 				status = http.StatusInternalServerError
 			}
 			return handlers.WrapError(err, "unable to check account settlement earnings", status)

@@ -9,6 +9,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -30,6 +31,8 @@ var (
 		Scaleup:      "scaleup",
 		Ad:           "ad",
 	}
+	// TransactionTypesList a list version of the transaction types
+	TransactionTypesList = stringutils.CollectValues(TransactionTypes)
 	// AccountTypes holds possible account types
 	AccountTypes = accountTypes{
 		Channel:   "channel",

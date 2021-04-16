@@ -4,14 +4,27 @@ import (
 	"fmt"
 	"time"
 
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
 
 var (
-	// VoteValue holds the bat value of a single vote
+	// VoteValue holds the baseline bat value of a single vote
 	VoteValue = decimal.NewFromFloat(0.25)
+	// FundingTypes holds all possible funding types for the funding struct
+	FundingTypes = fundingTypes{
+		UGP: "ugp",
+		Ads: "ads",
+	}
+	// FundingTypeList a list version of the funding types struct
+	FundingTypeList = stringutils.CollectValues(FundingTypes)
 )
+
+type fundingTypes struct {
+	UGP string
+	Ads string
+}
 
 // Funding holds information about suggestion funding sources
 type Funding struct {
@@ -89,7 +102,7 @@ func (funding *Funding) GetExcluded() bool {
 func (funding *Funding) GenerateID(channel Channel, date string) string {
 	surveyorID := funding.GetSurveyorID(date)
 	return uuid.NewV5(
-		TransactionNS["votes"],
+		TransactionNS[AltKeys.Votes],
 		channel.String()+funding.GetCohort()+surveyorID,
 	).String()
 }

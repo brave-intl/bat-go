@@ -1,6 +1,6 @@
-// +build test,integration
+// +build integration
 
-package eyeshade
+package test
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade"
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -23,12 +25,12 @@ type ControllersSuite struct {
 	suite.Suite
 	tokens  map[string]string
 	ctx     context.Context
-	db      Datastore
-	rodb    Datastore
+	db      datastore.Datastore
+	rodb    datastore.Datastore
 	mock    sqlmock.Sqlmock
 	mockRO  sqlmock.Sqlmock
 	server  *httptest.Server
-	service *Service
+	service *eyeshade.Service
 }
 
 func TestControllersSuite(t *testing.T) {
@@ -45,11 +47,11 @@ func (suite *ControllersSuite) SetupSuite() {
 
 	suite.ctx = ctx
 	name := "sqlmock"
-	suite.db = NewFromConnection(&grantserver.Postgres{
+	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockDB, name),
 	}, name)
 	suite.mock = mock
-	suite.rodb = NewFromConnection(&grantserver.Postgres{
+	suite.rodb = datastore.NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockRODB, name),
 	}, name)
 	suite.mockRO = mockRO
@@ -62,14 +64,14 @@ func (suite *ControllersSuite) SetupSuite() {
 	for key, value := range suite.tokens {
 		os.Setenv(middleware.ScopesToEnv[key], value)
 	}
-	service, err := SetupService(
-		WithContext(suite.ctx),
-		WithBuildInfo,
-		WithNewLogger,
-		WithConnections(suite.db, suite.rodb),
-		WithNewRouter,
-		WithMiddleware,
-		WithRoutes,
+	service, err := eyeshade.SetupService(
+		eyeshade.WithContext(suite.ctx),
+		eyeshade.WithBuildInfo,
+		eyeshade.WithNewLogger,
+		eyeshade.WithConnections(suite.db, suite.rodb),
+		eyeshade.WithNewRouter,
+		eyeshade.WithMiddleware,
+		eyeshade.WithRoutes,
 	)
 	suite.Require().NoError(err)
 	suite.service = service

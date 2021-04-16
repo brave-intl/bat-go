@@ -1,10 +1,10 @@
-package eyeshade
+package datastore
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool
-// using ../.prom-gowrap.tmpl template
+// using ../../.prom-gowrap.tmpl template
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/eyeshade -i Datastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/eyeshade/datastore -i Datastore -t ../../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
-	sqlx "github.com/jmoiron/sqlx"
+	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -55,6 +55,34 @@ func (_d DatastoreWithPrometheus) Commit(ctx context.Context) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Commit", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.Commit(ctx)
+}
+
+// CountBallots implements Datastore
+func (_d DatastoreWithPrometheus) CountBallots(ctx context.Context, p1 ...string) (bap1 *[]models.Ballot, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CountBallots", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CountBallots(ctx, p1...)
+}
+
+// FreezeSurveyors implements Datastore
+func (_d DatastoreWithPrometheus) FreezeSurveyors(ctx context.Context, p1 ...string) (sap1 *[]models.Surveyor, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "FreezeSurveyors", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FreezeSurveyors(ctx, p1...)
 }
 
 // GetAccountEarnings implements Datastore
@@ -125,6 +153,20 @@ func (_d DatastoreWithPrometheus) GetBallotsByID(ctx context.Context, p1 ...stri
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetBallotsByID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetBallotsByID(ctx, p1...)
+}
+
+// GetFreezableSurveyors implements Datastore
+func (_d DatastoreWithPrometheus) GetFreezableSurveyors(ctx context.Context, i1 int) (sap1 *[]models.Surveyor, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetFreezableSurveyors", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetFreezableSurveyors(ctx, i1)
 }
 
 // GetGrantStats implements Datastore
@@ -212,7 +254,7 @@ func (_d DatastoreWithPrometheus) GetTransactionsByAccount(ctx context.Context, 
 }
 
 // GetTransactionsByID implements Datastore
-func (_d DatastoreWithPrometheus) GetTransactionsByID(ctx context.Context, documentIDs ...string) (tap1 *[]models.Transaction, err error) {
+func (_d DatastoreWithPrometheus) GetTransactionsByID(ctx context.Context, p1 ...string) (tap1 *[]models.Transaction, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -222,7 +264,7 @@ func (_d DatastoreWithPrometheus) GetTransactionsByID(ctx context.Context, docum
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTransactionsByID", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetTransactionsByID(ctx, documentIDs...)
+	return _d.base.GetTransactionsByID(ctx, p1...)
 }
 
 // InsertBallots implements Datastore
@@ -395,6 +437,20 @@ func (_d DatastoreWithPrometheus) SeedDB(ctx context.Context) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SeedDB", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.SeedDB(ctx)
+}
+
+// SetVoteFees implements Datastore
+func (_d DatastoreWithPrometheus) SetVoteFees(ctx context.Context, p1 ...string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetVoteFees", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetVoteFees(ctx, p1...)
 }
 
 // WithTx implements Datastore

@@ -1,6 +1,6 @@
-// +build test,integration
+// +build integration
 
-package eyeshade
+package test
 
 import (
 	"context"
@@ -8,7 +8,10 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/eyeshade"
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
+	"github.com/brave-intl/bat-go/eyeshade/must"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 )
@@ -16,24 +19,15 @@ import (
 type ServiceMockTestSuite struct {
 	suite.Suite
 	ctx     context.Context
-	db      Datastore
-	rodb    Datastore
+	db      datastore.Datastore
+	rodb    datastore.Datastore
 	mock    sqlmock.Sqlmock
 	mockRO  sqlmock.Sqlmock
-	service *Service
+	service *eyeshade.Service
 }
-
-// type DatastoreTestSuite struct {
-// 	suite.Suite
-// 	ctx context.Context
-// 	db  Datastore
-// }
 
 func TestServiceMockTestSuite(t *testing.T) {
 	suite.Run(t, new(ServiceMockTestSuite))
-	// if os.Getenv("EYESHADE_DB_URL") != "" {
-	// 	suite.Run(t, new(DatastoreTestSuite))
-	// }
 }
 
 func (suite *ServiceMockTestSuite) SetupSuite() {
@@ -45,25 +39,25 @@ func (suite *ServiceMockTestSuite) SetupSuite() {
 	mockRODB, mockRO, err := sqlmock.New()
 	suite.Require().NoError(err, "failed to create a sql mock")
 
-	suite.db = NewFromConnection(&grantserver.Postgres{
+	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockDB, name),
 	}, name)
 	suite.mock = mock
-	suite.rodb = NewFromConnection(&grantserver.Postgres{
+	suite.rodb = datastore.NewFromConnection(&grantserver.Postgres{
 		DB: sqlx.NewDb(mockRODB, name),
 	}, name)
 	suite.mockRO = mockRO
 
-	service, err := SetupService(
-		WithContext(suite.ctx),
-		WithConnections(suite.db, suite.rodb),
+	service, err := eyeshade.SetupService(
+		eyeshade.WithContext(suite.ctx),
+		eyeshade.WithConnections(suite.db, suite.rodb),
 	)
 	suite.Require().NoError(err)
 	suite.service = service
 }
 
 func (suite *ServiceMockTestSuite) TestGetBalances() {
-	accountIDs := CreateIDs(2)
+	accountIDs := must.UUIDsToString(must.RandomIDs(2, true)...)
 
 	expected := suite.SetupMockBalances(accountIDs, accountIDs)
 	balances := suite.GetBalances(accountIDs, true)
@@ -71,8 +65,8 @@ func (suite *ServiceMockTestSuite) TestGetBalances() {
 	suite.Require().Len(*balances, len(*expected))
 
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expected),
-		MustMarshal(suite.Require(), balances),
+		must.Marshal(suite.Require(), expected),
+		must.Marshal(suite.Require(), balances),
 	)
 
 	expected = suite.SetupMockBalances(accountIDs)
@@ -81,8 +75,8 @@ func (suite *ServiceMockTestSuite) TestGetBalances() {
 	suite.Require().Len(*balances, len(*expected))
 
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expected),
-		MustMarshal(suite.Require(), balances),
+		must.Marshal(suite.Require(), expected),
+		must.Marshal(suite.Require(), balances),
 	)
 }
 
@@ -102,7 +96,7 @@ func (suite *ServiceMockTestSuite) SetupMockBalances(
 		suite.mockRO,
 		pendingAccountIDs[0],
 	)
-	return mergePendingTransactions(expectedPending, expectedBalances)
+	return models.MergePendingTransactions(expectedPending, expectedBalances)
 }
 
 func (suite *ServiceMockTestSuite) GetBalances(

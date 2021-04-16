@@ -15,7 +15,7 @@ type defunctRoute struct {
 }
 
 var (
-	defunctRoutes = []defunctRoute{
+	DefunctRoutes = []defunctRoute{
 		{"POST", "/v2/publishers/settlement/submit"},
 		{"GET", "/v1/referrals/statement/{owner}"},
 		{"PUT", "/v1/referrals/{transactionID}"},
@@ -40,7 +40,7 @@ type DefunctResponse struct {
 // RouterDefunct for defunct eyeshade endpoints
 func RouterDefunct(withV1 bool) chi.Router {
 	r := chi.NewRouter()
-	for _, routeSettings := range defunctRoutes {
+	for _, routeSettings := range DefunctRoutes {
 		path := routeSettings.Path
 		isV1 := strings.Contains(path, "/v1/")
 		isAndWithV1 := withV1 && isV1

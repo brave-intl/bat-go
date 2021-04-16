@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/brave-intl/bat-go/eyeshade/countries"
+	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
 )
 
 // Datastore returns a read only datastore if available
 // otherwise a normal datastore
-func (service *Service) Datastore(ro ...bool) Datastore {
+func (service *Service) Datastore(ro ...bool) datastore.Datastore {
 	if len(ro) > 0 && ro[0] && service.roDatastore != nil {
 		return service.roDatastore
 	}
@@ -63,7 +64,7 @@ func (service *Service) GetBalances(
 		if err != nil {
 			return nil, err
 		}
-		return mergePendingTransactions(*pendingVotes, *balances), nil
+		return models.MergePendingTransactions(*pendingVotes, *balances), nil
 	}
 	return balances, nil
 }
@@ -83,7 +84,7 @@ func (service *Service) GetTransactionsByAccount(
 	if err != nil {
 		return nil, err
 	}
-	return transformTransactions(
+	return models.TransactionsToCreatorsTransactions(
 		accountID,
 		transactions,
 	), nil
@@ -135,42 +136,4 @@ func (service *Service) InsertConvertableTransactions(
 ) error {
 	return service.Datastore().
 		InsertConvertableTransactions(ctx, txs)
-}
-
-func transformTransactions(account string, txs *[]models.Transaction) *[]models.CreatorsTransaction {
-	creatorsTxs := []models.CreatorsTransaction{}
-	for _, tx := range *txs {
-		creatorsTxs = append(
-			creatorsTxs,
-			tx.BackfillForCreators(account),
-		)
-	}
-	return &creatorsTxs
-}
-
-func mergePendingTransactions(votes []models.PendingTransaction, balances []models.Balance) *[]models.Balance {
-	pending := []models.Balance{}
-	balancesByAccountID := map[string]*models.Balance{}
-	balanceIndex := map[string]int{}
-	for i, balance := range balances {
-		balanceIndex[balance.AccountID] = i
-		balancesByAccountID[balance.AccountID] = &balance
-	}
-	for _, vote := range votes {
-		accountID := vote.Channel.String()
-		balance := balancesByAccountID[accountID]
-		if balance == nil {
-			pending = append(pending, models.Balance{
-				AccountID: accountID,
-				Balance:   vote.Balance,
-				Type:      "channel",
-			})
-		} else {
-			balance := balances[balanceIndex[accountID]]
-			balance.Balance = balance.Balance.Add(vote.Balance)
-			balances[balanceIndex[accountID]] = balance
-		}
-	}
-	allBalances := append(balances, pending...)
-	return &allBalances
 }

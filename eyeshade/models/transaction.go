@@ -73,3 +73,45 @@ type CreatorsTransaction struct {
 	SettlementDestinationType *string        `json:"settlement_destination_type,omitempty"`
 	SettlementDestination     *string        `json:"settlement_destination,omitempty"`
 }
+
+// TransactionsToCreatorsTransactions converts transactions to creators transactions
+func TransactionsToCreatorsTransactions(
+	account string,
+	txs *[]Transaction,
+) *[]CreatorsTransaction {
+	creatorsTxs := []CreatorsTransaction{}
+	for _, tx := range *txs {
+		creatorsTxs = append(
+			creatorsTxs,
+			tx.BackfillForCreators(account),
+		)
+	}
+	return &creatorsTxs
+}
+
+func MergePendingTransactions(votes []PendingTransaction, balances []Balance) *[]Balance {
+	pending := []Balance{}
+	balancesByAccountID := map[string]*Balance{}
+	balanceIndex := map[string]int{}
+	for i, balance := range balances {
+		balanceIndex[balance.AccountID] = i
+		balancesByAccountID[balance.AccountID] = &balance
+	}
+	for _, vote := range votes {
+		accountID := vote.Channel.String()
+		balance := balancesByAccountID[accountID]
+		if balance == nil {
+			pending = append(pending, Balance{
+				AccountID: accountID,
+				Balance:   vote.Balance,
+				Type:      "channel",
+			})
+		} else {
+			balance := balances[balanceIndex[accountID]]
+			balance.Balance = balance.Balance.Add(vote.Balance)
+			balances[balanceIndex[accountID]] = balance
+		}
+	}
+	allBalances := append(balances, pending...)
+	return &allBalances
+}

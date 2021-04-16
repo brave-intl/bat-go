@@ -3,14 +3,14 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
 TEST_PKG?=./...
-ifdef TEST_TAGS
-	ifneq (,$(findstring test,$(TEST_TAGS)))
-	else
-		TEST_TAGS:=test,$(TEST_TAGS)
-	endif
-else
-	TEST_TAGS=test
-endif
+# ifdef TEST_TAGS
+# 	ifneq (,$(findstring test,$(TEST_TAGS)))
+# 	else
+# 		TEST_TAGS:=test,$(TEST_TAGS)
+# 	endif
+# else
+# 	TEST_TAGS=test
+# endif
 TEST_FLAGS= -tags $(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
 	TEST_FLAGS = -tags $(TEST_TAGS) $(TEST_PKG) -run $(TEST_RUN)
@@ -34,9 +34,9 @@ mock:
 	mockgen -source=./utils/clients/bitflyer/client.go -destination=utils/clients/bitflyer/mock/mock.go -package=mock_bitflyer
 
 prep-eyeshade:
-	gowrap gen -p github.com/brave-intl/bat-go/eyeshade -i Datastore -t ./.prom-gowrap.tmpl -o ./eyeshade/instrumented_read_only_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/eyeshade_readonly_datastore_duration_seconds/g' ./eyeshade/instrumented_read_only_datastore.go
-	mockgen -source=./eyeshade/datastore.go -destination=eyeshade/mockdatastore.go -package=eyeshade
+	gowrap gen -p github.com/brave-intl/bat-go/eyeshade/datastore -i Datastore -t ./.prom-gowrap.tmpl -o ./eyeshade/datastore/instrumented_read_only_datastore.go
+	sed -i'bak' 's/readonlydatastore_duration_seconds/eyeshade_readonly_datastore_duration_seconds/g' ./eyeshade/datastore/instrumented_read_only_datastore.go
+	mockgen -source=./eyeshade/datastore/datastore.go -destination=eyeshade/datastore/mockdatastore.go -package=datastore
 
 prep-ratios:
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go
@@ -105,7 +105,7 @@ docker-eyeshade-test:
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	docker-compose -f docker-compose.yml -f eyeshade/docker-compose.yml \
-	exec -e TEST_PKG=./eyeshade -e VAULT_TOKEN=$(VAULT_TOKEN) -e TEST_RUN=$(TEST_RUN) -e TEST_TAGS=$(TEST_TAGS) \
+	exec -e TEST_PKG=./eyeshade/... -e VAULT_TOKEN=$(VAULT_TOKEN) -e TEST_RUN=$(TEST_RUN) -e TEST_TAGS=$(TEST_TAGS) \
 	eyeshade-web make test
 	go run main.go generate eyeshade-json-schema
 

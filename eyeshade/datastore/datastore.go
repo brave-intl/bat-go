@@ -1,4 +1,4 @@
-package eyeshade
+package datastore
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	datastoreutils "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
@@ -86,9 +87,13 @@ type Datastore interface {
 	SeedDB(context.Context) error
 	GetBallotsByID(context.Context, ...string) (*[]models.Ballot, error)
 	GetTransactionsByID(
-		ctx context.Context,
-		documentIDs ...string,
+		context.Context,
+		...string,
 	) (*[]models.Transaction, error)
+	GetFreezableSurveyors(context.Context, int) (*[]models.Surveyor, error)
+	FreezeSurveyors(context.Context, ...string) (*[]models.Surveyor, error)
+	SetVoteFees(context.Context, ...string) error
+	CountBallots(context.Context, ...string) (*[]models.Ballot, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -151,6 +156,144 @@ func NewConnections() (Datastore, Datastore, error) {
 		}
 	}
 	return eyeshadePg, eyeshadeRoPg, err
+}
+
+// GetFreezableSurveyors gets surveyors that can be frozen within a given time frame
+func (pg *Postgres) GetFreezableSurveyors(
+	ctx context.Context,
+	lag int,
+) (*[]models.Surveyor, error) {
+	statement := `
+SELECT id
+FROM surveyor_groups
+WHERE NOT frozen
+AND (
+	NOT VIRTUAL
+	AND created_at < CURRENT_DATE - $1 * INTERVAL '1d'
+) OR (
+	VIRTUAL
+	AND created_at < CURRENT_DATE
+)`
+	var surveyors []models.Surveyor
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.Rollback(ctx)
+	err = tx.SelectContext(ctx, &surveyors, statement, lag)
+	if err != nil {
+		return nil, err
+	}
+	return &surveyors, pg.Commit(ctx)
+}
+
+// SetVoteFees sets the amount and fees values
+func (pg *Postgres) SetVoteFees(ctx context.Context, ids ...string) error {
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer pg.Rollback(ctx)
+	statement := `
+UPDATE votes
+SET
+	amount = (1 - $1::DECIMAL) * votes.tally * surveyor_groups.price,
+	fees =  $1::DECIMAL * votes.tally * surveyor_groups.price
+FROM surveyor_groups
+WHERE
+		votes.surveyor_id = surveyor_groups.id
+AND votes.surveyor_id = ANY($2::TEXT[])
+AND NOT votes.excluded
+AND surveyor_groups.frozen`
+	_, err = tx.ExecContext(ctx, statement, pq.Array(ids))
+	if err != nil {
+		return err
+	}
+	return pg.Commit(ctx)
+}
+
+// MarkVotesTransacted marks transacted on the surveyor votes
+// only if they were already inserted into db
+func (pg *Postgres) MarkVotesTransacted(
+	ctx context.Context,
+	ids ...string,
+) error {
+	statement := `
+UPDATE votes
+	SET transacted = true
+FROM (
+	SELECT votes.id
+	FROM votes
+	JOIN transactions
+	ON (
+		transactions.document_id = votes.surveyor_id
+		AND transactions.to_account = votes.channel
+	)
+	WHERE
+		NOT votes.excluded
+		AND votes.surveyor_id = $1
+) o
+WHERE votes.id = o.id`
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer pg.Rollback(ctx)
+	_, err = tx.ExecContext(ctx, statement, pq.Array(ids))
+	if err != nil {
+		return err
+	}
+	return pg.Commit(ctx)
+}
+
+// CountBallots counts the votes across surveyors
+func (pg *Postgres) CountBallots(ctx context.Context, ids ...string) (*[]models.Ballot, error) {
+	var ballots []models.Ballot
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.Rollback(ctx)
+	statement := `
+SELECT
+	votes.channel,
+	votes.surveyor_id,
+	COALESCE(SUM(votes.amount), 0.0) AS amount,
+	COALESCE(SUM(votes.fees), 0.0) AS fees
+FROM votes
+WHERE surveyor_id = $1::TEXT
+AND NOT excluded
+AND NOT transacted
+AND amount IS NOT NULL
+GROUP BY (votes.channel, votes.surveyor_id)`
+	if err = tx.SelectContext(ctx, &ballots, statement, pq.Array(ids)); err != nil {
+		return nil, err
+	}
+	return &ballots, pg.Commit(ctx)
+}
+
+// FreezeSurveyors freezes a list of surveyors
+func (pg *Postgres) FreezeSurveyors(
+	ctx context.Context,
+	ids ...string,
+) (*[]models.Surveyor, error) {
+	ctx, tx, err := pg.ResolveConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer pg.Rollback(ctx)
+	statement := `
+UPDATE surveyor_groups
+SET
+	frozen = TRUE,
+	updated_at = CURRENT_TIMESTAMP
+WHERE id = ANY($1::TEXT[])
+RETURNING *`
+	var surveyors []models.Surveyor
+	if err := tx.SelectContext(ctx, &surveyors, statement, pq.Array(ids)); err != nil {
+		return nil, err
+	}
+	return &surveyors, pg.Commit(ctx)
 }
 
 // GetAccountEarnings gets the account earnings for a subset of ids
@@ -636,7 +779,7 @@ func (pg *Postgres) convertToBallots(
 	ctx context.Context,
 	votes []models.Vote,
 ) (*[]models.Surveyor, *[]models.Ballot, error) {
-	date := time.Now().Format("2021-01-01")
+	date := timeutils.JustDate(time.Now().UTC())
 	_, surveyorIDs := models.CollectSurveyorIDs(date, votes)
 	insertedSurveyors, err := pg.GetSurveyorsByID(ctx, surveyorIDs)
 	if err != nil {
@@ -649,7 +792,7 @@ func (pg *Postgres) convertToBallots(
 
 // SeedDB seeds the db with the appropriate seed files
 func (pg *Postgres) SeedDB(ctx context.Context) error {
-	dir := "./seeds/"
+	dir := "../seeds/"
 	fileInfos, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err

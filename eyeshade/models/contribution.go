@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	stringutils "github.com/brave-intl/bat-go/utils/string"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -14,13 +15,17 @@ var (
 		AutoContribute: "auto-contribute",
 		OneoffTip:      "oneoff-tip",
 		RecurringTip:   "recurring-tip",
+		Payment:        "payment",
 	}
+	// ContributionTypeList a list version of the contribution types values
+	ContributionTypeList = stringutils.CollectValues(ContributionTypes)
 )
 
 type contributionTypes struct {
 	AutoContribute string
 	OneoffTip      string
 	RecurringTip   string
+	Payment        string
 }
 
 func (ct *contributionTypes) All() []string {
@@ -44,7 +49,7 @@ type Contribution struct {
 
 // GetSurveyorID gets the surveyor id
 func (contribution *Contribution) GetSurveyorID(date string) string {
-	d := contribution.CreatedAt.Format(time.RFC3339)
+	d := contribution.CreatedAt.UTC().Format(time.RFC3339)
 	if date != "" {
 		d = date
 	}
@@ -91,7 +96,7 @@ func (contribution *Contribution) ToBallot(date string) Ballot {
 // GenerateID generates an id from the contribution namespace
 func (contribution *Contribution) GenerateID(date string) string {
 	return uuid.NewV5(
-		TransactionNS["votes"],
+		TransactionNS[AltKeys.Votes],
 		contribution.Channel.Normalize().String()+contribution.GetCohort()+contribution.GetSurveyorID(date),
 	).String()
 }

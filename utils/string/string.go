@@ -48,3 +48,16 @@ func CollectTags(t interface{}, tags ...string) []string {
 	}
 	return list
 }
+
+// CollectValues collects the values of a struct
+func CollectValues(s interface{}) []string {
+	list := []string{}
+	//
+	reflected := reflect.ValueOf(s)
+	for i := 0; i < reflected.NumField(); i++ {
+		if reflected.Type().Field(i).Type.Kind() == reflect.String {
+			list = append(list, reflected.Field(i).String())
+		}
+	}
+	return list
+}

@@ -1,6 +1,6 @@
-// +build test,integration
+// +build integration
 
-package eyeshade
+package test
 
 import (
 	"encoding/json"
@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/eyeshade"
 	"github.com/brave-intl/bat-go/eyeshade/models"
+	"github.com/brave-intl/bat-go/eyeshade/must"
 	"github.com/maikelmclauflin/go-boom"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/require"
 )
 
 func (suite *ControllersSuite) TestRouterStatic() {
@@ -24,7 +25,7 @@ func (suite *ControllersSuite) TestRouterStatic() {
 
 func (suite *ControllersSuite) TestRouterDefunct() {
 	re := regexp.MustCompile(`\{.+\}`)
-	for _, route := range defunctRoutes {
+	for _, route := range eyeshade.DefunctRoutes {
 		path := re.ReplaceAllString(route.Path, uuid.NewV4().String())
 		_, body := suite.DoRequest(route.Method, path, nil, "")
 		var defunctResponse boom.Err
@@ -33,6 +34,8 @@ func (suite *ControllersSuite) TestRouterDefunct() {
 		suite.Require().Equal(boom.Gone(), defunctResponse)
 	}
 }
+
+// func (suite *ControllersSuite) TestProtectedRoutes() {}
 
 func (suite *ControllersSuite) TestGETAccountEarnings() {
 	options := models.AccountEarningsOptions{
@@ -74,12 +77,12 @@ func (suite *ControllersSuite) TestGETAccountSettlementEarnings() {
 		&actual,
 	)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 
 	actual = []models.AccountSettlementEarnings{}
-	now := time.Now()
+	now := time.Now().UTC()
 	startDate := now.Truncate(time.Second)
 	untilDate := startDate.AddDate(0, 0, 2)
 	options = models.AccountSettlementEarningsOptions{
@@ -100,8 +103,8 @@ func (suite *ControllersSuite) TestGETAccountSettlementEarnings() {
 		&actual,
 	)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -143,15 +146,7 @@ func (suite *ControllersSuite) CheckAndUnmarshal(
 		s = status[0]
 	}
 	suite.Require().Equal(s, resStatusCode, string(body))
-	MustUnmarshal(suite.Require(), body, p)
-}
-
-func MustUnmarshal(
-	assertions *require.Assertions,
-	bytes []byte,
-	structure interface{},
-) {
-	assertions.NoError(json.Unmarshal(bytes, structure))
+	must.Unmarshal(suite.Require(), body, p)
 }
 
 func (suite *ControllersSuite) DoGETAccountBalances(
@@ -187,8 +182,8 @@ func (suite *ControllersSuite) TestGETBalances() {
 		&actual,
 	)
 	suite.Require().JSONEq(
-		MustMarshal(suite.Require(), expect),
-		MustMarshal(suite.Require(), actual),
+		must.Marshal(suite.Require(), expect),
+		must.Marshal(suite.Require(), actual),
 	)
 }
 
@@ -255,7 +250,7 @@ func (suite *ControllersSuite) TestGETTransactionsByAccount() {
 					scenario.types...,
 				)
 				if scenario.body == nil {
-					expected = transformTransactions(unescapedAccountID, &expectedTxs)
+					expected = models.TransactionsToCreatorsTransactions(unescapedAccountID, &expectedTxs)
 				}
 			}
 			if scenario.body != nil {
@@ -271,7 +266,7 @@ func (suite *ControllersSuite) TestGETTransactionsByAccount() {
 				return
 			}
 			suite.Require().JSONEq(
-				MustMarshal(suite.Require(), expected),
+				must.Marshal(suite.Require(), expected),
 				actual,
 			)
 		})
