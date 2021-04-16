@@ -243,8 +243,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 
-	r.Get("/metrics", middleware.Metrics())
-
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
 		// pprof attaches routes to default serve mux
