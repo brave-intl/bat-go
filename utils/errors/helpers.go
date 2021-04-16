@@ -53,3 +53,12 @@ func IsErrAlreadyExists(err error) bool {
 	te, ok := err.(alreadyExists)
 	return ok && te.AlreadyExistsError()
 }
+
+// IsErrForbidden is a helper method for determining if an error indicates the action is forbidden
+func IsErrForbidden(err error) bool {
+	type forbidden interface {
+		ForbiddenError() bool
+	}
+	te, ok := err.(forbidden)
+	return ok && te.ForbiddenError()
+}

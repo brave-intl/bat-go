@@ -269,9 +269,12 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 	}
 
 	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
-		fmt.Printf("quote returned is invalid, skipping\n")
-		settlement.Status = "failed"
-		return nil
+		// BAT transfers have TTL of zero, as do invalid transfers of XAU / LBA
+		if submitInfo.DestCurrency == "XAU" || submitInfo.DestCurrency == "LBA" {
+			fmt.Printf("quote returned is invalid, skipping\n")
+			settlement.Status = "failed"
+			return nil
+		}
 	}
 
 	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)
@@ -365,6 +368,10 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 				}
 
 				break
+			} else if errorutils.IsErrForbidden(err) {
+				fmt.Printf("invalid destination, skipping\n")
+				settlement.Status = "failed"
+				return nil
 			} else if errorutils.IsErrAlreadyExists(err) {
 				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
 				upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
