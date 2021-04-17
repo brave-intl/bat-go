@@ -188,7 +188,7 @@ func (suite *ControllersSuite) TestGETBalances() {
 }
 
 func (suite *ControllersSuite) TestGETTransactionsByAccount() {
-	unescapedAccountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+	unescapedAccountID := models.PrefixOwnerID(uuid.NewV4().String())
 	escapedAccountID := url.PathEscape(unescapedAccountID)
 	scenarios := map[string]struct {
 		path   string

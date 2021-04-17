@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/alecthomas/jsonschema"
+	eyeshadeoutput "github.com/brave-intl/bat-go/eyeshade/output"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/spf13/cobra"
@@ -20,9 +23,11 @@ func init() {
 	GenerateCmd.AddCommand(EyeshadeJSONSchemaCmd)
 
 	// overwrite - defaults to false
-	JSONSchemaCmd.Flags().Bool("overwrite", false,
+	builder := NewFlagBuilder(JSONSchemaCmd).
+		AddCommand(EyeshadeJSONSchemaCmd)
+
+	builder.Flag().Bool("overwrite", false,
 		"overwrite the existing json schema files")
-	Must(viper.BindPFlag("overwrite", JSONSchemaCmd.Flags().Lookup("overwrite")))
 }
 
 // GenerateCmd is the generate command
@@ -46,24 +51,40 @@ var EyeshadeJSONSchemaCmd = &cobra.Command{
 }
 
 func eyeshadeJSONSchemaRun(command *cobra.Command, args []string) error {
-	return nil
+	return jsonSchemaGenerate(
+		command.Context(),
+		viper.GetViper().GetBool("overwrite"),
+		eyeshadeoutput.APIResponseTypes,
+		map[string]string{
+			"models":    "eyeshade",
+			"countries": "eyeshade",
+		},
+	)
 }
 
-// jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand
 func jsonSchemaRun(command *cobra.Command, args []string) error {
-	ctx := command.Context()
-	logger, err := appctx.GetLogger(ctx)
+	overwrite, err := command.Flags().GetBool("overwrite")
 	if err != nil {
 		return err
 	}
-	overwrite, err := command.Flags().GetBool("overwrite")
+	return jsonSchemaGenerate(command.Context(), overwrite, outputs.APIResponseTypes)
+}
+
+// jsonSchemaGenerate - main entrypoint for the `generate json-schema` subcommand
+func jsonSchemaGenerate(
+	ctx context.Context,
+	overwrite bool,
+	responseTypes []reflect.Type,
+	transformers ...map[string]string,
+) error {
+	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
 	}
 	logger.Info().Msg("starting json-schema generation")
 
 	// Wallet Outputs ./wallet/outputs.go
-	for _, t := range outputs.APIResponseTypes {
+	for _, t := range responseTypes {
 
 		logger.Info().Str("path", t.PkgPath()).Str("name", t.Name()).Str("str", t.String()).Msg("type being processed")
 
@@ -72,12 +93,18 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to generate json schema: %w", err)
 		}
 
-		parts := strings.Split(t.String(), ".")
+		str := t.String()
+		for _, transformer := range transformers {
+			for key, val := range transformer {
+				str = strings.ReplaceAll(str, key, val)
+			}
+		}
+		parts := strings.Split(str, ".")
 
 		// read old schema file
 		existingSchema, err := ioutil.ReadFile(
 			fmt.Sprintf("./schema/%s/%s", parts[0], parts[1]))
-		if err != nil {
+		if err != nil && err != os.ErrNotExist {
 			logger.Info().Err(err).Msg("could not find existing schema file, might be a new api")
 		} else {
 			// test equality of schema file with what we just generated

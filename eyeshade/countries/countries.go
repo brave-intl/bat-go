@@ -71,14 +71,6 @@ func FindByID(groups []Group, id uuid.UUID) *Group {
 	return nil
 }
 
-// ComputedValue holds computed information about a referral group
-type ComputedValue struct {
-	Probi    decimal.Decimal
-	Value    decimal.Decimal
-	Currency string
-	ID       uuid.UUID
-}
-
 // Group holds information about a given referral group
 type Group struct {
 	ID       uuid.UUID       `json:"id" db:"id"`

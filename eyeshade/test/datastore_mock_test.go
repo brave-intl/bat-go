@@ -60,7 +60,7 @@ func SetupMockGetAccountEarnings(
 	)
 	rows := []models.AccountEarnings{}
 	for i := 0; i < options.Limit; i++ {
-		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+		accountID := models.PrefixOwnerID(uuid.NewV4().String())
 		earnings := decimal.NewFromFloat(
 			float64(rand.Intn(100)),
 		).Div(
@@ -122,7 +122,7 @@ func SetupMockGetAccountSettlementEarnings(
 		args = append(args, untilDate.Format(time.RFC3339))
 	}
 	for i := 0; i < options.Limit; i++ {
-		accountID := fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String())
+		accountID := models.PrefixOwnerID(uuid.NewV4().String())
 		paid := decimal.NewFromFloat(
 			float64(rand.Intn(100)),
 		).Div(

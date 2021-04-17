@@ -3,7 +3,6 @@ package must
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -62,7 +61,7 @@ func CreateSettlements(count int, txType string) []models.Settlement {
 			Commission:   decimal.Zero,
 			Amount:       bat,
 			Currency:     altcurrency.BAT.String(),
-			Owner:        fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			Owner:        models.PrefixOwnerID(uuid.NewV4().String()),
 			Channel:      models.Channel("brave.com"),
 			Hash:         uuid.NewV4().String(),
 			Type:         txType,
@@ -102,7 +101,7 @@ func CreateReferrals(count int, countryGroupID uuid.UUID) []models.Referral {
 		referrals = append(referrals, models.Referral{
 			TransactionID:      uuid.NewV4().String(),
 			Channel:            models.Channel("brave.com"),
-			Owner:              fmt.Sprintf("publishers#uuid:%s", uuid.NewV4().String()),
+			Owner:              models.PrefixOwnerID(uuid.NewV4().String()),
 			FinalizedTimestamp: now,
 			ReferralCode:       "ABC123",
 			DownloadID:         uuid.NewV4().String(),

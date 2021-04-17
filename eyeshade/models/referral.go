@@ -12,6 +12,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	publisherPrefix = "publishers#uuid:"
+)
+
 // Referral holds information from referral queue
 type Referral struct {
 	TransactionID      string                  `json:"transactionId"`
@@ -44,15 +48,18 @@ func (referral *Referral) GenerateID() string {
 	).String()
 }
 
+func PrefixOwnerID(id string) string {
+	return publisherPrefix + id
+}
+
 // ToTxs converts a referral to the appropriate transactions
 func (referral *Referral) ToTxs() []Transaction {
 	owner := referral.Owner
 	if owner == "removed" {
 		return []Transaction{}
 	}
-	prefix := "publishers#uuid:"
-	if owner[:len(prefix)] != prefix {
-		owner = prefix + owner
+	if owner[:len(publisherPrefix)] != publisherPrefix {
+		owner = PrefixOwnerID(owner)
 	}
 	createdAt := referral.FinalizedTimestamp
 	month := createdAt.Month().String()[:3]
@@ -61,12 +68,12 @@ func (referral *Referral) ToTxs() []Transaction {
 		ID:              referral.GenerateID(),
 		CreatedAt:       createdAt,
 		Description:     fmt.Sprintf("referrals through %s", month),
-		TransactionType: "referral",
+		TransactionType: TransactionTypes.Referral,
 		DocumentID:      referral.GetTransactionID(),
 		FromAccount:     SettlementAddress,
-		FromAccountType: "uphold",
+		FromAccountType: Providers.Uphold,
 		ToAccount:       owner,
-		ToAccountType:   "owner",
+		ToAccountType:   AccountTypes.Owner,
 		Amount:          referral.Amount,
 		Channel:         &channel,
 	}}
