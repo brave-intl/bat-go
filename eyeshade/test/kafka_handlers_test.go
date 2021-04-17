@@ -84,7 +84,8 @@ func (suite *KafkaHandlersSuite) TestSettlements() {
 	txs := models.SettlementsToConvertableTransactions(settlements...)
 	ids := models.CollectTransactionIDs(txs...)
 
-	go must.WaitFor(errChan, must.Check(func(
+	go must.WaitFor(errChan, func(
+		errChan chan error,
 		last bool,
 	) (bool, error) {
 		txs, err := suite.service.Datastore(true).
@@ -98,10 +99,10 @@ func (suite *KafkaHandlersSuite) TestSettlements() {
 			return false, err
 		}
 		if err == nil {
-			last = len(*txs) == len(ids)
+			last = len(*txs) == len(ids) && suite.service.Consumer(avro.TopicKeys.Settlement).IdleFor(time.Second)
 		}
 		return last, err
-	}))
+	})
 
 	select {
 	case err := <-errChan:
@@ -127,7 +128,8 @@ func (suite *KafkaHandlersSuite) TestReferrals() {
 	ch := make(chan []models.Transaction)
 	convertableTransactions := models.ReferralsToConvertableTransactions(referrals...)
 	ids := models.CollectTransactionIDs(convertableTransactions...)
-	go must.WaitFor(errChan, must.Check(func(
+	go must.WaitFor(errChan, func(
+		errChan chan error,
 		last bool,
 	) (bool, error) {
 		txs, err := suite.service.Datastore(true).
@@ -141,10 +143,10 @@ func (suite *KafkaHandlersSuite) TestReferrals() {
 			return false, err
 		}
 		if err == nil {
-			last = len(*txs) == len(ids)
+			last = len(*txs) == len(ids) && suite.service.Consumer(avro.TopicKeys.Referral).IdleFor(time.Second)
 		}
 		return last, err
-	}))
+	})
 
 	select {
 	case err := <-errChan:
@@ -171,11 +173,10 @@ func (suite *KafkaHandlersSuite) TestSuggestions() {
 	date := timeutils.JustDate(time.Now().UTC())
 	errChan := suite.service.Consume()
 	votes := models.SuggestionsToVotes(suggestions...)
-	fmt.Println("date", date)
 	voteIDs := models.CollectBallotIDs(date, votes...)
-	fmt.Println("voteIDs", voteIDs)
 	ch := make(chan []models.Ballot)
-	go must.WaitFor(errChan, must.Check(func(
+	go must.WaitFor(errChan, func(
+		errChan chan error,
 		last bool,
 	) (bool, error) {
 		ballots, err := suite.service.Datastore(true).
@@ -189,10 +190,10 @@ func (suite *KafkaHandlersSuite) TestSuggestions() {
 			return false, err
 		}
 		if err == nil {
-			last = len(*ballots) == len(voteIDs)
+			last = len(*ballots) == len(voteIDs) && suite.service.Consumer(avro.TopicKeys.Suggestion).IdleFor(time.Second)
 		}
 		return last, err
-	}))
+	})
 	select {
 	case err := <-errChan:
 		suite.Require().NoError(err)
@@ -223,7 +224,8 @@ func (suite *KafkaHandlersSuite) TestContributions() {
 	votes := models.ContributionsToVotes(contributions...)
 	voteIDs := models.CollectBallotIDs(date, votes...)
 	ch := make(chan []models.Ballot)
-	go must.WaitFor(errChan, must.Check(func(
+	go must.WaitFor(errChan, func(
+		errChan chan error,
 		last bool,
 	) (bool, error) {
 		ballots, err := suite.service.Datastore(true).
@@ -237,10 +239,10 @@ func (suite *KafkaHandlersSuite) TestContributions() {
 			return false, err
 		}
 		if err == nil {
-			last = len(*ballots) == len(voteIDs)
+			last = len(*ballots) == len(voteIDs) && suite.service.Consumer(avro.TopicKeys.Contribution).IdleFor(time.Second)
 		}
 		return last, err
-	}))
+	})
 	select {
 	case err := <-errChan:
 		suite.Require().NoError(err)

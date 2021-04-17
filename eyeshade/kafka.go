@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	avrocontribution "github.com/brave-intl/bat-go/eyeshade/avro/contribution"
@@ -38,6 +39,7 @@ type BatchMessagesHandler interface {
 type BatchMessageConsumer interface {
 	Consume(erred chan error)
 	IsConsuming() bool
+	IdleFor(time.Duration) bool
 	Read() ([]kafka.Message, bool, error)
 	Handler([]kafka.Message) error
 	Commit([]kafka.Message) error
@@ -56,6 +58,8 @@ type BatchMessageProducer interface {
 type MessageHandler struct {
 	key         string
 	isConsuming bool
+	isHandling  bool
+	lastTick    time.Time
 	bundle      avro.TopicBundle
 	service     *Service
 	reader      *kafka.Reader
@@ -66,6 +70,11 @@ type MessageHandler struct {
 // IsConsuming checks if the message handler is consuming
 func (con *MessageHandler) IsConsuming() bool {
 	return con.isConsuming
+}
+
+// IdleFor returns notes whether or not the consumer is temporarily done consuming
+func (con *MessageHandler) IdleFor(duration time.Duration) bool {
+	return !con.isHandling && (con.lastTick.IsZero() || time.Now().After(con.lastTick.Add(duration)))
 }
 
 // Topic returns the topic of the message handler
@@ -125,6 +134,7 @@ func (con *MessageHandler) Consume(
 		if !con.isConsuming {
 			break
 		}
+		con.isHandling = false
 		msgs, _, e := con.Read()
 		if e != nil {
 			err = errorutils.Wrap(e, "during read")
@@ -133,6 +143,8 @@ func (con *MessageHandler) Consume(
 		if len(msgs) == 0 {
 			continue
 		}
+		con.isHandling = true
+		con.lastTick = time.Now()
 		e = con.Handler(msgs)
 		if e != nil {
 			err = errorutils.Wrap(e, "during handler")
@@ -143,7 +155,9 @@ func (con *MessageHandler) Consume(
 			err = errorutils.Wrap(e, "during commit")
 			break
 		}
+		con.lastTick = time.Now()
 	}
+	con.isHandling = false
 	con.isConsuming = false
 	if err != nil {
 		erred <- errorutils.Wrap(
@@ -251,6 +265,10 @@ func WithConsumer(
 		}
 		return nil
 	}
+}
+
+func (service *Service) Consumer(key string) BatchMessageConsumer {
+	return service.consumers[key]
 }
 
 // WithProducer sets up a consumer on the service

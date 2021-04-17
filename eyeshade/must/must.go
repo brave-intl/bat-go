@@ -201,33 +201,14 @@ func UUIDsToString(uuids ...uuid.UUID) []string {
 	return list
 }
 
-// Check checks a function
-// use with must.WaitFor(
-func Check(
-	runner func(bool) (bool, error),
-) func(chan error) (bool, error) {
-	return func(errChan chan error) (bool, error) {
-		finished, err := runner(false)
-		if err != nil {
-			return false, err
-		}
-		if finished { //len(*ballots) == len(ids) {
-			<-time.After(time.Second * 1) // let the kafka consumer catch up
-			go func() { _, _ = runner(true) }()
-			return finished, err
-		}
-		return finished, err
-	}
-}
-
 // WaitFor the utility to call functions on a periotic interval
 func WaitFor(
 	errChan chan error,
-	handler func(chan error) (bool, error),
+	handler func(chan error, bool) (bool, error),
 ) {
 	for {
 		<-time.After(time.Millisecond * 100)
-		finished, err := handler(errChan)
+		finished, err := handler(errChan, false)
 		if err == sql.ErrNoRows {
 			continue
 		}
@@ -236,6 +217,10 @@ func WaitFor(
 			return
 		}
 		if finished {
+			_, err := handler(errChan, true)
+			if err != nil {
+				errChan <- err
+			}
 			return
 		}
 	}
