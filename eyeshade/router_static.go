@@ -15,6 +15,7 @@ type defunctRoute struct {
 }
 
 var (
+	// DefunctRoutes holds defunct routes that will always return 410s
 	DefunctRoutes = []defunctRoute{
 		{"POST", "/v2/publishers/settlement/submit"},
 		{"GET", "/v1/referrals/statement/{owner}"},

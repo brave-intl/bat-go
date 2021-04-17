@@ -89,6 +89,7 @@ func TransactionsToCreatorsTransactions(
 	return &creatorsTxs
 }
 
+// MergePendingTransactions merge pending transactions with balances
 func MergePendingTransactions(votes []PendingTransaction, balances []Balance) *[]Balance {
 	pending := []Balance{}
 	balancesByAccountID := map[string]*Balance{}

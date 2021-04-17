@@ -267,6 +267,7 @@ func WithConsumer(
 	}
 }
 
+// Consumer retrieves a consumer off of the service
 func (service *Service) Consumer(key string) BatchMessageConsumer {
 	return service.consumers[key]
 }
