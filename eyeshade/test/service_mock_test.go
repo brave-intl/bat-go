@@ -8,10 +8,10 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	"github.com/brave-intl/bat-go/eyeshade"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 )

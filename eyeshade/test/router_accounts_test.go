@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/eyeshade"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/maikelmclauflin/go-boom"
 	uuid "github.com/satori/go.uuid"
 )

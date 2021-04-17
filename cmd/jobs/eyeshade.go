@@ -10,7 +10,7 @@ import (
 	_ "net/http/pprof"
 	// re-using viper bind-env for wallet env variables
 	_ "github.com/brave-intl/bat-go/cmd/wallets"
-	"github.com/brave-intl/bat-go/eyeshade"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 
 	"github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"

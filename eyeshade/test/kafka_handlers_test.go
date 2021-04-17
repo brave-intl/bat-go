@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/eyeshade"
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/stretchr/testify/suite"
 )

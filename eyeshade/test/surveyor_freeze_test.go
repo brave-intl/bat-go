@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/eyeshade"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
 	timeutils "github.com/brave-intl/bat-go/utils/time"

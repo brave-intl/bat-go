@@ -13,8 +13,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	"github.com/brave-intl/bat-go/eyeshade"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
