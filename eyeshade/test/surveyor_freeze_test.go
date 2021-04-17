@@ -6,20 +6,19 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/eyeshade"
-	"github.com/brave-intl/bat-go/eyeshade/datastore"
+	"github.com/brave-intl/bat-go/eyeshade/models"
+	"github.com/brave-intl/bat-go/eyeshade/must"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/suite"
 )
 
 type SurveyorFreezeSuite struct {
 	suite.Suite
 	ctx     context.Context
-	db      datastore.Datastore
-	rodb    datastore.Datastore
-	mock    sqlmock.Sqlmock
-	mockRO  sqlmock.Sqlmock
 	service *eyeshade.Service
 }
 
@@ -56,5 +55,36 @@ func (suite *SurveyorFreezeSuite) SetupSuite() {
 }
 
 func (suite *SurveyorFreezeSuite) TestSurveyorFreeze() {
-	// contributions := must.CreateContributions(5)
+	contributions := must.CreateContributions(5)
+	votes := models.ContributionsToVotes(contributions...)
+	suite.Require().NoError(
+		suite.service.Datastore().InsertVotes(suite.ctx, votes),
+	)
+	date := timeutils.JustDate(time.Now().UTC())
+	_, ids := models.CollectSurveyorIDs(
+		date,
+		votes,
+	)
+	// have to do this for the virual surveyors
+	statement := `
+UPDATE surveyor_groups
+SET created_at = current_date - INTERVAL '1d'
+WHERE id = ANY($1::TEXT[])`
+	_, err := suite.service.Datastore().RawDB().ExecContext(
+		suite.ctx,
+		statement,
+		pq.Array(ids),
+	)
+	suite.Require().NoError(err)
+	suite.Require().NoError(
+		suite.service.FreezeSurveyors(),
+	)
+	ballotIDs := models.CollectBallotIDs(date, votes...)
+	ballots, err := suite.service.Datastore().GetBallotsByID(suite.ctx, ballotIDs...)
+	suite.Require().NoError(err)
+	convertables := models.BallotsToConvertableTransactions(*ballots...)
+	convertableIDs := models.CollectTransactionIDs(convertables...)
+	txs, err := suite.service.Datastore().GetTransactionsByID(suite.ctx, convertableIDs...)
+	suite.Require().NoError(err)
+	suite.Require().Len(*txs, len(ballotIDs))
 }

@@ -19,6 +19,8 @@ var (
 	}
 	// ContributionTypeList a list version of the contribution types values
 	ContributionTypeList = stringutils.CollectValues(ContributionTypes)
+	// ContributionFee holds the percent as a decimal that should be attributed to fees
+	ContributionFee = decimal.NewFromFloat(0.05)
 )
 
 type contributionTypes struct {

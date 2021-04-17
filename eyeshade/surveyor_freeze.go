@@ -10,7 +10,7 @@ import (
 // FreezeSurveyors freezes surveyors that can be frozen
 // given an optional lag time (usualy 1 day)
 func (service *Service) FreezeSurveyors(days ...int) error {
-	lag := 0
+	lag := 1
 	if len(days) > 0 {
 		lag = days[0]
 	}
@@ -46,11 +46,12 @@ func (service *Service) FreezeSurveyors(days ...int) error {
 	if err != nil {
 		return err
 	}
-	for _, ballot := range *ballots {
+	for i, ballot := range *ballots {
 		ballot.SurveyorCreatedAt = surveyorIDToCreatedAt[ballot.SurveyorID]
 		if ballot.SurveyorCreatedAt == nil {
 			return errors.New("unable to match ballot to surveyor")
 		}
+		(*ballots)[i] = ballot
 	}
 
 	convertables := models.BallotsToConvertableTransactions(

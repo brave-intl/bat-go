@@ -100,6 +100,6 @@ func EyeshadeServer(
 			return err
 		}
 	}
-	// freeze surveyors, looking back 1 day
+	// freeze surveyors, looking back 1 day by default
 	return service.FreezeSurveyors()
 }

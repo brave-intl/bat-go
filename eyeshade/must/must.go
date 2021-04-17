@@ -52,7 +52,7 @@ func CreateSettlements(count int, txType string) []models.Settlement {
 	settlements := []models.Settlement{}
 	for i := 0; i < count; i++ {
 		bat := decimal.NewFromFloat(5)
-		fees := bat.Mul(decimal.NewFromFloat(0.05))
+		fees := bat.Mul(models.ContributionFee)
 		batSubFees := bat.Sub(fees)
 		settlements = append(settlements, models.Settlement{
 			AltCurrency:  altcurrency.BAT,

@@ -205,7 +205,7 @@ WHERE
 AND votes.surveyor_id = ANY($2::TEXT[])
 AND NOT votes.excluded
 AND surveyor_groups.frozen`
-	_, err = tx.ExecContext(ctx, statement, pq.Array(ids))
+	_, err = tx.ExecContext(ctx, statement, models.ContributionFee, pq.Array(ids))
 	if err != nil {
 		return err
 	}
@@ -261,12 +261,12 @@ SELECT
 	COALESCE(SUM(votes.amount), 0.0) AS amount,
 	COALESCE(SUM(votes.fees), 0.0) AS fees
 FROM votes
-WHERE surveyor_id = $1::TEXT
+WHERE surveyor_id = ANY($1::TEXT[])
 AND NOT excluded
 AND NOT transacted
 AND amount IS NOT NULL
 GROUP BY (votes.channel, votes.surveyor_id)`
-	if err = tx.SelectContext(ctx, &ballots, statement, pq.Array(ids)); err != nil {
+	if err := tx.SelectContext(ctx, &ballots, statement, pq.Array(ids)); err != nil {
 		return nil, err
 	}
 	return &ballots, pg.Commit(ctx)
