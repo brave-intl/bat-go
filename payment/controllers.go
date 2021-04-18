@@ -652,6 +652,7 @@ type VerifyCredentialRequest struct {
 	Type         string  `json:"type"`
 	Version      float64 `json:"version"`
 	SKU          string  `json:"sku"`
+	MerchantID   string  `json:"merchantId"`
 	Presentation string  `json:"presentation" valid:"base64"`
 }
 
@@ -681,6 +682,15 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			err = json.Unmarshal(bytes, &decodedCredential)
 			if err != nil {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
+			if err != nil {
+				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+			}
+			if issuerID != decodedCredential.Issuer {
+				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 			}
 
 			err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
