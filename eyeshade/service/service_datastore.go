@@ -3,7 +3,6 @@ package eyeshade
 import (
 	"context"
 
-	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -96,19 +95,20 @@ func (service *Service) GetReferralGroups(
 	resolve bool,
 	activeAt inputs.Time,
 	fields ...string,
-) (*[]countries.ReferralGroup, error) {
+) (*[]models.ReferralGroup, error) {
 	groups, err := service.Datastore(true).
 		GetReferralGroups(ctx, activeAt)
 	if err != nil {
 		return nil, err
 	}
 	if resolve {
-		groups = countries.Resolve(*groups)
+		groups = models.Resolve(*groups)
 	}
+	serializableGroups := []models.ReferralGroup{}
 	for _, group := range *groups {
-		group.SetKeys(fields) // will only render these keys when serializing
+		serializableGroups = append(serializableGroups, group.SetKeys(fields)) // will only render these keys when serializing
 	}
-	return groups, nil
+	return &serializableGroups, nil
 }
 
 // GetGrantStats gets the grnat stats that match the input parameters

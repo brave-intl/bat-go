@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	uuid "github.com/satori/go.uuid"
@@ -16,7 +15,7 @@ var (
 	publisherPrefix = "publishers#uuid:"
 )
 
-// Referral holds information from referral queue
+// Referral holds information from referral quue
 type Referral struct {
 	TransactionID      string                  `json:"transactionId"`
 	Channel            Channel                 `json:"channelId"`
@@ -122,7 +121,7 @@ func (referral *Referral) Valid() error {
 func ReferralBackfill(
 	referral *Referral,
 	createdAt time.Time,
-	group countries.Group,
+	group ReferralGroup,
 	rates map[string]decimal.Decimal,
 ) *Referral {
 	referral.FinalizedTimestamp = createdAt
@@ -134,11 +133,11 @@ func ReferralBackfill(
 // ReferralBackfillMany backfills data about settlements from a group and rates
 func ReferralBackfillMany(
 	referrals *[]Referral,
-	groups *[]countries.Group,
+	groups *[]ReferralGroup,
 	rates map[string]decimal.Decimal,
 ) (*[]Referral, error) {
 	set := []Referral{}
-	groupByID := countries.GroupByID(*groups...)
+	groupByID := ReferralGroupByID(*groups...)
 	for _, referral := range *referrals {
 		group := groupByID[referral.CountryGroupID]
 		if group.Amount.Equal(decimal.Zero) {

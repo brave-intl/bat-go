@@ -34,7 +34,7 @@ func (service *Service) GETReferralGroups() handlers.AppHandler {
 		resolve := query.Get("resolve") == "true"
 		activeAt := inputs.NewTime(time.RFC3339, time.Now())
 		_ = inputs.DecodeAndValidateString(r.Context(), activeAt, query.Get("activeAt"))
-		fields := requestutils.ManyQueryParams(query["fields"])
+		fields := append([]string{"id"}, requestutils.ManyQueryParams(query["fields"])...)
 
 		body, err := service.GetReferralGroups(
 			r.Context(),

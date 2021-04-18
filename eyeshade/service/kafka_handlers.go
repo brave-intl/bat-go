@@ -6,7 +6,6 @@ import (
 	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
 	avrosettlement "github.com/brave-intl/bat-go/eyeshade/avro/settlement"
 	avrosuggestion "github.com/brave-intl/bat-go/eyeshade/avro/suggestion"
-	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/segmentio/kafka-go"
@@ -97,7 +96,7 @@ func (service *Service) ModifyReferrals(
 	if err != nil {
 		return nil, err
 	}
-	currencies := countries.CollectCurrencies(*groups...)
+	currencies := models.CollectCurrencies(*groups...)
 	rates, err := service.Clients().Ratios().FetchRate(
 		service.Context(),
 		altcurrency.BAT.String(),

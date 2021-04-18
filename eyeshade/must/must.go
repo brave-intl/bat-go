@@ -183,7 +183,7 @@ func RandomNumber(params ...int) int {
 }
 
 // RandomIDs generates random ids
-func RandomIDs(count int, flags ...bool) []uuid.UUID {
+func RandomIDs(count int) []uuid.UUID {
 	ids := []uuid.UUID{}
 	for i := 0; i < count; i++ {
 		ids = append(ids, uuid.NewV4())

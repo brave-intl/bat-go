@@ -10,7 +10,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/brave-intl/bat-go/eyeshade/countries"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -114,7 +113,7 @@ func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Conte
 }
 
 // GetActiveCountryGroups implements Datastore
-func (_d DatastoreWithPrometheus) GetActiveCountryGroups(ctx context.Context) (gap1 *[]countries.Group, err error) {
+func (_d DatastoreWithPrometheus) GetActiveCountryGroups(ctx context.Context) (rap1 *[]models.ReferralGroup, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -198,7 +197,7 @@ func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []s
 }
 
 // GetReferralGroups implements Datastore
-func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (rap1 *[]countries.ReferralGroup, err error) {
+func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (rap1 *[]models.ReferralGroup, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

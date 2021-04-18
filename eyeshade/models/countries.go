@@ -1,10 +1,11 @@
-package countries
+package models
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,36 +21,47 @@ var (
 )
 
 // Resolve resolves the many referral groups that come back
-func Resolve(rows []ReferralGroup) *[]ReferralGroup {
+func Resolve(groups []ReferralGroup) *[]ReferralGroup {
 	rowsFiltered := []ReferralGroup{}
-	groupsByID := map[uuid.UUID]ReferralGroup{}
-	filter := map[string]*ReferralGroup{}
-	codesByID := map[uuid.UUID]jsonutils.JSONStringArray{}
-	for _, group := range rows {
-		groupsByID[group.ID] = group
-		for _, country := range *group.Codes {
-			if filter[country] != nil && group.ActiveAt.After((*filter[country]).ActiveAt) {
+	groupsByID := map[string]ReferralGroup{}
+	countryToGoup := map[string]*ReferralGroup{}
+	groupIDToCodesList := map[string][]string{}
+	for i := range groups {
+		group := groups[i]
+		groupsByID[group.ID.String()] = group
+		for _, country := range group.Codes {
+			if countryToGoup[country] != nil {
+				if group.ActiveAt.After((*countryToGoup[country]).ActiveAt) {
+					countryToGoup[country] = &group
+				}
 				continue
 			}
 			// set this value if it has not already been set
 			// or if the current group is after the currently set group
-			filter[country] = &group
+			countryToGoup[country] = &group
 		}
 	}
-	for country, group := range filter {
-		codesByID[group.ID] = append(codesByID[group.ID], country)
+	for country, group := range countryToGoup {
+		id := group.ID.String()
+		groupIDToCodesList[id] = append(groupIDToCodesList[id], country)
 	}
-	for id, codes := range codesByID {
-		codes := codes
-		group := groupsByID[id]
-		group.Codes = &codes
+	groupIDs := []string{}
+	for id := range groupIDToCodesList {
+		groupIDs = append(groupIDs, id)
+	}
+	sort.Strings(groupIDs)
+	for _, groupID := range groupIDs {
+		codes := groupIDToCodesList[groupID]
+		group := groupsByID[groupID]
+		sort.Strings(codes)
+		group.Codes = jsonutils.JSONStringArray(codes)
 		rowsFiltered = append(rowsFiltered, group)
 	}
 	return &rowsFiltered
 }
 
-// FindGroup finds the matching group or reverts back to the original rate id
-func FindGroup(passedGroupID uuid.UUID, groups []Group) Group {
+// FindReferralGroup finds the matching group or reverts back to the original rate id
+func FindReferralGroup(passedGroupID uuid.UUID, groups []ReferralGroup) ReferralGroup {
 	countryGroupID := passedGroupID
 	if uuid.Equal(countryGroupID, uuid.Nil) {
 		countryGroupID = OriginalRateID
@@ -62,7 +74,7 @@ func FindGroup(passedGroupID uuid.UUID, groups []Group) Group {
 }
 
 // FindByID finds a referral group by its id
-func FindByID(groups []Group, id uuid.UUID) *Group {
+func FindByID(groups []ReferralGroup, id uuid.UUID) *ReferralGroup {
 	for _, group := range groups {
 		if uuid.Equal(group.ID, id) {
 			return &group
@@ -71,47 +83,43 @@ func FindByID(groups []Group, id uuid.UUID) *Group {
 	return nil
 }
 
-// Group holds information about a given referral group
-type Group struct {
-	ID       uuid.UUID       `json:"id" db:"id"`
-	ActiveAt time.Time       `json:"activeAt" db:"active_at"`
-	Name     string          `json:"name" db:"name"`
-	Amount   decimal.Decimal `json:"amount" db:"amount"`
-	Currency string          `json:"currency" db:"currency"`
-}
-
 // ReferralGroup holds information about a given referral group
 type ReferralGroup struct {
 	keys []string
 
-	ID       uuid.UUID                  `json:"id" db:"id"`
-	ActiveAt time.Time                  `json:"activeAt" db:"active_at"`
-	Name     string                     `json:"name" db:"name"`
-	Amount   decimal.Decimal            `json:"amount" db:"amount"`
-	Currency string                     `json:"currency" db:"currency"`
-	Codes    *jsonutils.JSONStringArray `json:"codes" db:"codes,omitempty"`
+	ID       uuid.UUID                 `json:"id" db:"id"`
+	ActiveAt time.Time                 `json:"activeAt" db:"active_at"`
+	Name     string                    `json:"name" db:"name"`
+	Amount   decimal.Decimal           `json:"amount" db:"amount"`
+	Currency string                    `json:"currency" db:"currency"`
+	Codes    jsonutils.JSONStringArray `json:"codes" db:"codes,omitempty"`
 }
 
 // MarshalJSON marshalles the referral group only including keys that were asked for +id
 func (rg ReferralGroup) MarshalJSON() ([]byte, error) {
 	keys := append([]string{"id"}, rg.keys...)
 	keysHash := map[string]bool{}
+	sort.Strings(keys)
 	for _, key := range keys {
 		keysHash[key] = true
 	}
 	params := []string{}
-	val := reflect.ValueOf(rg).Elem()
+	val := reflect.ValueOf(rg)
 	for i := 0; i < val.NumField(); i++ {
 		valueField := val.Field(i)
 		typeField := val.Type().Field(i)
-		if !keysHash[typeField.Name] {
-			continue
-		}
 		jsonTag, ok := typeField.Tag.Lookup("json")
 		if !ok {
 			continue
 		}
 		split := strings.Split(jsonTag, ",")
+		key := split[0]
+		if !keysHash[key] {
+			continue
+		}
+		if key == "codes" && valueField.IsNil() {
+			valueField = reflect.ValueOf([]string{})
+		}
 		marshalled, err := json.Marshal(valueField.Interface())
 		if err != nil {
 			return nil, err
@@ -120,7 +128,7 @@ func (rg ReferralGroup) MarshalJSON() ([]byte, error) {
 			params,
 			fmt.Sprintf(
 				"%s:%s",
-				strconv.Quote(split[0]),
+				strconv.Quote(key),
 				marshalled,
 			),
 		)
@@ -133,13 +141,14 @@ func (rg ReferralGroup) MarshalJSON() ([]byte, error) {
 
 // SetKeys sets the keys property to allow for a subset of the group
 // to be serialized during a json marshal
-func (rg ReferralGroup) SetKeys(keys []string) {
+func (rg ReferralGroup) SetKeys(keys []string) ReferralGroup {
 	rg.keys = keys
+	return rg
 }
 
-// GroupByID creates a mapping of groups accessable by their id
-func GroupByID(groups ...Group) map[string]Group {
-	modifiers := map[string]Group{}
+// ReferralGroupByID creates a mapping of groups accessable by their id
+func ReferralGroupByID(groups ...ReferralGroup) map[string]ReferralGroup {
+	modifiers := map[string]ReferralGroup{}
 	for _, group := range groups {
 		modifiers[group.ID.String()] = group
 	}
@@ -147,7 +156,7 @@ func GroupByID(groups ...Group) map[string]Group {
 }
 
 // CollectCurrencies collects the currencies from the
-func CollectCurrencies(groups ...Group) []string {
+func CollectCurrencies(groups ...ReferralGroup) []string {
 	currencies := []string{}
 	hash := map[string]bool{}
 	for _, group := range groups {
