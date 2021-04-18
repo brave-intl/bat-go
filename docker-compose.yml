@@ -58,6 +58,8 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - "ALLOWED_ORIGINS=http://localhost:8080"
+      - SKUS_WHITELIST
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

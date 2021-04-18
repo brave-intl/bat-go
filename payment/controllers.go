@@ -45,12 +45,18 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
 
-	r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
+	if os.Getenv("ENV") == "local" {
+		r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
+		r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", corsMiddleware([]string{"POST"})(CreateOrder(service))))
+	} else {
+		r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(service)))
+	}
+
+	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
-
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
