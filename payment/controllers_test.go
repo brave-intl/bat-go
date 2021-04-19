@@ -748,7 +748,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	defer mockCtrl.Finish()
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
