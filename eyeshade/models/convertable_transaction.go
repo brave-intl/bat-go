@@ -35,7 +35,6 @@ func CollectTransactions(convertableTxs ...ConvertableTransaction) []Transaction
 	for _, convertableTx := range convertableTxs {
 		ids = append(ids, convertableTx.ToTxIDs()...)
 		converted := convertableTx.ToTxs()
-		// txs = append(txs, converted...)
 		for _, convert := range converted {
 			hash[convert.ID] = convert
 		}

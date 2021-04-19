@@ -25,9 +25,9 @@ type Transaction struct {
 	ToAccount          string           `json:"toAccount" db:"to_account"`
 	ToAccountType      string           `json:"toAccountType" db:"to_account_type"`
 	Amount             decimal.Decimal  `json:"amount" db:"amount"`
-	SettlementCurrency *string          `json:"settlementCurrency" db:"settlement_currency"`
-	SettlementAmount   *decimal.Decimal `json:"settlementAmount" db:"settlement_amount"`
-	Channel            *Channel         `json:"channel" db:"channel"`
+	SettlementCurrency *string          `json:"settlementCurrency,omitempty" db:"settlement_currency"`
+	SettlementAmount   *decimal.Decimal `json:"settlementAmount,omitempty" db:"settlement_amount"`
+	Channel            *Channel         `json:"channel,omitempty" db:"channel"`
 }
 
 // BackfillForCreators converts a transaction from the database to a backfill transaction
@@ -58,6 +58,8 @@ func (tx *Transaction) BackfillForCreators(account string) CreatorsTransaction {
 		TransactionType:           tx.TransactionType,
 		SettlementDestinationType: settlementDestinationType,
 		SettlementDestination:     settlementDestination,
+		ToAccount:                 tx.ToAccount,
+		FromAccount:               tx.FromAccount,
 	}
 }
 
@@ -72,6 +74,8 @@ type CreatorsTransaction struct {
 	SettlementAmount          inputs.Decimal `json:"settlement_amount,omitempty"`
 	SettlementDestinationType *string        `json:"settlement_destination_type,omitempty"`
 	SettlementDestination     *string        `json:"settlement_destination,omitempty"`
+	FromAccount               string         `json:"from_account"`
+	ToAccount                 string         `json:"to_account"`
 }
 
 // TransactionsToCreatorsTransactions converts transactions to creators transactions

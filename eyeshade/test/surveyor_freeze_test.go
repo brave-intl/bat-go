@@ -55,36 +55,58 @@ func (suite *SurveyorFreezeSuite) SetupSuite() {
 }
 
 func (suite *SurveyorFreezeSuite) TestSurveyorFreeze() {
-	contributions := must.CreateContributions(5)
-	votes := models.ContributionsToVotes(contributions...)
-	suite.Require().NoError(
-		suite.service.Datastore().InsertVotes(suite.ctx, votes),
-	)
-	date := timeutils.JustDate(time.Now().UTC())
-	_, ids := models.CollectSurveyorIDs(
-		date,
-		votes,
-	)
-	// have to do this for the virual surveyors
-	statement := `
+	type Scenario struct {
+		name  string
+		input []models.Contribution
+		count int
+	}
+
+	scenarios := []Scenario{{
+		name:  "many votes for one surveyor",
+		input: must.CreateContributions(10),
+		count: 3, // 3 different surveyors, same channel
+	}, {
+		name: "many surveyors",
+		input: append(
+			must.CreateContributions(10),
+			must.CreateContributions(10)...,
+		),
+		count: 6,
+	}}
+	for _, scenario := range scenarios {
+		suite.Run(scenario.name, func() {
+			contributions := scenario.input
+			votes := models.ContributionsToVotes(contributions...)
+			suite.Require().NoError(
+				suite.service.Datastore().InsertVotes(suite.ctx, votes),
+			)
+			date := timeutils.JustDate(time.Now().UTC())
+			_, ids := models.CollectSurveyorIDs(
+				date,
+				votes,
+			)
+			// have to do this for the virual surveyors
+			statement := `
 UPDATE surveyor_groups
 SET created_at = current_date - INTERVAL '1d'
 WHERE id = ANY($1::TEXT[])`
-	_, err := suite.service.Datastore().RawDB().ExecContext(
-		suite.ctx,
-		statement,
-		pq.Array(ids),
-	)
-	suite.Require().NoError(err)
-	suite.Require().NoError(
-		suite.service.FreezeSurveyors(),
-	)
-	ballotIDs := models.CollectBallotIDs(date, votes...)
-	ballots, err := suite.service.Datastore().GetBallotsByID(suite.ctx, ballotIDs...)
-	suite.Require().NoError(err)
-	convertables := models.BallotsToConvertableTransactions(*ballots...)
-	convertableIDs := models.CollectTransactionIDs(convertables...)
-	txs, err := suite.service.Datastore().GetTransactionsByID(suite.ctx, convertableIDs...)
-	suite.Require().NoError(err)
-	suite.Require().Len(*txs, len(ballotIDs))
+			_, err := suite.service.Datastore().RawDB().ExecContext(
+				suite.ctx,
+				statement,
+				pq.Array(ids),
+			)
+			suite.Require().NoError(err)
+			suite.Require().NoError(
+				suite.service.FreezeSurveyors(),
+			)
+			ballotIDs := models.CollectBallotIDs(date, votes...)
+			ballots, err := suite.service.Datastore().GetBallotsByID(suite.ctx, ballotIDs...)
+			suite.Require().NoError(err)
+			convertables := models.BallotsToConvertableTransactions(*ballots...)
+			convertableIDs := models.CollectTransactionIDs(convertables...)
+			txs, err := suite.service.Datastore().GetTransactionsByID(suite.ctx, convertableIDs...)
+			suite.Require().NoError(err)
+			suite.Require().Len(*txs, scenario.count)
+		})
+	}
 }
