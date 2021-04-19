@@ -1,0 +1,22 @@
+<html>
+
+<head>
+    <title>Buy cool new product</title>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+
+<body>
+    <button id="checkout-button">Checkout</button>
+    <script type="text/javascript">
+        // Create an instance of the Stripe object with your publishable API key
+        var stripe = Stripe('<STRIPE_PUBLIC_API_KEY>');
+        var checkoutButton = document.getElementById('checkout-button');
+        checkoutButton.addEventListener('click', function () {
+            // Create a new Checkout Session using the server-side endpoint you
+            // created in step 3.
+            return stripe.redirectToCheckout({ sessionId: '<CHECKOUT_SESSION_ID>' });
+        });
+    </script>
+</body>
+
+</html>

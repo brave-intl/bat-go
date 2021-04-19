@@ -13,3 +13,7 @@ create table mint_drain_promotion (
   primary key(promotion_id, mint_drain_id),
   constraint no_dups unique (promotion_id, mint_drain_id)
 );
+
+-- Compose migration from payments service
+
+ALTER TABLE orders ADD COLUMN metadata JSONB DEFAULT NULL;

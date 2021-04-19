@@ -297,7 +297,7 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	}
 
 	// setup the service now
-	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "payment_db")
+	db, err := NewWritablePostgres(viper.GetString("datastore"), true, "payment_db")
 	if err != nil {
 		logger.Panic().Err(err).Msg("unable connect to payment db")
 	}
