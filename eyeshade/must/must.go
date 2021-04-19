@@ -38,7 +38,7 @@ func CreateContributions(count int) []models.Contribution {
 				CreatedAt:     time.Now().UTC(),
 				BaseVoteValue: models.VoteValue,
 				VoteTally:     RandomNumber(1, 9),
-				FundingSource: promotionIDs[RandomNumber(promotionLimit)],
+				FundingSource: promotionIDs[RandomNumber(promotionLimit)].String(),
 			})
 		}
 	}

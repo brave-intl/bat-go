@@ -86,12 +86,13 @@ docker-up-dev-rep:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.reputation.yml -f docker-compose.dev.yml up -d
 
-docker-test:
+docker-test: docker-bat-go-test docker-eyeshade-test json-schema
+
+docker-bat-go-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) TEST_PKG=$(TEST_PKG) TEST_RUN=$(TEST_RUN) docker-compose -f docker-compose.yml -f docker-compose.dev.yml run --rm dev make test
-	go run main.go generate json-schema
 
 docker-eyeshade-test:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
@@ -100,7 +101,6 @@ docker-eyeshade-test:
 	docker-compose -f docker-compose.yml -f eyeshade/docker-compose.yml \
 	exec -e TEST_PKG=./eyeshade/... -e VAULT_TOKEN=$(VAULT_TOKEN) -e TEST_RUN=$(TEST_RUN) -e TEST_TAGS=$(EYESHADE_TEST_TAGS) \
 	eyeshade-web make test
-	go run main.go generate eyeshade-json-schema
 
 docker-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
@@ -155,9 +155,11 @@ vault-clean:
 
 json-schema:
 	go run main.go generate json-schema --overwrite
+	go run main.go generate eyeshade-json-schema --overwrite
 
 create-json-schema:
 	go run main.go generate json-schema
+	go run main.go generate eyeshade-json-schema
 
 test:
 	GODEBUG=x509ignoreCN=0 go test -count 1 -v -p 1 $(TEST_FLAGS)

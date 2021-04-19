@@ -46,7 +46,7 @@ type Contribution struct {
 	CreatedAt     time.Time       `json:"createdAt"`
 	BaseVoteValue decimal.Decimal `json:"baseVoteValue"`
 	VoteTally     int             `json:"voteTally"`
-	FundingSource uuid.UUID       `json:"fundingSource"`
+	FundingSource string          `json:"fundingSource"`
 }
 
 // GetSurveyorID gets the surveyor id
