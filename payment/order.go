@@ -30,18 +30,18 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID          uuid.UUID            `json:"id" db:"id"`
-	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU         string               `json:"sku" db:"sku"`
-	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency    string               `json:"currency" db:"currency"`
-	Quantity    int                  `json:"quantity" db:"quantity"`
-	Price       decimal.Decimal      `json:"price" db:"price"`
-	Subtotal    decimal.Decimal      `json:"subtotal" db:"subtotal"`
-	Location    datastore.NullString `json:"location" db:"location"`
-	Description datastore.NullString `json:"description" db:"description"`
-	Type        string               `json:"type"`
+	ID             uuid.UUID            `json:"id" db:"id"`
+	OrderID        uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU            string               `json:"sku" db:"sku"`
+	CreatedAt      *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt      *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency       string               `json:"currency" db:"currency"`
+	Quantity       int                  `json:"quantity" db:"quantity"`
+	Price          decimal.Decimal      `json:"price" db:"price"`
+	Subtotal       decimal.Decimal      `json:"subtotal" db:"subtotal"`
+	Location       datastore.NullString `json:"location" db:"location"`
+	Description    datastore.NullString `json:"description" db:"description"`
+	CredentialType string               `json:"credentialType" db:"credential_type"`
 }
 
 const (
@@ -86,6 +86,13 @@ func IsValidSKU(sku string) bool {
 			DEV_BRAVE_TOGETHER_FREE,
 			DEV_BRAVE_TOGETHER_PAID,
 			DEV_SEARCH_CLOSED_BETA:
+			return true
+		}
+	}
+
+	whitelistedSKUs := strings.Split(os.Getenv("SKUS_WHITELIST"), ",")
+	for _, whitelistedSKU := range whitelistedSKUs {
+		if sku == whitelistedSKU {
 			return true
 		}
 	}
@@ -140,6 +147,8 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			}
 		case "currency":
 			orderItem.Currency = value
+		case "credential_type":
+			orderItem.CredentialType = value
 		}
 
 	}

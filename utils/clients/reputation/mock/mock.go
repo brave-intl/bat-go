@@ -7,7 +7,7 @@ package mock_reputation
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	go_uuid "github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	reflect "reflect"
 )
 
@@ -35,7 +35,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // IsWalletReputable mocks base method
-func (m *MockClient) IsWalletReputable(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
+func (m *MockClient) IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWalletReputable", ctx, id, platform)
 	ret0, _ := ret[0].(bool)
@@ -49,8 +49,23 @@ func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
 }
 
+// IsWalletAdsReputable mocks base method
+func (m *MockClient) IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWalletAdsReputable", ctx, id, platform)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsWalletAdsReputable indicates an expected call of IsWalletAdsReputable
+func (mr *MockClientMockRecorder) IsWalletAdsReputable(ctx, id, platform interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletAdsReputable", reflect.TypeOf((*MockClient)(nil).IsWalletAdsReputable), ctx, id, platform)
+}
+
 // IsWalletOnPlatform mocks base method
-func (m *MockClient) IsWalletOnPlatform(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
+func (m *MockClient) IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWalletOnPlatform", ctx, id, platform)
 	ret0, _ := ret[0].(bool)

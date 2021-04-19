@@ -58,6 +58,8 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - "ALLOWED_ORIGINS=http://localhost:8080"
+      - SKUS_WHITELIST
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -97,7 +99,6 @@ services:
       - DONOR_WALLET_PUBLIC_KEY
       - ENCRYPTION_KEY
       - FEATURE_MERCHANT
-      - FEATURE_WALLET
       - GRANT_SIGNATOR_PUBLIC_KEY
       - GRANT_WALLET_CARD_ID
       - GRANT_WALLET_PRIVATE_KEY

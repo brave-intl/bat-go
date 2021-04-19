@@ -18,8 +18,10 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
@@ -62,6 +64,11 @@ func init() {
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
 		Env("WALLET_ON_PLATFORM_PRIOR_TO")
+
+	flagBuilder.Flag().Bool("reputation-on-drain", false,
+		"check wallet reputation on drain").
+		Bind("reputation-on-drain").
+		Env("REPUTATION_ON_DRAIN")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
@@ -219,8 +226,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
 
-	r.Get("/metrics", middleware.Metrics())
-
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
 		// pprof attaches routes to default serve mux
@@ -262,7 +267,17 @@ func jobWorker(ctx context.Context, job func(context.Context) (bool, error), dur
 	for {
 		_, err := job(ctx)
 		if err != nil {
-			logger.Error().Err(err).Msg("error encountered in job run")
+			log := logger.Error().Err(err)
+			httpError, ok := err.(*errorutils.ErrorBundle)
+			if ok {
+				state, ok := httpError.Data().(clients.HTTPState)
+				if ok {
+					log = log.Int("status", state.Status).
+						Str("path", state.Path).
+						Interface("data", state.Body)
+				}
+			}
+			log.Msg("error encountered in job run")
 			sentry.CaptureException(err)
 		}
 		// regardless if attempted or not, wait for the duration until retrying
@@ -313,6 +328,7 @@ func GrantServer(
 	// add flags to context
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))

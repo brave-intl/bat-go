@@ -194,9 +194,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		orderItems[i].OrderID = order.ID
 
 		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, (quantity * price) as subtotal
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
+			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])
 
@@ -229,7 +229,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 

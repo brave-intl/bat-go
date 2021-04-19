@@ -107,3 +107,20 @@ func (me *MultiError) Error() string {
 	}
 	return errText
 }
+
+// DrainCodified - Job runner drain codified errors have DrainCode()
+type DrainCodified interface {
+	// DrainCode - get the drain code from the interface implementation
+	DrainCode() (string, bool)
+}
+
+// Codified - implementation of DrainCodified
+type Codified struct {
+	ErrCode string
+	Retry   bool
+}
+
+// DrainCode - implementation of DrainCodified.DrainCode
+func (c Codified) DrainCode() (string, bool) {
+	return c.ErrCode, c.Retry
+}

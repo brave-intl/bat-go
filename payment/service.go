@@ -3,7 +3,10 @@ package payment
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 	"github.com/linkedin/goavro"
 	"github.com/spf13/viper"
 
@@ -151,7 +155,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		orderItems = append(orderItems, *orderItem)
 	}
 
-	// If order consists of free trials, we can consider it paid
+	// If order consists entirely of zero cost items ( e.g. trials ), we can consider it paid
 	if totalPrice.IsZero() {
 		status = "paid"
 	} else {
@@ -288,6 +292,22 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 	return s.Datastore.RunNextOrderJob(ctx, s)
 }
 
+func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
+	debug, err := strconv.ParseBool(os.Getenv("DEBUG"))
+	if err != nil {
+		debug = false
+	}
+	return cors.Handler(cors.Options{
+		Debug:            debug,
+		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
+		AllowedMethods:   allowedMethods,
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{""},
+		AllowCredentials: false,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	})
+}
+
 // SetupService - setup the payment microservice
 func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
 	logger, err := appctx.GetLogger(ctx)
@@ -332,8 +352,15 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if viper.GetBool("payments-feature-flag") {
 		// setup our payment routes
 		r.Route("/v1/orders", func(r chi.Router) {
-			r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(s)))
-			r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", GetOrder(s)))
+			if os.Getenv("ENV") == "local" {
+				r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
+				r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", corsMiddleware([]string{"POST"})(CreateOrder(s))))
+			} else {
+				r.Method("POST", "/", middleware.InstrumentHandler("CreateOrder", CreateOrder(s)))
+			}
+
+			r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
+			r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(s))))
 
 			if os.Getenv("ENV") != "production" {
 				r.Method("PUT", "/{orderID}", middleware.InstrumentHandler("CancelOrder", CancelOrder(s)))
@@ -344,17 +371,21 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 			r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(s)))
 
-			r.Method("POST", "/{orderID}/credentials", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(s)))
-			r.Method("GET", "/{orderID}/credentials", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(s)))
-			if os.Getenv("ENV") != "production" {
-				r.Method("DELETE", "/{orderID}/credentials", middleware.InstrumentHandler("DeleteOrderCreds", DeleteOrderCreds(s)))
-			}
-			r.Method("GET", "/{orderID}/credentials/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(s)))
+			r.Route("/{orderID}/credentials", func(cr chi.Router) {
+				cr.Use(corsMiddleware([]string{"GET", "POST"}))
+				cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(s)))
+				cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(s)))
+				// TODO authorization should be merchant specific, however currently this is only used internally
+				cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", middleware.SimpleTokenAuthorizedOnly(DeleteOrderCreds(s))))
+
+				cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(s)))
+			})
 		})
 
 		r.Route("/v1/credentials", func(r chi.Router) {
 			if os.Getenv("ENV") != "production" {
 				r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", VerifyCredential(s)))
+				r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", middleware.SimpleTokenAuthorizedOnly(VerifyCredential(s))))
 			}
 		})
 

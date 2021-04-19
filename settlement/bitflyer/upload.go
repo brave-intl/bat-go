@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"sort"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -15,82 +16,88 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+var (
+	notSubmittedCategory = "not-submitted"
+)
+
 // GroupSettlements groups settlements under a single provider id so that we can impose limits based on price
 // no signing here, just grouping settlements under a single deposit id
 func GroupSettlements(
 	settlements *[]settlement.Transaction,
 ) map[string][]settlement.Transaction {
-	grouped := make(map[string][]settlement.Transaction)
+	byAttr := make(map[string]map[string]settlement.Transaction)
+	byTransferID := make(map[string]settlement.Transaction)
+	groupedByPublisher := make(map[string][]settlement.Transaction)
+	channelsByPublisher := make(map[string][]string)
+
 	for _, payout := range *settlements {
 		if payout.WalletProvider == "bitflyer" {
-			id := bitflyer.GenerateTransferID(&payout)
-			grouped[id] = append(grouped[id], payout)
+			publisher := payout.Publisher
+			channel := payout.Channel
+			if byAttr[publisher] == nil {
+				byAttr[publisher] = make(map[string]settlement.Transaction)
+			}
+			byAttr[publisher][channel] = payout
+			byTransferID[payout.TransferID()] = payout
+			channelsByPublisher[publisher] = append(channelsByPublisher[publisher], channel)
 		}
 	}
-
-	return grouped
+	for publisher, channels := range channelsByPublisher {
+		sort.Strings(channels)
+		for _, channel := range channels {
+			groupedByPublisher[publisher] = append(groupedByPublisher[publisher], byAttr[publisher][channel])
+		}
+	}
+	return groupedByPublisher
 }
 
 // CategorizeResponse categorizes a response from bitflyer as pending, complete, failed, or unknown
 func CategorizeResponse(
-	originalTransactions map[string][]settlement.Transaction,
+	limitedSettlements map[string]settlement.Transaction,
+	groupedByPublisher map[string][]settlement.Transaction,
 	payout *bitflyer.WithdrawToDepositIDResponse,
-) ([]settlement.Transaction, string) {
-	txs := originalTransactions[payout.TransferID]
-	key := "unknown"
-	switch payout.Status {
-	case "SUCCESS", "EXECUTED":
+) (settlement.Transaction, string) {
+	currentTx := limitedSettlements[payout.TransferID]
+	key := payout.CategorizeStatus()
+	if payout.Status == "OTHER_ERROR" && !currentTx.Amount.Equal(payout.Amount) {
 		key = "complete"
-	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION", "OTHER_ERROR":
-		key = "failed"
-	case "CREATED", "PENDING":
-		key = "pending"
-	}
-	aggregatedAmount := decimal.Zero
-	for i, original := range txs {
-		original.Status = key
-		note := payout.Status
-		if payout.Message != "" {
-			note = fmt.Sprintf("%s: %s", payout.Status, payout.Message)
-		}
-		original.Note = note
-		aggregatedAmount = aggregatedAmount.Add(original.Probi)
-		tmp := altcurrency.BAT
-		original.AltCurrency = &tmp
-		original.Currency = tmp.String()
-		txs[i] = original
-	}
-	if key == "complete" && !payout.Amount.Equal(decimal.Zero) {
-		aggregatedAmount = altcurrency.BAT.FromProbi(aggregatedAmount)
-		if !aggregatedAmount.Equal(decimal.Zero) && !aggregatedAmount.Equal(payout.Amount) {
-			key = "invalid-input"
-			for i := range txs {
-				txs[i].Status = key
-			}
+		payout.Status = "EXECUTED"
+		// use payed out amount
+		amount := payout.Amount
+		currentTx.Amount = amount
+		currentTx.Probi = altcurrency.BAT.ToProbi(amount)
+		if currentTx.Type == "contribution" {
+			currentTx.BATPlatformFee = currentTx.Probi.Div(decimal.NewFromFloat(19)).Truncate(0)
 		}
 	}
-	return txs, key
+	currentTx.Status = key
+	note := payout.Status
+	if payout.Message != "" {
+		note = fmt.Sprintf("%s: %s", payout.Status, payout.Message)
+	}
+	// overwrite the amount
+	currentTx.Note = note
+	tmp := altcurrency.BAT
+	currentTx.AltCurrency = &tmp
+	currentTx.Currency = tmp.String()
+	return currentTx, key
 }
 
 // CategorizeResponses categorizes the series of responses
 func CategorizeResponses(
-	originalTransactions map[string][]settlement.Transaction,
+	limitedSettlements map[string]settlement.Transaction,
+	groupedByPublisher map[string][]settlement.Transaction,
 	response *[]bitflyer.WithdrawToDepositIDResponse,
 ) map[string][]settlement.Transaction {
 	transactions := make(map[string][]settlement.Transaction)
 
 	for _, payout := range *response {
 		original, key := CategorizeResponse(
-			originalTransactions,
+			limitedSettlements,
+			groupedByPublisher,
 			&payout,
 		)
-		nonZero := []settlement.Transaction{}
-		for _, tx := range original {
-			if tx.Probi.GreaterThan(decimal.Zero) {
-				nonZero = append(nonZero, tx)
-			}
-		}
-		transactions[key] = append(transactions[key], nonZero...)
+		transactions[key] = append(transactions[key], original)
 	}
 	return transactions
 }
@@ -98,7 +105,8 @@ func CategorizeResponses(
 // SubmitBulkPayoutTransactions submits bulk payout transactions
 func SubmitBulkPayoutTransactions(
 	ctx context.Context,
-	transactionsMap map[string][]settlement.Transaction,
+	limitedSettlements map[string]settlement.Transaction,
+	groupedByPublisher map[string][]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
@@ -126,7 +134,11 @@ func SubmitBulkPayoutTransactions(
 		return submittedTransactions, err
 	}
 	// collect all successful transactions to send to eyeshade
-	submitted := CategorizeResponses(transactionsMap, &response.Withdrawals)
+	submitted := CategorizeResponses(
+		limitedSettlements,
+		groupedByPublisher,
+		&response.Withdrawals,
+	)
 	for key, txs := range submitted {
 		submittedTransactions[key] = append(submittedTransactions[key], txs...)
 	}
@@ -136,7 +148,8 @@ func SubmitBulkPayoutTransactions(
 // CheckPayoutTransactionsStatus checks the status of given transactions
 func CheckPayoutTransactionsStatus(
 	ctx context.Context,
-	transactionsMap map[string][]settlement.Transaction,
+	limitedTransactions map[string]settlement.Transaction,
+	groupedByPublisher map[string][]settlement.Transaction,
 	submittedTransactions map[string][]settlement.Transaction,
 	bulkPayoutRequestRequirements bitflyer.WithdrawToDepositIDBulkPayload,
 	bitflyerClient bitflyer.Client,
@@ -150,13 +163,14 @@ func CheckPayoutTransactionsStatus(
 
 	result, err := bitflyerClient.CheckPayoutStatus(
 		ctx,
-		bulkPayoutRequestRequirements,
+		bulkPayoutRequestRequirements.ToBulkStatus(),
 	)
 	if err != nil {
 		return nil, err
 	}
 	response := CategorizeResponses(
-		transactionsMap,
+		limitedTransactions,
+		groupedByPublisher,
 		&result.Withdrawals,
 	)
 	for key, original := range response {
@@ -174,74 +188,99 @@ func CheckPayoutTransactionsStatus(
 }
 
 func setupSettlementTransactions(
-	transactions map[string][]settlement.Transaction,
-	limit decimal.Decimal,
+	transactionsByPublisher map[string][]settlement.Transaction,
+	probiLimit decimal.Decimal,
+	excludeLimited bool,
+	// successfulPerPublisher map[string]int,
 ) (
-	// transfer_id => partial transactions
-	map[string][]settlement.Transaction,
-	*[][]settlement.Transaction,
+	[]settlement.Transaction,
+	[][]settlement.Transaction,
+	[]settlement.Transaction,
 	error,
 ) {
-	settlementRequests := [][]settlement.Transaction{{}}
-	settlements := make(map[string][]settlement.Transaction)
-	for key, groupedWithdrawals := range transactions {
-		set, index := getSettlementGroup(&settlementRequests)
+	// goes to bitflyer, does not include 0 value txs
+	settlementRequests := [][]settlement.Transaction{}
+	// goes to eyeshade, includes 0 value txs
+	settlements := []settlement.Transaction{}
+	// a list of settlements that are not being sent
+	notSubmittedSettlements := []settlement.Transaction{}
+
+	for _, groupedWithdrawals := range transactionsByPublisher {
+		set, index := getSettlementGroup(settlementRequests, len(groupedWithdrawals))
+		if index == len(settlementRequests) {
+			settlementRequests = append(settlementRequests, set)
+		}
 		aggregatedTx := settlement.Transaction{}
-		for gwdIndex, wd := range groupedWithdrawals {
-			// last := 1+gwdIndex == len(groupedWithdrawals)
-			if gwdIndex == 0 {
-				aggregatedTx.AltCurrency = wd.AltCurrency
-				aggregatedTx.Currency = wd.Currency
-				aggregatedTx.Destination = wd.Destination
-				aggregatedTx.Publisher = wd.Publisher
-				aggregatedTx.WalletProvider = wd.WalletProvider
-				aggregatedTx.WalletProviderID = wd.WalletProviderID
-				aggregatedTx.ProviderID = wd.WalletProviderID
-				aggregatedTx.Channel = wd.Channel
-				aggregatedTx.SettlementID = wd.SettlementID
-				aggregatedTx.Type = wd.Type
+		limitedTxs := []settlement.Transaction{}
+		publisherProbiLimit := probiLimit
+		for groupedWithdrawalIndex, limitedTx := range groupedWithdrawals {
+			if groupedWithdrawalIndex == 0 {
+				aggregatedTx.AltCurrency = limitedTx.AltCurrency
+				aggregatedTx.Currency = limitedTx.Currency
+				aggregatedTx.Destination = limitedTx.Destination
+				aggregatedTx.Publisher = limitedTx.Publisher
+				aggregatedTx.WalletProvider = limitedTx.WalletProvider
+				aggregatedTx.WalletProviderID = limitedTx.WalletProviderID
+				aggregatedTx.ProviderID = limitedTx.WalletProviderID
+				aggregatedTx.Channel = limitedTx.Channel
+				aggregatedTx.SettlementID = limitedTx.SettlementID
+				aggregatedTx.Type = limitedTx.Type
 			}
-			partialProbi := wd.Probi
+			partialProbi := limitedTx.Probi
 			// will hit our limits
-			if aggregatedTx.Amount.Add(partialProbi).GreaterThan(limit) {
+			if aggregatedTx.Probi.Add(partialProbi).GreaterThan(publisherProbiLimit) {
 				// reduce amount and fee to be within. can be zero
-				partialProbi = limit.Sub(aggregatedTx.Probi)
+				if excludeLimited {
+					// if we are excluding any limited transactions,
+					// then simply reduce the limit for that publisher
+					publisherProbiLimit = aggregatedTx.Probi
+				}
+				partialProbi = publisherProbiLimit.Sub(aggregatedTx.Probi)
 			}
 			partialFee := decimal.Zero
-			if wd.BATPlatformFee.GreaterThan(decimal.Zero) {
-				partialFee = partialProbi.Div(decimal.NewFromFloat(19))
+			if limitedTx.BATPlatformFee.GreaterThan(decimal.Zero) {
+				partialFee = partialProbi.Div(decimal.NewFromFloat(19)).Truncate(0)
 			}
-			partialAmount := altcurrency.BAT.FromProbi(partialProbi.Add(partialFee)) // always in BAT to BAT so we're good
+			// always in BAT to BAT so we're good
+			partialAmount := altcurrency.BAT.FromProbi(partialProbi)
 			// add to aggregate provider transaction
 			aggregatedTx.Amount = aggregatedTx.Amount.Add(partialAmount)
-			aggregatedTx.BATPlatformFee = aggregatedTx.BATPlatformFee.Add(partialFee) // not needed but useful for sanity checking
-			aggregatedTx.Probi = aggregatedTx.Probi.Add(partialProbi)                 // not needed but useful for sanity checking
-			// need separate so we can settle different types on eyeshade
-			// update single settlement.
-			wd.Amount = partialAmount
-			wd.BATPlatformFee = partialFee
-			wd.Probi = partialProbi
+			// not needed but useful for sanity checking
+			aggregatedTx.BATPlatformFee = aggregatedTx.BATPlatformFee.Add(partialFee)
+			aggregatedTx.Probi = aggregatedTx.Probi.Add(partialProbi)
 			// attach to upper levels
-			wd.ProviderID = key
-			settlements[key] = append(settlements[key], wd)
+			if partialProbi.Equals(decimal.Zero) {
+				limitedTx.Status = "not-submitted"
+				limitedTx.Note = "MONTHLY_SEND_LIMIT: not-submitted"
+				notSubmittedSettlements = append(notSubmittedSettlements, limitedTx)
+			} else {
+				// need separate so we can settle different types on eyeshade
+				// update single settlement.
+				limitedTx.Amount = partialAmount
+				limitedTx.BATPlatformFee = partialFee
+				limitedTx.Probi = partialProbi
+				settlements = append(settlements, limitedTx)
+				limitedTxs = append(limitedTxs, limitedTx)
+			}
 		}
-		*set = append(*set, aggregatedTx)
-		settlementRequests[index] = *set
+		settlements = append(settlements, limitedTxs...)
+		set = append(set, aggregatedTx)
+		settlementRequests[index] = set
 	}
-	return settlements, &settlementRequests, nil
+	return settlements, settlementRequests, notSubmittedSettlements, nil
 }
 
 func createBitflyerRequests(
 	sourceFrom string,
 	dryRun *bitflyer.DryRunOption,
 	token string,
-	settlementRequests *[][]settlement.Transaction,
+	settlementRequests [][]settlement.Transaction,
 ) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
-	for _, withdrawalSet := range *settlementRequests {
+	for _, withdrawalSet := range settlementRequests {
 		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
 			sourceFrom,
-			&withdrawalSet,
+			withdrawalSet,
 		)
 		if err != nil {
 			return nil, err
@@ -256,17 +295,22 @@ func createBitflyerRequests(
 }
 
 func getSettlementGroup(
-	settlementRequests *[][]settlement.Transaction,
-) (*[]settlement.Transaction, int) {
-	requestSeries := *settlementRequests
+	settlementRequests [][]settlement.Transaction,
+	toAdd int,
+) ([]settlement.Transaction, int) {
+	requestSeries := settlementRequests
+	if len(requestSeries) == 0 {
+		set := []settlement.Transaction{}
+		return set, 0
+	}
 	lastIndex := len(requestSeries) - 1
 	set := requestSeries[lastIndex]
-	if len(requestSeries[lastIndex]) >= 1000 {
+	futureLength := len(requestSeries[lastIndex]) + toAdd
+	if futureLength > 1000 {
 		set := []settlement.Transaction{}
-		*settlementRequests = append(*settlementRequests, set)
-		return &set, len(*settlementRequests) - 1
+		return set, len(settlementRequests) - 1
 	}
-	return &set, len(*settlementRequests) - 1
+	return set, len(settlementRequests) - 1
 }
 
 // IterateRequest iterates requests
@@ -276,8 +320,9 @@ func IterateRequest(
 	bitflyerClient bitflyer.Client,
 	bulkPayoutFiles []string,
 	sourceFrom string,
+	excludeLimited bool,
 	dryRun *bitflyer.DryRunOption,
-) (*map[string][]settlement.Transaction, error) {
+) (map[string][]settlement.Transaction, error) {
 
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -287,34 +332,51 @@ func IterateRequest(
 	// for submission to eyeshade
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
-	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY")
+	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
 	if err != nil {
-		return &submittedTransactions, err
+		return submittedTransactions, err
 	}
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read bulk payout file")
-			return &submittedTransactions, err
+			return submittedTransactions, err
 		}
 
 		var txs []settlement.Transaction
 		err = json.Unmarshal(bytes, &txs)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
-			return &submittedTransactions, err
+			return submittedTransactions, err
 		}
+		for i, tx := range txs {
+			tx.ProviderID = tx.TransferID()
+			txs[i] = tx
+		}
+		// group by publisher and transfer id
+		groupedByPublisher := GroupSettlements(&txs)
 		// bat limit
-		limit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
+		probiLimit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
 											Div(quote.Rate). // convert to bat
-											Truncate(8))     // truncated to satoshis
-		transactionsMap, transactionGroups, err := setupSettlementTransactions(
-			GroupSettlements(&txs),
-			limit,
+			// Mul(decimal.NewFromFloat(0.9)). // reduce by an extra 10% if we're paranoid
+			Truncate(8)) // truncated to satoshis
+		limitedSettlements, transactionGroups, notSubmittedSettlements, err := setupSettlementTransactions(
+			groupedByPublisher,
+			probiLimit,
+			excludeLimited,
 		)
 		if err != nil {
 			return nil, err
 		}
+		if len(notSubmittedSettlements) > 0 {
+			submittedTransactions[notSubmittedCategory] = append(
+				submittedTransactions[notSubmittedCategory],
+				notSubmittedSettlements...,
+			)
+		}
+
+		limitedSettlementsByTransferID := mapSettlementsByTransferID(limitedSettlements)
 
 		requests, err := createBitflyerRequests(
 			sourceFrom,
@@ -325,12 +387,12 @@ func IterateRequest(
 		if err != nil {
 			return nil, err
 		}
-
 		for i, request := range *requests {
 			if action == "upload" {
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
 					ctx,
-					transactionsMap,
+					limitedSettlementsByTransferID,
+					groupedByPublisher,
 					submittedTransactions,
 					request,
 					bitflyerClient,
@@ -344,7 +406,8 @@ func IterateRequest(
 			} else if action == "checkstatus" {
 				submittedTransactions, err = CheckPayoutTransactionsStatus(
 					ctx,
-					transactionsMap,
+					limitedSettlementsByTransferID,
+					groupedByPublisher,
 					submittedTransactions,
 					request,
 					bitflyerClient,
@@ -358,5 +421,13 @@ func IterateRequest(
 			}
 		}
 	}
-	return &submittedTransactions, nil
+	return submittedTransactions, nil
+}
+
+func mapSettlementsByTransferID(settlements []settlement.Transaction) map[string]settlement.Transaction {
+	byTransferID := make(map[string]settlement.Transaction)
+	for _, settlement := range settlements {
+		byTransferID[settlement.TransferID()] = settlement
+	}
+	return byTransferID
 }
