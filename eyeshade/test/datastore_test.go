@@ -4,17 +4,15 @@ package test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
-	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
@@ -46,9 +44,34 @@ func (suite *DatastoreSuite) SetupSuite() {
 	suite.ctx = ctx
 }
 
+func ResetDB(ctx context.Context, db datastore.Datastore) error {
+	tables := []string{
+		"transactions",
+		"votes",
+		"surveyor_groups",
+		"geo_referral_countries",
+		"geo_referral_groups",
+	}
+	for _, table := range tables {
+		statement := fmt.Sprintf(`delete from %s`, table)
+		_, err := db.RawDB().
+			ExecContext(ctx, statement)
+		if err != nil {
+			return err
+		}
+	}
+	return db.SeedDB(ctx)
+}
+
+func (suite *DatastoreSuite) SetupTest() {
+	suite.Require().NoError(
+		ResetDB(suite.ctx, suite.db),
+	)
+}
+
 func (suite *DatastoreSuite) TestInsertConvertableTransactions() {
 	refs := must.CreateReferrals(3, models.OriginalRateID)
-	groups, err := suite.db.GetReferralGroups(suite.ctx, *inputs.NewTime(time.RFC3339, time.Now()))
+	groups, err := suite.db.GetActiveReferralGroups(suite.ctx)
 	suite.Require().NoError(err)
 	referrals, err := models.ReferralBackfillMany(
 		&refs,
@@ -59,17 +82,21 @@ func (suite *DatastoreSuite) TestInsertConvertableTransactions() {
 	referralConvertables := models.ReferralsToConvertableTransactions(
 		*referrals...,
 	)
+	settlements := must.CreateSettlements(3, "contribution")
+	settlements = models.SettlementBackfillMany(settlements)
 	settlementConvertables := models.SettlementsToConvertableTransactions(
-		must.CreateSettlements(3, "contribution")...,
+		settlements...,
 	)
 	convertables := append(referralConvertables, settlementConvertables...)
 	suite.Require().NoError(
 		suite.db.InsertConvertableTransactions(suite.ctx, convertables),
 	)
 	var p []models.Transaction
-	suite.Require().NoError(
-		suite.db.RawDB().SelectContext(suite.ctx, &p, `select * from transactions`),
+	statement := fmt.Sprintf(`
+select %s from transactions`,
+		strings.Join(models.TransactionColumns, ", "),
 	)
-	j, _ := json.Marshal(p)
-	fmt.Println(string(j))
+	suite.Require().NoError(
+		suite.db.RawDB().SelectContext(suite.ctx, &p, statement),
+	)
 }

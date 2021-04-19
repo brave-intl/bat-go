@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/brave-intl/bat-go/utils/inputs"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
@@ -196,8 +195,8 @@ func (_d DatastoreWithPrometheus) GetPending(ctx context.Context, accountIDs []s
 	return _d.base.GetPending(ctx, accountIDs)
 }
 
-// GetReferralGroups implements Datastore
-func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (rap1 *[]models.ReferralGroup, err error) {
+// GetReferralGroupsByActiveAt implements Datastore
+func (_d DatastoreWithPrometheus) GetReferralGroupsByActiveAt(ctx context.Context, activeAt time.Time) (rap1 *[]models.ReferralGroup, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -205,9 +204,9 @@ func (_d DatastoreWithPrometheus) GetReferralGroups(ctx context.Context, activeA
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetReferralGroups", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetReferralGroupsByActiveAt", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetReferralGroups(ctx, activeAt)
+	return _d.base.GetReferralGroupsByActiveAt(ctx, activeAt)
 }
 
 // GetSettlementStats implements Datastore

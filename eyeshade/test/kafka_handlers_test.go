@@ -4,7 +4,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -33,19 +32,9 @@ func TestKafkaHandlersSuite(t *testing.T) {
 }
 
 func (suite *KafkaHandlersSuite) SetupTest() {
-	tables := []string{"transactions", "votes", "surveyor_groups"}
-	for _, table := range tables {
-		statement := fmt.Sprintf(`delete
-from %s`, table)
-		_, err := suite.service.Datastore().
-			RawDB().
-			ExecContext(suite.ctx, statement)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
-	suite.Require().NoError(suite.service.Datastore().
-		SeedDB(suite.ctx))
+	suite.Require().NoError(
+		ResetDB(suite.ctx, suite.service.Datastore()),
+	)
 }
 
 func (suite *KafkaHandlersSuite) SetupSuite() {

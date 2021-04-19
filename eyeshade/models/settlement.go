@@ -406,6 +406,16 @@ func SettlementBackfill(settlement Settlement, t ...time.Time) Settlement {
 	return settlement
 }
 
+// SettlementBackfillMany backfills with now as the timestamp
+func SettlementBackfillMany(settlements []Settlement) []Settlement {
+	s := []Settlement{}
+	now := time.Now()
+	for _, settlement := range settlements {
+		s = append(s, SettlementBackfill(settlement, now))
+	}
+	return s
+}
+
 // SettlementBackfillFromTransactions backfills data about settlements from pre existing transactions
 func SettlementBackfillFromTransactions(
 	settlements []Settlement,

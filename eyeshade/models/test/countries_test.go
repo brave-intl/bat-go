@@ -10,7 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
-	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )
@@ -32,7 +32,7 @@ func (suite *CountriesSuite) TestGroupMarshal() {
 	rawInput := models.ReferralGroup{}
 	rawInputWithCodesField := models.ReferralGroup{}.SetKeys([]string{"codes"})
 	rawInputWithCodesValues := models.ReferralGroup{}.SetKeys([]string{"codes"})
-	rawInputWithCodesValues.Codes = jsonutils.JSONStringArray([]string{"CA", "US"})
+	rawInputWithCodesValues.Codes = pq.StringArray([]string{"CA", "US"})
 
 	scenarios := []Scenario{{
 		name:  "raw",

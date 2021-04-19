@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -54,7 +54,7 @@ func Resolve(groups []ReferralGroup) *[]ReferralGroup {
 		codes := groupIDToCodesList[groupID]
 		group := groupsByID[groupID]
 		sort.Strings(codes)
-		group.Codes = jsonutils.JSONStringArray(codes)
+		group.Codes = pq.StringArray(codes)
 		rowsFiltered = append(rowsFiltered, group)
 	}
 	return &rowsFiltered
@@ -87,12 +87,12 @@ func FindByID(groups []ReferralGroup, id uuid.UUID) *ReferralGroup {
 type ReferralGroup struct {
 	keys []string
 
-	ID       uuid.UUID                 `json:"id" db:"id"`
-	ActiveAt time.Time                 `json:"activeAt" db:"active_at"`
-	Name     string                    `json:"name" db:"name"`
-	Amount   decimal.Decimal           `json:"amount" db:"amount"`
-	Currency string                    `json:"currency" db:"currency"`
-	Codes    jsonutils.JSONStringArray `json:"codes" db:"codes,omitempty"`
+	ID       uuid.UUID       `json:"id" db:"id"`
+	ActiveAt time.Time       `json:"activeAt" db:"active_at"`
+	Name     string          `json:"name" db:"name"`
+	Amount   decimal.Decimal `json:"amount" db:"amount"`
+	Currency string          `json:"currency" db:"currency"`
+	Codes    pq.StringArray  `json:"codes" db:"codes,omitempty"`
 }
 
 // MarshalJSON marshalles the referral group only including keys that were asked for +id

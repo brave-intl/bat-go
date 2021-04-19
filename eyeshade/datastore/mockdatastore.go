@@ -7,11 +7,11 @@ package datastore
 import (
 	context "context"
 	models "github.com/brave-intl/bat-go/eyeshade/models"
-	inputs "github.com/brave-intl/bat-go/utils/inputs"
 	v4 "github.com/golang-migrate/migrate/v4"
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
 	reflect "reflect"
+	time "time"
 )
 
 // MockDatastore is a mock of Datastore interface
@@ -306,19 +306,19 @@ func (mr *MockDatastoreMockRecorder) GetActiveReferralGroups(ctx interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveReferralGroups", reflect.TypeOf((*MockDatastore)(nil).GetActiveReferralGroups), ctx)
 }
 
-// GetReferralGroups mocks base method
-func (m *MockDatastore) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]models.ReferralGroup, error) {
+// GetReferralGroupsByActiveAt mocks base method
+func (m *MockDatastore) GetReferralGroupsByActiveAt(ctx context.Context, activeAt time.Time) (*[]models.ReferralGroup, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReferralGroups", ctx, activeAt)
+	ret := m.ctrl.Call(m, "GetReferralGroupsByActiveAt", ctx, activeAt)
 	ret0, _ := ret[0].(*[]models.ReferralGroup)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetReferralGroups indicates an expected call of GetReferralGroups
-func (mr *MockDatastoreMockRecorder) GetReferralGroups(ctx, activeAt interface{}) *gomock.Call {
+// GetReferralGroupsByActiveAt indicates an expected call of GetReferralGroupsByActiveAt
+func (mr *MockDatastoreMockRecorder) GetReferralGroupsByActiveAt(ctx, activeAt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReferralGroups", reflect.TypeOf((*MockDatastore)(nil).GetReferralGroups), ctx, activeAt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReferralGroupsByActiveAt", reflect.TypeOf((*MockDatastore)(nil).GetReferralGroupsByActiveAt), ctx, activeAt)
 }
 
 // GetSettlementStats mocks base method
