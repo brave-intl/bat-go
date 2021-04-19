@@ -25,15 +25,17 @@ var SettlementCmd = &cobra.Command{
 }
 
 // WriteCategorizedTransactions write out transactions categorized under a key
-func WriteCategorizedTransactions(ctx context.Context, outPath string, transactions *map[string][]settlement.Transaction) error {
-	if transactions != nil {
-		for key, txs := range *transactions {
-			if len(txs) > 0 {
-				outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
-				err := WriteTransactions(ctx, outputPath, &txs)
-				if err != nil {
-					return err
-				}
+func WriteCategorizedTransactions(
+	ctx context.Context,
+	outPath string,
+	transactions map[string][]settlement.Transaction,
+) error {
+	for key, txs := range transactions {
+		if len(txs) > 0 {
+			outputPath := strings.TrimSuffix(outPath, filepath.Ext(outPath)) + "-" + key + ".json"
+			err := WriteTransactions(ctx, outputPath, txs)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -41,17 +43,17 @@ func WriteCategorizedTransactions(ctx context.Context, outPath string, transacti
 }
 
 // WriteTransactions writes settlement transactions to a json file
-func WriteTransactions(ctx context.Context, outPath string, metadata *[]settlement.Transaction) error {
+func WriteTransactions(ctx context.Context, outPath string, metadata []settlement.Transaction) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	if len(*metadata) == 0 {
+	if len(metadata) == 0 {
 		return nil
 	}
 
-	logger.Debug().Str("files", outPath).Int("num transactions", len(*metadata)).Msg("writing outputting files")
+	logger.Debug().Str("files", outPath).Int("num transactions", len(metadata)).Msg("writing outputting files")
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		logger.Error().Err(err).Msg("failed writing outputting files")

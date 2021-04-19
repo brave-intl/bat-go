@@ -33,6 +33,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const (
+	USER_WALLET_VOTE_TEST_SKU_TOKEN = "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M"
+	FREE_TEST_SKU_TOKEN             = "AgEJYnJhdmUuY29tAh9pbnRlZ3JhdGlvbiB0ZXN0IGZyZWUgc2t1IHRva2VuAAIZc2t1PWludGVncmF0aW9uLXRlc3QtZnJlZQACCnByaWNlPTAuMDAAAgxjdXJyZW5jeT1CQVQAAgxkZXNjcmlwdGlvbj0AAhpjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQAABiC0YlYI9JFuPyC6C1UlwQOZoQeRw/fpNTNZVcvvqWg5TA=="
+)
+
 type ControllersTestSuite struct {
 	service *Service
 	suite.Suite
@@ -66,7 +71,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	}
 }
 
-func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
+func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity int) Order {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -78,7 +83,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
+				SKU:      skuToken,
 				Quantity: quantity,
 			},
 		},
@@ -101,7 +106,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 }
 
 func (suite *ControllersTestSuite) TestCreateOrder() {
-	order := suite.setupCreateOrder(40)
+	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 40)
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
@@ -118,6 +123,26 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 	suite.Assert().Equal("user-wallet-vote", order.Items[0].SKU)
 }
 
+func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
+	os.Setenv("SKUS_WHITELIST", FREE_TEST_SKU_TOKEN)
+	defer os.Setenv("SKUS_WHITELIST", "")
+	order := suite.setupCreateOrder(FREE_TEST_SKU_TOKEN, 10)
+
+	// Check the order
+	suite.Assert().Equal("0", order.TotalPrice.String())
+	suite.Assert().Equal("paid", order.Status)
+	suite.Assert().Equal("BAT", order.Currency)
+
+	// Check the order items
+	suite.Assert().Equal(len(order.Items), 1)
+	suite.Assert().Equal("BAT", order.Items[0].Currency)
+	suite.Assert().Equal("0", order.Items[0].Price.String())
+	suite.Assert().Equal(10, order.Items[0].Quantity)
+	suite.Assert().Equal(decimal.New(0, 0), order.Items[0].Subtotal)
+	suite.Assert().Equal(order.ID, order.Items[0].OrderID)
+	suite.Assert().Equal("integration-test-free", order.Items[0].SKU)
+}
+
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -130,7 +155,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 	createRequest := &CreateOrderRequest{
 		Items: []OrderItemRequest{
 			{
-				SKU:      "MDAxY2xvY2F0aW9uIGxvY2FsaG9zdDo4MDgwCjAwMWVpZGVudGlmaWVyIEJyYXZlIFNLVSB2MS4wCjAwMWFjaWQgc2t1ID0gQlJBVkUtMTIzNDUKMDAxMmNpZCBwcmljZSA9IDgKMDAxN2NpZCBjdXJyZW5jeSA9IEJBVAowMDJhY2lkIGRlc2NyaXB0aW9uID0gMTIgb3VuY2VzIG9mIENvZmZlZQowMDFjY2lkIGV4cGlyeSA9IDE1ODU2MDczNTkKMDAyZnNpZ25hdHVyZSB60s2IxrUuE0SYqFM3mD2p85nogryrOkkaNUkrHgjEPQo",
+				SKU:      FREE_TEST_SKU_TOKEN,
 				Quantity: 1,
 			},
 		},
@@ -149,7 +174,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
-	order := suite.setupCreateOrder(20)
+	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 20)
 
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
@@ -199,7 +224,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	service := &Service{
 		Datastore: pg,
 	}
-	order := suite.setupCreateOrder(1 / .25)
+	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 1/.25)
 
 	handler := CreateUpholdTransaction(service)
 
@@ -270,7 +295,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Require().NoError(err)
 
 	// External transaction has 12 BAT
-	order := suite.setupCreateOrder(12 / .25)
+	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 12/.25)
 
 	handler := CreateUpholdTransaction(service)
 
@@ -370,165 +395,48 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
-func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
-
+func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
 	start := time.Now()
-	numVotes := 20
-
-	mockCtrl := gomock.NewController(suite.T())
-	defer mockCtrl.Finish()
-	mockCB := mockcb.NewMockClient(mockCtrl)
-
-	pg, err := NewPostgres("", false)
-	suite.Require().NoError(err, "Failed to get postgres conn")
-	walletDB, _, err := wallet.NewPostgres()
-	suite.Require().NoError(err, "Failed to get postgres conn")
-
-	// Create connection to Kafka
-	// FIXME stick kafka setup in suite setup
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-
-	dialer, _, err := kafkautils.TLSDialer()
-	suite.Require().NoError(err)
-	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
-	suite.Require().NoError(err)
-
-	// create topics
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
-	suite.Require().NoError(err)
-
-	offset, err := conn.ReadLastOffset()
-	suite.Require().NoError(err)
-
-	service := &Service{
-		Datastore: pg,
-		cbClient:  mockCB,
-		wallet: &wallet.Service{
-			Datastore: walletDB,
-		},
-	}
-
-	err = service.InitKafka(context.Background())
-	suite.Require().NoError(err, "Failed to initialize kafka")
-
-	log.Printf("!!! time to startup kafka: %+v\n", time.Now().Sub(start))
-
-	// kick off async goroutine to monitor the vote
-	// queue of uncommitted votes in postgres, and
-	// push the votes through redemption and kafka
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		for {
-			_, err := service.RunNextVoteDrainJob(ctx)
-			suite.Require().NoError(err, "Failed to drain vote queue")
-			_, err = service.RunNextOrderJob(ctx)
-			suite.Require().NoError(err, "Failed to drain order queue")
-			<-time.After(50 * time.Millisecond)
-		}
-	}()
-	defer cancel()
-
-	// Create the order first
-	handler := CreateOrder(service)
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
-			{
-				SKU:      "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
-				Quantity: numVotes,
-			},
-		},
-	}
-
-	log.Printf("!!! time to create order: %+v\n", time.Now().Sub(start))
-
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	var order Order
-	err = json.Unmarshal([]byte(rr.Body.String()), &order)
-	suite.Require().NoError(err)
-
-	userWallet := generateWallet(suite.T())
-	err = walletDB.UpsertWallet(ctx, &userWallet.Info)
-	suite.Require().NoError(err)
-
-	log.Printf("!!! time to generate wallet: %+v\n", time.Now().Sub(start))
-
-	balanceBefore, err := userWallet.GetBalance(true)
-	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
-	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
-	suite.Require().NoError(err)
-
-	walletID, err := uuid.FromString(userWallet.ID)
-	suite.Require().NoError(err)
-
-	anonCardRequest := CreateAnonCardTransactionRequest{
-		WalletID:    walletID,
-		Transaction: txn,
-	}
-
-	body, err = json.Marshal(&anonCardRequest)
-	suite.Require().NoError(err)
-
-	handler = CreateAnonCardTransaction(service)
-	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	log.Printf("!!! time to post anon card transaction: %+v\n", time.Now().Sub(start))
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	issuerName := "brave.com?sku=anon-card-vote"
-	issuerPublicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
-	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	issuerName = "brave.com?sku=" + order.Items[0].SKU
+	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY=", "XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
 	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
 	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
-	sig := "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
-	preimage := "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+	sig = "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	preimage = "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
 
 	credsReq := CreateOrderCredsRequest{
 		ItemID:       order.Items[0].ID,
 		BlindedCreds: blindedCreds,
 	}
 
-	body, err = json.Marshal(&credsReq)
+	body, err := json.Marshal(&credsReq)
 	suite.Require().NoError(err)
 
-	handler = CreateOrderCreds(service)
-	req, err = http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
+	handler := CreateOrderCreds(service)
+	req, err := http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	log.Printf("!!! time to create credentials: %+v\n", time.Now().Sub(start))
 
-	rctx = chi.NewRouteContext()
+	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
-	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
-		Name:      issuerName,
-		PublicKey: issuerPublicKey,
-	}, nil)
-	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+	if firstTime {
+		mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+		mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+			Name:      issuerName,
+			PublicKey: issuerPublicKey,
+		}, nil)
+	}
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
 		BatchProof:   proof,
 		SignedTokens: signedCreds,
 	}, nil)
 
-	rr = httptest.NewRecorder()
+	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
@@ -589,6 +497,145 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	log.Printf("!!! time to finish loop for status ok: %+v\n", time.Now().Sub(start))
 
 	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
+
+	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	suite.Require().NoError(err)
+
+	return
+}
+
+func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
+	start := time.Now()
+	numVotes := 1
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Create connection to Kafka
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, _, err := kafkautils.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
+	suite.Require().NoError(err)
+
+	// create topics
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	offset, err := conn.ReadLastOffset()
+	suite.Require().NoError(err)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+	}
+
+	err = service.InitKafka(context.Background())
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	log.Printf("!!! time to startup kafka: %+v\n", time.Now().Sub(start))
+	start = time.Now()
+
+	// kick off async goroutine to monitor the vote
+	// queue of uncommitted votes in postgres, and
+	// push the votes through redemption and kafka
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, err := service.RunNextVoteDrainJob(ctx)
+				suite.Require().NoError(err, "Failed to drain vote queue")
+				_, err = service.RunNextOrderJob(ctx)
+				suite.Require().NoError(err, "Failed to drain order queue")
+				<-time.After(50 * time.Millisecond)
+			}
+		}
+	}()
+	defer cancel()
+
+	// Create the order first
+	handler := CreateOrder(service)
+	createRequest := &CreateOrderRequest{
+		Items: []OrderItemRequest{
+			{
+				SKU:      "AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
+				Quantity: numVotes,
+			},
+		},
+	}
+
+	log.Printf("!!! time to create order: %+v\n", time.Now().Sub(start))
+	start = time.Now()
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
+
+	var order Order
+	err = json.Unmarshal([]byte(rr.Body.String()), &order)
+	suite.Require().NoError(err)
+
+	userWallet := generateWallet(suite.T())
+	err = walletDB.UpsertWallet(ctx, &userWallet.Info)
+	suite.Require().NoError(err)
+
+	log.Printf("!!! time to generate wallet: %+v\n", time.Now().Sub(start))
+	start = time.Now()
+
+	balanceBefore, err := userWallet.GetBalance(true)
+	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
+	suite.Require().NoError(err)
+
+	walletID, err := uuid.FromString(userWallet.ID)
+	suite.Require().NoError(err)
+
+	anonCardRequest := CreateAnonCardTransactionRequest{
+		WalletID:    walletID,
+		Transaction: txn,
+	}
+
+	body, err = json.Marshal(&anonCardRequest)
+	suite.Require().NoError(err)
+
+	handler = CreateAnonCardTransaction(service)
+	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusCreated, rr.Code)
+
+	log.Printf("!!! time to post anon card transaction: %+v\n", time.Now().Sub(start))
+
+	issuerName, issuerPublicKey, sig, preimage, ordercreds := suite.fetchCredentials(ctx, service, mockCB, order, true)
+
+	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
 
 	// Test getting the same order by item ID
 	handler = GetOrderCredsByID(service)
@@ -689,6 +736,126 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
 	// check that the funding source matches the issuer
 	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
+}
+
+func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
+	os.Setenv("SKUS_WHITELIST", FREE_TEST_SKU_TOKEN)
+	defer os.Setenv("SKUS_WHITELIST", "")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	pg, err := NewPostgres("", false)
+	suite.Require().NoError(err, "Failed to get postgres conn")
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, err = service.RunNextOrderJob(ctx)
+				suite.Require().NoError(err, "Failed to drain order queue")
+				<-time.After(50 * time.Millisecond)
+			}
+		}
+	}()
+	defer cancel()
+
+	order := suite.setupCreateOrder(FREE_TEST_SKU_TOKEN, 1)
+
+	_, _, _, _, ordercreds := suite.fetchCredentials(ctx, service, mockCB, order, true)
+	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
+
+	handler := DeleteOrderCreds(service)
+	req, err := http.NewRequest("DELETE", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	// Reset should succeed
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	// Credentials should be cleared out
+	suite.Assert().Equal(http.StatusNotFound, rr.Code)
+
+	// Signing after reset should proceed normally
+	issuerName, _, sig, preimage, ordercreds := suite.fetchCredentials(ctx, service, mockCB, order, false)
+	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
+
+	presentation := cbr.CredentialRedemption{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}
+
+	presentationBytes, err := json.Marshal(&presentation)
+	suite.Require().NoError(err)
+	presentationPayload := base64.StdEncoding.EncodeToString(presentationBytes)
+
+	verifyRequest := VerifyCredentialRequest{
+		Type:         "single-use",
+		Version:      1,
+		SKU:          "incorrect-sku",
+		MerchantID:   "brave.com",
+		Presentation: presentationPayload,
+	}
+
+	body, err := json.Marshal(&verifyRequest)
+	suite.Require().NoError(err)
+
+	handler = VerifyCredential(service)
+	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	// Verification should fail when outer sku does not match inner presentation
+	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
+
+	// Correct the SKU
+	verifyRequest.SKU = "integration-test-free"
+
+	body, err = json.Marshal(&verifyRequest)
+	suite.Require().NoError(err)
+
+	handler = VerifyCredential(service)
+	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	// mocked redeem creds
+	mockCB.EXPECT().RedeemCredential(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(preimage), gomock.Eq(sig), gomock.Eq(issuerName))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	// Verification should succeed if SKU and merchant are correct
+	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
 
 func (suite *ControllersTestSuite) SetupCreateKey() Key {

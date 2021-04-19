@@ -206,15 +206,6 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
-		for i, item := range order.Items {
-			// FIXME
-			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
-				order.Items[i].Type = "time-limited"
-			} else {
-				order.Items[i].Type = "single-use"
-			}
-		}
-
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
 	})
 }
@@ -240,15 +231,6 @@ func GetOrder(service *Service) handlers.AppHandler {
 		status := http.StatusOK
 		if order == nil {
 			status = http.StatusNotFound
-		}
-
-		// FIXME
-		for i, item := range order.Items {
-			if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
-				order.Items[i].Type = "time-limited"
-			} else {
-				order.Items[i].Type = "single-use"
-			}
 		}
 
 		if order != nil && !order.IsPaid() && order.IsStripePayable() {
@@ -808,6 +790,7 @@ type VerifyCredentialRequest struct {
 	Type         string  `json:"type"`
 	Version      float64 `json:"version"`
 	SKU          string  `json:"sku"`
+	MerchantID   string  `json:"merchantId"`
 	Presentation string  `json:"presentation" valid:"base64"`
 }
 
@@ -847,6 +830,12 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
 
+			// FIXME Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			// replace current hardcoded check
+			if req.MerchantID != "brave.com" || !(req.SKU == "brave-together-free" || req.SKU == "brave-together-paid") {
+				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+			}
+
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
@@ -880,6 +869,15 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			err = json.Unmarshal(bytes, &decodedCredential)
 			if err != nil {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
+			if err != nil {
+				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+			}
+			if issuerID != decodedCredential.Issuer {
+				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 			}
 
 			err = service.cbClient.RedeemCredential(r.Context(), decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)

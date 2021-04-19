@@ -85,6 +85,14 @@ func getTipChoices(ctx context.Context) []float64 {
 	return c
 }
 
+func getDefaultChoice(ctx context.Context) float64 {
+	c, ok := ctx.Value(appctx.DefaultACChoiceCTXKey).(float64)
+	if !ok {
+		return 0
+	}
+	return c
+}
+
 func getMonthlyChoices(ctx context.Context) []float64 {
 	c, ok := ctx.Value(appctx.DefaultMonthlyChoicesCTXKey).([]float64)
 	if !ok {

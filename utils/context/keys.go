@@ -28,6 +28,8 @@ const (
 	DefaultTipChoicesCTXKey CTXKey = "default_tip_choices"
 	// DefaultACChoicesCTXKey - the context key for getting the default ac choices
 	DefaultACChoicesCTXKey CTXKey = "default_ac_choices"
+	// DefaultACChoiceCTXKey - the context key for getting the default ac choice
+	DefaultACChoiceCTXKey CTXKey = "default_ac_choice"
 	// RatiosCacheExpiryDurationCTXKey - context key for ratios client cache expiry
 	RatiosCacheExpiryDurationCTXKey CTXKey = "ratios_client_cache_expiry"
 	// RatiosCachePurgeDurationCTXKey - context key for ratios client cache purge
@@ -63,6 +65,8 @@ const (
 	BitflyerClientSecretCTXKey CTXKey = "bitflyer_client_secret"
 	// BitflyerClientIDCTXKey - context key for the client secret
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
+	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
+	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 )
 
 var (

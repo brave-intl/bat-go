@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // CheckPayoutStatus implements Client
-func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
+func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -53,7 +53,7 @@ func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload Wi
 }
 
 // FetchQuote implements Client
-func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode string) (qp1 *Quote, err error) {
+func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode string, readFromFile bool) (qp1 *Quote, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -63,7 +63,7 @@ func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode strin
 
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchQuote", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.FetchQuote(ctx, productCode)
+	return _d.base.FetchQuote(ctx, productCode, readFromFile)
 }
 
 // RefreshToken implements Client

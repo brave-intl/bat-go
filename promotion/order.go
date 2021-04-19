@@ -28,17 +28,18 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID          uuid.UUID            `json:"id" db:"id"`
-	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU         string               `json:"sku" db:"sku"`
-	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency    string               `json:"currency" db:"currency"`
-	Quantity    int                  `json:"quantity" db:"quantity"`
-	Price       decimal.Decimal      `json:"price" db:"price"`
-	Subtotal    decimal.Decimal      `json:"subtotal"`
-	Location    datastore.NullString `json:"location" db:"location"`
-	Description datastore.NullString `json:"description" db:"description"`
+	ID             uuid.UUID            `json:"id" db:"id"`
+	OrderID        uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU            string               `json:"sku" db:"sku"`
+	CreatedAt      *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt      *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency       string               `json:"currency" db:"currency"`
+	Quantity       int                  `json:"quantity" db:"quantity"`
+	Price          decimal.Decimal      `json:"price" db:"price"`
+	Subtotal       decimal.Decimal      `json:"subtotal"`
+	Location       datastore.NullString `json:"location" db:"location"`
+	Description    datastore.NullString `json:"description" db:"description"`
+	CredentialType string               `json:"credentialType" db:"credential_type"`
 }
 
 // IsPaid returns true if the order is paid

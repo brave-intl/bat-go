@@ -69,13 +69,11 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 			Str("environment", viper.GetString("environment")).
 			Msg("server starting")
 	}
-	// we will always have metrics and health-check
 	return r
 }
 
 // SetupDefaultRoutes sets up default routes
 func SetupDefaultRoutes(ctx context.Context, r *chi.Mux) *chi.Mux {
-	r.Get("/metrics", middleware.Metrics())
 	r.Get("/health-check", handlers.HealthCheckHandler(
 		ctx.Value(appctx.VersionCTXKey).(string),
 		ctx.Value(appctx.VersionCTXKey).(string),

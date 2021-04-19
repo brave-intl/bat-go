@@ -22,6 +22,20 @@ func GetByteSliceFromContext(ctx context.Context, key CTXKey) ([]byte, error) {
 	return nil, ErrValueWrongType
 }
 
+//GetBoolFromContext - given a CTXKey return the bool value from the context if it exists
+func GetBoolFromContext(ctx context.Context, key CTXKey) (bool, error) {
+	v := ctx.Value(key)
+	if v == nil {
+		// value not on context
+		return false, ErrNotInContext
+	}
+	if s, ok := v.(bool); ok {
+		return s, nil
+	}
+	// value not a string
+	return false, ErrValueWrongType
+}
+
 //GetStringFromContext - given a CTXKey return the string value from the context if it exists
 func GetStringFromContext(ctx context.Context, key CTXKey) (string, error) {
 	v := ctx.Value(key)

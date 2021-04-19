@@ -51,12 +51,6 @@ func init() {
 		Bind("datastore").
 		Require()
 
-	walletsCmdBuilder.Flag().Bool("wallets-feature-flag", false,
-		"the feature flag enabling the wallets feature").
-		Env("FEATURE_WALLET").
-		Bind("wallets-feature-flag").
-		Require()
-
 	walletsCmdBuilder.Flag().Bool("enable-link-drain-flag", false,
 		"the in-migration flag disabling the wallets link feature").
 		Env("ENABLE_LINKING_DRAINING").

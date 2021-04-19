@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
@@ -104,6 +105,10 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	excludeLimited, err := cmd.Flags().GetBool("exclude-limited")
+	if err != nil {
+		return err
+	}
 	dryRunOptions, err := ParseDryRun(cmd)
 	if err != nil {
 		return err
@@ -115,6 +120,7 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		out,
 		token,
 		sourceFrom,
+		excludeLimited,
 		dryRunOptions,
 	)
 }
@@ -152,6 +158,10 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
 	token := viper.GetViper().GetString("bitflyer-client-token")
+	excludeLimited, err := cmd.Flags().GetBool("exclude-limited")
+	if err != nil {
+		return err
+	}
 	sourceFrom, err := cmd.Flags().GetString("bitflyer-source-from")
 	if err != nil {
 		return err
@@ -167,6 +177,7 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		out,
 		token,
 		sourceFrom,
+		excludeLimited,
 		dryRunOptions,
 	)
 }
@@ -206,6 +217,11 @@ func init() {
 		Bind("bitflyer-dryrun").
 		Env("BITFLYER_DRYRUN")
 
+	uploadCheckStatusBuilder.Flag().Duration("bitflyer-process-time", time.Second,
+		"tells bitflyer the duration of this practice round").
+		Bind("bitflyer-dryrun").
+		Env("BITFLYER_DRYRUN")
+
 	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
 		"the token to be sent for auth on bitflyer").
 		Bind("bitflyer-client-token").
@@ -230,12 +246,17 @@ func init() {
 		"the bitflyer domain to interact with").
 		Bind("bitflyer-server").
 		Env("BITFLYER_SERVER")
+
+	allBuilder.Flag().Bool("exclude-limited", false,
+		"in order to avoid not knowing what the payout amount will be because of transfer limits").
+		Bind("exclude-limited")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
 func BitflyerUploadSettlement(
 	ctx context.Context,
 	action, inPath, outPath, token, sourceFrom string,
+	excludeLimited bool,
 	dryRun *bitflyer.DryRunOption,
 ) error {
 	logger, err := appctx.GetLogger(ctx)
@@ -266,6 +287,7 @@ func BitflyerUploadSettlement(
 		bitflyerClient,
 		bulkPayoutFiles,
 		sourceFrom,
+		excludeLimited,
 		dryRun,
 	)
 	// write file for upload to eyeshade

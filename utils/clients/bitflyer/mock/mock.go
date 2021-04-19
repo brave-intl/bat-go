@@ -35,18 +35,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // FetchQuote mocks base method
-func (m *MockClient) FetchQuote(ctx context.Context, productCode string) (*bitflyer.Quote, error) {
+func (m *MockClient) FetchQuote(ctx context.Context, productCode string, readFromFile bool) (*bitflyer.Quote, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchQuote", ctx, productCode)
+	ret := m.ctrl.Call(m, "FetchQuote", ctx, productCode, readFromFile)
 	ret0, _ := ret[0].(*bitflyer.Quote)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FetchQuote indicates an expected call of FetchQuote
-func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) FetchQuote(ctx, productCode, readFromFile interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchQuote", reflect.TypeOf((*MockClient)(nil).FetchQuote), ctx, productCode)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchQuote", reflect.TypeOf((*MockClient)(nil).FetchQuote), ctx, productCode, readFromFile)
 }
 
 // UploadBulkPayout mocks base method
@@ -65,7 +65,7 @@ func (mr *MockClientMockRecorder) UploadBulkPayout(ctx, payload interface{}) *go
 }
 
 // CheckPayoutStatus mocks base method
-func (m *MockClient) CheckPayoutStatus(ctx context.Context, payload bitflyer.WithdrawToDepositIDBulkPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
+func (m *MockClient) CheckPayoutStatus(ctx context.Context, payload bitflyer.CheckBulkStatusPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckPayoutStatus", ctx, payload)
 	ret0, _ := ret[0].(*bitflyer.WithdrawToDepositIDBulkResponse)
