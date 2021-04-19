@@ -1,4 +1,4 @@
-// +build integration
+// +build eyeshade
 
 package test
 
@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
+	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/suite"

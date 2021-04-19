@@ -92,7 +92,7 @@ func (service *Service) ModifyReferrals(
 	referrals *[]models.Referral,
 ) (*[]models.Referral, error) {
 	groups, err := service.Datastore(true).
-		GetActiveCountryGroups(service.Context())
+		GetActiveReferralGroups(service.Context())
 	if err != nil {
 		return nil, err
 	}

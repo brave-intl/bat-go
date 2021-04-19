@@ -44,7 +44,6 @@ services:
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
       - "DATABASE_MIGRATIONS_URL=file:///src/eyeshade/migrations"
-      - "DATABASE_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade?sslmode=disable"
       - "EYESHADE_DB_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade?sslmode=disable"
       - TEST_PKG
       - TEST_RUN

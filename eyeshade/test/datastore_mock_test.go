@@ -1,4 +1,4 @@
-// +build integration
+// +build eyeshade
 
 package test
 
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
@@ -43,10 +42,7 @@ func (suite *DatastoreMockSuite) SetupSuite() {
 	mockDB, mock, err := sqlmock.New()
 	suite.Require().NoError(err, "failed to create a sql mock")
 
-	name := "sqlmock"
-	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockDB, name),
-	}, name)
+	suite.db = datastore.NewFromConnection(sqlx.NewDb(mockDB, "sqlmock"))
 	suite.ctx = ctx
 	suite.mock = mock
 }
@@ -303,7 +299,7 @@ func SetupMockGetTransactionsByAccount(
 			(*txTypesHash)[txType] = true
 		}
 	}
-	channels := must.UUIDsToString(must.RandomIDs(3, true)...)
+	channels := must.UUIDsToString(must.RandomIDs(3)...)
 	providerID := uuid.NewV4().String()
 	for _, channel := range channels {
 		rows = append(rows, ContributeTransaction(channel))
@@ -454,7 +450,7 @@ func (suite *DatastoreMockSuite) GetAccountSettlementEarnings(
 }
 
 func (suite *DatastoreMockSuite) TestGetBalances() {
-	accountIDs := must.UUIDsToString(must.RandomIDs(3, true)...)
+	accountIDs := must.UUIDsToString(must.RandomIDs(3)...)
 
 	expect := SetupMockGetBalances(
 		suite.mock,

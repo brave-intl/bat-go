@@ -39,7 +39,7 @@ func (service *Service) GETReferralGroups() handlers.AppHandler {
 		body, err := service.GetReferralGroups(
 			r.Context(),
 			resolve,
-			*activeAt,
+			*activeAt.Time(),
 			fields...,
 		)
 		if err != nil {

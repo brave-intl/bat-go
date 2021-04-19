@@ -3,14 +3,7 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_TIME := $(shell date +%s)
 VAULT_VERSION=0.10.1
 TEST_PKG?=./...
-# ifdef TEST_TAGS
-# 	ifneq (,$(findstring test,$(TEST_TAGS)))
-# 	else
-# 		TEST_TAGS:=test,$(TEST_TAGS)
-# 	endif
-# else
-# 	TEST_TAGS=test
-# endif
+EYESHADE_TEST_TAGS?=eyeshade
 TEST_FLAGS= -tags $(TEST_TAGS) $(TEST_PKG)
 ifdef TEST_RUN
 	TEST_FLAGS = -tags $(TEST_TAGS) $(TEST_PKG) -run $(TEST_RUN)
@@ -105,7 +98,7 @@ docker-eyeshade-test:
 		-f docker-compose.yml -f docker-compose.dev.yml up -d vault
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	docker-compose -f docker-compose.yml -f eyeshade/docker-compose.yml \
-	exec -e TEST_PKG=./eyeshade/... -e VAULT_TOKEN=$(VAULT_TOKEN) -e TEST_RUN=$(TEST_RUN) -e TEST_TAGS=$(TEST_TAGS) \
+	exec -e TEST_PKG=./eyeshade/... -e VAULT_TOKEN=$(VAULT_TOKEN) -e TEST_RUN=$(TEST_RUN) -e TEST_TAGS=$(EYESHADE_TEST_TAGS) \
 	eyeshade-web make test
 	go run main.go generate eyeshade-json-schema
 

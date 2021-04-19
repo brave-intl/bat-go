@@ -2,10 +2,10 @@ package eyeshade
 
 import (
 	"context"
+	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
-	"github.com/brave-intl/bat-go/utils/inputs"
 )
 
 // Datastore returns a read only datastore if available
@@ -93,11 +93,11 @@ func (service *Service) GetTransactionsByAccount(
 func (service *Service) GetReferralGroups(
 	ctx context.Context,
 	resolve bool,
-	activeAt inputs.Time,
+	activeAt time.Time,
 	fields ...string,
 ) (*[]models.ReferralGroup, error) {
 	groups, err := service.Datastore(true).
-		GetReferralGroups(ctx, activeAt)
+		GetReferralGroupsByActiveAt(ctx, activeAt)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,8 @@ func (service *Service) GetReferralGroups(
 	}
 	serializableGroups := []models.ReferralGroup{}
 	for _, group := range *groups {
-		serializableGroups = append(serializableGroups, group.SetKeys(fields)) // will only render these keys when serializing
+		// will only render these keys when serializing
+		serializableGroups = append(serializableGroups, group.SetKeys(fields))
 	}
 	return &serializableGroups, nil
 }

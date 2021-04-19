@@ -47,6 +47,7 @@ func (referral *Referral) GenerateID() string {
 	).String()
 }
 
+// PrefixOwnerID prepends the publisher prefix, useful when only the id is available
 func PrefixOwnerID(id string) string {
 	return publisherPrefix + id
 }
@@ -57,6 +58,7 @@ func (referral *Referral) ToTxs() []Transaction {
 	if owner == "removed" {
 		return []Transaction{}
 	}
+	// in case publishers prefix does not exist
 	if owner[:len(publisherPrefix)] != publisherPrefix {
 		owner = PrefixOwnerID(owner)
 	}
@@ -87,6 +89,7 @@ func (referral *Referral) ToTxIDs() []string {
 func (referral *Referral) Ignore() bool {
 	props := referral.Channel.Normalize().Props()
 	return referral.Amount.GreaterThan(largeBAT) ||
+		referral.Owner == "removed" || // special case that promo-services was sending
 		(props.ProviderName == "youtube" && props.ProviderSuffix == "user")
 }
 

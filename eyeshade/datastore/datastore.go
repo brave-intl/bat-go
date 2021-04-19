@@ -15,7 +15,6 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	datastoreutils "github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/inputs"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -68,10 +67,10 @@ type Datastore interface {
 		ctx context.Context,
 		txs *[]models.Transaction,
 	) error
-	GetActiveCountryGroups(ctx context.Context) (*[]models.ReferralGroup, error)
-	GetReferralGroups(
+	GetActiveReferralGroups(ctx context.Context) (*[]models.ReferralGroup, error)
+	GetReferralGroupsByActiveAt(
 		ctx context.Context,
-		activeAt inputs.Time,
+		activeAt time.Time,
 	) (*[]models.ReferralGroup, error)
 	GetSettlementStats(
 		ctx context.Context,
@@ -102,10 +101,10 @@ type Postgres struct {
 }
 
 // NewFromConnection creates new datastores from connection objects
-func NewFromConnection(pg *grantserver.Postgres, name string) Datastore {
+func NewFromConnection(db *sqlx.DB) Datastore {
 	return &DatastoreWithPrometheus{
-		base:         &Postgres{*pg},
-		instanceName: name,
+		base:         &Postgres{grantserver.Postgres{DB: db}},
+		instanceName: db.DriverName(),
 	}
 }
 
@@ -125,7 +124,7 @@ func NewDB(
 	if err != nil {
 		return nil, err
 	}
-	return NewFromConnection(pg, name), nil
+	return NewFromConnection(pg.RawDB()), nil
 }
 
 // NewConnections creates postgres connections
@@ -622,8 +621,8 @@ AND created_at < $3`
 	)
 }
 
-// GetActiveCountryGroups gets country groups to match their amount with their designated payout
-func (pg *Postgres) GetActiveCountryGroups(ctx context.Context) (*[]models.ReferralGroup, error) {
+// GetActiveReferralGroups gets country groups to match their amount with their designated payout
+func (pg *Postgres) GetActiveReferralGroups(ctx context.Context) (*[]models.ReferralGroup, error) {
 	statement := `
 SELECT
 	id,
@@ -638,8 +637,8 @@ ORDER BY active_at DESC`
 	return &groups, pg.RawDB().SelectContext(ctx, &groups, statement)
 }
 
-// GetReferralGroups gets referral groups active by a certain time
-func (pg *Postgres) GetReferralGroups(ctx context.Context, activeAt inputs.Time) (*[]models.ReferralGroup, error) {
+// GetReferralGroupsByActiveAt gets referral groups active by a certain time
+func (pg *Postgres) GetReferralGroupsByActiveAt(ctx context.Context, activeAt time.Time) (*[]models.ReferralGroup, error) {
 	statement := `
 SELECT
   id,
@@ -647,7 +646,7 @@ SELECT
   name,
   amount,
   currency,
-  models.codes AS codes
+  countries.codes AS codes
 FROM geo_referral_groups, (
   SELECT
     group_id,
@@ -657,7 +656,7 @@ FROM geo_referral_groups, (
 ) AS countries
 WHERE
     geo_referral_groups.active_at <= $1
-AND models.group_id = geo_referral_groups.id`
+AND countries.group_id = geo_referral_groups.id`
 	groups := []models.ReferralGroup{}
 	err := pg.SelectContext(ctx, &groups, statement, activeAt)
 	if err != nil && err != sql.ErrNoRows {

@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	// APIResponseTypes holds api responses for endpoints on eyeshade
 	APIResponseTypes = []reflect.Type{
 		reflect.TypeOf(models.AccountSettlementEarnings{}),
 		reflect.TypeOf(models.AccountEarnings{}),

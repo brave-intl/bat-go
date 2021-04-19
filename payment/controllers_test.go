@@ -50,7 +50,7 @@ func TestControllersTestSuite(t *testing.T) {
 
 func (suite *ControllersTestSuite) SetupSuite() {
 	govalidator.SetFieldsRequiredByDefault(true)
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	m, err := pg.NewMigrate()
@@ -74,7 +74,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity int) Order {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -146,7 +146,7 @@ func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
 }
 
 func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -220,7 +220,7 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 }
 
 func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -285,7 +285,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -349,7 +349,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 
 	// Get all the transactions, should only be one
 
-	handler = GetTransactionsByAccount(suite.service)
+	handler = GetTransactions(suite.service)
 	req, err = http.NewRequest("GET", "/v1/orders/{orderID}/transactions", nil)
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
@@ -514,7 +514,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	defer mockCtrl.Finish()
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -930,7 +930,7 @@ func (suite *ControllersTestSuite) TestDeleteKey() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeys() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors
@@ -960,7 +960,7 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 }
 
 func (suite *ControllersTestSuite) TestGetKeysFiltered() {
-	pg, err := NewPostgres("", false, "")
+	pg, err := NewPostgres("", false, "payment")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Delete transactions so we don't run into any validation errors

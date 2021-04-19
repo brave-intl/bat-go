@@ -27,6 +27,7 @@ services:
       - CHALLENGE_BYPASS_TOKEN
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
       - "DATABASE_URL=postgres://grants:password@postgres/grants?sslmode=disable"
+      - "EYESHADE_DB_URL=postgres://eyeshade:password@eyeshade-postgres/eyeshade?sslmode=disable"
       - DONOR_WALLET_CARD_ID
       - DONOR_WALLET_PRIVATE_KEY
       - DONOR_WALLET_PUBLIC_KEY
@@ -166,6 +167,7 @@ services:
       - "POSTGRES_PASSWORD=password"
     networks:
       - eyeshade
+      - grant
     command: ["postgres", "-c", "log_statement=all"]
 
   challenge-bypass-postgres:

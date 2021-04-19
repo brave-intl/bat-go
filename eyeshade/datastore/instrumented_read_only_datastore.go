@@ -112,8 +112,8 @@ func (_d DatastoreWithPrometheus) GetAccountSettlementEarnings(ctx context.Conte
 	return _d.base.GetAccountSettlementEarnings(ctx, options)
 }
 
-// GetActiveCountryGroups implements Datastore
-func (_d DatastoreWithPrometheus) GetActiveCountryGroups(ctx context.Context) (rap1 *[]models.ReferralGroup, err error) {
+// GetActiveReferralGroups implements Datastore
+func (_d DatastoreWithPrometheus) GetActiveReferralGroups(ctx context.Context) (rap1 *[]models.ReferralGroup, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -121,9 +121,9 @@ func (_d DatastoreWithPrometheus) GetActiveCountryGroups(ctx context.Context) (r
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetActiveCountryGroups", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetActiveReferralGroups", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetActiveCountryGroups(ctx)
+	return _d.base.GetActiveReferralGroups(ctx)
 }
 
 // GetBalances implements Datastore

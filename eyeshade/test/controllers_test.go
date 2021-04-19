@@ -1,4 +1,4 @@
-// +build integration
+// +build eyeshade
 
 package test
 
@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	eyeshade "github.com/brave-intl/bat-go/eyeshade/service"
 	"github.com/brave-intl/bat-go/middleware"
@@ -46,14 +45,9 @@ func (suite *ControllersSuite) SetupSuite() {
 	suite.Require().NoError(err, "failed to create a sql mock")
 
 	suite.ctx = ctx
-	name := "sqlmock"
-	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockDB, name),
-	}, name)
+	suite.db = datastore.NewFromConnection(sqlx.NewDb(mockDB, "sqlmock"))
 	suite.mock = mock
-	suite.rodb = datastore.NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockRODB, name),
-	}, name)
+	suite.rodb = datastore.NewFromConnection(sqlx.NewDb(mockRODB, "sqlmock"))
 	suite.mockRO = mockRO
 
 	suite.tokens = map[string]string{

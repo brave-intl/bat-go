@@ -1,4 +1,4 @@
-// +build integration
+// +build eyeshade
 
 package test
 
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/eyeshade/models"
 	"github.com/brave-intl/bat-go/eyeshade/must"
@@ -32,20 +31,15 @@ func TestServiceMockTestSuite(t *testing.T) {
 
 func (suite *ServiceMockTestSuite) SetupSuite() {
 	suite.ctx = context.Background()
-	name := "sqlmock"
 	// setup mock DB we will inject into our pg
 	mockDB, mock, err := sqlmock.New()
 	suite.Require().NoError(err, "failed to create a sql mock")
 	mockRODB, mockRO, err := sqlmock.New()
 	suite.Require().NoError(err, "failed to create a sql mock")
 
-	suite.db = datastore.NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockDB, name),
-	}, name)
+	suite.db = datastore.NewFromConnection(sqlx.NewDb(mockDB, "sqlmock"))
 	suite.mock = mock
-	suite.rodb = datastore.NewFromConnection(&grantserver.Postgres{
-		DB: sqlx.NewDb(mockRODB, name),
-	}, name)
+	suite.rodb = datastore.NewFromConnection(sqlx.NewDb(mockRODB, "sqlmock"))
 	suite.mockRO = mockRO
 
 	service, err := eyeshade.SetupService(
@@ -57,7 +51,7 @@ func (suite *ServiceMockTestSuite) SetupSuite() {
 }
 
 func (suite *ServiceMockTestSuite) TestGetBalances() {
-	accountIDs := must.UUIDsToString(must.RandomIDs(2, true)...)
+	accountIDs := must.UUIDsToString(must.RandomIDs(2)...)
 
 	expected := suite.SetupMockBalances(accountIDs, accountIDs)
 	balances := suite.GetBalances(accountIDs, true)
@@ -91,8 +85,8 @@ func (suite *ServiceMockTestSuite) SetupMockBalances(
 	if len(pendingAccountIDs) == 0 {
 		return &expectedBalances
 	}
-
 	expectedPending := SetupMockGetPending(
+
 		suite.mockRO,
 		pendingAccountIDs[0],
 	)

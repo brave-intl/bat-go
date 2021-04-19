@@ -1,3 +1,5 @@
+// +build eyeshade
+
 package models
 
 import (
