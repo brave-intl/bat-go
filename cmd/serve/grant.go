@@ -29,7 +29,6 @@ import (
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	"github.com/go-chi/cors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -105,18 +104,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	r := chi.NewRouter()
-
-	if os.Getenv("ENV") != "production" {
-		r.Use(cors.Handler(cors.Options{
-			Debug:            true,
-			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software"},
-			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
-			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: false,
-			MaxAge:           300,
-		}))
-	}
 
 	// chain should be:
 	// id / transfer -> ip -> heartbeat -> request logger / recovery -> token check -> rate limit
