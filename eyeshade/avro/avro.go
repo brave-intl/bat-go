@@ -54,13 +54,6 @@ type BatchVoteDecoder func(
 	msgs []kafka.Message,
 ) (*[]models.Vote, error)
 
-// BatchConvertableTransactionDecoder decodes a batch of convertable transactions
-type BatchConvertableTransactionDecoder func(
-	codecs map[string]*goavro.Codec,
-	msgs []kafka.Message,
-	_ ...map[string]string,
-) (*[]models.ConvertableTransaction, error)
-
 // TryDecode tries to decode the message
 func TryDecode(
 	codecs map[string]*goavro.Codec,
