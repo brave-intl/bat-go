@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -40,7 +41,7 @@ type BatchMessageConsumer interface {
 	Consume(erred chan error)
 	IsConsuming() bool
 	IdleFor(time.Duration) bool
-	Read() ([]kafka.Message, bool, error)
+	Read() ([]kafka.Message, error)
 	Handler([]kafka.Message) error
 	Commit([]kafka.Message) error
 }
@@ -63,6 +64,7 @@ type MessageHandler struct {
 	bundle      avro.TopicBundle
 	service     *Service
 	reader      *kafka.Reader
+	conn        *kafka.Conn
 	writer      *kafka.Writer
 	dialer      *kafka.Dialer
 }
@@ -82,27 +84,40 @@ func (con *MessageHandler) Topic() string {
 	return avro.KeyToTopic[con.bundle.Key()]
 }
 
-// Collect collects messages from the reader
-func (con *MessageHandler) Collect(
-	msgCh chan<- kafka.Message,
-	errCh chan<- error,
-) {
-	msg, err := con.reader.FetchMessage(con.Context())
-	if err != nil {
-		errCh <- err
-	} else {
-		msgCh <- msg
-	}
-}
+// Read reads messages from the kafka connection
+func (con *MessageHandler) Read() ([]kafka.Message, error) {
+	// msg, err := con.reader.FetchMessage(con.Context())
+	// msgs := []kafka.Message{}
+	// if err != nil {
+	// 	return msgs, false, err
+	// }
+	// return append(msgs, msg), false, err
 
-// Read reads messages
-func (con *MessageHandler) Read() ([]kafka.Message, bool, error) {
-	msg, err := con.reader.FetchMessage(con.Context())
 	msgs := []kafka.Message{}
-	if err != nil {
-		return msgs, false, err
+	// not sure if these are the correct constraints to provide
+	batch := con.conn.ReadBatchWith(kafka.ReadBatchConfig{
+		MinBytes:       1,
+		MaxBytes:       1e6,
+		IsolationLevel: kafka.ReadCommitted,
+	}) // fetch 10KB min, 1MB max
+	defer batch.Close()
+	limit := 100
+	for {
+		if len(msgs) == limit {
+			// limit has been met
+			break
+		}
+		msg, err := batch.ReadMessage()
+		if err != nil {
+			if err == io.EOF {
+				// batch is finished reading
+				break
+			}
+			return msgs, err
+		}
+		msgs = append(msgs, msg)
 	}
-	return append(msgs, msg), false, err
+	return msgs, nil
 }
 
 // Handler handles the batch of messages
@@ -135,7 +150,7 @@ func (con *MessageHandler) Consume(
 			break
 		}
 		con.isHandling = false
-		msgs, _, e := con.Read()
+		msgs, e := con.Read()
 		if e != nil {
 			err = errorutils.Wrap(e, "during read")
 			break
@@ -180,6 +195,7 @@ func (con *MessageHandler) Produce(
 	if err != nil {
 		return err
 	}
+	fmt.Printf("producing %s, %d\n", con.Topic(), len(*messages))
 	return con.writer.WriteMessages(
 		ctx,
 		*messages...,
@@ -188,15 +204,15 @@ func (con *MessageHandler) Produce(
 
 // WithTopicAutoCreation creates topics used by producers and consumers
 func WithTopicAutoCreation(service *Service) error {
-	keys := map[string]int{}
+	keys := map[string]bool{}
 	if service.producers != nil {
 		for key := range service.producers {
-			keys[key] = 0
+			keys[key] = true
 		}
 	}
 	if service.consumers != nil {
 		for key := range service.consumers {
-			keys[key] = 0
+			keys[key] = true
 		}
 	}
 
@@ -221,8 +237,17 @@ func WithTopicAutoCreation(service *Service) error {
 	if err != nil {
 		return err
 	}
+
 	for key := range keys {
 		topic := avro.KeyToTopic[key]
+		existingPartitions, err := conn.ReadPartitions(topic)
+		if err != nil {
+			return err
+		}
+		if len(existingPartitions) > 0 {
+			// skip so that we do not reset the topic offset
+			continue
+		}
 		err = conn.CreateTopics(kafka.TopicConfig{
 			Topic:             topic,
 			NumPartitions:     partitions,
@@ -253,10 +278,17 @@ func WithConsumer(
 			if err != nil {
 				return err
 			}
+			// needed for batch processing
+			broker := kafkautils.Brokers(service.Context())[0]
+			conn, err := dialer.DialLeader(service.Context(), "tcp", broker, avro.KeyToTopic[topicKey], 0)
+			if err != nil {
+				return err
+			}
 			consumer := &MessageHandler{
 				key:     topicKey,
 				bundle:  KeyToEncoder[topicKey],
-				reader:  reader,
+				reader:  reader, // used for committing
+				conn:    conn,
 				dialer:  dialer,
 				service: service,
 			}

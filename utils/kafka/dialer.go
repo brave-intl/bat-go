@@ -206,13 +206,14 @@ func InitKafkaReader(
 	kafkaBrokers := Brokers(ctx)
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:     kafkaBrokers,
-		Topic:       topic,
-		Dialer:      dialer,
-		MaxWait:     time.Second * 5,
-		GroupID:     groupID,
-		StartOffset: kafka.FirstOffset,
-		Logger:      kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:        kafkaBrokers,
+		Topic:          topic,
+		Dialer:         dialer,
+		MaxWait:        time.Second * 5,
+		GroupID:        groupID,
+		GroupBalancers: []kafka.GroupBalancer{kafka.RangeGroupBalancer{}},
+		StartOffset:    kafka.LastOffset,
+		Logger:         kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	return kafkaReader, dialer, TryKafkaConnection(dialer, kafkaBrokers)
