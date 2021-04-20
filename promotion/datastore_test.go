@@ -834,8 +834,8 @@ func getSuggestionDrainEntry(pg *Postgres) *SuggestionJob {
 func insertFailedSuggestionDrainEntry(pg *Postgres, errcode, suggestionText string, suggestionEvent []byte) error {
 	var err error
 	statement := `
-	insert into suggestion_drain (credentials, suggestion_text, suggestion_event, erred, errcode)
-	values ('[]', $1, $2, true, $3)`
+	insert into suggestion_drain (credentials, suggestion_text, suggestion_event, erred, errcode, retry_from)
+	values ('[]', $1, $2, true, $3, 2)`
 	_, err = pg.RawDB().Exec(statement, suggestionText, suggestionEvent, errcode)
 	if err != nil {
 		return err
