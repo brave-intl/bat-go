@@ -135,6 +135,7 @@ func (service *Service) TryUpgradeSuggestionEvent(suggestion []byte) ([]byte, er
 // SuggestionWorker attempts to work on a suggestion job by redeeming the credentials and emitting the event
 type SuggestionWorker interface {
 	RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
+	CreateSuggestionEvent(ctx context.Context, suggestionText string, suggestion []byte) error
 	PauseWorker(until time.Time)
 	IsPaused() bool
 }
@@ -341,16 +342,10 @@ func (service *Service) IsPaused() bool {
 	return time.Now().Before(service.pauseSuggestionsUntil)
 }
 
-// RedeemAndCreateSuggestionEvent after validating that all the credential bindings
-func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error {
+// CreateSuggestionEvent submit suggestion event
+func (service *Service) CreateSuggestionEvent(ctx context.Context, suggestionText string, suggestion []byte) error {
 	suggestion, err := service.TryUpgradeSuggestionEvent(suggestion)
 	if err != nil {
-		return err
-	}
-
-	err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
-	if err != nil {
-		// error from cbClient should be errorutils.Codified as data
 		return err
 	}
 
@@ -414,6 +409,17 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 			})
 		}
 	}
-
 	return nil
+}
+
+// RedeemAndCreateSuggestionEvent after validating that all the credential bindings
+func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error {
+	// perform redemption
+	var err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
+	if err != nil {
+		// error from cbClient should be errorutils.Codified as data
+		return err
+	}
+	// perform createSuggestionEvent
+	return service.CreateSuggestionEvent(ctx, suggestionText, suggestion)
 }

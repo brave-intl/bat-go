@@ -519,6 +519,71 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
+func (suite *ControllersTestSuite) TestSuggestRetryNoRedemptionError() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
+	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+
+	// FIXME stick kafka setup in suite setup
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+
+	dialer, _, err := kafkautils.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  mockCB,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+		reputationClient: mockReputation,
+	}
+
+	err = service.InitKafka(context.Background())
+	suite.Require().NoError(err, "Failed to initialize kafka")
+
+	suggestion := Suggestion{
+		Type:    "oneoff-tip",
+		Channel: "brave.com",
+	}
+
+	suggestionBytes, err := json.Marshal(&suggestion)
+	suite.Require().NoError(err)
+	suggestionPayload := base64.StdEncoding.EncodeToString(suggestionBytes)
+
+	// insert our test failed suggestion, and see if we pick it up
+	err = insertFailedSuggestionDrainEntry(
+		pg.(*DatastoreWithPrometheus).base.(*Postgres), "kafka_write", suggestionPayload, suggestionBytes)
+	suite.Require().Equal(err, nil)
+
+	// check that the suggestion drain got the right error
+	var failedSuggestion = getSuggestionDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
+	suite.Require().Equal("kafka_write", *failedSuggestion.ErrCode)
+	suite.Require().Equal(true, failedSuggestion.Erred)
+
+	// check that the run next failed suggestion does pick this up
+	attempted, err := pg.RunNextFailedSuggestionJob(context.Background(), service)
+	suite.Require().Equal(err, nil)
+	suite.Require().Equal(true, attempted)
+}
+
 func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -661,6 +726,10 @@ func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	suite.Require().Equal("cbr_dup_redeem", *failedSuggestion.ErrCode)
 	suite.Require().Equal(true, failedSuggestion.Erred)
 
+	// check that the run next failed suggestion does not pick this up
+	attempted, err := pg.RunNextFailedSuggestionJob(req.Context(), service)
+	suite.Require().Equal(err, nil)
+	suite.Require().Equal(false, attempted)
 }
 
 func (suite *ControllersTestSuite) TestSuggest() {

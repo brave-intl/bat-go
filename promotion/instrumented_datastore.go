@@ -500,6 +500,20 @@ func (_d DatastoreWithPrometheus) RunNextDrainJob(ctx context.Context, worker Dr
 	return _d.base.RunNextDrainJob(ctx, worker)
 }
 
+// RunNextFailedSuggestionJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextFailedSuggestionJob(ctx context.Context, worker SuggestionWorker) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextFailedSuggestionJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextFailedSuggestionJob(ctx, worker)
+}
+
 // RunNextMintDrainJob implements Datastore
 func (_d DatastoreWithPrometheus) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (b1 bool, err error) {
 	_since := time.Now()

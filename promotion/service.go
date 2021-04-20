@@ -249,6 +249,11 @@ func InitService(
 			Workers: 1,
 		},
 		{
+			Func:    service.RunNextFailedSuggestionJob,
+			Cadence: 1 * time.Second,
+			Workers: 2,
+		},
+		{
 			Func:    service.RunNextMintDrainJob,
 			Cadence: time.Second,
 			Workers: 6,
@@ -307,6 +312,11 @@ func (s *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
 // RunNextSuggestionJob takes the next suggestion job and completes it
 func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 	return s.Datastore.RunNextSuggestionJob(ctx, s)
+}
+
+// RunNextFailedSuggestionJob takes the next suggestion job and completes it
+func (s *Service) RunNextFailedSuggestionJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextFailedSuggestionJob(ctx, s)
 }
 
 // RunNextDrainJob takes the next drain job and completes it

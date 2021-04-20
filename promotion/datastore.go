@@ -88,6 +88,8 @@ type Datastore interface {
 	InsertSuggestion(credentials []cbr.CredentialRedemption, suggestionText string, suggestion []byte) error
 	// RunNextSuggestionJob to process a suggestion if there is one waiting
 	RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
+	// RunNextFailedSuggestionJob to process a suggestion if there is one waiting
+	RunNextFailedSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error)
 	// InsertClobberedClaims inserts clobbered claim ids into the clobbered_claims table
 	InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, version int) error
 	// InsertBATLossEvent inserts claims of lost bat
@@ -908,6 +910,93 @@ type SuggestionJob struct {
 	CreatedAt       time.Time `db:"created_at"`
 }
 
+// RunNextFailedSuggestionJob to process a suggestion if there is one waiting
+func (pg *Postgres) RunNextFailedSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
+	tx, err := pg.RawDB().Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+	defer pg.RollbackTx(tx)
+
+	// grab an erred job for reprocessing
+	// exclude all that do not have erred set, that do not
+	// have errcode set, and those that are duplicate
+	// redemptions, as we will not retry those
+	statement := `
+select *
+from suggestion_drain
+where erred and 
+	errcode != '' and errcode is not null and
+	errcode != 'cbr_dup_redeem'
+for update skip locked
+limit 1`
+
+	jobs := []SuggestionJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		return attempted, err
+	}
+
+	if len(jobs) != 1 {
+		return attempted, nil
+	}
+
+	job := jobs[0]
+	attempted = true
+
+	var credentials []cbr.CredentialRedemption
+	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	if err != nil {
+		return attempted, err
+	}
+
+	if !worker.IsPaused() {
+		// if the job successfully made it past redemption, don't attempt another redemption
+		var err error
+		if suggestionErrCodePastRedemption(*job.ErrCode) {
+			// create and post the suggestion
+			err = worker.CreateSuggestionEvent(ctx, job.SuggestionText, job.SuggestionEvent)
+		} else {
+			// these tokens haven't been redeemed yet, attempt that
+			err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+		}
+
+		// handle error from CreateSuggestionEvent or RedeemAndCreateSuggestionEvent appropriately
+		if err != nil {
+			if strings.Contains(err.Error(), "expired") {
+				// set flag to stop this worker from running again
+				worker.PauseWorker(time.Now().Add(30 * time.Minute))
+			}
+
+			// inform sentry about this error
+			sentry.CaptureException(err)
+
+			_, errCode, retriable := errToDrainCode(err)
+
+			if !retriable {
+				if _, err = tx.Exec(
+					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+					err = tx.Commit()
+				}
+				return attempted, err
+			}
+		}
+
+		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		if err != nil {
+			return attempted, err
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			return attempted, err
+		}
+	}
+
+	return attempted, nil
+}
+
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 
@@ -1497,4 +1586,16 @@ func toUUIDs(a ...string) ([]uuid.UUID, error) {
 		b = append(b, v)
 	}
 	return b, nil
+}
+
+func suggestionErrCodePastRedemption(errCode string) bool {
+	var m = map[string]bool{
+		"kafka_write":       true,
+		"kafka_codec":       true,
+		"bad_order_id":      true,
+		"bad_order_amount":  true,
+		"fail_order_create": true,
+		"fail_order_status": true,
+	}
+	return m[errCode]
 }
