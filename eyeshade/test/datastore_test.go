@@ -70,11 +70,15 @@ func (suite *DatastoreSuite) SetupTest() {
 }
 
 func (suite *DatastoreSuite) TestInsertConvertableTransactions() {
-	refs := must.CreateReferrals(3, models.OriginalRateID)
 	groups, err := suite.db.GetActiveReferralGroups(suite.ctx)
 	suite.Require().NoError(err)
+
+	mixedReferrals := must.CreateReferrals(2, models.OriginalRateID)
+	for _, group := range *groups {
+		mixedReferrals = append(mixedReferrals, must.CreateReferrals(2, group.ID)...)
+	}
 	referrals, err := models.ReferralBackfillMany(
-		&refs,
+		&mixedReferrals,
 		groups,
 		map[string]decimal.Decimal{"USD": decimal.NewFromFloat(2)},
 	)
@@ -88,6 +92,10 @@ func (suite *DatastoreSuite) TestInsertConvertableTransactions() {
 		settlements...,
 	)
 	convertables := append(referralConvertables, settlementConvertables...)
+	ids := []string{}
+	for _, convertable := range convertables {
+		ids = append(ids, convertable.ToTxIDs()...)
+	}
 	suite.Require().NoError(
 		suite.db.InsertConvertableTransactions(suite.ctx, convertables),
 	)
@@ -99,4 +107,6 @@ select %s from transactions`,
 	suite.Require().NoError(
 		suite.db.RawDB().SelectContext(suite.ctx, &p, statement),
 	)
+	suite.Require().Greater(len(ids), len(convertables))
+	suite.Require().Equal(len(ids), len(p))
 }
