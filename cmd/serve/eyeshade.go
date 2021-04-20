@@ -55,10 +55,6 @@ func WithService(
 
 // RunEyeshadeServer is the runner for starting up the eyeshade server
 func RunEyeshadeServer(cmd *cobra.Command, args []string) error {
-	// enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
-	// if err != nil {
-	// 	return err
-	// }
 	ctx := cmd.Context()
 	err := EyeshadeServer(
 		ctx,
