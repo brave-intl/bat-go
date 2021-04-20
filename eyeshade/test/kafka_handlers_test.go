@@ -39,19 +39,13 @@ func (suite *KafkaHandlersSuite) SetupTest() {
 
 func (suite *KafkaHandlersSuite) SetupSuite() {
 	suite.ctx = context.Background()
-	topics := []string{
-		avro.TopicKeys.Settlement,
-		avro.TopicKeys.Contribution,
-		avro.TopicKeys.Referral,
-		avro.TopicKeys.Suggestion,
-	}
 	service, err := eyeshade.SetupService(
 		eyeshade.WithContext(suite.ctx),
 		eyeshade.WithBuildInfo,
 		eyeshade.WithNewDBs,
 		eyeshade.WithNewClients,
 		eyeshade.WithProducer(topics...),
-		eyeshade.WithConsumer(topics...),
+		eyeshade.WithConsumer(100, avro.AllTopics...),
 		eyeshade.WithTopicAutoCreation,
 	)
 	suite.Require().NoError(err)

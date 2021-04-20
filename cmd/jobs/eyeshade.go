@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	cmd.ServeCmd.AddCommand(EyeshadeSurveyorFreezeCmd)
+	JobsCmd.AddCommand(EyeshadeSurveyorFreezeCmd)
 }
 
 // WithService creates a service
@@ -100,6 +100,5 @@ func EyeshadeServer(
 			return err
 		}
 	}
-	// freeze surveyors, looking back 1 day by default
 	return service.FreezeSurveyors()
 }

@@ -10,7 +10,7 @@ import (
 // FreezeSurveyors freezes surveyors that can be frozen
 // given an optional lag time (usualy 1 day)
 func (service *Service) FreezeSurveyors(days ...int) error {
-	lag := 1
+	lag := 1 // only relevant for non virtual
 	if len(days) > 0 {
 		lag = days[0]
 	}

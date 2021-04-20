@@ -27,7 +27,15 @@ var (
 		TopicKeys.Contribution: env + ".payment.vote",
 		TopicKeys.Referral:     env + ".promo.referral",
 	}
+	// AllTopics holds all of the topics as an array
+	AllTopics = []string{}
 )
+
+func init() {
+	for _, topic := range KeyToTopic {
+		AllTopics = append(AllTopics, topic)
+	}
+}
 
 type keys struct {
 	Settlement   string

@@ -67,6 +67,7 @@ type MessageHandler struct {
 	conn        *kafka.Conn
 	writer      *kafka.Writer
 	dialer      *kafka.Dialer
+	batchLimit  int
 }
 
 // IsConsuming checks if the message handler is consuming
@@ -86,22 +87,11 @@ func (con *MessageHandler) Topic() string {
 
 // Read reads messages from the kafka connection
 func (con *MessageHandler) Read() ([]kafka.Message, error) {
-	// msg, err := con.reader.FetchMessage(con.Context())
-	// msgs := []kafka.Message{}
-	// if err != nil {
-	// 	return msgs, false, err
-	// }
-	// return append(msgs, msg), false, err
-
 	msgs := []kafka.Message{}
 	// not sure if these are the correct constraints to provide
-	batch := con.conn.ReadBatchWith(kafka.ReadBatchConfig{
-		MinBytes:       1,
-		MaxBytes:       1e6,
-		IsolationLevel: kafka.ReadCommitted,
-	}) // fetch 10KB min, 1MB max
+	batch := con.conn.ReadBatch(1, 1e6)
 	defer batch.Close()
-	limit := 100
+	limit := con.batchLimit
 	for {
 		if len(msgs) == limit {
 			// limit has been met
@@ -160,6 +150,7 @@ func (con *MessageHandler) Consume(
 		}
 		con.isHandling = true
 		con.lastTick = time.Now()
+		fmt.Println("handling", len(msgs))
 		e = con.Handler(msgs)
 		if e != nil {
 			err = errorutils.Wrap(e, "during handler")
@@ -262,6 +253,7 @@ func WithTopicAutoCreation(service *Service) error {
 
 // WithConsumer sets up a consumer on the service
 func WithConsumer(
+	batchLimit int,
 	topicKeys ...string,
 ) func(*Service) error {
 	return func(service *Service) error {
@@ -285,12 +277,13 @@ func WithConsumer(
 				return err
 			}
 			consumer := &MessageHandler{
-				key:     topicKey,
-				bundle:  KeyToEncoder[topicKey],
-				reader:  reader, // used for committing
-				conn:    conn,
-				dialer:  dialer,
-				service: service,
+				key:        topicKey,
+				bundle:     KeyToEncoder[topicKey],
+				reader:     reader, // used for committing
+				conn:       conn,
+				dialer:     dialer,
+				service:    service,
+				batchLimit: batchLimit,
 			}
 			service.dialer = dialer
 			service.consumers[topicKey] = BatchMessageConsumer(consumer)
