@@ -48,21 +48,15 @@ func WithService(
 
 // RunEyeshadeSurveyorFreezeCmd is the runner for starting up the eyeshade server
 func RunEyeshadeSurveyorFreezeCmd(cmd *cobra.Command, args []string) error {
-	// enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
-	// if err != nil {
-	// 	return err
-	// }
-	ctx := cmd.Context()
-	err := EyeshadeServer(
-		ctx,
+	if err := EyeshadeServer(
+		cmd.Context(),
 		true,
 		WithService,
-	)
-	if err == nil {
-		return nil
+	); err != nil {
+		sentry.CaptureException(err)
+		return errorutils.Wrap(err, "HTTP server start failed!")
 	}
-	sentry.CaptureException(err)
-	return errorutils.Wrap(err, "HTTP server start failed!")
+	return nil
 }
 
 // EyeshadeServer runs the eyeshade server
