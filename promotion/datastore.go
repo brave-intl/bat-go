@@ -1045,15 +1045,13 @@ limit 1`
 			// inform sentry about this error
 			sentry.CaptureException(err)
 
-			_, errCode, retriable := errToDrainCode(err)
+			_, errCode, _ := errToDrainCode(err)
 
-			if !retriable {
-				if _, err = tx.Exec(
-					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
-					err = tx.Commit()
-				}
-				return attempted, err
+			if _, err = tx.Exec(
+				`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+				err = tx.Commit()
 			}
+			return attempted, err
 		}
 
 		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
