@@ -89,11 +89,9 @@ func (con *MessageHandler) Topic() string {
 func (con *MessageHandler) Read() ([]kafka.Message, error) {
 	msgs := []kafka.Message{}
 	// not sure if these are the correct constraints to provide
-	batch := con.conn.ReadBatch(1, 1e6)
-	defer batch.Close()
-	limit := con.batchLimit
+	batch := con.conn.ReadBatch(1, 1e6) // we should never hit this limit
 	for {
-		if len(msgs) == limit {
+		if len(msgs) == con.batchLimit {
 			// limit has been met
 			break
 		}
@@ -103,11 +101,18 @@ func (con *MessageHandler) Read() ([]kafka.Message, error) {
 				// batch is finished reading
 				break
 			}
-			return msgs, err
+			errs := []error{err}
+			e := batch.Close()
+			if e != nil {
+				errs = append(errs, e)
+			}
+			return msgs, &errorutils.MultiError{
+				Errs: errs,
+			}
 		}
 		msgs = append(msgs, msg)
 	}
-	return msgs, nil
+	return msgs, batch.Close()
 }
 
 // Handler handles the batch of messages

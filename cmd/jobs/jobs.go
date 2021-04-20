@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	// JobsCmd the jobs subcommand to start a given job
 	JobsCmd = &cobra.Command{
 		Use:   "jobs",
 		Short: "subcommand to start a given job",

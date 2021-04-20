@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	// ConsumersCmd a subcommand for consumers
 	ConsumersCmd = &cobra.Command{
 		Use:   "consumers",
 		Short: "subcommand to start a given job",

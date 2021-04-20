@@ -65,28 +65,41 @@ func RunEyeshadeProducersCmd(cmd *cobra.Command, args []string) error {
 	switch viper.GetViper().GetString("topic") {
 	case avro.TopicKeys.Contribution, avro.KeyToTopic[avro.TopicKeys.Contribution]:
 		var t []models.Contribution
-		Parse(file, &t)
+		err := Parse(file, &t)
+		if err != nil {
+			return err
+		}
 		return service.ProduceContributions(cmd.Context(), t)
 	case avro.TopicKeys.Referral, avro.KeyToTopic[avro.TopicKeys.Referral]:
 		var t []models.Referral
-		Parse(file, &t)
+		err := Parse(file, &t)
+		if err != nil {
+			return err
+		}
 		return service.ProduceReferrals(cmd.Context(), t)
 	case avro.TopicKeys.Settlement, avro.KeyToTopic[avro.TopicKeys.Settlement]:
 		var t []models.Settlement
-		Parse(file, &t)
+		err := Parse(file, &t)
+		if err != nil {
+			return err
+		}
 		return service.ProduceSettlements(cmd.Context(), t)
 	case avro.TopicKeys.Suggestion, avro.KeyToTopic[avro.TopicKeys.Suggestion]:
 		var t []models.Suggestion
-		Parse(file, &t)
+		err := Parse(file, &t)
+		if err != nil {
+			return err
+		}
 		return service.ProduceSuggestions(cmd.Context(), t)
 	}
+	return nil
 }
 
+// Parse parses a given file
 func Parse(file string, p interface{}) error {
 	statement, err := ioutil.ReadFile(file)
 	if err != nil {
 		return err
 	}
-	json.Unmarshal(statement, p)
-	return nil
+	return json.Unmarshal(statement, p)
 }

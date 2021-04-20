@@ -6,9 +6,10 @@ import (
 )
 
 var (
+	// ProducersCmd the subcommand to produce messages
 	ProducersCmd = &cobra.Command{
 		Use:   "producers",
-		Short: "subcommand to start a given job",
+		Short: "subcommand to produce messages to a topic",
 	}
 )
 
