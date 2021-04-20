@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
@@ -48,6 +49,8 @@ func TestControllersTestSuite(t *testing.T) {
 }
 
 func (suite *ControllersTestSuite) SetupSuite() {
+	govalidator.SetFieldsRequiredByDefault(true)
+
 	pg, err := NewPostgres("", false)
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
