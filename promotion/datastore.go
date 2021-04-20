@@ -928,7 +928,8 @@ select *
 from suggestion_drain
 where erred and 
 	errcode != '' and errcode is not null and
-	errcode != 'cbr_dup_redeem'
+	errcode != 'cbr_dup_redeem' and 
+	errcode != 'unknown'
 for update skip locked
 limit 1`
 
