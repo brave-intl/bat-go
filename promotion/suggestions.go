@@ -360,6 +360,7 @@ func (service *Service) CreateSuggestionEvent(ctx context.Context, suggestionTex
 		return errorutils.New(err, "kafka write error", errorutils.Codified{
 			ErrCode: "kafka_write",
 			Retry:   true,
+			Phase:   retryJobFromEmit,
 		})
 	}
 
@@ -370,9 +371,10 @@ func (service *Service) CreateSuggestionEvent(ctx context.Context, suggestionTex
 	eventMap := newInterface.(map[string]interface{})
 	if err != nil {
 		// error should be errorutils.Codified as data
+		// if this suggestion does not match the codec we dont want to retry
 		return errorutils.New(err, "kafka codec issue", errorutils.Codified{
 			ErrCode: "kafka_codec",
-			Retry:   true,
+			Retry:   false,
 		})
 	}
 

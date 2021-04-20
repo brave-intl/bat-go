@@ -112,15 +112,23 @@ func (me *MultiError) Error() string {
 type DrainCodified interface {
 	// DrainCode - get the drain code from the interface implementation
 	DrainCode() (string, bool)
+	// RetryFrom -> return the phase the job can be retried from
+	RetryFrom() int
 }
 
 // Codified - implementation of DrainCodified
 type Codified struct {
 	ErrCode string
 	Retry   bool
+	Phase   int
 }
 
 // DrainCode - implementation of DrainCodified.DrainCode
 func (c Codified) DrainCode() (string, bool) {
 	return c.ErrCode, c.Retry
+}
+
+// RetryFrom - implementation of DrainCodified.RetryFrom
+func (c Codified) RetryFrom() int {
+	return c.Phase
 }

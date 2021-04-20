@@ -908,7 +908,15 @@ type SuggestionJob struct {
 	Erred           bool      `db:"erred"`
 	ErrCode         *string   `db:"errcode"`
 	CreatedAt       time.Time `db:"created_at"`
+	RetryFrom       int       `db:"retry_from"`
 }
+
+const (
+	dontRetryJob       int = iota // 0 <- don't retry
+	retryJobFromRedeem            // 1 <- retry redeem step and emit and order
+	retryJobFromEmit              // 2 <- retry emit and order
+	retryJobFromOrder             // 3 <- retry order
+)
 
 // RunNextFailedSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextFailedSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
@@ -926,10 +934,7 @@ func (pg *Postgres) RunNextFailedSuggestionJob(ctx context.Context, worker Sugge
 	statement := `
 select *
 from suggestion_drain
-where erred and 
-	errcode != '' and errcode is not null and
-	errcode != 'cbr_dup_redeem' and 
-	errcode != 'unknown'
+where erred and retry_from>0
 for update skip locked
 limit 1`
 
@@ -955,12 +960,16 @@ limit 1`
 	if !worker.IsPaused() {
 		// if the job successfully made it past redemption, don't attempt another redemption
 		var err error
-		if suggestionErrCodePastRedemption(*job.ErrCode) {
-			// create and post the suggestion
-			err = worker.CreateSuggestionEvent(ctx, job.SuggestionText, job.SuggestionEvent)
-		} else {
-			// these tokens haven't been redeemed yet, attempt that
+
+		switch job.RetryFrom {
+		case retryJobFromRedeem:
 			err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
+		case retryJobFromEmit:
+			err = worker.CreateSuggestionEvent(ctx, job.SuggestionText, job.SuggestionEvent)
+		case retryJobFromOrder:
+			// TODO: Fix when we correct counting suggestions against order
+			// if the failure is retry from job order just set error = nil and move on
+			err = nil
 		}
 
 		// handle error from CreateSuggestionEvent or RedeemAndCreateSuggestionEvent appropriately
@@ -974,10 +983,11 @@ limit 1`
 			// inform sentry about this error
 			sentry.CaptureException(err)
 
-			_, errCode, _ := errToDrainCode(err)
+			_, errCode, retryFrom := errToDrainCode(err)
 
 			if _, err = tx.Exec(
-				`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+				`update suggestion_drain set erred = true, errcode=$1, retry_from=$2 where id = $3`,
+				errCode, retryFrom, job.ID); err == nil {
 				err = tx.Commit()
 			}
 			return attempted, err
@@ -1046,10 +1056,11 @@ limit 1`
 			// inform sentry about this error
 			sentry.CaptureException(err)
 
-			_, errCode, _ := errToDrainCode(err)
+			_, errCode, retryFrom := errToDrainCode(err)
 
 			if _, err = tx.Exec(
-				`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+				`update suggestion_drain set erred = true, errcode=$1, retry_from=$2 where id = $3`,
+				errCode, retryFrom, job.ID); err == nil {
 				err = tx.Commit()
 			}
 			return attempted, err
@@ -1186,15 +1197,16 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 }
 
 // errToDrainCode - given a drain related processing error, generate a code and retriable flag
-func errToDrainCode(err error) (string, string, bool) {
+func errToDrainCode(err error) (string, string, int) {
 	var (
 		status    string
 		errCode   string
 		retriable bool
+		retryFrom int
 	)
 
 	if err == nil {
-		return "", "", false
+		return "", "", dontRetryJob
 	}
 
 	status = "failed"
@@ -1202,9 +1214,16 @@ func errToDrainCode(err error) (string, string, bool) {
 	var eb *errorutils.ErrorBundle
 	if errors.As(err, &eb) {
 		// if this is an error bundle, check the "data" for a codified type
-		if c, ok := eb.Data().(errorutils.Codified); ok {
+		if c, ok := eb.Data().(errorutils.DrainCodified); ok {
 			errCode, retriable = c.DrainCode()
-			return status, errCode, retriable
+
+			// if this has a retry from phase, set the phase
+			retryFrom = c.RetryFrom()
+			if retriable && retryFrom == 0 {
+				retryFrom = retryJobFromRedeem
+			}
+
+			return status, errCode, retryFrom
 		}
 	}
 
@@ -1217,38 +1236,42 @@ func errToDrainCode(err error) (string, string, bool) {
 		errCode = "sign_transfer"
 	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {
 		errCode = "failed_client"
-		retriable = true
+		retryFrom = retryJobFromRedeem
 	} else if errors.Is(err, errorutils.ErrFailedBodyRead) {
 		errCode = "failed_response_body"
-		retriable = true
+		retryFrom = retryJobFromRedeem
 	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
 		errCode = "failed_response_unmarshal"
-		retriable = true
+		retryFrom = retryJobFromRedeem
 	} else if errors.Is(err, errReputationServiceFailure) {
 		errCode = "reputation-service-failure"
-		retriable = true
+		retryFrom = retryJobFromRedeem
 	} else if errors.Is(err, errWalletNotReputable) {
 		errCode = "reputation-failed"
 		status = "reputation-failed"
-		retriable = false
+		retryFrom = dontRetryJob
 	} else {
 		if codedErr, ok := err.(uphold.Coded); ok {
 			// possible wallet provider specific errors
 			errCode = codedErr.GetCode()
+			retryFrom = retryJobFromEmit
 		} else {
 			errCode = "unknown"
+			retryFrom = dontRetryJob
 		}
 		var bfe *clients.BitflyerError
 		if errors.As(err, &bfe) {
 			// possible wallet provider specific errors
 			if len(bfe.ErrorIDs) > 0 {
 				errCode = bfe.ErrorIDs[0]
+				retryFrom = retryJobFromEmit
 			}
 		} else {
 			errCode = "unknown"
+			retryFrom = dontRetryJob
 		}
 	}
-	return status, errCode, retriable
+	return status, errCode, retryFrom
 }
 
 // DrainJob - definition of a drain job
@@ -1325,22 +1348,20 @@ limit 1`
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		status, errCode, retriable := errToDrainCode(err)
+		status, errCode, _ := errToDrainCode(err)
 
 		// inform sentry about this error
 		sentry.CaptureException(err)
 
-		if !retriable {
-			if _, err := tx.Exec(`
+		if _, err := tx.Exec(`
 				update claim_drain set
 					erred = true,
 					errcode=$1,
 					status=$3
 				where id = $2`, errCode, job.ID, status); err != nil {
-				pg.RollbackTx(tx)
-			}
-			_ = tx.Commit()
+			pg.RollbackTx(tx)
 		}
+		_ = tx.Commit()
 		return attempted, err
 	}
 
@@ -1584,16 +1605,4 @@ func toUUIDs(a ...string) ([]uuid.UUID, error) {
 		b = append(b, v)
 	}
 	return b, nil
-}
-
-func suggestionErrCodePastRedemption(errCode string) bool {
-	var m = map[string]bool{
-		"kafka_write":       true,
-		"kafka_codec":       true,
-		"bad_order_id":      true,
-		"bad_order_amount":  true,
-		"fail_order_create": true,
-		"fail_order_status": true,
-	}
-	return m[errCode]
 }
