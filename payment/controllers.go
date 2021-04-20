@@ -650,7 +650,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 // VerifyCredentialRequest includes an opaque subscription credential blob
 type VerifyCredentialRequest struct {
 	Type         string  `json:"type" valid:"in(single-use,time-limited)"`
-	Version      float64 `json:"version" valid:"int"`
+	Version      float64 `json:"version" valid:"-"`
 	SKU          string  `json:"sku" valid:"-"`
 	MerchantID   string  `json:"merchantId" valid:"-"`
 	Presentation string  `json:"presentation" valid:"base64"`
