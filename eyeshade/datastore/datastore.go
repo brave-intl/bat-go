@@ -587,7 +587,7 @@ func (pg *Postgres) GetSettlementStats(ctx context.Context, options models.Settl
 	}
 	statement := fmt.Sprintf(`
 SELECT
-	sum(amount) AS amount
+	SUM(amount) AS amount
 FROM transactions
 WHERE
 	transaction_type = $1 %s
@@ -604,7 +604,7 @@ func (pg *Postgres) GetGrantStats(ctx context.Context, options models.GrantStatO
 	statement := `
 SELECT
 	count(*) AS count,
-	sum(amount) AS amount
+	SUM(amount) AS amount
 FROM votes
 WHERE
 		cohort = $1::TEXT
