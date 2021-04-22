@@ -45,7 +45,7 @@ func WithService(
 		eyeshade.WithNewLogger,
 		eyeshade.WithBuildInfo,
 		eyeshade.WithNewDBs,
-		eyeshade.WithConsumer(batchSize, avro.AllTopics...),
+		eyeshade.WithConsumer(batchSize, avro.AllTopicKeys...),
 		eyeshade.WithTopicAutoCreation,
 	)
 }

@@ -7,8 +7,8 @@ ARG COMMIT
 WORKDIR /src/
 COPY go.mod go.sum ./
 ENV GO111MODULE=on
-
 RUN go mod download
+
 COPY . ./
 
 RUN CGO_ENABLED=0 GOOS=linux go build \

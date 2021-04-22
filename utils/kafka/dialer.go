@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/linkedin/goavro"
@@ -22,7 +23,8 @@ import (
 )
 
 var (
-	groupID = fmt.Sprintf("%s.%s", os.Getenv("ENV"), os.Getenv("SERVICE"))
+	// GroupID holds the group id for the env
+	GroupID = fmt.Sprintf("%s.%s", os.Getenv("ENV"), os.Getenv("SERVICE"))
 )
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires
@@ -174,12 +176,18 @@ func InitKafkaWriter(
 
 	kafkaBrokers := Brokers(ctx)
 
+	replications, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATIONS"))
+	if err != nil {
+		return nil, nil, errorutils.Wrap(err, "unable to parse `KAFKA_REPLICATIONS` env")
+	}
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  kafkaBrokers,
-		Topic:    topic,
-		Balancer: &kafka.LeastBytes{},
-		Dialer:   dialer,
-		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:      kafkaBrokers,
+		RequiredAcks: replications,
+		Async:        false,
+		Topic:        topic,
+		Dialer:       dialer,
+		Balancer:     &kafka.LeastBytes{},
+		Logger:       kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	return kafkaWriter, dialer, nil
@@ -206,17 +214,48 @@ func InitKafkaReader(
 	kafkaBrokers := Brokers(ctx)
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        kafkaBrokers,
-		Topic:          topic,
-		Dialer:         dialer,
-		MaxWait:        time.Second * 5,
-		GroupID:        groupID,
-		GroupBalancers: []kafka.GroupBalancer{kafka.RangeGroupBalancer{}},
-		StartOffset:    kafka.LastOffset,
-		Logger:         kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:     kafkaBrokers,
+		Topic:       topic,
+		Dialer:      dialer,
+		GroupID:     GroupID,
+		StartOffset: kafka.LastOffset,
+		Logger:      kafka.LoggerFunc(logger.Printf), // FIXME
 	})
-
 	return kafkaReader, dialer, TryKafkaConnection(dialer, kafkaBrokers)
+}
+
+// InitKafkaConsumerGroup creates a consumer group
+func InitKafkaConsumerGroup(
+	ctx context.Context,
+	topics []string,
+	dialers ...*kafka.Dialer,
+) (*kafka.ConsumerGroup, *kafka.Dialer, error) {
+
+	_, logger := logging.SetupLogger(ctx)
+
+	dialer, err := InitDialer(ctx, dialers...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kafkaBrokers := Brokers(ctx)
+
+	groupBalancer := []kafka.GroupBalancer{
+		kafka.RackAffinityGroupBalancer{},
+		kafka.RangeGroupBalancer{},
+	}
+	consumerGroup, err := kafka.NewConsumerGroup(kafka.ConsumerGroupConfig{
+		Brokers:        kafkaBrokers,
+		ID:             GroupID,
+		Dialer:         dialer,
+		GroupBalancers: groupBalancer,
+		Topics:         topics,
+		Logger:         kafka.LoggerFunc(logger.Printf),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return consumerGroup, dialer, nil
 }
 
 // TryKafkaConnection tries connecting to list of brokers. If at least one

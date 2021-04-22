@@ -2,8 +2,10 @@ package eyeshade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/eyeshade/datastore"
 	"github.com/brave-intl/bat-go/utils/clients/common"
@@ -26,6 +28,7 @@ type Service struct {
 	consumers   map[string]BatchMessageConsumer
 	producers   map[string]BatchMessageProducer
 	dialer      *kafka.Dialer
+	group       *kafka.ConsumerGroup
 }
 
 // SetupService initializes the service with the correct dependencies
@@ -118,11 +121,64 @@ func (service *Service) Consume() chan error {
 		return *service.errChannel
 	}
 	errCh := make(chan error)
-	for _, consumer := range service.consumers {
-		go consumer.Consume(errCh)
-	}
 	service.errChannel = &errCh
+	go consume(service)
 	return errCh
+}
+
+func consume(service *Service) {
+	logger, err := appctx.GetLogger(service.Context())
+	if err != nil {
+		*service.errChannel <- err
+		return
+	}
+	logger.Info().Msg("consuming")
+	for {
+		generation, err := service.NextGroup()
+		if err == nil {
+			err = <-service.JoinGroup(generation)
+		} else {
+			err = resolveError(service, err)
+		}
+		logger.Info().Err(err).Msg("error received from channel")
+		logger.Info().
+			Bool("blance-in-progress", errors.Is(err, kafka.RebalanceInProgress)).
+			Bool("group-coordinator-not-available", errors.Is(err, kafka.GroupCoordinatorNotAvailable)).
+			Bool("group-is-closed", errors.Is(err, kafka.ErrGroupClosed)).
+			Bool("leader-not-available", errors.Is(err, kafka.LeaderNotAvailable)).
+			Msg("error received")
+		if err != nil &&
+			!errors.Is(err, kafka.RebalanceInProgress) &&
+			!errors.Is(err, kafka.GroupCoordinatorNotAvailable) &&
+			!errors.Is(err, kafka.ErrGroupClosed) &&
+			!errors.Is(err, kafka.LeaderNotAvailable) {
+			logger.Info().Msg("unrecognized error received")
+			*service.errChannel <- err
+		}
+		keys := service.StopConsumers()
+		logger.Info().
+			Strs("topic-keys", keys).
+			Msg("all consumers stopped")
+		<-time.After(time.Second)
+	}
+}
+
+// StopConsumers stops consumers and waits for them to finish
+func (service *Service) StopConsumers() []string {
+	for _, consumer := range service.consumers {
+		consumer.Stop()
+	}
+	keys := []string{}
+	for key, consumer := range service.consumers {
+		keys = append(keys, key)
+		for {
+			<-time.After(time.Millisecond * 100)
+			if consumer.IsStopped() {
+				break
+			}
+		}
+	}
+	return keys
 }
 
 // WithNewLogger attaches a logger to the context on the service

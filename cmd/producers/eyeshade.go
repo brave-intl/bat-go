@@ -48,7 +48,7 @@ func WithService(
 		eyeshade.WithContext(ctx),
 		eyeshade.WithNewLogger,
 		eyeshade.WithBuildInfo,
-		eyeshade.WithProducer(avro.AllTopics...),
+		eyeshade.WithProducer(avro.AllTopicKeys...),
 		eyeshade.WithTopicAutoCreation,
 	)
 }

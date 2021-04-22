@@ -42,10 +42,11 @@ func (suite *KafkaHandlersSuite) SetupSuite() {
 	service, err := eyeshade.SetupService(
 		eyeshade.WithContext(suite.ctx),
 		eyeshade.WithBuildInfo,
+		eyeshade.WithNewLogger,
 		eyeshade.WithNewDBs,
 		eyeshade.WithNewClients,
-		eyeshade.WithProducer(topics...),
-		eyeshade.WithConsumer(100, avro.AllTopics...),
+		eyeshade.WithProducer(avro.AllTopicKeys...),
+		eyeshade.WithConsumer(100, avro.AllTopicKeys...),
 		eyeshade.WithTopicAutoCreation,
 	)
 	suite.Require().NoError(err)

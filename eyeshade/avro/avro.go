@@ -29,11 +29,14 @@ var (
 	}
 	// AllTopics holds all of the topics as an array
 	AllTopics = []string{}
+	// AllTopicKeys holds a list of all of the topic keys
+	AllTopicKeys = []string{}
 )
 
 func init() {
-	for _, topic := range KeyToTopic {
+	for key, topic := range KeyToTopic {
 		AllTopics = append(AllTopics, topic)
+		AllTopicKeys = append(AllTopicKeys, key)
 	}
 }
 

@@ -1,6 +1,8 @@
 package eyeshade
 
 import (
+	"context"
+
 	"github.com/brave-intl/bat-go/eyeshade/avro"
 	avrocontribution "github.com/brave-intl/bat-go/eyeshade/avro/contribution"
 	avroreferral "github.com/brave-intl/bat-go/eyeshade/avro/referral"
@@ -14,7 +16,7 @@ import (
 var (
 	// Handlers is a map for a topic key to point to any non standard handlers
 	// all others are handled by HandlerDefault
-	Handlers = map[string]func(con *MessageHandler, msgs []kafka.Message) error{
+	Handlers = map[string]func(context.Context, *MessageHandler, ...kafka.Message) error{
 		avro.TopicKeys.Suggestion:   HandleVotes,
 		avro.TopicKeys.Contribution: HandleVotes,
 		avro.TopicKeys.Settlement:   HandlerInsertConvertableTransaction,
@@ -29,51 +31,54 @@ var (
 
 // HandleVotes handles vote insertions
 func HandleVotes(
-	con *MessageHandler,
-	msgs []kafka.Message,
+	ctx context.Context,
+	consumer *MessageHandler,
+	msgs ...kafka.Message,
 ) error {
-	votes, err := DecodeBatchVotes[con.bundle.Key()](
-		con.bundle.Codecs(),
+	votes, err := DecodeBatchVotes[consumer.bundle.Key()](
+		consumer.bundle.Codecs(),
 		msgs,
 	)
 	if err != nil {
 		return err
 	}
-	return con.service.Datastore().
-		InsertVotes(con.Context(), *votes)
+	return consumer.service.Datastore().
+		InsertVotes(ctx, *votes)
 }
 
 // HandlerInsertConvertableTransaction is the default handler for direct to transaction use cases
 func HandlerInsertConvertableTransaction(
-	con *MessageHandler,
-	msgs []kafka.Message,
+	ctx context.Context,
+	consumer *MessageHandler,
+	msgs ...kafka.Message,
 ) error {
 	txs, err := avrosettlement.DecodeBatch(
-		con.bundle.Codecs(),
+		consumer.bundle.Codecs(),
 		msgs,
 	)
 	if err != nil {
 		return err
 	}
-	return con.service.InsertConvertableTransactions(
-		con.Context(),
+	return consumer.service.InsertConvertableTransactions(
+		ctx,
 		*txs,
 	)
 }
 
 // HandlerInsertReferrals is the default handler for direct to transaction use cases
 func HandlerInsertReferrals(
-	con *MessageHandler,
-	msgs []kafka.Message,
+	ctx context.Context,
+	consumer *MessageHandler,
+	msgs ...kafka.Message,
 ) error {
 	referrals, err := avroreferral.DecodeBatch(
-		con.bundle.Codecs(),
+		consumer.bundle.Codecs(),
 		msgs,
 	)
 	if err != nil {
 		return err
 	}
-	referrals, err = con.service.ModifyReferrals(referrals)
+	referrals, err = consumer.service.ModifyReferrals(referrals)
 	if err != nil {
 		return err
 	}
@@ -81,8 +86,8 @@ func HandlerInsertReferrals(
 	for i := range *referrals {
 		txs = append(txs, &(*referrals)[i])
 	}
-	return con.service.InsertConvertableTransactions(
-		con.Context(),
+	return consumer.service.InsertConvertableTransactions(
+		ctx,
 		txs,
 	)
 }

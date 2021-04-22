@@ -7,11 +7,6 @@ import (
 	"github.com/brave-intl/bat-go/eyeshade/models"
 )
 
-// Producer returns a kafka message producer
-func (service *Service) Producer(key string) BatchMessageProducer {
-	return service.producers[key]
-}
-
 // ProduceSettlements produces settlments onto the topic
 func (service *Service) ProduceSettlements(
 	ctx context.Context,
