@@ -104,7 +104,7 @@ func (promotion *Promotion) Claimable() bool {
 
 // Expired check if now is after the expires_at time
 func (promotion *Promotion) Expired() bool {
-	return promotion.ExpiresAt.Before(time.Now())
+	return promotion.ExpiresAt.Before(time.Now().UTC())
 }
 
 // GetAvailablePromotions first tries to look up the wallet and then retrieves available promotions
