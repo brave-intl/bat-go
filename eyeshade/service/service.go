@@ -126,6 +126,27 @@ func (service *Service) Consume() chan error {
 	return errCh
 }
 
+func propagateError(service *Service, err error) bool {
+	logger, _ := appctx.GetLogger(service.Context())
+	logger.Info().Err(err).Msg("error received from channel")
+	logger.Info().
+		Bool("blance-in-progress", errors.Is(err, kafka.RebalanceInProgress)).
+		Bool("group-coordinator-not-available", errors.Is(err, kafka.GroupCoordinatorNotAvailable)).
+		Bool("group-is-closed", errors.Is(err, kafka.ErrGroupClosed)).
+		Bool("leader-not-available", errors.Is(err, kafka.LeaderNotAvailable)).
+		Msg("error received")
+	if err != nil &&
+		!errors.Is(err, kafka.RebalanceInProgress) &&
+		!errors.Is(err, kafka.GroupCoordinatorNotAvailable) &&
+		!errors.Is(err, kafka.ErrGroupClosed) &&
+		!errors.Is(err, kafka.LeaderNotAvailable) {
+		logger.Info().Msg("unrecognized error received")
+		*service.errChannel <- err
+		return true
+	}
+	return false
+}
+
 func consume(service *Service) {
 	logger, err := appctx.GetLogger(service.Context())
 	if err != nil {
@@ -135,31 +156,23 @@ func consume(service *Service) {
 	logger.Info().Msg("consuming")
 	for {
 		generation, err := service.NextGroup()
-		if err == nil {
-			err = <-service.JoinGroup(generation)
-		} else {
+		if err != nil {
 			err = resolveError(service, err)
+			_ = propagateError(service, err)
+			continue
 		}
-		logger.Info().Err(err).Msg("error received from channel")
-		logger.Info().
-			Bool("blance-in-progress", errors.Is(err, kafka.RebalanceInProgress)).
-			Bool("group-coordinator-not-available", errors.Is(err, kafka.GroupCoordinatorNotAvailable)).
-			Bool("group-is-closed", errors.Is(err, kafka.ErrGroupClosed)).
-			Bool("leader-not-available", errors.Is(err, kafka.LeaderNotAvailable)).
-			Msg("error received")
-		if err != nil &&
-			!errors.Is(err, kafka.RebalanceInProgress) &&
-			!errors.Is(err, kafka.GroupCoordinatorNotAvailable) &&
-			!errors.Is(err, kafka.ErrGroupClosed) &&
-			!errors.Is(err, kafka.LeaderNotAvailable) {
-			logger.Info().Msg("unrecognized error received")
-			*service.errChannel <- err
+		errCh := service.JoinGroup(generation)
+		for {
+			err = <-errCh
+			if propagateError(service, err) {
+				continue // collect more errors
+			}
+			keys := service.StopConsumers()
+			logger.Info().
+				Strs("topic-keys", keys).
+				Msg("all consumers stopped")
+			<-time.After(time.Second)
 		}
-		keys := service.StopConsumers()
-		logger.Info().
-			Strs("topic-keys", keys).
-			Msg("all consumers stopped")
-		<-time.After(time.Second)
 	}
 }
 
