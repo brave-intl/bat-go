@@ -101,8 +101,7 @@ func (connection *Connection) AutoCreate() error {
 func (connection *Connection) Seek() error {
 	offset := connection.assignment.Offset
 	if offset > -2 {
-		offset++
-		_, err := connection.conn.Seek(offset, kafka.SeekDontCheck)
+		_, err := connection.conn.Seek(offset+1, kafka.SeekDontCheck)
 		if err != nil {
 			return errorutils.Wrap(err, "failed to seek")
 		}

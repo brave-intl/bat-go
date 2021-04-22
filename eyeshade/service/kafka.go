@@ -16,6 +16,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -39,7 +40,7 @@ type BatchMessageConsumer interface {
 	AutoCreate()
 	// Consume(erred chan error)
 	Read(*kafka.Conn) ([]kafka.Message, error)
-	HandleAndCommit(context.Context, Committer, []kafka.Message) error
+	HandleAndCommit(context.Context, *zerolog.Logger, Committer, []kafka.Message) error
 	IdleFor(time.Duration) bool
 	TopicCreated() bool
 	Topic() string
@@ -164,7 +165,12 @@ func handleMessages(ctx context.Context, consumer *MessageHandler, msgs []kafka.
 }
 
 // HandleAndCommit runs the handler and commits to the kafka queue in one database transaction
-func (consumer *MessageHandler) HandleAndCommit(ctx context.Context, committer Committer, msgs []kafka.Message) error {
+func (consumer *MessageHandler) HandleAndCommit(
+	ctx context.Context,
+	logger *zerolog.Logger,
+	committer Committer,
+	msgs []kafka.Message,
+) error {
 	ds := consumer.service.Datastore()
 	// this is all one db transaction we do not want to commit to db
 	// until we successfully commit to the consumer group (Committer)
@@ -172,6 +178,10 @@ func (consumer *MessageHandler) HandleAndCommit(ctx context.Context, committer C
 	if err != nil {
 		return errorutils.Wrap(err, "during tx formation")
 	}
+	logger.Info().
+		Str("topic", consumer.Topic()).
+		Int("count", len(msgs)).
+		Msg("handling messages")
 	if err := handleMessages(ctx, consumer, msgs); err != nil {
 		return errorutils.Wrap(err, "during handler")
 	}
@@ -212,6 +222,12 @@ func (consumer *MessageHandler) ConsumeAssignedPartitionSync(
 	topic string,
 	assignment kafka.PartitionAssignment,
 ) error {
+	logger, _ := appctx.GetLogger(consumer.Context())
+	logger.Debug().
+		Str("topic", topic).
+		Int("partition-id", assignment.ID).
+		Int64("offset", assignment.Offset).
+		Msg("received assignments")
 	broker := kafkautils.Brokers(consumer.Context())[0]
 	connection, err := NewConnection(ctx, consumer.service.dialer, broker, topic, assignment)
 	if err != nil {
@@ -231,12 +247,12 @@ func (consumer *MessageHandler) ConsumeAssignedPartitionSync(
 	consumer.isStopped = true
 	for { // loop to continue consuming
 		if !consumer.isStopped {
-			fmt.Println("breaking consumption, consumer no longer marked as consuming")
+			logger.Info().Msg("breaking consumption, consumer no longer marked as consuming")
 			break
 		}
 		// check to make sure nothiing else has closed the context
 		if ok := consumer.Tick(ctx); !ok {
-			fmt.Println("breaking consumption, context marked as done")
+			logger.Info().Msg("breaking consumption, context marked as done")
 			break
 		}
 		consumer.isHandling = false
@@ -250,7 +266,7 @@ func (consumer *MessageHandler) ConsumeAssignedPartitionSync(
 
 		consumer.isHandling = true
 		consumer.lastTick = time.Now()
-		if e := consumer.HandleAndCommit(ctx, generation, msgs); e != nil {
+		if e := consumer.HandleAndCommit(ctx, logger, generation, msgs); e != nil {
 			return errorutils.Wrap(e, "within handle and commit")
 		}
 		consumer.lastTick = time.Now()
@@ -340,12 +356,8 @@ func (service *Service) JoinGroup(
 	generation *kafka.Generation,
 ) chan error {
 	erred := make(chan error)
-	logger, _ := appctx.GetLogger(service.Context())
 	generation.Start(func(ctx context.Context) {
 		innerErr := make(chan error)
-		logger.Debug().
-			Interface("assignments", generation.Assignments).
-			Msg("received assignments")
 		for topic, partitionAssignments := range generation.Assignments {
 			consumer := service.ConsumerByTopic(topic)
 			if consumer == nil {

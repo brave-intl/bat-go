@@ -153,7 +153,9 @@ func consume(service *Service) {
 		*service.errChannel <- err
 		return
 	}
-	logger.Info().Msg("consuming")
+	defer func() {
+		logger.Info().Err(service.CloseGroup()).Msg("group closed")
+	}()
 	for {
 		generation, err := service.NextGroup()
 		if err != nil {
