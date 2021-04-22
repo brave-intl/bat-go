@@ -178,7 +178,8 @@ func InitKafkaWriter(
 
 	replications, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATIONS"))
 	if err != nil {
-		return nil, nil, errorutils.Wrap(err, "unable to parse `KAFKA_REPLICATIONS` env")
+		fmt.Printf("unable to parse `KAFKA_REPLICATIONS` env %v", err)
+		replications = 1
 	}
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		Brokers:      kafkaBrokers,
