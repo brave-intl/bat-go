@@ -16,6 +16,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	// GenerateCmd is the generate command
+	GenerateCmd = &cobra.Command{
+		Use:   "generate",
+		Short: "entrypoint to generate subcommands",
+	}
+
+	// JSONSchemaCmd is the json schema command
+	JSONSchemaCmd = &cobra.Command{
+		Use:   "json-schema",
+		Short: "entrypoint to generate json schema for project",
+		Run:   Perform("generate json schema", jsonSchemaRun),
+	}
+
+	// EyeshadeJSONSchemaCmd is the json schema command
+	EyeshadeJSONSchemaCmd = &cobra.Command{
+		Use:   "eyeshade-json-schema",
+		Short: "entrypoint to generate json schema for eyeshade",
+		Run:   Perform("generate eyeshade json schema", eyeshadeJSONSchemaRun),
+	}
+)
+
 func init() {
 	RootCmd.AddCommand(GenerateCmd)
 	GenerateCmd.AddCommand(JSONSchemaCmd)
@@ -27,26 +49,6 @@ func init() {
 
 	builder.Flag().Bool("overwrite", false,
 		"overwrite the existing json schema files")
-}
-
-// GenerateCmd is the generate command
-var GenerateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "entrypoint to generate subcommands",
-}
-
-// JSONSchemaCmd is the json schema command
-var JSONSchemaCmd = &cobra.Command{
-	Use:   "json-schema",
-	Short: "entrypoint to generate json schema for project",
-	Run:   Perform("generate eyeshade json schema", jsonSchemaRun),
-}
-
-// EyeshadeJSONSchemaCmd is the json schema command
-var EyeshadeJSONSchemaCmd = &cobra.Command{
-	Use:   "eyeshade-json-schema",
-	Short: "entrypoint to generate json schema for eyeshade",
-	Run:   Perform("generate json schema", eyeshadeJSONSchemaRun),
 }
 
 func eyeshadeJSONSchemaRun(command *cobra.Command, args []string) error {
