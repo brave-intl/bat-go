@@ -14,7 +14,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func init() {
@@ -40,7 +39,7 @@ var GenerateCmd = &cobra.Command{
 var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
-	Run:   Perform("generate json schema", jsonSchemaRun),
+	Run:   Perform("generate eyeshade json schema", jsonSchemaRun),
 }
 
 // EyeshadeJSONSchemaCmd is the json schema command
@@ -51,9 +50,13 @@ var EyeshadeJSONSchemaCmd = &cobra.Command{
 }
 
 func eyeshadeJSONSchemaRun(command *cobra.Command, args []string) error {
+	overwrite, err := command.Flags().GetBool("overwrite")
+	if err != nil {
+		return err
+	}
 	return jsonSchemaGenerate(
 		command.Context(),
-		viper.GetViper().GetBool("overwrite"),
+		overwrite,
 		eyeshadeoutput.APIResponseTypes,
 		map[string]string{
 			"models":    "eyeshade",
@@ -110,7 +113,7 @@ func jsonSchemaGenerate(
 			// test equality of schema file with what we just generated
 			if !bytes.Equal(existingSchema, schema) {
 				if overwrite {
-					logger.Warn().Msg(fmt.Sprintf("schema has changed: %s.%s", parts[0], parts[1]))
+					logger.Warn().Str("module", parts[0]).Str("struct", parts[1]).Msg("schema has changed")
 				} else {
 					return fmt.Errorf("schema has changed: %s.%s", parts[0], parts[1])
 				}
