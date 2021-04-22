@@ -109,7 +109,7 @@ func jsonSchemaGenerate(
 		// read old schema file
 		existingSchema, err := ioutil.ReadFile(
 			fmt.Sprintf("./schema/%s/%s", parts[0], parts[1]))
-		if err != nil && err != os.ErrNotExist {
+		if err != nil {
 			logger.Info().Err(err).Msg("could not find existing schema file, might be a new api")
 		} else {
 			// test equality of schema file with what we just generated
