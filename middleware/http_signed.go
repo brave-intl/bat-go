@@ -38,7 +38,7 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			var s httpsignature.Signature
 			err := s.UnmarshalText([]byte(r.Header.Get("Signature")))
 			if err != nil {
-				http.Error(w, http.StatusText(400), 400)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
 
@@ -50,22 +50,22 @@ func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 			pubKey, err := ks.LookupPublicKey(ctx, s.KeyID)
 
 			if err != nil {
-				http.Error(w, http.StatusText(500), 500)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
 			if pubKey == nil {
-				http.Error(w, http.StatusText(404), 404)
+				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 				return
 			}
 
 			valid, err := s.Verify(*pubKey, crypto.Hash(0), r)
 
 			if err != nil {
-				http.Error(w, http.StatusText(500), 500)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
 			if !valid {
-				http.Error(w, http.StatusText(403), 403)
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 				return
 			}
 

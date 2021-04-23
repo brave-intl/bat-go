@@ -222,10 +222,10 @@ func CompletePaypalSettlement(cmd *cobra.Command, args []string) error {
 func PaypalCompleteSettlement(payouts *[]settlement.Transaction, txnID string) (*[]settlement.Transaction, error) {
 	for i, payout := range *payouts {
 		if payout.WalletProvider != "paypal" {
-			return nil, errors.New("Error, non-paypal payment included.\nThis command should be called only on the filtered paypal-settlement.json")
+			return nil, errors.New("error, non-paypal payment included.\nThis command should be called only on the filtered paypal-settlement.json")
 		}
 		if !payout.Amount.GreaterThan(decimal.Zero) {
-			return nil, errors.New("Error, non-zero payment included.\nThis command should be called only on the post-rate paypal-settlement.json")
+			return nil, errors.New("error, non-zero payment included.\nThis command should be called only on the post-rate paypal-settlement.json")
 		}
 		payout.Status = "complete"
 		payout.ProviderID = txnID

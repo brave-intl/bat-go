@@ -338,7 +338,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		if transaction != nil {
-			err = fmt.Errorf("External Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
+			err = fmt.Errorf("external Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 

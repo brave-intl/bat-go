@@ -157,8 +157,8 @@ type Postgres struct {
 }
 
 // NewDB creates a new Postgres Datastore
-func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewDB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_datastore",
@@ -168,8 +168,8 @@ func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (
 }
 
 // NewRODB creates a new Postgres RO Datastore
-func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewRODB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_ro_datastore",
@@ -181,14 +181,14 @@ func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string)
 // NewPostgres creates new postgres connections
 func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var roPg ReadOnlyDatastore
-	pg, err := NewDB("", true, "promotion_db")
+	pg, err := NewDB("", true, "promotion", "promotion_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	roDB := os.Getenv("RO_DATABASE_URL")
 	if len(roDB) > 0 {
-		roPg, err = NewRODB(roDB, false, "promotion_read_only_db")
+		roPg, err = NewRODB(roDB, false, "promotion", "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -388,7 +388,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	}
 
 	if len(issuers) != 1 {
-		return nil, errors.New("Unexpected number of issuers returned")
+		return nil, errors.New("unexpected number of issuers returned")
 	}
 
 	return &issuers[0], nil
@@ -530,7 +530,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if err != nil {
 		return nil, err
 	} else if len(claims) != 1 {
-		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
+		return nil, fmt.Errorf("incorrect number of claims updated / inserted: %d", len(claims))
 	}
 	claim := claims[0]
 
@@ -992,7 +992,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, fmt.Errorf("Failed to get order : %w", err)
+		return nil, fmt.Errorf("failed to get order : %w", err)
 	}
 
 	foundOrderItems := []OrderItem{}
@@ -1399,7 +1399,7 @@ where
 	}
 
 	if depositDestination == "" {
-		return attempted, errors.New("Wallet is not verified")
+		return attempted, errors.New("wallet is not verified")
 	}
 
 	depositDestinationUUID, err := uuid.FromString(depositDestination)
@@ -1441,7 +1441,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
+		return errors.New("no rows updated")
 	}
 
 	return nil

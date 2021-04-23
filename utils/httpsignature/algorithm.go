@@ -28,7 +28,7 @@ func (a Algorithm) String() string {
 // MarshalText marshalls the algorithm into text.
 func (a *Algorithm) MarshalText() (text []byte, err error) {
 	if *a == invalid {
-		return nil, errors.New("Not a supported algorithm")
+		return nil, errors.New("not a supported algorithm")
 	}
 	text = []byte(a.String())
 	return
@@ -39,7 +39,7 @@ func (a *Algorithm) UnmarshalText(text []byte) (err error) {
 	var exists bool
 	*a, exists = algorithmID[string(text)]
 	if !exists {
-		return errors.New("Not a supported algorithm")
+		return errors.New("not a supported algorithm")
 	}
 	return nil
 }

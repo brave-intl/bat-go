@@ -56,7 +56,7 @@ func isSimpleTokenInContext(ctx context.Context) bool {
 func SimpleTokenAuthorizedOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isSimpleTokenInContext(r.Context()) {
-			http.Error(w, http.StatusText(403), 403)
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

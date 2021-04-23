@@ -217,12 +217,12 @@ func TransferFunds(
 		if walletc == altc {
 			valueProbi = balance.SpendableProbi
 		} else {
-			return errors.New("Sending all funds not available for currencies other than the wallet currency")
+			return errors.New("sending all funds not available for currencies other than the wallet currency")
 		}
 	} else {
 		valueProbi = altc.ToProbi(valueDec)
 		if walletc == altc && balance.SpendableProbi.LessThan(valueProbi) {
-			return errors.New("Insufficient funds in wallet")
+			return errors.New("insufficient funds in wallet")
 		}
 	}
 

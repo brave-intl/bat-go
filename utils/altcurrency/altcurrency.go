@@ -87,7 +87,7 @@ func (a AltCurrency) String() string {
 // MarshalText marshalls the altcurrency into text.
 func (a *AltCurrency) MarshalText() (text []byte, err error) {
 	if *a == invalid {
-		return nil, errors.New("Not a valid AltCurrency")
+		return nil, errors.New("not a valid AltCurrency")
 	}
 	text = []byte(a.String())
 	return
@@ -103,7 +103,7 @@ func (a *AltCurrency) UnmarshalText(text []byte) (err error) {
 func FromString(text string) (AltCurrency, error) {
 	a, exists := altCurrencyID[text]
 	if !exists {
-		return invalid, errors.New("Not a valid AltCurrency")
+		return invalid, errors.New("not a valid AltCurrency")
 	}
 	return a, nil
 }
