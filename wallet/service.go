@@ -85,7 +85,7 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	}
 	anonCard, ok := providerWallet.(*uphold.Wallet)
 	if !ok {
-		return nil, errors.New("Only uphold wallets are supported")
+		return nil, errors.New("only uphold wallets are supported")
 	}
 
 	// FIXME needs to require the idempotency key

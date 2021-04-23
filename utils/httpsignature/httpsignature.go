@@ -63,7 +63,7 @@ func (s *SignatureParams) IsMalformed() bool {
 // TODO Add support for digest generation based on req.Body?
 func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err error) {
 	if s.IsMalformed() {
-		return nil, errors.New("Refusing to build signing string with malformed params")
+		return nil, errors.New("refusing to build signing string with malformed params")
 	}
 
 	headers := s.Headers
@@ -76,7 +76,7 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			if req.URL != nil && len(req.Method) > 0 {
 				out = append(out, []byte(fmt.Sprintf("%s: %s %s", RequestTargetHeader, strings.ToLower(req.Method), req.URL.RequestURI()))...)
 			} else {
-				return nil, fmt.Errorf("Request must have a URL and Method to use the %s pseudo-header", RequestTargetHeader)
+				return nil, fmt.Errorf("request must have a URL and Method to use the %s pseudo-header", RequestTargetHeader)
 			}
 		} else if header == DigestHeader {
 			var d digest.Instance
@@ -154,7 +154,7 @@ func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.
 // MarshalText marshalls the signature into text.
 func (s *Signature) MarshalText() (text []byte, err error) {
 	if s.IsMalformed() {
-		return nil, errors.New("Not a valid Algorithm")
+		return nil, errors.New("not a valid Algorithm")
 	}
 
 	algo, err := s.Algorithm.MarshalText()
@@ -197,13 +197,13 @@ func (s *Signature) UnmarshalText(text []byte) (err error) {
 		} else if key == "signature" {
 			s.Sig = value
 		} else {
-			return errors.New("Invalid key in signature")
+			return errors.New("invalid key in signature")
 		}
 	}
 
 	// Check that all required fields were present
 	if s.Algorithm == invalid || len(s.KeyID) == 0 || len(s.Sig) == 0 {
-		return errors.New("A valid signature MUST have algorithm, keyId, and signature keys")
+		return errors.New("a valid signature MUST have algorithm, keyId, and signature keys")
 	}
 
 	return nil

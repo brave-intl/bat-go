@@ -13,7 +13,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -124,7 +123,7 @@ var (
 )
 
 // UpsertWallet upserts the given wallet
-func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *wallet.Info) error {
+func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *walletutils.Info) error {
 	statement := `
 	insert into wallets
 		(
@@ -151,7 +150,7 @@ func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *wallet.Info) error
 }
 
 // GetWallet by ID
-func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*wallet.Info, error) {
+func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -160,7 +159,7 @@ func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*wallet.Info, 
 		wallets
 	where
 		id = $1`
-	wallets := []wallet.Info{}
+	wallets := []walletutils.Info{}
 	err := pg.RawDB().SelectContext(ctx, &wallets, statement, ID)
 	if err != nil {
 		return nil, err

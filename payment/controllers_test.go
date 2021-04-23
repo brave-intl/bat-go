@@ -73,13 +73,8 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	}
 }
 
-<<<<<<< HEAD
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity int) Order {
-	pg, err := NewPostgres("", false)
-=======
-func (suite *ControllersTestSuite) setupCreateOrder(quantity int) Order {
 	pg, err := NewPostgres("", false, "")
->>>>>>> 1ed37ad... added pg update to payment
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	service := &Service{
@@ -753,7 +748,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	defer mockCtrl.Finish()
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
-	pg, err := NewPostgres("", false)
+	pg, err := NewPostgres("", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")

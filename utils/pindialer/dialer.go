@@ -24,7 +24,7 @@ func validateChain(fingerprint string, connstate tls.ConnectionState) error {
 			}
 		}
 	}
-	return errors.New("The server certificate was not valid")
+	return errors.New("the server certificate was not valid")
 }
 
 // MakeContextDialer returns a ContextDialer that only succeeds on connection to a TLS secured address with the pinned fingerprint
@@ -51,7 +51,7 @@ func GetFingerprints(c *tls.Conn) (map[string]string, error) {
 	connstate := c.ConnectionState()
 
 	if len(connstate.VerifiedChains) < 1 {
-		return nil, errors.New("No valid verified chain found")
+		return nil, errors.New("no valid verified chain found")
 	}
 	prints := make(map[string]string)
 
