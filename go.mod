@@ -9,7 +9,6 @@ require (
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
-	github.com/frankban/quicktest v1.4.2 // indirect
 	github.com/getsentry/sentry-go v0.10.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.0
@@ -29,12 +28,11 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mssola/user_agent v0.5.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/pierrec/lz4 v2.3.0+incompatible // indirect
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rs/zerolog v1.21.0
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/satori/go.uuid v1.2.0
-	github.com/segmentio/kafka-go v0.4.13
+	github.com/segmentio/kafka-go v0.4.15
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24
 	github.com/sirupsen/logrus v1.8.1
