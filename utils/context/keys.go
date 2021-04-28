@@ -47,6 +47,8 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
+	// GeminiClientCTXKey - context key for the build time of code
+	GeminiClientCTXKey CTXKey = "gemini_client"
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code

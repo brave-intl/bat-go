@@ -278,7 +278,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
 		}
 
-		err = s.LinkGeminiWallet(ctx, wallet, glr.Destination, glr.AccountID)
+		err = s.LinkGeminiWallet(ctx, wallet, glr.VerificationToken)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}

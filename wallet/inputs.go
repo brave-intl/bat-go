@@ -248,19 +248,14 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 
 // GeminiLinkingRequest holds info needed to link gemini account
 type GeminiLinkingRequest struct {
-	Signature   string `json:"signature"`
-	Destination string `json:"destination"`
-	AccountID   string `json:"account_id"`
+	VerificationToken string `json:"linking_info"`
 }
 
 // Validate - implementation of validatable interface
 func (glr *GeminiLinkingRequest) Validate(ctx context.Context) error {
 	var merr = new(errorutils.MultiError)
-	if glr.Signature == "" {
-		merr.Append(errors.New("failed to validate 'signature': must not be empty"))
-	}
-	if glr.Destination == "" || !govalidator.IsUUID(glr.Destination) {
-		merr.Append(errors.New("failed to validate 'destination': must be uuid"))
+	if glr.VerificationToken == "" {
+		merr.Append(errors.New("failed to validate 'linking_info': must not be empty"))
 	}
 	if merr.Count() > 0 {
 		return merr
@@ -294,7 +289,7 @@ func (glr *GeminiLinkingRequest) HandleErrors(err error) *handlers.AppError {
 			}
 		}
 	}
-	return handlers.ValidationError("brave create wallet request validation errors", issues)
+	return handlers.ValidationError("gemini wallet linking request validation errors", issues)
 }
 
 // BitFlyerLinkingRequest - the structure for a brave provider wallet creation request

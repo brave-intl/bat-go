@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -30,9 +31,10 @@ var (
 
 // Service contains datastore connections
 type Service struct {
-	Datastore   Datastore
-	RoDatastore ReadOnlyDatastore
-	repClient   reputation.Client
+	Datastore    Datastore
+	RoDatastore  ReadOnlyDatastore
+	repClient    reputation.Client
+	geminiClient gemini.Client
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -151,10 +153,23 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutil
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, depositID, accountID string) error {
-	// during validation we verified that the account hash and deposit id were signed by gemini
-	// we also validated that this "info" signed the request to perform the linking with http signature
-	// we assume that since we got linkingInfo signed from BF that they are KYC
+func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, verificationToken string) error {
+	// get gemini client from context
+	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
+	if !ok {
+		// no gemini client on context
+		return handlers.WrapError(
+			appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
+	}
+
+	// perform an Account Validation call to gemini to get the accountID
+	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken)
+	if err != nil {
+		return handlers.WrapError(
+			errors.New("invalid linking_info"), "unable to validate gemini account", http.StatusBadRequest)
+	}
+
+	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
 	if info.ProviderLinkingID != nil {
 		// check if the member matches the associated member
@@ -163,7 +178,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.
 		}
 	} else {
 		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "gemini")
+		err := service.Datastore.LinkWallet(ctx, info.ID, accountID, providerLinkingID, nil, "gemini")
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {
@@ -294,6 +309,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	}
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
+
+	if os.Getenv("GEMINI_ENABLED") == "true" {
+		s.geminiClient, err = gemini.New()
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to create gemini client")
+		}
+	}
 
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
