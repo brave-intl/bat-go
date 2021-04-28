@@ -21,5 +21,5 @@ func GetWallet(ctx context.Context, info wallet.Info) (wallet.Wallet, error) {
 		// err = uW.UpdatePublicKey()
 		return uW, err
 	}
-	return nil, fmt.Errorf("No such supported wallet provider %s", info.Provider)
+	return nil, fmt.Errorf("no such supported wallet provider %s", info.Provider)
 }

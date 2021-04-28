@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -99,7 +100,11 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(rows)
+	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
+	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
+
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(open)
 
 	// txHasDestination
 	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
@@ -275,16 +280,24 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	}
 
 	var (
+		idFrom      = uuid.NewV4()
 		idTo        = uuid.NewV4()
 		accountHash = uuid.NewV4()
 		timestamp   = time.Now()
 	)
 
+	h := sha256.New()
+	if _, err := h.Write([]byte(idFrom.String())); err != nil {
+		panic(err)
+	}
+
+	externalAccountID := hex.EncodeToString(h.Sum(nil))
+
 	cl := wallet.BitFlyerLinkingInfo{
 		DepositID:         idTo.String(),
 		RequestID:         "1",
 		AccountHash:       accountHash.String(),
-		ExternalAccountID: "2",
+		ExternalAccountID: externalAccountID,
 		Timestamp:         timestamp,
 	}
 
@@ -308,7 +321,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 				},
 			})
 
-		idFrom = uuid.NewV4()
 		// add the datastore to the context
 		ctx = middleware.AddKeyID(context.WithValue(context.Background(), appctx.BitFlyerJWTKeyCTXKey, []byte(secret)), idFrom.String())
 		r   = httptest.NewRequest(
@@ -329,6 +341,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		rows              = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
 					AddRow(idFrom, "bitflyer", "", "12345", providerLinkingID, idTo)
 	)
+	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 

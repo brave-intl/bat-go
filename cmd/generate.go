@@ -73,7 +73,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 				if overwrite {
 					logger.Warn().Msg(fmt.Sprintf("Schema has changed: %s.%s", parts[0], parts[1]))
 				} else {
-					return fmt.Errorf("Schema has changed: %s.%s", parts[0], parts[1])
+					return fmt.Errorf("schema has changed: %s.%s", parts[0], parts[1])
 				}
 			}
 		}

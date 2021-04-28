@@ -35,6 +35,8 @@ var (
 	errMissingEnvGeminiClientID     = errors.New("missing env for gemini redemption `GEMINI_CLIENT_ID`")
 	errMissingEnvGeminiClientKey    = errors.New("missing env for gemini redemption `GEMINI_CLIENT_KEY`")
 	errMissingEnvGeminiClientSecret = errors.New("missing env for gemini redemption `GEMINI_CLIENT_SECRET`")
+	errReputationServiceFailure     = errors.New("failed to call reputation service")
+	errWalletNotReputable           = errors.New("wallet is not reputable")
 )
 
 // Drain ad suggestions into verified wallet
@@ -48,7 +50,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
-		return nil, errors.New("Wallet is not verified")
+		return nil, errors.New("wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
@@ -106,7 +108,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
-			return nil, errors.New("Only ads suggestions can be drained")
+			return nil, errors.New("only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
@@ -121,7 +123,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
-			return nil, errors.New("Cannot claim more funds than were earned")
+			return nil, errors.New("cannot claim more funds than were earned")
 		}
 
 		// Skip already drained promotions for idempotency
@@ -238,6 +240,18 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 	}
 
+	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationOnDrainCTXKey); ok {
+		// perform reputation check for wallet, and error accordingly if there is a reputation failure
+		reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
+		if err != nil {
+			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
+			return nil, errReputationServiceFailure
+		}
+
+		if !reputable {
+			return nil, errWalletNotReputable
+		}
+	}
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
@@ -251,7 +265,25 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	} else if *wallet.UserDepositAccountProvider == "bitflyer" {
 
 		transferID := uuid.NewV4().String()
+
 		totalF64, _ := total.Float64()
+
+		// get quote, make sure we dont go over 100K JPY
+		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch bitflyer quote")
+		}
+
+		JPYLimit := decimal.NewFromFloat(100000)
+		var overLimitErr error
+
+		totalJPYTransfer := total.Mul(quote.Rate)
+
+		if totalJPYTransfer.GreaterThan(JPYLimit) {
+			over := JPYLimit.Sub(totalJPYTransfer).String()
+			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
+			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
+		}
 
 		tx := new(walletutils.TransactionInfo)
 
@@ -272,7 +304,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			},
 		}
 		// upload
-		_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+		_, err = service.bfClient.UploadBulkPayout(ctx, payload)
 		if err != nil {
 			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 			var bfe *clients.BitflyerError
@@ -290,6 +322,16 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 						return nil, fmt.Errorf("failed to transfer funds: %w", err)
 					}
 				}
+
+				for _, v := range bfe.ErrorIDs {
+					// non-retry errors, report to sentry
+					if v == "NO_INV" {
+						logger.Error().Err(bfe).Msg("no bitflyer inventory")
+						sentry.CaptureException(bfe)
+					}
+				}
+				// runner has ability to read ErrorIDs from bfe and code it
+				return nil, bfe
 			}
 			return nil, fmt.Errorf("failed to transfer funds: %w", err)
 		}
@@ -298,6 +340,11 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if service.drainChannel != nil {
 			service.drainChannel <- tx
 		}
+
+		if overLimitErr != nil {
+			return tx, overLimitErr
+		}
+
 		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "gemini" {
 

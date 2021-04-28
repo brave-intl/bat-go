@@ -132,6 +132,8 @@ func (c *SimpleHTTPClient) newRequest(
 		RawQuery: qs,
 	})
 
+	// m, _ := json.MarshalIndent(body, "", "  ")
+	// fmt.Println(path, string(m))
 	if body != nil && method != "GET" {
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
@@ -216,7 +218,7 @@ func (c *SimpleHTTPClient) do(
 	// // helpful if you want to read the body as it is
 	// bodyBytes, _ := requestutils.Read(resp.Body)
 	// resp.Body.Close() // must close
-	// fmt.Println(string(bodyBytes))
+	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
 	// resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if status >= 200 && status <= 299 {
 		if v != nil {

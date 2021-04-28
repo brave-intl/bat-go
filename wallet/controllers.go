@@ -66,10 +66,7 @@ func validateHTTPSignature(ctx context.Context, r *http.Request, signature strin
 		}
 	}
 	pubKey := httpsignature.Verifier(publicKey)
-	if err != nil {
-		return "", err
-	}
-	if pubKey == nil {
+	if len(pubKey.String()) == 0 {
 		return "", errors.New("invalid public key")
 	}
 

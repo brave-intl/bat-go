@@ -1,0 +1,2 @@
+drop index mint_drain_promotion_mint_drain_id_idx;
+drop index mint_drain_status_idx;

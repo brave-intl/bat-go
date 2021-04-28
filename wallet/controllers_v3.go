@@ -595,3 +595,79 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }
+
+// IncreaseLinkingLimitV3 - increase the allowable linking limit for the specified paymentId by one
+func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx         = r.Context()
+			custodianID = chi.URLParam(r, "custodian_id")
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
+		err = s.IncreaseLinkingLimit(ctx, custodianID)
+		if err != nil {
+			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
+			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+// GetLinkingInfoV3 - get linking metadata
+func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx       = r.Context()
+			paymentID = new(inputs.ID)
+			// default to a uuid that doesn't exist
+			providerLinkingID = uuid.NewV4().String()
+			custodianID       = r.URL.Query().Get("custodianId")
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		if r.URL.Query().Get("paymentId") != "" {
+			// get payment id
+			if err := inputs.DecodeAndValidateString(ctx, paymentID, r.URL.Query().Get("paymentId")); err != nil {
+				logger.Warn().Err(err).Str("paymentID", r.URL.Query().Get("paymentId")).Msg("failed to decode and validate paymentID from url")
+				return handlers.ValidationError(
+					"error validating paymentID url parameter",
+					map[string]interface{}{
+						"paymentID": err.Error(),
+					},
+				)
+			}
+			// get the wallet
+			wallet, err := s.GetWallet(ctx, *paymentID.UUID())
+			if err != nil || wallet == nil {
+				if wallet == nil || strings.Contains(err.Error(), "looking up wallet") {
+					return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
+				}
+				return handlers.WrapError(err, "unable to get linking limit for payment id", http.StatusServiceUnavailable)
+			}
+			if wallet.ProviderLinkingID != nil {
+				providerLinkingID = wallet.ProviderLinkingID.String()
+			}
+		}
+
+		info, err := s.GetLinkingInfo(ctx, providerLinkingID, custodianID)
+		if err != nil {
+			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to get linking info")
+			return handlers.WrapError(err, "error getting linking info", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, info, w, http.StatusOK)
+	}
+}

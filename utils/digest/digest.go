@@ -42,12 +42,12 @@ func (d *Instance) MarshalText() (text []byte, err error) {
 func (d *Instance) UnmarshalText(text []byte) (err error) {
 	s := strings.SplitN(string(text), "=", 2)
 	if len(s) != 2 {
-		return errors.New("A valid digest specifier must consist of two parts separated by =")
+		return errors.New("a valid digest specifier must consist of two parts separated by =")
 	}
 	var exists bool
 	d.Hash, exists = hashID[s[0]]
 	if !exists {
-		return fmt.Errorf("The digest algorithm %s is not supported", s[0])
+		return fmt.Errorf("the digest algorithm %s is not supported", s[0])
 	}
 	d.Digest = s[1]
 	return nil

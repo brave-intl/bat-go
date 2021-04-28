@@ -13,7 +13,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/metrics"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jmoiron/sqlx"
@@ -22,8 +22,6 @@ import (
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
-
-const currentMigrationVersion = 25
 
 var (
 	// dbInstanceClassToMaxConn -  https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.Managing.html
@@ -42,13 +40,19 @@ var (
 		"db.r5.24xlarge": 5000,
 	}
 	dbs = map[string]*sqlx.DB{}
+	// CurrentMigrationVersion holds the default migration version
+	CurrentMigrationVersion = uint(32)
+	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
+	MigrationTracks = map[string]uint{
+		"eyeshade": 20,
+	}
 )
 
 // Datastore holds generic methods
 type Datastore interface {
 	RawDB() *sqlx.DB
 	NewMigrate() (*migrate.Migrate, error)
-	Migrate() error
+	Migrate(...uint) error
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
 }
@@ -84,7 +88,7 @@ func (pg *Postgres) NewMigrate() (*migrate.Migrate, error) {
 }
 
 // Migrate the Postgres instance
-func (pg *Postgres) Migrate() error {
+func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, os.Getenv("ENV"))
 	_, logger := logging.SetupLogger(ctx)
 
@@ -98,10 +102,14 @@ func (pg *Postgres) Migrate() error {
 
 	v, dirty, err := m.Version()
 
+	currentMigrationVersion := CurrentMigrationVersion
+	if len(currentMigrationVersions) > 0 {
+		currentMigrationVersion = currentMigrationVersions[0]
+	}
 	subLogger := logger.With().
 		Bool("dirty", dirty).
 		Int("db_version", int(v)).
-		Int("code_version", currentMigrationVersion).
+		Uint("code_version", currentMigrationVersion).
 		Logger()
 
 	subLogger.Info().Msg("database status")
@@ -135,7 +143,12 @@ func (pg *Postgres) Migrate() error {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (*Postgres, error) {
+func NewPostgres(
+	databaseURL string,
+	performMigration bool,
+	migrationTrack string,
+	dbStatsPrefix ...string,
+) (*Postgres, error) {
 	if len(databaseURL) == 0 {
 		databaseURL = os.Getenv("DATABASE_URL")
 	}
@@ -194,7 +207,11 @@ func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...str
 	pg := &Postgres{db}
 
 	if performMigration {
-		err = pg.Migrate()
+		migrationVersion := MigrationTracks[migrationTrack]
+		if migrationVersion == 0 {
+			migrationVersion = CurrentMigrationVersion
+		}
+		err = pg.Migrate(migrationVersion)
 		if err != nil {
 			return nil, err
 		}

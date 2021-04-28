@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -57,6 +58,14 @@ func (fb *FlagBuilder) String(key string, defaultValue string, description strin
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
 			command.Flags().String(key, defaultValue, description)
+		})
+}
+
+// Duration attaches a string flag to the command
+func (fb *FlagBuilder) Duration(key string, defaultValue time.Duration, description string) *FlagBuilder {
+	return fb.SetKey(key).
+		loopCommands(func(command *cobra.Command) {
+			command.Flags().Duration(key, defaultValue, description)
 		})
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -156,8 +157,8 @@ type Postgres struct {
 }
 
 // NewDB creates a new Postgres Datastore
-func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewDB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_datastore",
@@ -167,8 +168,8 @@ func NewDB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (
 }
 
 // NewRODB creates a new Postgres RO Datastore
-func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewRODB(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "promotion_ro_datastore",
@@ -180,14 +181,14 @@ func NewRODB(databaseURL string, performMigration bool, dbStatsPrefix ...string)
 // NewPostgres creates new postgres connections
 func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var roPg ReadOnlyDatastore
-	pg, err := NewDB("", true, "promotion_db")
+	pg, err := NewDB("", true, "promotion", "promotion_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 	roDB := os.Getenv("RO_DATABASE_URL")
 	if len(roDB) > 0 {
-		roPg, err = NewRODB(roDB, false, "promotion_read_only_db")
+		roPg, err = NewRODB(roDB, false, "promotion", "promotion_read_only_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -387,7 +388,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	}
 
 	if len(issuers) != 1 {
-		return nil, errors.New("Unexpected number of issuers returned")
+		return nil, errors.New("unexpected number of issuers returned")
 	}
 
 	return &issuers[0], nil
@@ -514,14 +515,14 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if promotion.Type == "ads" || legacyClaimExists {
 		statement := `
 		update claims
-		set redeemed = true
+		set redeemed = true, redeemed_at = now()
 		where promotion_id = $1 and wallet_id = $2 and not redeemed
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID)
 	} else {
 		statement := `
-		insert into claims (promotion_id, wallet_id, approximate_value, redeemed)
-		values ($1, $2, $3, true)
+		insert into claims (promotion_id, wallet_id, approximate_value, redeemed, redeemed_at)
+		values ($1, $2, $3, true, now())
 		returning *`
 		err = tx.Select(&claims, statement, promotion.ID, wallet.ID, promotion.ApproximateValue)
 	}
@@ -529,7 +530,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	if err != nil {
 		return nil, err
 	} else if len(claims) != 1 {
-		return nil, fmt.Errorf("Incorrect number of claims updated / inserted: %d", len(claims))
+		return nil, fmt.Errorf("incorrect number of claims updated / inserted: %d", len(claims))
 	}
 	claim := claims[0]
 
@@ -896,6 +897,17 @@ func (pg *Postgres) InsertSuggestion(credentials []cbr.CredentialRedemption, sug
 	return nil
 }
 
+// SuggestionJob - representation of a suggestion job
+type SuggestionJob struct {
+	ID              uuid.UUID `db:"id"`
+	Credentials     string    `db:"credentials"`
+	SuggestionText  string    `db:"suggestion_text"`
+	SuggestionEvent []byte    `db:"suggestion_event"`
+	Erred           bool      `db:"erred"`
+	ErrCode         *string   `db:"errcode"`
+	CreatedAt       time.Time `db:"created_at"`
+}
+
 // RunNextSuggestionJob to process a suggestion if there is one waiting
 func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionWorker) (bool, error) {
 
@@ -907,14 +919,6 @@ func (pg *Postgres) RunNextSuggestionJob(ctx context.Context, worker SuggestionW
 	defer pg.RollbackTx(tx)
 
 	// FIXME
-	type SuggestionJob struct {
-		ID              uuid.UUID `db:"id"`
-		Credentials     string    `db:"credentials"`
-		SuggestionText  string    `db:"suggestion_text"`
-		SuggestionEvent []byte    `db:"suggestion_event"`
-		Erred           bool      `db:"erred"`
-		ErrCode         *string   `db:"errcode"`
-	}
 
 	statement := `
 select *
@@ -949,7 +953,11 @@ limit 1`
 				// set flag to stop this worker from running again
 				worker.PauseWorker(time.Now().Add(30 * time.Minute))
 			}
-			errCode, retriable := errToDrainCode(err)
+
+			// inform sentry about this error
+			sentry.CaptureException(err)
+
+			_, errCode, retriable := errToDrainCode(err)
 
 			if !retriable {
 				if _, err = tx.Exec(
@@ -984,7 +992,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, fmt.Errorf("Failed to get order : %w", err)
+		return nil, fmt.Errorf("failed to get order : %w", err)
 	}
 
 	foundOrderItems := []OrderItem{}
@@ -1066,7 +1074,7 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	}
 	defer pg.RollbackTx(tx)
 
-	_, err = tx.Exec(`update claims set drained = true where id = $1 and not drained`, claim.ID)
+	_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
 	if err != nil {
 		return err
 	}
@@ -1074,10 +1082,10 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	var claimDrain = DrainJob{}
 
 	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id)
-	values ($1, $2, $3, $4)
+	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id)
+	values ($1, $2, $3, $4, $5)
 	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID)
+	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID)
 	if err != nil {
 		return err
 	}
@@ -1091,11 +1099,28 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 }
 
 // errToDrainCode - given a drain related processing error, generate a code and retriable flag
-func errToDrainCode(err error) (string, bool) {
+func errToDrainCode(err error) (string, string, bool) {
 	var (
+		status    string
 		errCode   string
 		retriable bool
 	)
+
+	if err == nil {
+		return "", "", false
+	}
+
+	status = "failed"
+
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		// if this is an error bundle, check the "data" for a codified type
+		if c, ok := eb.Data().(errorutils.Codified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, errCode, retriable
+		}
+	}
+
 	// possible protocol errors
 	if errors.Is(err, errorutils.ErrMarshalTransferRequest) {
 		errCode = "marshal_transfer"
@@ -1112,6 +1137,13 @@ func errToDrainCode(err error) (string, bool) {
 	} else if errors.Is(err, errorutils.ErrFailedBodyUnmarshal) {
 		errCode = "failed_response_unmarshal"
 		retriable = true
+	} else if errors.Is(err, errReputationServiceFailure) {
+		errCode = "reputation-service-failure"
+		retriable = true
+	} else if errors.Is(err, errWalletNotReputable) {
+		errCode = "reputation-failed"
+		status = "reputation-failed"
+		retriable = false
 	} else {
 		if codedErr, ok := err.(uphold.Coded); ok {
 			// possible wallet provider specific errors
@@ -1119,22 +1151,34 @@ func errToDrainCode(err error) (string, bool) {
 		} else {
 			errCode = "unknown"
 		}
+		var bfe *clients.BitflyerError
+		if errors.As(err, &bfe) {
+			// possible wallet provider specific errors
+			if len(bfe.ErrorIDs) > 0 {
+				errCode = bfe.ErrorIDs[0]
+			}
+		} else {
+			errCode = "unknown"
+		}
 	}
-	return errCode, retriable
+	return status, errCode, retriable
 }
 
 // DrainJob - definition of a drain job
 type DrainJob struct {
 	ID            uuid.UUID       `db:"id"`
+	ClaimID       *uuid.UUID      `db:"claim_id"`
 	Credentials   string          `db:"credentials"`
 	WalletID      uuid.UUID       `db:"wallet_id"`
 	Total         decimal.Decimal `db:"total"`
 	TransactionID *string         `db:"transaction_id"`
 	Erred         bool            `db:"erred"`
 	ErrCode       *string         `db:"errcode"`
+	Status        *string         `db:"status"`
 	BatchID       *uuid.UUID      `db:"batch_id"`
 	Completed     bool            `db:"completed"`
-	CompletedAt   *time.Time      `db:"completed_at"`
+	CompletedAt   pq.NullTime     `db:"completed_at"`
+	UpdatedAt     pq.NullTime     `db:"updated_at"`
 }
 
 // RunNextDrainJob to process deposits if there is one waiting
@@ -1158,6 +1202,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
+and (status is null or status not in ('complete', 'reputation-failed', 'failed'))
 for update skip locked
 limit 1`
 
@@ -1174,6 +1219,15 @@ limit 1`
 	job := jobs[0]
 	attempted = true
 
+	// set job status to initialized
+	_, err = tx.Exec(`
+		update claim_drain set
+			status = 'initialized'
+		where id = $1`, job.ID)
+	if err != nil {
+		return attempted, err
+	}
+
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
 	if err != nil {
@@ -1184,10 +1238,18 @@ limit 1`
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		errCode, retriable := errToDrainCode(err)
+		status, errCode, retriable := errToDrainCode(err)
+
+		// inform sentry about this error
+		sentry.CaptureException(err)
 
 		if !retriable {
-			if _, err := tx.Exec(`update claim_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err != nil {
+			if _, err := tx.Exec(`
+				update claim_drain set
+					erred = true,
+					errcode=$1,
+					status=$3
+				where id = $2`, errCode, job.ID, status); err != nil {
 				pg.RollbackTx(tx)
 			}
 			_ = tx.Commit()
@@ -1195,7 +1257,13 @@ limit 1`
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`update claim_drain set transaction_id = $1, completed = true, completed_at = now() where id = $2`, txn.ID, job.ID)
+	_, err = tx.Exec(`
+		update claim_drain set
+			transaction_id = $1,
+			completed = true,
+			completed_at = now(),
+			status = 'complete'
+		where id = $2`, txn.ID, job.ID)
 	if err != nil {
 		return attempted, err
 	}
@@ -1331,7 +1399,7 @@ where
 	}
 
 	if depositDestination == "" {
-		return attempted, errors.New("Wallet is not verified")
+		return attempted, errors.New("wallet is not verified")
 	}
 
 	depositDestinationUUID, err := uuid.FromString(depositDestination)
@@ -1373,7 +1441,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
+		return errors.New("no rows updated")
 	}
 
 	return nil

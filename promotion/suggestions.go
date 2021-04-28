@@ -350,6 +350,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 
 	err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 	if err != nil {
+		// error from cbClient should be errorutils.Codified as data
 		return err
 	}
 
@@ -360,7 +361,11 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		},
 	)
 	if err != nil {
-		return err
+		// error from WriteMessages should be errorutils.Codified as data
+		return errorutils.New(err, "kafka write error", errorutils.Codified{
+			ErrCode: "kafka_write",
+			Retry:   true,
+		})
 	}
 
 	// Delete this section once the issue is completed
@@ -369,27 +374,44 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	newInterface, _, err := service.codecs["suggestion"].NativeFromBinary(suggestion)
 	eventMap := newInterface.(map[string]interface{})
 	if err != nil {
-		return err
+		// error should be errorutils.Codified as data
+		return errorutils.New(err, "kafka codec issue", errorutils.Codified{
+			ErrCode: "kafka_codec",
+			Retry:   true,
+		})
 	}
 
 	if eventMap["orderId"] != nil && eventMap["orderId"] != "" {
 		orderID, err := uuid.FromString(eventMap["orderId"].(string))
 		if err != nil {
-			return err
+			// error should be errorutils.Codified as data
+			return errorutils.New(err, "bad order id", errorutils.Codified{
+				ErrCode: "bad_order_id",
+				Retry:   false,
+			})
 		}
 		amount, err := decimal.NewFromString(eventMap["totalAmount"].(string))
 		if err != nil {
-			return err
+			return errorutils.New(err, "bad total amount value", errorutils.Codified{
+				ErrCode: "bad_order_amount",
+				Retry:   false,
+			})
 		}
 
 		_, err = service.Datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
 		if err != nil {
-			return fmt.Errorf("Error recording order transaction : %w", err)
+			return errorutils.New(err, "error recording order transaction: ", errorutils.Codified{
+				ErrCode: "fail_order_create",
+				Retry:   false,
+			})
 		}
 
 		err = service.UpdateOrderStatus(orderID)
 		if err != nil {
-			return err
+			return errorutils.New(err, "failed to update order status", errorutils.Codified{
+				ErrCode: "fail_order_status",
+				Retry:   false,
+			})
 		}
 	}
 

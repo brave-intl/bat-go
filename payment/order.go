@@ -19,7 +19,7 @@ type Order struct {
 	Currency   string               `json:"currency" db:"currency"`
 	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
 	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID string               `json:"-" db:"merchant_id"`
+	MerchantID string               `json:"merchantId" db:"merchant_id"`
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
@@ -27,17 +27,18 @@ type Order struct {
 
 // OrderItem includes information about a particular order item
 type OrderItem struct {
-	ID          uuid.UUID            `json:"id" db:"id"`
-	OrderID     uuid.UUID            `json:"orderId" db:"order_id"`
-	SKU         string               `json:"sku" db:"sku"`
-	CreatedAt   *time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt   *time.Time           `json:"updatedAt" db:"updated_at"`
-	Currency    string               `json:"currency" db:"currency"`
-	Quantity    int                  `json:"quantity" db:"quantity"`
-	Price       decimal.Decimal      `json:"price" db:"price"`
-	Subtotal    decimal.Decimal      `json:"subtotal" db:"subtotal"`
-	Location    datastore.NullString `json:"location" db:"location"`
-	Description datastore.NullString `json:"description" db:"description"`
+	ID             uuid.UUID            `json:"id" db:"id"`
+	OrderID        uuid.UUID            `json:"orderId" db:"order_id"`
+	SKU            string               `json:"sku" db:"sku"`
+	CreatedAt      *time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt      *time.Time           `json:"updatedAt" db:"updated_at"`
+	Currency       string               `json:"currency" db:"currency"`
+	Quantity       int                  `json:"quantity" db:"quantity"`
+	Price          decimal.Decimal      `json:"price" db:"price"`
+	Subtotal       decimal.Decimal      `json:"subtotal" db:"subtotal"`
+	Location       datastore.NullString `json:"location" db:"location"`
+	Description    datastore.NullString `json:"description" db:"description"`
+	CredentialType string               `json:"credentialType" db:"credential_type"`
 }
 
 // IsValidSKU checks to see if the token provided is one that we've previously created
@@ -69,6 +70,13 @@ func IsValidSKU(sku string) bool {
 			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
 			// Staging - Free Trial
 			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
+			return true
+		}
+	}
+
+	whitelistedSKUs := strings.Split(os.Getenv("SKUS_WHITELIST"), ",")
+	for _, whitelistedSKU := range whitelistedSKUs {
+		if sku == whitelistedSKU {
 			return true
 		}
 	}
@@ -123,6 +131,8 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			}
 		case "currency":
 			orderItem.Currency = value
+		case "credential_type":
+			orderItem.CredentialType = value
 		}
 
 	}

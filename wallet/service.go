@@ -85,7 +85,7 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	}
 	anonCard, ok := providerWallet.(*uphold.Wallet)
 	if !ok {
-		return nil, errors.New("Only uphold wallets are supported")
+		return nil, errors.New("only uphold wallets are supported")
 	}
 
 	// FIXME needs to require the idempotency key
@@ -96,6 +96,33 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 
 	// Submit and confirm since we are requiring the idempotency key
 	return anonCard.SubmitTransaction(transaction, confirm)
+}
+
+// IncreaseLinkingLimit - increase this wallet's linking limit
+func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
+	// convert to provider id
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, custodianID)
+
+	if err := service.Datastore.IncreaseLinkingLimit(ctx, providerLinkingID); err != nil {
+		return fmt.Errorf("unable to increase linking limit: %w", err)
+	}
+	return nil
+}
+
+// GetLinkingInfo - Get data about the linking info
+func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, custodianID string) (LinkingInfo, error) {
+	// compute the provider linking id based on custodian id if there is one
+
+	if custodianID != "" {
+		// generate a provider linking id
+		providerLinkingID = uuid.NewV5(WalletClaimNamespace, custodianID).String()
+	}
+
+	info, err := service.Datastore.GetLinkingLimitInfo(ctx, providerLinkingID)
+	if err != nil {
+		return info, fmt.Errorf("unable to increase linking limit: %w", err)
+	}
+	return info, nil
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
@@ -268,41 +295,49 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
 
-	// if feature is enabled, setup the routes
-	if viper.GetBool("wallets-feature-flag") {
-		// setup our wallet routes
-		r.Route("/v3/wallet", func(r chi.Router) {
-			// rate limited to 2 per minute...
-			// create wallet routes for our wallet providers
-			r.Post("/uphold", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
-				"CreateUpholdWallet", CreateUpholdWalletV3)).ServeHTTP)
-			r.Post("/brave", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
-				"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
+	// setup our wallet routes
+	r.Route("/v3/wallet", func(r chi.Router) {
+		// rate limited to 2 per minute...
+		// create wallet routes for our wallet providers
+		r.Post("/uphold", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
+			"CreateUpholdWallet", CreateUpholdWalletV3)).ServeHTTP)
+		r.Post("/brave", middleware.RateLimiter(ctx, 2)(middleware.InstrumentHandlerFunc(
+			"CreateBraveWallet", CreateBraveWalletV3)).ServeHTTP)
 
-			// if wallets are being migrated we do not want to over claim, we might go over the limit
-			if viper.GetBool("enable-link-drain-flag") {
-				// create wallet claim routes for our wallet providers
-				r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
-					"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
-				r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
-				r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
-				r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
-					"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
-			}
+		// if wallets are being migrated we do not want to over claim, we might go over the limit
+		if viper.GetBool("enable-link-drain-flag") {
+			// create wallet claim routes for our wallet providers
+			r.Post("/uphold/{paymentID}/claim", middleware.InstrumentHandlerFunc(
+				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+			r.Post("/bitflyer/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
+			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
+			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
+		}
+		// support only APIs to assist in linking limit issues
+		/*
+			TODO: currently commented out due to concerns about how to enable/disable particular
+			people from accessing this endpoint.
+			r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
+				middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
+		*/
 
-			// get wallet routes
-			r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
-				"GetWallet", GetWalletV3))
-			r.Get("/recover/{publicKey}", middleware.InstrumentHandlerFunc(
-				"RecoverWallet", RecoverWalletV3))
+		// linking info api is okay to expose publically
+		r.Get("/linking-info",
+			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
 
-			// get wallet balance routes
-			r.Get("/uphold/{paymentID}", middleware.InstrumentHandlerFunc(
-				"GetUpholdWalletBalance", GetUpholdWalletBalanceV3))
-		})
-	}
+		// get wallet routes
+		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
+			"GetWallet", GetWalletV3))
+		r.Get("/recover/{publicKey}", middleware.InstrumentHandlerFunc(
+			"RecoverWallet", RecoverWalletV3))
+
+		// get wallet balance routes
+		r.Get("/uphold/{paymentID}", middleware.InstrumentHandlerFunc(
+			"GetUpholdWalletBalance", GetUpholdWalletBalanceV3))
+	})
 	return r, ctx, s
 }
 
@@ -342,6 +377,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	}
+
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError

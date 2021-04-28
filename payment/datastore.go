@@ -50,6 +50,8 @@ type Datastore interface {
 	InsertOrderCreds(creds *OrderCreds) error
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
+	// DeleteOrderCreds
+	DeleteOrderCreds(orderID uuid.UUID) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
 	// RunNextOrderJob
@@ -85,8 +87,8 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "payment_datastore",
@@ -177,9 +179,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		orderItems[i].OrderID = order.ID
 
 		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, (quantity * price) as subtotal
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
+			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
+			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
 		`)
 		err = nstmt.Get(&orderItems[i], orderItems[i])
 
@@ -212,7 +214,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
@@ -336,7 +338,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
+		return errors.New("no rows updated")
 	}
 
 	return nil
@@ -394,7 +396,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	}
 
 	if len(issuers) != 1 {
-		return nil, errors.New("Unexpected number of issuers returned")
+		return nil, errors.New("unexpected number of issuers returned")
 	}
 
 	return &issuers[0], nil
@@ -462,6 +464,22 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 	}
 
 	return nil, nil
+}
+
+// DeleteOrderCreds deletes the order credentials for a OrderID
+func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID) error {
+
+	query := `
+		delete
+		from order_creds
+		where order_id = $1`
+
+	_, err := pg.RawDB().Exec(query, orderID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID

@@ -816,3 +816,17 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
 }
+
+func getClaimDrainEntry(pg *Postgres) *DrainJob {
+	var dj = new(DrainJob)
+	statement := `select * from claim_drain limit 1`
+	_ = pg.Get(dj, statement)
+	return dj
+}
+
+func getSuggestionDrainEntry(pg *Postgres) *SuggestionJob {
+	var sj = new(SuggestionJob)
+	statement := `select * from suggestion_drain limit 1`
+	_ = pg.Get(sj, statement)
+	return sj
+}

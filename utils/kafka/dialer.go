@@ -69,12 +69,13 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 
 	block, rest := pem.Decode(encryptedKeyPEM)
 	if len(rest) > 0 {
-		return nil, nil, errors.New("Extra data in KAFKA_SSL_KEY")
+		return nil, nil, errors.New("extra data in KAFKA_SSL_KEY")
 	}
 
 	keyPEM := pem.EncodeToMemory(block)
 	if len(keyPassword) != 0 {
-		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword))
+		// TODO: move away from DecryptPEM in 1.16
+		keyDER, err := x509.DecryptPEMBlock(block, []byte(keyPassword)) //nolint
 		if err != nil {
 			return nil, nil, errorutils.Wrap(err, "decrypt KAFKA_SSL_KEY failed")
 		}
@@ -106,7 +107,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 	if len(caPEM) > 0 {
 		caCertPool := x509.NewCertPool()
 		if ok := caCertPool.AppendCertsFromPEM([]byte(caPEM)); !ok {
-			return nil, nil, errors.New("Could not add custom CA from KAFKA_SSL_CA_LOCATION")
+			return nil, nil, errors.New("could not add custom CA from KAFKA_SSL_CA_LOCATION")
 		}
 		config.RootCAs = caCertPool
 	}
