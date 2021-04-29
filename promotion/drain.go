@@ -32,6 +32,7 @@ import (
 
 var (
 	errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+	errGeminiMisconfigured      = errors.New("gemini is not configured")
 	errReputationServiceFailure = errors.New("failed to call reputation service")
 	errWalletNotReputable       = errors.New("wallet is not reputable")
 )
@@ -389,6 +390,12 @@ func redeemAndTransferGeminiFunds(
 	wallet *walletutils.Info,
 	total decimal.Decimal,
 ) (*walletutils.TransactionInfo, error) {
+
+	// in the event that gemini configs or service do not exist
+	// error on redeem and transfer
+	if service.geminiConf == nil || service.geminiClient == nil {
+		return errGeminiMisconfigured
+	}
 
 	ns, err := uuid.FromString(wallet.UserDepositDestination)
 	if err != nil {
