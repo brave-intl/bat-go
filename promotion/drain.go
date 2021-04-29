@@ -425,7 +425,7 @@ func redeemAndTransferGeminiFunds(
 		return nil, errMissingEnvGeminiClientID
 	}
 	APIKey := os.Getenv("GEMINI_CLIENT_KEY")
-	if clientID == "" {
+	if APIKey == "" {
 		return nil, errMissingEnvGeminiClientKey
 	}
 	secret := os.Getenv("GEMINI_CLIENT_SECRET")
