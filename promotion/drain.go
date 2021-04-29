@@ -394,7 +394,7 @@ func redeemAndTransferGeminiFunds(
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
 	if service.geminiConf == nil || service.geminiClient == nil {
-		return errGeminiMisconfigured
+		return nil, errGeminiMisconfigured
 	}
 
 	ns, err := uuid.FromString(wallet.UserDepositDestination)
