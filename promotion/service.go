@@ -86,6 +86,7 @@ type Service struct {
 	reputationClient        reputation.Client
 	bfClient                bitflyer.Client
 	geminiClient            gemini.Client
+	geminiConf              *gemini.Conf
 	codecs                  map[string]*goavro.Codec
 	kafkaWriter             *kafka.Writer
 	kafkaDialer             *kafka.Dialer
@@ -217,8 +218,17 @@ func InitService(
 		}
 	}
 
-	var geminiClient gemini.Client
+	var (
+		geminiClient gemini.Client
+		geminiConf   *gemini.Conf
+	)
 	if os.Getenv("GEMINI_ENABLED") == "true" {
+		geminiConf = &gemini.Conf{
+			ClientID: os.Getenv("GEMINI_CLIENT_ID"),
+			APIKey:   os.Getenv("GEMINI_CLIENT_KEY"),
+			Secret:   os.Getenv("GEMINI_CLIENT_SECRET"),
+		}
+
 		gc, err := gemini.New()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gemini client: %w", err)
@@ -238,6 +248,7 @@ func InitService(
 		cbClient:                cbClient,
 		bfClient:                bfClient,
 		geminiClient:            geminiClient,
+		geminiConf:              geminiConf,
 		reputationClient:        reputationClient,
 		wallet:                  walletService,
 		pauseSuggestionsUntilMu: sync.RWMutex{},

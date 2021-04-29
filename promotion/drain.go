@@ -31,12 +31,10 @@ import (
 )
 
 var (
-	errMissingTransferPromotion     = errors.New("missing configuration: BraveTransferPromotionID")
-	errMissingEnvGeminiClientID     = errors.New("missing env for gemini redemption `GEMINI_CLIENT_ID`")
-	errMissingEnvGeminiClientKey    = errors.New("missing env for gemini redemption `GEMINI_CLIENT_KEY`")
-	errMissingEnvGeminiClientSecret = errors.New("missing env for gemini redemption `GEMINI_CLIENT_SECRET`")
-	errReputationServiceFailure     = errors.New("failed to call reputation service")
-	errWalletNotReputable           = errors.New("wallet is not reputable")
+	errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+	errGeminiMisconfigured      = errors.New("gemini is not configured")
+	errReputationServiceFailure = errors.New("failed to call reputation service")
+	errWalletNotReputable       = errors.New("wallet is not reputable")
 )
 
 // Drain ad suggestions into verified wallet
@@ -393,7 +391,16 @@ func redeemAndTransferGeminiFunds(
 	total decimal.Decimal,
 ) (*walletutils.TransactionInfo, error) {
 
-	ns := uuid.Must(uuid.FromString(wallet.UserDepositDestination))
+	// in the event that gemini configs or service do not exist
+	// error on redeem and transfer
+	if service.geminiConf == nil || service.geminiClient == nil {
+		return nil, errGeminiMisconfigured
+	}
+
+	ns, err := uuid.FromString(wallet.UserDepositDestination)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user deposit destination: %w", err)
+	}
 	txType := "drain"
 	channel := "wallet"
 	transferID := uuid.NewV5(ns, txType+channel).String()
@@ -420,26 +427,14 @@ func redeemAndTransferGeminiFunds(
 			Account:     &account,
 		},
 	}
-	clientID := os.Getenv("GEMINI_CLIENT_ID")
-	if clientID == "" {
-		return nil, errMissingEnvGeminiClientID
-	}
-	APIKey := os.Getenv("GEMINI_CLIENT_KEY")
-	if APIKey == "" {
-		return nil, errMissingEnvGeminiClientKey
-	}
-	secret := os.Getenv("GEMINI_CLIENT_SECRET")
-	if secret == "" {
-		return nil, errMissingEnvGeminiClientSecret
-	}
 
 	payload := gemini.NewBulkPayoutPayload(
 		&account,
-		clientID,
+		service.geminiConf.ClientID,
 		&payouts,
 	)
 	// upload
-	signer := cryptography.NewHMACHasher([]byte(secret))
+	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
 	serializedPayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
@@ -447,14 +442,15 @@ func redeemAndTransferGeminiFunds(
 	b64Payload := base64.StdEncoding.EncodeToString([]byte(serializedPayload))
 	_, err = service.geminiClient.UploadBulkPayout(
 		ctx,
-		APIKey,
+		service.geminiConf.APIKey,
 		signer,
 		b64Payload,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
 	}
-	// check if this
+
+	// check if we have a drainChannel defined on our service
 	if service.drainChannel != nil {
 		service.drainChannel <- tx
 	}
