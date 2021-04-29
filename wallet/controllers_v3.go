@@ -245,7 +245,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		}
 
 		// validate payment id matches what was in the http signature
-		signatureID, err := middleware.GetKeyID(r.Context())
+		signatureID, err := middleware.GetKeyID(ctx)
 		if err != nil {
 			return handlers.ValidationError(
 				"error validating paymentID url parameter",

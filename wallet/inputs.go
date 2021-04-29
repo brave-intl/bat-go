@@ -253,12 +253,8 @@ type GeminiLinkingRequest struct {
 
 // Validate - implementation of validatable interface
 func (glr *GeminiLinkingRequest) Validate(ctx context.Context) error {
-	var merr = new(errorutils.MultiError)
 	if glr.VerificationToken == "" {
-		merr.Append(errors.New("failed to validate 'linking_info': must not be empty"))
-	}
-	if merr.Count() > 0 {
-		return merr
+		return errors.New("failed to validate 'linking_info': must not be empty")
 	}
 	return nil
 }

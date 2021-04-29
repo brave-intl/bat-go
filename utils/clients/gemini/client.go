@@ -180,6 +180,13 @@ type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 }
 
+// Conf some common gemini configuration values
+type Conf struct {
+	ClientID string
+	APIKey   string
+	Secret   string
+}
+
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
 	serverEnvKey := "GEMINI_SERVER"
@@ -327,7 +334,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken stri
 	if err != nil {
 		return "", err
 	}
-	return res.ID, err
+	return res.ID, nil
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key
