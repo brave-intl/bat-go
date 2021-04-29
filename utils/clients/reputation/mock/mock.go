@@ -7,7 +7,7 @@ package mock_reputation
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	go_uuid "github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	reflect "reflect"
 )
 
@@ -35,7 +35,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // IsWalletReputable mocks base method
-func (m *MockClient) IsWalletReputable(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
+func (m *MockClient) IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWalletReputable", ctx, id, platform)
 	ret0, _ := ret[0].(bool)
@@ -50,7 +50,7 @@ func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{
 }
 
 // IsWalletAdsReputable mocks base method
-func (m *MockClient) IsWalletAdsReputable(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
+func (m *MockClient) IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWalletAdsReputable", ctx, id, platform)
 	ret0, _ := ret[0].(bool)
@@ -65,7 +65,7 @@ func (mr *MockClientMockRecorder) IsWalletAdsReputable(ctx, id, platform interfa
 }
 
 // IsWalletOnPlatform mocks base method
-func (m *MockClient) IsWalletOnPlatform(ctx context.Context, id go_uuid.UUID, platform string) (bool, error) {
+func (m *MockClient) IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsWalletOnPlatform", ctx, id, platform)
 	ret0, _ := ret[0].(bool)
