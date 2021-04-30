@@ -112,7 +112,7 @@ func (pg *Postgres) Migrate() error {
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
-	if v > currentMigrationVersion {
+	if v > currentMigrationVersion || dirty {
 		// dont attempt to migrate if our number is less than what is on the db
 		// or if the migration is in dirty state
 		subLogger.Error().Msg("migration not attempted")
