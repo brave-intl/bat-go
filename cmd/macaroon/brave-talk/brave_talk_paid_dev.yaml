@@ -3,10 +3,10 @@ tokens:
     version: 1
     location: "together.bsg.brave.software"
     first_party_caveats:
-      - sku: "brave-together-paid"
+      - sku: "brave-talk-paid"
       - price: 5
       - currency: "USD"
       - description: "One month paid subscription for Brave Talk"
       - credential_type: "time-limited"
       - credential_valid_duration: "P1M"
-      - payment_methods: ["stripe"]
+      - payment_methods: "stripe"

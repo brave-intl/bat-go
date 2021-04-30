@@ -42,6 +42,7 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
+	PaymentMethods string               `json:"paymentMethods" db:"payment_methods"`
 }
 
 const (
@@ -59,7 +60,11 @@ const (
 	DEV_BRAVE_TOGETHER_FREE     = "MDAyOWxvY2F0aW9uIHRvZ2V0aGVyLmJzZy5icmF2ZS5zb2Z0d2FyZQowMDMwaWRlbnRpZmllciBicmF2ZS10b2dldGhlci1mcmVlIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS10b2dldGhlci1mcmVlCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDNjY2lkIGRlc2NyaXB0aW9uPU9uZSBtb250aCBmcmVlIHRyaWFsIGZvciBCcmF2ZSBUb2dldGhlcgowMDI1Y2lkIGNyZWRlbnRpYWxfdHlwZT10aW1lLWxpbWl0ZWQKMDAyNmNpZCBjcmVkZW50aWFsX3ZhbGlkX2R1cmF0aW9uPVAxTQowMDJmc2lnbmF0dXJlIGebBXoPnj06tvlJkPEDLp9nfWo6Wfc1Txj6jTlgxjrQCg=="
 	DEV_BRAVE_TOGETHER_PAID     = "MDAyOWxvY2F0aW9uIHRvZ2V0aGVyLmJzZy5icmF2ZS5zb2Z0d2FyZQowMDMwaWRlbnRpZmllciBicmF2ZS10b2dldGhlci1wYWlkIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS10b2dldGhlci1wYWlkCjAwMTBjaWQgcHJpY2U9NQowMDE1Y2lkIGN1cnJlbmN5PVVTRAowMDQzY2lkIGRlc2NyaXB0aW9uPU9uZSBtb250aCBwYWlkIHN1YnNjcmlwdGlvbiBmb3IgQnJhdmUgVG9nZXRoZXIKMDAyNWNpZCBjcmVkZW50aWFsX3R5cGU9dGltZS1saW1pdGVkCjAwMjZjaWQgY3JlZGVudGlhbF92YWxpZF9kdXJhdGlvbj1QMU0KMDAyZnNpZ25hdHVyZSDKLJ7NuuzP3KdmTdVnn0dI3JmIfNblQKmY+WBJOqnQJAo="
 	DEV_SEARCH_CLOSED_BETA      = "AgEVc2VhcmNoLmJyYXZlLnNvZnR3YXJlAh9zZWFyY2ggY2xvc2VkIGJldGEgcHJvZ3JhbSBkZW1vAAIWc2t1PXNlYXJjaC1iZXRhLWFjY2VzcwACB3ByaWNlPTAAAgxjdXJyZW5jeT1CQVQAAi1kZXNjcmlwdGlvbj1TZWFyY2ggY2xvc2VkIGJldGEgcHJvZ3JhbSBhY2Nlc3MAAhpjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQAABiB3uXfAAkNSRQd24jSauRny3VM0BYZ8yOclPTEgPa0xrA=="
+	DEV_BRAVE_TALK_FREE         = "MDAyOWxvY2F0aW9uIHRvZ2V0aGVyLmJzZy5icmF2ZS5zb2Z0d2FyZQowMDJjaWRlbnRpZmllciBicmF2ZS10YWxrLWZyZWUgc2t1IHRva2VuIHYxCjAwMWNjaWQgc2t1PWJyYXZlLXRhbGstZnJlZQowMDEwY2lkIHByaWNlPTAKMDAxNWNpZCBjdXJyZW5jeT1CQVQKMDAzOGNpZCBkZXNjcmlwdGlvbj1PbmUgbW9udGggZnJlZSB0cmlhbCBmb3IgQnJhdmUgVGFsawowMDI1Y2lkIGNyZWRlbnRpYWxfdHlwZT10aW1lLWxpbWl0ZWQKMDAyNmNpZCBjcmVkZW50aWFsX3ZhbGlkX2R1cmF0aW9uPVAxTQowMDJmc2lnbmF0dXJlIDweRDu/2CXxxA8811TLwxIyaB7Pfp92mmrWFn40g+ZVCg=="
+	DEV_BRAVE_TALK_PAID         = "MDAyOWxvY2F0aW9uIHRvZ2V0aGVyLmJzZy5icmF2ZS5zb2Z0d2FyZQowMDJjaWRlbnRpZmllciBicmF2ZS10YWxrLXBhaWQgc2t1IHRva2VuIHYxCjAwMWNjaWQgc2t1PWJyYXZlLXRhbGstcGFpZAowMDEwY2lkIHByaWNlPTUKMDAxNWNpZCBjdXJyZW5jeT1VU0QKMDAzZmNpZCBkZXNjcmlwdGlvbj1PbmUgbW9udGggcGFpZCBzdWJzY3JpcHRpb24gZm9yIEJyYXZlIFRhbGsKMDAyNWNpZCBjcmVkZW50aWFsX3R5cGU9dGltZS1saW1pdGVkCjAwMjZjaWQgY3JlZGVudGlhbF92YWxpZF9kdXJhdGlvbj1QMU0KMDAxZmNpZCBwYXltZW50X21ldGhvZHM9c3RyaXBlCjAwMmZzaWduYXR1cmUg7/duqYsSrI0XdNHuN6DGEcJV5k0WQZYt1GZuppQSjOgK"
 )
+
+const STRIPE_PAYMENT_METHOD = "stripe"
 
 // IsValidSKU checks to see if the token provided is one that we've previously created
 func IsValidSKU(sku string) bool {
@@ -85,7 +90,9 @@ func IsValidSKU(sku string) bool {
 			DEV_ANON_CARD_VOTE,
 			DEV_BRAVE_TOGETHER_FREE,
 			DEV_BRAVE_TOGETHER_PAID,
-			DEV_SEARCH_CLOSED_BETA:
+			DEV_SEARCH_CLOSED_BETA,
+			DEV_BRAVE_TALK_FREE,
+			DEV_BRAVE_TALK_PAID:
 			return true
 		}
 	}
@@ -149,6 +156,9 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			orderItem.Currency = value
 		case "credential_type":
 			orderItem.CredentialType = value
+		case "payment_methods":
+			// CSV string of payment methods
+			orderItem.PaymentMethods = value
 		}
 
 	}
@@ -168,10 +178,10 @@ func (order Order) IsPaid() bool {
 }
 
 // IsStripePayable returns true if every item is payable by Stripe
-// FIXME: Use accepted payment types from SKU
 func (order Order) IsStripePayable() bool {
 	for _, item := range order.Items {
-		if item.SKU != "brave-together-paid" {
+
+		if !strings.Contains(item.PaymentMethods, STRIPE_PAYMENT_METHOD) {
 			return false
 		}
 	}
@@ -240,7 +250,7 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 	for index, item := range order.Items {
 
 		var stripeProduct string
-		if item.SKU == "brave-together-paid" {
+		if item.SKU == "brave-talk-paid" {
 			stripeProduct = "price_1Hpg8nHof20bphG6X4eQ6Dit"
 		}
 

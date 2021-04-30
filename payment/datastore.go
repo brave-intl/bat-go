@@ -193,12 +193,11 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	for i := 0; i < len(orderItems); i++ {
 		orderItems[i].OrderID = order.ID
 
-		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
-		`)
-		err = nstmt.Get(&orderItems[i], orderItems[i])
+		err = tx.Get(&orderItems[i], `
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods
+		`, orderItems[i].OrderID, orderItems[i].SKU, orderItems[i].Quantity, orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal, orderItems[i].Location, orderItems[i].Description, orderItems[i].CredentialType, orderItems[i].PaymentMethods)
 
 		if err != nil {
 			return nil, err
@@ -229,7 +228,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type, payment_methods
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 

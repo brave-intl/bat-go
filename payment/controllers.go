@@ -247,7 +247,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			}
 
 			orderWithStripeCheckoutSessionID := OrderWithStripeCheckoutSessionID{
-				Order: order,
+				Order:                   order,
 				StripeCheckoutSessionID: stripeCheckoutSessionID,
 			}
 
@@ -471,7 +471,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 		expiresAt := issuedAt.AddDate(0, 0, 35)
 		if order.IsPaid() {
 			for _, item := range order.Items {
-				if item.SKU == "brave-together-free" || item.SKU == "brave-together-paid" {
+				if item.SKU == "brave-talk-free" || item.SKU == "brave-talk-paid" {
 					result, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
 					if err != nil {
 						return handlers.WrapError(err, "Error generating time-limited credential", http.StatusInternalServerError)
@@ -832,7 +832,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 			// FIXME Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
 			// replace current hardcoded check
-			if req.MerchantID != "brave.com" || !(req.SKU == "brave-together-free" || req.SKU == "brave-together-paid") {
+			if req.MerchantID != "brave.com" || !(req.SKU == "brave-talk-free" || req.SKU == "brave-talk-paid") {
 				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 			}
 
