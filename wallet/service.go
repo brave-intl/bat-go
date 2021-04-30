@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -30,9 +31,10 @@ var (
 
 // Service contains datastore connections
 type Service struct {
-	Datastore   Datastore
-	RoDatastore ReadOnlyDatastore
-	repClient   reputation.Client
+	Datastore    Datastore
+	RoDatastore  ReadOnlyDatastore
+	repClient    reputation.Client
+	geminiClient gemini.Client
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
@@ -85,7 +87,7 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	}
 	anonCard, ok := providerWallet.(*uphold.Wallet)
 	if !ok {
-		return nil, errors.New("Only uphold wallets are supported")
+		return nil, errors.New("only uphold wallets are supported")
 	}
 
 	// FIXME needs to require the idempotency key
@@ -139,6 +141,44 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutil
 	} else {
 		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
 		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "bitflyer")
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == ErrTooManyCardsLinked {
+				status = http.StatusConflict
+			}
+			return handlers.WrapError(err, "unable to link wallets", status)
+		}
+	}
+	return nil
+}
+
+// LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
+func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, verificationToken string) error {
+	// get gemini client from context
+	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
+	if !ok {
+		// no gemini client on context
+		return handlers.WrapError(
+			appctx.ErrNotInContext, "gemini client misconfigured", http.StatusInternalServerError)
+	}
+
+	// perform an Account Validation call to gemini to get the accountID
+	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken)
+	if err != nil {
+		return handlers.WrapError(
+			errors.New("invalid linking_info"), "unable to validate gemini account", http.StatusBadRequest)
+	}
+
+	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
+	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
+	if info.ProviderLinkingID != nil {
+		// check if the member matches the associated member
+		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	} else {
+		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+		err := service.Datastore.LinkWallet(ctx, info.ID, accountID, providerLinkingID, nil, "gemini")
 		if err != nil {
 			status := http.StatusInternalServerError
 			if err == ErrTooManyCardsLinked {
@@ -270,6 +310,13 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, s.repClient)
 
+	if os.Getenv("GEMINI_ENABLED") == "true" {
+		s.geminiClient, err = gemini.New()
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to create gemini client")
+		}
+	}
+
 	// setup our wallet routes
 	r.Route("/v3/wallet", func(r chi.Router) {
 		// rate limited to 2 per minute...
@@ -288,6 +335,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
 			r.Post("/brave/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
+			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
 		}
 		// support only APIs to assist in linking limit issues
 		/*

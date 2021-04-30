@@ -13,7 +13,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -76,8 +75,8 @@ type Postgres struct {
 }
 
 // NewWritablePostgres creates a new Postgres Datastore
-func NewWritablePostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewWritablePostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "wallet_datastore",
@@ -87,8 +86,8 @@ func NewWritablePostgres(databaseURL string, performMigration bool, dbStatsPrefi
 }
 
 // NewReadOnlyPostgres creates a new Postgres RO Datastore
-func NewReadOnlyPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewReadOnlyPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (ReadOnlyDatastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &ReadOnlyDatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "wallet_ro_datastore",
@@ -100,7 +99,7 @@ func NewReadOnlyPostgres(databaseURL string, performMigration bool, dbStatsPrefi
 // NewPostgres creates postgres connections
 func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	var walletRODB ReadOnlyDatastore
-	walletDB, err := NewWritablePostgres("", true)
+	walletDB, err := NewWritablePostgres("", true, "wallet")
 	if err != nil {
 		sentry.CaptureException(err)
 		log.Panic().Err(err).Msg("Must be able to init postgres connection to start")
@@ -108,7 +107,7 @@ func NewPostgres() (Datastore, ReadOnlyDatastore, error) {
 	}
 	roDB := os.Getenv("RO_DATABASE_URL")
 	if len(roDB) > 0 {
-		walletRODB, err = NewReadOnlyPostgres(roDB, false)
+		walletRODB, err = NewReadOnlyPostgres(roDB, false, "wallet")
 		if err != nil {
 			sentry.CaptureException(err)
 			log.Error().Err(err).Msg("Could not start reader postgres connection")
@@ -124,7 +123,7 @@ var (
 )
 
 // UpsertWallet upserts the given wallet
-func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *wallet.Info) error {
+func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *walletutils.Info) error {
 	statement := `
 	insert into wallets
 		(
@@ -151,7 +150,7 @@ func (pg *Postgres) UpsertWallet(ctx context.Context, wallet *wallet.Info) error
 }
 
 // GetWallet by ID
-func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*wallet.Info, error) {
+func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error) {
 	statement := `
 	select
 		id, provider, provider_id, public_key, provider_linking_id, anonymous_address,
@@ -160,7 +159,7 @@ func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*wallet.Info, 
 		wallets
 	where
 		id = $1`
-	wallets := []wallet.Info{}
+	wallets := []walletutils.Info{}
 	err := pg.RawDB().SelectContext(ctx, &wallets, statement, ID)
 	if err != nil {
 		return nil, err

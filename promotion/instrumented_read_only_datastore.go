@@ -196,7 +196,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) 
 }
 
 // Migrate implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) Migrate() (err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) Migrate(p1 ...uint) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -206,7 +206,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) Migrate() (err error) {
 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "Migrate", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.Migrate()
+	return _d.base.Migrate(p1...)
 }
 
 // NewMigrate implements ReadOnlyDatastore

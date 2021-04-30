@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/google/go-querystring/query"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -161,6 +163,8 @@ func (pr PayoutResult) GenerateLog() string {
 
 // Client abstracts over the underlying client
 type Client interface {
+	// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
+	ValidateAccount(ctx context.Context, verificationToken string) (string, error)
 	// FetchAccountList requests account information to scope future requests
 	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
@@ -174,6 +178,13 @@ type Client interface {
 // HTTPClient wraps http.Client for interacting with the cbr server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
+}
+
+// Conf some common gemini configuration values
+type Conf struct {
+	ClientID string
+	APIKey   string
+	Secret   string
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
@@ -287,6 +298,43 @@ func (c *HTTPClient) UploadBulkPayout(
 		return nil, err
 	}
 	return &body, err
+}
+
+// ValidateAccountReq - request structure for inputs to validate account client call
+type ValidateAccountReq struct {
+	Token string `url:"token"`
+}
+
+// ValidateAccountRes - request structure for inputs to validate account client call
+type ValidateAccountRes struct {
+	ID string `json:"id"`
+}
+
+// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
+func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken string) (string, error) {
+	// create the query string parameters
+	var (
+		va, _ = query.Values(ValidateAccountReq{
+			Token: verificationToken,
+		})
+		u = &url.URL{
+			Path:     "/v1/account/validate",
+			RawQuery: va.Encode(),
+		}
+		res = new(ValidateAccountRes)
+	)
+
+	// create the request
+	req, err := c.client.NewRequest(ctx, "POST", u.String(), nil)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = c.client.Do(ctx, req, res)
+	if err != nil {
+		return "", err
+	}
+	return res.ID, nil
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key

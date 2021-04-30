@@ -2,6 +2,8 @@ package promotion
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,14 +12,16 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	w "github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -28,6 +32,7 @@ import (
 
 var (
 	errMissingTransferPromotion = errors.New("missing configuration: BraveTransferPromotionID")
+	errGeminiMisconfigured      = errors.New("gemini is not configured")
 	errReputationServiceFailure = errors.New("failed to call reputation service")
 	errWalletNotReputable       = errors.New("wallet is not reputable")
 )
@@ -43,7 +48,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
-		return nil, errors.New("Wallet is not verified")
+		return nil, errors.New("wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
@@ -101,7 +106,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
-			return nil, errors.New("Only ads suggestions can be drained")
+			return nil, errors.New("only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
@@ -116,7 +121,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
-			return nil, errors.New("Cannot claim more funds than were earned")
+			return nil, errors.New("cannot claim more funds than were earned")
 		}
 
 		// Skip already drained promotions for idempotency
@@ -278,7 +283,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
 		}
 
-		tx := new(w.TransactionInfo)
+		tx := new(walletutils.TransactionInfo)
 
 		tx.ID = transferID
 		tx.Destination = wallet.UserDepositDestination
@@ -339,6 +344,10 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		}
 
 		return tx, err
+	} else if *wallet.UserDepositAccountProvider == "gemini" {
+
+		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
+
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
 
@@ -366,13 +375,86 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				return nil, fmt.Errorf("failed to set append total funds: %w", err)
 			}
 		}
-		return new(w.TransactionInfo), nil
+		return new(walletutils.TransactionInfo), nil
 	}
 
 	logger.Error().Msg("RedeemAndTransferFunds: unknown deposit provider")
 	return nil, fmt.Errorf(
 		"failed to transfer funds: user_deposit_account_provider unknown: %s",
 		*wallet.UserDepositAccountProvider)
+}
+
+func redeemAndTransferGeminiFunds(
+	ctx context.Context,
+	service *Service,
+	wallet *walletutils.Info,
+	total decimal.Decimal,
+) (*walletutils.TransactionInfo, error) {
+
+	// in the event that gemini configs or service do not exist
+	// error on redeem and transfer
+	if service.geminiConf == nil || service.geminiClient == nil {
+		return nil, errGeminiMisconfigured
+	}
+
+	ns, err := uuid.FromString(wallet.UserDepositDestination)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user deposit destination: %w", err)
+	}
+	txType := "drain"
+	channel := "wallet"
+	transferID := uuid.NewV5(ns, txType+channel).String()
+
+	tx := new(walletutils.TransactionInfo)
+
+	tx.ID = transferID
+	tx.Destination = wallet.UserDepositDestination
+	tx.DestAmount = total
+
+	account := "primary" // the account we want to drain from
+	settlementTx := settlement.Transaction{
+		SettlementID: transferID,
+		Type:         txType,
+		Destination:  wallet.UserDepositDestination,
+		Channel:      channel,
+	}
+	payouts := []gemini.PayoutPayload{
+		{
+			TxRef:       gemini.GenerateTxRef(&settlementTx),
+			Amount:      total,
+			Currency:    "BAT",
+			Destination: wallet.UserDepositDestination,
+			Account:     &account,
+		},
+	}
+
+	payload := gemini.NewBulkPayoutPayload(
+		&account,
+		service.geminiConf.ClientID,
+		&payouts,
+	)
+	// upload
+	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
+	serializedPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize payload: %w", err)
+	}
+	b64Payload := base64.StdEncoding.EncodeToString([]byte(serializedPayload))
+	_, err = service.geminiClient.UploadBulkPayout(
+		ctx,
+		service.geminiConf.APIKey,
+		signer,
+		b64Payload,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	// check if we have a drainChannel defined on our service
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
+	}
+	return tx, err
 }
 
 // MintGrant create a new grant for the wallet specified with the total specified

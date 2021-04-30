@@ -246,10 +246,51 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 	return handlers.ValidationError("brave link wallet request validation errors", issues)
 }
 
+// GeminiLinkingRequest holds info needed to link gemini account
+type GeminiLinkingRequest struct {
+	VerificationToken string `json:"linking_info"`
+}
+
+// Validate - implementation of validatable interface
+func (glr *GeminiLinkingRequest) Validate(ctx context.Context) error {
+	if glr.VerificationToken == "" {
+		return errors.New("failed to validate 'linking_info': must not be empty")
+	}
+	return nil
+}
+
+// Decode - implementation of  decodable interface
+func (glr *GeminiLinkingRequest) Decode(ctx context.Context, v []byte) error {
+	if err := inputs.DecodeJSON(ctx, v, glr); err != nil {
+		return fmt.Errorf("failed to decode json: %w", err)
+	}
+	return nil
+}
+
+// HandleErrors - handle any errors from this request
+func (glr *GeminiLinkingRequest) HandleErrors(err error) *handlers.AppError {
+	issues := map[string]string{}
+	if errors.Is(err, ErrInvalidJSON) {
+		issues["invalidJSON"] = err.Error()
+	}
+
+	var merr *errorutils.MultiError
+	if errors.As(err, &merr) {
+		for _, e := range merr.Errs {
+			if strings.Contains(e.Error(), "failed decoding") {
+				issues["decoding"] = e.Error()
+			}
+			if strings.Contains(e.Error(), "failed validation") {
+				issues["validation"] = e.Error()
+			}
+		}
+	}
+	return handlers.ValidationError("gemini wallet linking request validation errors", issues)
+}
+
 // BitFlyerLinkingRequest - the structure for a brave provider wallet creation request
 type BitFlyerLinkingRequest struct {
 	LinkingInfo string `json:"linkingInfo"`
-
 	DepositID   string `json:"-"`
 	AccountHash string `json:"-"`
 }

@@ -87,8 +87,8 @@ type Postgres struct {
 }
 
 // NewPostgres creates a new Postgres Datastore
-func NewPostgres(databaseURL string, performMigration bool, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, dbStatsPrefix...)
+func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "payment_datastore",
@@ -338,7 +338,7 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
+		return errors.New("no rows updated")
 	}
 
 	return nil
@@ -396,7 +396,7 @@ func (pg *Postgres) InsertIssuer(issuer *Issuer) (*Issuer, error) {
 	}
 
 	if len(issuers) != 1 {
-		return nil, errors.New("Unexpected number of issuers returned")
+		return nil, errors.New("unexpected number of issuers returned")
 	}
 
 	return &issuers[0], nil

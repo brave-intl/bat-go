@@ -17,6 +17,7 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/middleware"
+	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -363,6 +364,96 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Post("/v3/wallet/bitflyer/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestLinkGeminiWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom    = uuid.NewV4()
+		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
+		idTo      = uuid.NewV4()
+		accountID = uuid.NewV4()
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		linkingInfo = "this is the fake jwt for linking_info"
+
+		// setup mock clients
+		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
+		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"POST",
+			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
+			bytes.NewBufferString(fmt.Sprintf(`
+				{
+					"linking_info": "%s"
+				}`, linkingInfo)),
+		)
+		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+
+		// calculate the provider id
+		providerLinkingID = uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())
+		rows              = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
+					AddRow(idFrom, "bitflyer", "", "12345", providerLinkingID, idTo)
+	)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
+	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+
+	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		accountID.String(),
+		nil,
+	)
+
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("^select (.+)").WithArgs(providerLinkingID).WillReturnRows(rows)
+
+	// txHasDestination
+	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
+	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
+
+	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, providerLinkingID, "bitflyer").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {

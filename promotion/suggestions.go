@@ -400,7 +400,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 
 		_, err = service.Datastore.CreateTransaction(orderID, eventMap["id"].(string), "completed", "BAT", "virtual-grant", amount)
 		if err != nil {
-			return errorutils.New(err, "Error recording order transaction: ", errorutils.Codified{
+			return errorutils.New(err, "error recording order transaction: ", errorutils.Codified{
 				ErrCode: "fail_order_create",
 				Retry:   false,
 			})
