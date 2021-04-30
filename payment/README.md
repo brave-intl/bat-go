@@ -1,3 +1,4 @@
+
 # Brave SKUs Service
 
 ### Getting Started
@@ -147,6 +148,43 @@ Upon `GET` request to ```/v1/orders/:orderId```, server will respond with:
 }
 ```
 
-Because this order is Stripe payable, we will receive a Stripe Checkout Session Id, 
+Because this order is Stripe payable, we will receive a Stripe Checkout Session Id, this identifier can be used to fulfill the order via a credit card. For example if we construct the following sample script: 
+
+```html
+<html>
+
+<head>
+    <title>Buy cool new product</title>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+
+<body>
+    <button id="checkout-button">Checkout</button>
+    <script type="text/javascript">
+        // Create an instance of the Stripe object with your publishable API key
+        var stripe = Stripe('pk_test_51HlmudHof20bphG64WGsYJhhJ3OsgZw5DyVx5mM7PdW4K7gLJS5KoMiA624HEJIWXImp0DEj7nKg2x8l7nGT6zhk00dtatBliN');
+        var checkoutButton = document.getElementById('checkout-button');
+        checkoutButton.addEventListener('click', function () {
+            // Create a new Checkout Session using the server-side endpoint you
+            // created in step 3.
+            return stripe.redirectToCheckout({ sessionId: 'cs_test_a1g0n8FWNT3ClB2p9shKlpchGTw7cDKQCOqLJ1dSBcRd9ZsLssrtDLbZgM' });
+        });
+    </script>
+</body>
+
+</html>
+```
+
+And host locally, we can redirect to a page similar to this: 
 
 <img width="1226" alt="Screen Shot 2021-04-11 at 9 18 10 PM" src="https://user-images.githubusercontent.com/4713771/114328725-6d8f8580-9b0b-11eb-8827-1cbb575381a8.png">
+
+A credit card can then be entered, and upon successful payment, the corresponding order will become paid. Once paid, credentials may be created and requested as in the free trial. 
+
+### Architecture 
+
+Documentation above refers to a general use of the payment service. In the context of Brave Talk, the order of various calls and the service making the call is outlined in the diagram below: 
+
+<img width="1065" alt="Screen Shot 2021-04-30 at 1 58 22 PM" src="https://user-images.githubusercontent.com/4713771/116735903-2afbf300-a9bd-11eb-97fc-a384cece6346.png">
+
+
