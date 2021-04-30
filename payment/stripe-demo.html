@@ -9,12 +9,12 @@
     <button id="checkout-button">Checkout</button>
     <script type="text/javascript">
         // Create an instance of the Stripe object with your publishable API key
-        var stripe = Stripe('<STRIPE_PUBLIC_API_KEY>');
+        var stripe = Stripe('pk_test_51HlmudHof20bphG64WGsYJhhJ3OsgZw5DyVx5mM7PdW4K7gLJS5KoMiA624HEJIWXImp0DEj7nKg2x8l7nGT6zhk00dtatBliN');
         var checkoutButton = document.getElementById('checkout-button');
         checkoutButton.addEventListener('click', function () {
             // Create a new Checkout Session using the server-side endpoint you
             // created in step 3.
-            return stripe.redirectToCheckout({ sessionId: '<CHECKOUT_SESSION_ID>' });
+            return stripe.redirectToCheckout({ sessionId: 'cs_test_a1Mu3aXxUr7HflwMqKZDPmlrcKeQUIeoGC8iZgcka34KfFe3aOv8wEFccs' });
         });
     </script>
 </body>
