@@ -83,7 +83,7 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 }
 
 // Claimable checks whether the promotion can be claimed
-func (promotion *Promotion) Claimable(legacyClaimed bool) bool {
+func (promotion *Promotion) Claimable(overrideAutoExpiry bool) bool {
 	// manually disallow claims
 	if !promotion.Active {
 		return false
@@ -92,8 +92,8 @@ func (promotion *Promotion) Claimable(legacyClaimed bool) bool {
 	if promotion.Expired() {
 		return false
 	}
-	// otherwise allow previously claimed grants to go through
-	if legacyClaimed {
+	// override auto expiry (in legacy claimed case as example)
+	if overrideAutoExpiry {
 		return true
 	}
 	// expire grants created 3 months ago

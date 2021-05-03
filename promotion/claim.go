@@ -100,6 +100,20 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
+	// check if we need to override the auto expiry of the promotion
+	overrideAutoExpiry := false
+	if claim != nil {
+		overrideAutoExpiry = claim.LegacyClaimed
+	}
+
+	// check if promotion is claimable
+	if !promotion.Claimable(overrideAutoExpiry) {
+		return nil, &handlers.AppError{
+			Message: "promotion is no longer active",
+			Code:    http.StatusGone,
+		}
+	}
+
 	if claim != nil {
 		// get the claim credentials to check if these blinded creds were used before
 		claimCreds, err := service.Datastore.GetClaimCreds(claim.ID)
@@ -117,13 +131,7 @@ func (service *Service) ClaimPromotionForWallet(
 		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
 			return nil, errClaimedDifferentBlindCreds
 		}
-	}
 
-	if !promotion.Claimable(claim.LegacyClaimed) {
-		return nil, &handlers.AppError{
-			Message: "promotion is no longer active",
-			Code:    http.StatusGone,
-		}
 	}
 
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
