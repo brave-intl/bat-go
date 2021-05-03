@@ -1256,12 +1256,13 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 			ChecksReputation: false,
 		},
 		{
-			Legacy:      true,
+			Legacy:      true, // if legacy is true this status should result in OK
 			Type:        "ugp",
 			PromoActive: true,
 			CreatedAt:   threeMonthsAgo,
 			ExpiresAt:   later,
-			ClaimStatus: http.StatusGone,
+			// should be okay, because if the claim is legacy we do not auto expire
+			ClaimStatus: http.StatusOK,
 			// these are irrelevant if claim is gone
 			ChecksReputation: false,
 		},
@@ -1334,6 +1335,7 @@ func (suite *ControllersTestSuite) TestClaimCompatability() {
 					)
 			}
 		}
+
 		claimID := suite.ClaimGrant(
 			service,
 			info,
