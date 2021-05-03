@@ -61,7 +61,8 @@ type Promotion struct {
 	Available           bool                      `json:"available" db:"available"`
 	Platform            string                    `json:"platform" db:"platform"`
 	PublicKeys          jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
-	LegacyClaimed       bool                      `json:"legacyClaimed" db:"legacy_claimed"`
+	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
+	LegacyClaimed bool `json:"legacyClaimed" db:"legacy_claimed"`
 	//ClaimableUntil      time.Time
 }
 
@@ -82,7 +83,7 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 }
 
 // Claimable checks whether the promotion can be claimed
-func (promotion *Promotion) Claimable() bool {
+func (promotion *Promotion) Claimable(overrideAutoExpiry bool) bool {
 	// manually disallow claims
 	if !promotion.Active {
 		return false
@@ -91,8 +92,8 @@ func (promotion *Promotion) Claimable() bool {
 	if promotion.Expired() {
 		return false
 	}
-	// otherwise allow previously claimed grants to go through
-	if promotion.LegacyClaimed {
+	// override auto expiry (in legacy claimed case as example)
+	if overrideAutoExpiry {
 		return true
 	}
 	// expire grants created 3 months ago
