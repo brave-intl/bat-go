@@ -89,12 +89,6 @@ func (service *Service) ClaimPromotionForWallet(
 	if promotion == nil {
 		return nil, errors.New("promotion did not exist")
 	}
-	if !promotion.Claimable() {
-		return nil, &handlers.AppError{
-			Message: "promotion is no longer active",
-			Code:    http.StatusGone,
-		}
-	}
 
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
@@ -122,6 +116,13 @@ func (service *Service) ClaimPromotionForWallet(
 		// if blinded creds do not match prior attempt, return error
 		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
 			return nil, errClaimedDifferentBlindCreds
+		}
+	}
+
+	if !promotion.Claimable(claim.LegacyClaimed) {
+		return nil, &handlers.AppError{
+			Message: "promotion is no longer active",
+			Code:    http.StatusGone,
 		}
 	}
 
