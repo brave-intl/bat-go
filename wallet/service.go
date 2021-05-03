@@ -315,6 +315,7 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to create gemini client")
 		}
+		ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, s.geminiClient)
 	}
 
 	// setup our wallet routes
