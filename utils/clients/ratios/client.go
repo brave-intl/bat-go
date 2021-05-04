@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/google/go-querystring/query"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/shopspring/decimal"
 )
@@ -89,6 +91,11 @@ type RateResponse struct {
 // FetchOptions options for fetching rates from ratios
 type FetchOptions struct {
 	Currency string `url:"currency,omitempty"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (fo *FetchOptions) GenerateQueryString() (url.Values, error) {
+	return query.Values(fo)
 }
 
 // FetchRate fetches the rate of a currency to BAT

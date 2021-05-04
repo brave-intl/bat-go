@@ -305,6 +305,11 @@ type ValidateAccountReq struct {
 	Token string `url:"token"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
+	return query.Values(v)
+}
+
 // ValidateAccountRes - request structure for inputs to validate account client call
 type ValidateAccountRes struct {
 	ID string `json:"id"`

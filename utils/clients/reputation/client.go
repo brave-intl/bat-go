@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -53,6 +55,11 @@ type IsWalletReputableResponse struct {
 // IsReputableOpts - the query string options for the is reputable api call
 type IsReputableOpts struct {
 	Platform string `url:"platform"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (iro *IsReputableOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iro)
 }
 
 // IsWalletAdsReputable makes the request to the reputation server
@@ -135,6 +142,11 @@ type IsWalletOnPlatformResponse struct {
 // IsWalletOnPlatformOpts - the query string options for the is reputable api call
 type IsWalletOnPlatformOpts struct {
 	PriorTo string `url:"priorTo"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (iwopo *IsWalletOnPlatformOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iwopo)
 }
 
 // IsWalletOnPlatform makes the request to the reputation server

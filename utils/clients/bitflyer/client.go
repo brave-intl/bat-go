@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/google/go-querystring/query"
 	"github.com/shopspring/decimal"
 	"github.com/square/go-jose/jwt"
 )
@@ -40,6 +42,11 @@ type Quote struct {
 // QuoteQuery holds the query params for the quote
 type QuoteQuery struct {
 	ProductCode string `url:"product_code,omitempty"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (qq *QuoteQuery) GenerateQueryString() (url.Values, error) {
+	return query.Values(qq)
 }
 
 // WithdrawToDepositIDPayload holds a single withdrawal request
