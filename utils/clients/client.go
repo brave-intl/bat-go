@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -15,7 +16,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
-	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
@@ -33,6 +33,12 @@ var concurrentClientRequests = prometheus.NewGaugeVec(
 
 func init() {
 	prometheus.MustRegister(concurrentClientRequests)
+}
+
+// QueryStringBody - a type to generate the query string from a request "body" for the client
+type QueryStringBody interface {
+	// GenerateQueryString - function to generate the query string
+	GenerateQueryString() (url.Values, error)
 }
 
 // SimpleHTTPClient wraps http.Client for making simple token authorized requests
@@ -117,16 +123,20 @@ func (c *SimpleHTTPClient) newRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
 	qs := ""
-	if method == "GET" && body != nil {
-		v, err := query.Values(body)
+
+	if qsb != nil {
+		v, err := qsb.GenerateQueryString()
 		if err != nil {
-			return nil, 0, err
+			// problem generating the query string from the type
+			return nil, 0, fmt.Errorf("failed to generate query string: %w", err)
 		}
 		qs = v.Encode()
 	}
+
 	resolvedURL := c.BaseURL.ResolveReference(&url.URL{
 		Path:     path,
 		RawQuery: qs,
@@ -173,8 +183,9 @@ func (c *SimpleHTTPClient) NewRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, error) {
-	req, status, err := c.newRequest(ctx, method, path, body)
+	req, status, err := c.newRequest(ctx, method, path, body, qsb)
 	if err != nil {
 		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -55,6 +57,11 @@ type IsReputableOpts struct {
 	Platform string `url:"platform"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (iro *IsReputableOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iro)
+}
+
 // IsWalletAdsReputable makes the request to the reputation server
 // and reutrns whether a paymentId has enough reputation
 // to claim a grant
@@ -76,7 +83,8 @@ func (c *HTTPClient) IsWalletAdsReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String()+"/ads",
-		body,
+		nil,
+		&body,
 	)
 	if err != nil {
 		return false, err
@@ -112,7 +120,8 @@ func (c *HTTPClient) IsWalletReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String(),
-		body,
+		nil,
+		&body,
 	)
 	if err != nil {
 		return false, err
@@ -137,6 +146,11 @@ type IsWalletOnPlatformOpts struct {
 	PriorTo string `url:"priorTo"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (iwopo *IsWalletOnPlatformOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iwopo)
+}
+
 // IsWalletOnPlatform makes the request to the reputation server
 // and returns whether a paymentId is on a given platform
 func (c *HTTPClient) IsWalletOnPlatform(
@@ -153,7 +167,8 @@ func (c *HTTPClient) IsWalletOnPlatform(
 		ctx,
 		"GET",
 		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
-		IsWalletOnPlatformOpts{
+		nil,
+		&IsWalletOnPlatformOpts{
 			PriorTo: ctx.Value(appctx.WalletOnPlatformPriorToCTXKey).(string),
 		},
 	)

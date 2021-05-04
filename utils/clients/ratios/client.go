@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/google/go-querystring/query"
 	cache "github.com/patrickmn/go-cache"
 	"github.com/shopspring/decimal"
 )
@@ -91,6 +93,11 @@ type FetchOptions struct {
 	Currency string `url:"currency,omitempty"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (fo *FetchOptions) GenerateQueryString() (url.Values, error) {
+	return query.Values(fo)
+}
+
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
 	var cacheKey = fmt.Sprintf("%s_%s", base, currency)
@@ -100,7 +107,7 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 	}
 
 	url := fmt.Sprintf("/v1/relative/%s", base)
-	req, err := c.client.NewRequest(ctx, "GET", url, &FetchOptions{
+	req, err := c.client.NewRequest(ctx, "GET", url, nil, &FetchOptions{
 		Currency: currency,
 	})
 	if err != nil {
