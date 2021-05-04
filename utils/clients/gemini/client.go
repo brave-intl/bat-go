@@ -258,7 +258,7 @@ func (c *HTTPClient) CheckTxStatus(
 	txRef string,
 ) (*PayoutResult, error) {
 	urlPath := fmt.Sprintf("/v1/payment/%s/%s", clientID, txRef)
-	req, err := c.client.NewRequest(ctx, "POST", urlPath, nil)
+	req, err := c.client.NewRequest(ctx, "POST", urlPath, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]PayoutResult, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +305,11 @@ type ValidateAccountReq struct {
 	Token string `url:"token"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
+	return query.Values(v)
+}
+
 // ValidateAccountRes - request structure for inputs to validate account client call
 type ValidateAccountRes struct {
 	ID string `json:"id"`
@@ -314,18 +319,14 @@ type ValidateAccountRes struct {
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken string) (string, error) {
 	// create the query string parameters
 	var (
-		va, _ = query.Values(ValidateAccountReq{
-			Token: verificationToken,
-		})
-		u = &url.URL{
-			Path:     "/v1/account/validate",
-			RawQuery: va.Encode(),
-		}
 		res = new(ValidateAccountRes)
 	)
 
 	// create the request
-	req, err := c.client.NewRequest(ctx, "POST", u.String(), nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/validate", nil, &ValidateAccountReq{
+		Token: verificationToken,
+	})
+
 	if err != nil {
 		return "", err
 	}
@@ -344,7 +345,7 @@ func (c *HTTPClient) FetchAccountList(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]Account, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/list", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/list", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +369,7 @@ func (c *HTTPClient) FetchBalances(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]Balance, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/balances", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/balances", nil, nil)
 	if err != nil {
 		return nil, err
 	}
