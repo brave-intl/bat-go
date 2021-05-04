@@ -264,7 +264,7 @@ func (c *HTTPClient) FetchQuote(
 			return &read.Body, nil
 		}
 	}
-	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
+	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", nil, &QuoteQuery{
 		ProductCode: productCode,
 	})
 	if err != nil {
@@ -348,7 +348,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	ctx context.Context,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +368,7 @@ func (c *HTTPClient) CheckPayoutStatus(
 		http.MethodPost,
 		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
 		payload,
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -393,7 +394,7 @@ func (c *HTTPClient) RefreshToken(
 		Str("extra_client_secret", payload.ExtraClientSecret).
 		Str("grant_type", payload.GrantType).
 		Msg("payload values")
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
 		return nil, err
 	}

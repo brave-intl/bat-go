@@ -107,7 +107,7 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 	}
 
 	url := fmt.Sprintf("/v1/relative/%s", base)
-	req, err := c.client.NewRequest(ctx, "GET", url, &FetchOptions{
+	req, err := c.client.NewRequest(ctx, "GET", url, nil, &FetchOptions{
 		Currency: currency,
 	})
 	if err != nil {

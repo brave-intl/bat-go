@@ -83,7 +83,8 @@ func (c *HTTPClient) IsWalletAdsReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String()+"/ads",
-		body,
+		nil,
+		&body,
 	)
 	if err != nil {
 		return false, err
@@ -119,7 +120,8 @@ func (c *HTTPClient) IsWalletReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String(),
-		body,
+		nil,
+		&body,
 	)
 	if err != nil {
 		return false, err
@@ -165,7 +167,8 @@ func (c *HTTPClient) IsWalletOnPlatform(
 		ctx,
 		"GET",
 		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
-		IsWalletOnPlatformOpts{
+		nil,
+		&IsWalletOnPlatformOpts{
 			PriorTo: ctx.Value(appctx.WalletOnPlatformPriorToCTXKey).(string),
 		},
 	)

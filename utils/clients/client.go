@@ -123,12 +123,12 @@ func (c *SimpleHTTPClient) newRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
 	qs := ""
 
-	// check and see if the body is actually implementing the query string body interface
-	if qsb, ok := body.(QueryStringBody); ok {
+	if qsb != nil {
 		v, err := qsb.GenerateQueryString()
 		if err != nil {
 			// problem generating the query string from the type
@@ -183,8 +183,9 @@ func (c *SimpleHTTPClient) NewRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, error) {
-	req, status, err := c.newRequest(ctx, method, path, body)
+	req, status, err := c.newRequest(ctx, method, path, body, qsb)
 	if err != nil {
 		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}
