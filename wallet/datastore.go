@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -17,6 +18,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 
@@ -56,6 +58,12 @@ type Datastore interface {
 	InsertBitFlyerRequestID(ctx context.Context, requestID string) error
 	// UpsertWallets inserts a wallet if it does not already exist
 	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
+	// ConnectCustodialWallet - connect the wallet's custodial verified wallet.
+	ConnectCustodialWallet(ctx context.Context, cl CustodianLink) error
+	// InsertCustodianLink - create a record of a custodian wallet
+	InsertCustodianLink(ctx context.Context, cl *CustodianLink) error
+	// DisconnectCustodialWallet - disconnect the wallet's custodial id
+	DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -474,4 +482,255 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		return err
 	}
 	return nil
+}
+
+// CustodianLink - representation of wallet_custodian record
+type CustodianLink struct {
+	ID                 *uuid.UUID `json:"id" db:"id" valid:"uuidv4"`
+	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     time.Time  `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+}
+
+// GetWalletIDString - get string version of the WalletID
+func (cl *CustodianLink) GetWalletIDString() string {
+	if cl.WalletID != nil {
+		return cl.WalletID.String()
+	}
+	return ""
+}
+
+// GetLinkingIDString - get string version of the LinkingID
+func (cl *CustodianLink) GetLinkingIDString() string {
+	if cl.LinkingID != nil {
+		return cl.LinkingID.String()
+	}
+	return ""
+}
+
+// GetCustodianLinkByID - get the wallet custodian record by id
+func GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+	// TODO: implement
+	return nil, errorutils.ErrNotImplemented
+}
+
+// DisconnectCustodialWallet - disconnect the wallet's custodial id
+func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error {
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", walletID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("disconnecting custodial wallet")
+
+	// create tx
+	tx, err := createTx(ctx, pg)
+	if err != nil || tx == nil {
+		sublogger.Error().Err(err).
+			Msg("error creating tx for wallet linking")
+		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+	}
+	// add tx to ctx for future
+	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
+	defer pg.RollbackTx(tx)
+
+	// sql query to perform
+	stmt := `
+		update 
+			wallet_custodian as wc
+		set disconnected_at=now()
+		from wallets as w
+		where 
+			w.wallet_custodian_id=wc.id
+			and w.id=$1
+	`
+
+	fmt.Println("!!! about to update wallet_custodian table")
+	// perform query to set disconnected time on wallet custodian
+	if r, err := tx.ExecContext(
+		ctx,
+		stmt,
+		walletID,
+	); err != nil {
+		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
+		return err
+	} else if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
+			return errors.New("should have updated at least one wallet with disconnected custodial")
+		}
+	}
+
+	// sql query to perform unlinking
+	stmt = `
+		update wallets set wallet_custodian_id=null where id=$1
+	`
+	// perform query
+	if r, err := tx.ExecContext(
+		ctx,
+		stmt,
+		walletID,
+	); err != nil {
+		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
+		return err
+	} else if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
+			return errors.New("should have updated at least one wallet with disconnected custodial")
+		}
+	}
+
+	// commit
+	err = tx.Commit()
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to commit transaction")
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// done
+	return nil
+}
+
+// InsertCustodianLink - create a record of a custodian wallet
+func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) error {
+	var err error
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", cl.GetWalletIDString()).
+		Str("custodian", cl.Custodian).
+		Str("linking_id", cl.GetLinkingIDString()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("creating linking of wallet custodian")
+
+	// get tx
+	tx, ok := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !ok {
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx for wallet linking")
+			return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+
+	// TODO: check linking limits here
+
+	stmt := `
+		insert into wallet_custodian (
+			wallet_id, custodian, deposit_destination, linking_id
+		) values (
+			$1, $2, $3, $4
+		) returning id, created_at, linked_at
+	`
+
+	if cl.ID == nil {
+		cl.ID = new(uuid.UUID)
+	}
+
+	fmt.Println("tx: ", tx)
+
+	err = tx.Get(cl, stmt, cl.WalletID, cl.Custodian, cl.DepositDestination, cl.LinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert wallet_custodian")
+		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
+	}
+	return nil
+}
+
+// helper to make logger easier
+func logger(ctx context.Context) *zerolog.Logger {
+	// get logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+	return logger
+}
+
+// ConnectCustodialWallet - connect the wallet's custodial verified wallet.
+func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl CustodianLink) error {
+	var err error
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", cl.GetWalletIDString()).
+		Str("custodian", cl.Custodian).
+		Str("linking_id", cl.GetLinkingIDString()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("creating linking of wallet custodian")
+
+	// create tx
+	tx, err := createTx(ctx, pg)
+	if err != nil || tx == nil {
+		sublogger.Error().Err(err).
+			Msg("error creating tx for wallet linking")
+		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+	}
+	// add tx to ctx for future
+	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
+	defer pg.RollbackTx(tx)
+
+	// if cl is not defined, this must be a new wallet linking attempt
+	if cl.ID == nil {
+		// insert wallet custodian (which will update with an ID)
+		err := pg.InsertCustodianLink(ctx, &cl)
+		if err != nil {
+			sublogger.Error().Err(err).
+				Msg("error inserting wallet linking")
+			return fmt.Errorf("failed to insert the wallet linking: %w", err)
+		}
+	}
+	sublogger.Debug().Msg("inserted custodian link")
+	// link the new wallet custodian to the wallet record in db
+	stmt := `
+		update wallets set wallet_custodian_id=$2 where id=$1
+	`
+	// perform query
+	if r, err := tx.ExecContext(
+		ctx,
+		stmt,
+		cl.WalletID,
+		cl.ID,
+	); err != nil {
+		sublogger.Error().Err(err).
+			Str("wallet_custodian_id", cl.ID.String()).
+			Msg("failed to update wallet_custodian_id for wallet")
+		return fmt.Errorf("error updating wallet with new wallet_custodian: %w", err)
+	} else if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
+			return errors.New("should have updated at least one wallet with disconnected custodial")
+		}
+	}
+	return nil
+}
+
+// helper to create a tx
+func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
+	// get or create tx
+	logger(ctx).Debug().
+		Msg("no transaction on context wallet custodian insertion")
+	// no tx, create one and rollback on defer, adding to ctx
+	tx, err = pg.RawDB().Beginx()
+	if err != nil {
+		logger(ctx).Error().Err(err).
+			Msg("error creating transaction for insertion of wallet custodian")
+		return tx, fmt.Errorf("failed to create transaction: %w", err)
+	}
+	return tx, nil
 }

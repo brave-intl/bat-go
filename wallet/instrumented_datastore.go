@@ -42,6 +42,34 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// ConnectCustodialWallet implements Datastore
+func (_d DatastoreWithPrometheus) ConnectCustodialWallet(ctx context.Context, wc CustodianLink) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ConnectCustodialWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.ConnectCustodialWallet(ctx, wc)
+}
+
+// DisconnectCustodialWallet implements Datastore
+func (_d DatastoreWithPrometheus) DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DisconnectCustodialWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DisconnectCustodialWallet(ctx, walletID)
+}
+
 // GetByProviderLinkingID implements Datastore
 func (_d DatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
 	_since := time.Now()
@@ -124,6 +152,20 @@ func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, r
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertBitFlyerRequestID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertBitFlyerRequestID(ctx, requestID)
+}
+
+// InsertCustodianLink implements Datastore
+func (_d DatastoreWithPrometheus) InsertCustodianLink(ctx context.Context, wc *CustodianLink) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertCustodianLink", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertCustodianLink(ctx, wc)
 }
 
 // InsertWallet implements Datastore

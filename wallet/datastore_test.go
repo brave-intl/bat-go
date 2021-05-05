@@ -93,3 +93,34 @@ func (suite *WalletPostgresTestSuite) TestGetWallet() {
 	suite.Require().NoError(err, "Get wallet should succeed")
 	suite.Assert().Equal(origWallet, wallet)
 }
+
+func (suite *WalletPostgresTestSuite) TestCustodianLink() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	// setup a wallet
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	id := uuid.NewV4()
+	depositDest := uuid.NewV4()
+	linkingID := uuid.NewV4()
+
+	tmp := altcurrency.BAT
+	origWallet := &walletutils.Info{ID: id.String(), Provider: "uphold", AltCurrency: &tmp, ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
+	suite.Require().NoError(pg.UpsertWallet(context.Background(), origWallet), "Save wallet should succeed")
+
+	// perform a connect custodial wallet
+	suite.Require().NoError(
+		pg.ConnectCustodialWallet(context.Background(), CustodianLink{
+			ID:                 nil, // to create a new custodian link
+			WalletID:           &id,
+			Custodian:          "gemini",
+			DepositDestination: depositDest.String(),
+			LinkingID:          &linkingID,
+		}),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// perform a disconnect custodial wallet
+	suite.Require().NoError(
+		pg.DisconnectCustodialWallet(context.Background(), id),
+		"disconnect Custodial Wallet wallet should succeed")
+}
