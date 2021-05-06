@@ -463,3 +463,58 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 }
+
+func TestDisconnectCustodianLinkV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, _, _  = sqlmock.New()
+		datastore = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
+
+		handler = wallet.DisconnectCustodianLinkV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// TODO: when hooked up with datastore methods
+	// mock out the interactions.
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}

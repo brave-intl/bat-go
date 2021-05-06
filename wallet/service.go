@@ -338,6 +338,9 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
 			r.Post("/gemini/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
+			// disconnect verified custodial wallet
+			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 		}
 		// support only APIs to assist in linking limit issues
 		/*
@@ -412,5 +415,11 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		return handlers.WrapError(err, "unable to link wallets", status)
 	}
 
+	return nil
+}
+
+// DisconnectCustodianLink - removes the link to the custodian wallet that is active
+func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian string, walletID uuid.UUID) error {
+	// TODO: hook up Datastore to effect the disconnect
 	return nil
 }
