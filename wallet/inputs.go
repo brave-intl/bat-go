@@ -32,6 +32,31 @@ var (
 	ErrMissingLinkingInfo = errors.New("missing linking information")
 )
 
+// CustodianName - input validation for custodian name
+type CustodianName string
+
+// String - implement the stringer interface for this input
+func (cn *CustodianName) String() string {
+	return string(*cn)
+}
+
+// Validate - implement the validatable interface for this input
+func (cn *CustodianName) Validate(ctx context.Context) error {
+	if string(*cn) != "uphold" && string(*cn) != "bitflyer" && string(*cn) != "brave" && string(*cn) != "gemini" {
+		return fmt.Errorf("validate custodian name not in (uphold, bitflyer, brave, gemini)")
+	}
+	return nil
+}
+
+// Decode - implement the decodable interface for this input
+func (cn *CustodianName) Decode(ctx context.Context, v []byte) error {
+	*cn = CustodianName(string(v))
+	if *cn == "" {
+		return fmt.Errorf("failed to decode custodian name, cannot be empty")
+	}
+	return nil
+}
+
 // UpholdCreationRequest - the structure for a brave provider wallet creation request
 type UpholdCreationRequest struct {
 	SignedCreationRequest string `json:"signedCreationRequest"`
