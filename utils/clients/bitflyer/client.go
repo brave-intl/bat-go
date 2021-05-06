@@ -183,6 +183,7 @@ func NewWithdrawsFromTxs(
 	txs []settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
+	tolerance := decimal.NewFromFloat(0.000000001)
 	if !validSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
@@ -193,7 +194,8 @@ func NewWithdrawsFromTxs(
 		}
 		// exact is never true, equality check needed
 		f64, _ := bat.Float64()
-		if !decimal.NewFromFloat(f64).Equal(bat) {
+		delta :=  decimal.NewFromFloat(f64).Sub(bat).Abs()
+		if delta.GreaterThan(tolerance) {
 			return nil, fmt.Errorf("bat conversion did not work: %.8f is not equal %d", f64, bat)
 		}
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{

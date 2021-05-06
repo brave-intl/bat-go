@@ -1,0 +1,4 @@
+wallets:
+  bitflyer-contribution: 'prod-bitflyer-wallet-contributions-2021-06'
+  bitflyer-adsDirectDeposit: 'prod-bitflyer-wallet-adsDirectDeposit-2021-06'
+  bitflyer-referral: 'prod-bitflyer-wallet-referrals-2021-06'

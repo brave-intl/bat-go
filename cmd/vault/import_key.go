@@ -17,6 +17,7 @@ var (
 	keysList = []string{
 		"uphold-contribution",
 		"uphold-referral",
+		"uphold-adsDirectDeposit",
 		"gemini-contribution",
 		"gemini-referral",
 	}

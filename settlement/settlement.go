@@ -265,6 +265,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 		settlement.Status = "failed"
 		return nil
 	} else if err != nil {
+		fmt.Println("albert err 2")
 		return err
 	}
 
