@@ -43,7 +43,7 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 }
 
 // ConnectCustodialWallet implements Datastore
-func (_d DatastoreWithPrometheus) ConnectCustodialWallet(ctx context.Context, wc CustodianLink) (err error) {
+func (_d DatastoreWithPrometheus) ConnectCustodialWallet(ctx context.Context, cl CustodianLink) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -53,7 +53,7 @@ func (_d DatastoreWithPrometheus) ConnectCustodialWallet(ctx context.Context, wc
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "ConnectCustodialWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.ConnectCustodialWallet(ctx, wc)
+	return _d.base.ConnectCustodialWallet(ctx, cl)
 }
 
 // DisconnectCustodialWallet implements Datastore
@@ -82,6 +82,48 @@ func (_d DatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, pr
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetByProviderLinkingID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetByProviderLinkingID(ctx, providerLinkingID)
+}
+
+// GetCustodianLinkByID implements Datastore
+func (_d DatastoreWithPrometheus) GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (cp1 *CustodianLink, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkByID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkByID(ctx, ID)
+}
+
+// GetCustodianLinkByWalletID implements Datastore
+func (_d DatastoreWithPrometheus) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (cp1 *CustodianLink, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkByWalletID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkByWalletID(ctx, ID)
+}
+
+// GetCustodianLinkCount implements Datastore
+func (_d DatastoreWithPrometheus) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (i1 int, i2 int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkCount", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkCount(ctx, linkingID)
 }
 
 // GetLinkingLimitInfo implements Datastore
@@ -155,7 +197,7 @@ func (_d DatastoreWithPrometheus) InsertBitFlyerRequestID(ctx context.Context, r
 }
 
 // InsertCustodianLink implements Datastore
-func (_d DatastoreWithPrometheus) InsertCustodianLink(ctx context.Context, wc *CustodianLink) (err error) {
+func (_d DatastoreWithPrometheus) InsertCustodianLink(ctx context.Context, cl *CustodianLink) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -165,7 +207,7 @@ func (_d DatastoreWithPrometheus) InsertCustodianLink(ctx context.Context, wc *C
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertCustodianLink", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertCustodianLink(ctx, wc)
+	return _d.base.InsertCustodianLink(ctx, cl)
 }
 
 // InsertWallet implements Datastore

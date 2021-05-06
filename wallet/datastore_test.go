@@ -4,6 +4,8 @@ package wallet
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -95,6 +97,9 @@ func (suite *WalletPostgresTestSuite) TestGetWallet() {
 }
 
 func (suite *WalletPostgresTestSuite) TestCustodianLink() {
+
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
@@ -110,7 +115,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 
 	// perform a connect custodial wallet
 	suite.Require().NoError(
-		pg.ConnectCustodialWallet(context.Background(), CustodianLink{
+		pg.ConnectCustodialWallet(ctx, CustodianLink{
 			ID:                 nil, // to create a new custodian link
 			WalletID:           &id,
 			Custodian:          "gemini",
@@ -119,8 +124,31 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 		}),
 		"Connect Custodial Wallet wallet should succeed")
 
+	// get the wallet and check that the custodian link entry id is right
+	// get the custodian link entry and validate that the data is correct
+	cl, err := pg.GetCustodianLinkByWalletID(ctx, id)
+	suite.Require().NoError(err, "should have no error getting custodian link")
+	suite.Require().True(cl.LinkingID.String() == linkingID.String(), "linking id is not right")
+	suite.Require().True(cl.WalletID.String() == id.String(), "wallet id is not right")
+	suite.Require().True(cl.Custodian == "gemini", "custodian is not right")
+
+	clID := cl.ID
+	// check the link count is 1 for this wallet
+	used, max, err := pg.GetCustodianLinkCount(ctx, linkingID)
+	suite.Require().NoError(err, "should have no error getting custodian link count")
+	suite.Require().True(used == 1, "linking count is not right")
+	suite.Require().True(max == getEnvMaxCards(), "linking count is not right")
+
 	// perform a disconnect custodial wallet
 	suite.Require().NoError(
-		pg.DisconnectCustodialWallet(context.Background(), id),
+		pg.DisconnectCustodialWallet(ctx, id),
 		"disconnect Custodial Wallet wallet should succeed")
+
+	// should return sql not found error after a disconnect
+	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
+	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
+
+	// make sure the immutable record still exists
+	cl, err = pg.GetCustodianLinkByID(ctx, *clID)
+	suite.Require().NoError(err, "should be no errors, should still exist")
 }

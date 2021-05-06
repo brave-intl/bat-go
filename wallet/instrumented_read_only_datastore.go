@@ -56,6 +56,48 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Con
 	return _d.base.GetByProviderLinkingID(ctx, providerLinkingID)
 }
 
+// GetCustodianLinkByID implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (cp1 *CustodianLink, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkByID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkByID(ctx, ID)
+}
+
+// GetCustodianLinkByWalletID implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (cp1 *CustodianLink, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkByWalletID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkByWalletID(ctx, ID)
+}
+
+// GetCustodianLinkCount implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (i1 int, i2 int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianLinkCount", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianLinkCount(ctx, linkingID)
+}
+
 // GetWallet implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ctx context.Context, ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()

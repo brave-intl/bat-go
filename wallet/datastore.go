@@ -64,6 +64,12 @@ type Datastore interface {
 	InsertCustodianLink(ctx context.Context, cl *CustodianLink) error
 	// DisconnectCustodialWallet - disconnect the wallet's custodial id
 	DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error
+	// GetCustodianLinkByID - get the custodian link by ID
+	GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkByWalletID - get the custodian link by ID
+	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -75,6 +81,12 @@ type ReadOnlyDatastore interface {
 	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
 	// GetWalletByPublicKey
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
+	// GetCustodianLinkByID - get the custodian link by ID
+	GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkByWalletID - get the custodian link by ID
+	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -512,10 +524,181 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 	return ""
 }
 
+// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error) {
+	// the count of linked wallets
+	used := 0
+	max := 0
+	var err error
+
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("linking_id", linkingID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting GetCustodianLinkCount")
+
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().
+			Msg("no tx in context")
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx")
+			return 0, 0, fmt.Errorf("failed to create tx for GetCustodianLinkCount: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+
+	// get used
+	stmt := `
+		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
+	`
+	err = tx.Get(&used, stmt, linkingID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLinkCount from DB")
+		return 0, 0, fmt.Errorf("failed to get CustodianLinkCount from DB: %w", err)
+	}
+	// get max
+	stmt = `
+		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
+	`
+	err = tx.Get(&max, stmt, linkingID, getEnvMaxCards())
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLinkCount from DB")
+		return 0, 0, fmt.Errorf("failed to get CustodianLinkCount from DB: %w", err)
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return 0, 0, fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	return used, max, nil
+}
+
 // GetCustodianLinkByID - get the wallet custodian record by id
-func GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
-	// TODO: implement
-	return nil, errorutils.ErrNotImplemented
+func (pg *Postgres) GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+	var (
+		cl  = new(CustodianLink)
+		err error
+	)
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("custodian_link_id", ID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting GetCustodianLinkByID")
+
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().
+			Msg("no tx in context")
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx")
+			return nil, fmt.Errorf("failed to create tx for GetCustodianLinkByID: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+
+	// query
+	stmt := `
+		select
+			id, wallet_id, custodian, created_at, linked_at, disconnected_at, deposit_destination, linking_id
+		from
+			wallet_custodian
+		where
+			id = $1
+	`
+	err = tx.Get(cl, stmt, ID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLink from DB")
+		return nil, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+	return cl, nil
+}
+
+// GetCustodianLinkByWalletID - get the wallet custodian record by id
+func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+	var (
+		cl  = new(CustodianLink)
+		err error
+	)
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", ID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting GetCustodianLinkByWalletID")
+
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().
+			Msg("no tx in context")
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx")
+			return nil, fmt.Errorf("failed to create tx for GetCustodianLinkByID: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+	// query
+	stmt := `
+		select
+			wc.id, wc.wallet_id, wc.custodian, wc.created_at, wc.linked_at,
+			wc.disconnected_at, wc.deposit_destination, wc.linking_id
+		from
+			wallet_custodian wc
+		join
+			wallets w on (w.wallet_custodian_id = wc.id)
+		where
+			w.id = $1
+	`
+	err = tx.Get(cl, stmt, ID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLink from DB")
+		return nil, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+	return cl, nil
 }
 
 // DisconnectCustodialWallet - disconnect the wallet's custodial id
@@ -549,8 +732,6 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 			w.wallet_custodian_id=wc.id
 			and w.id=$1
 	`
-
-	fmt.Println("!!! about to update wallet_custodian table")
 	// perform query to set disconnected time on wallet custodian
 	if r, err := tx.ExecContext(
 		ctx,
@@ -612,8 +793,8 @@ func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) 
 		Msg("creating linking of wallet custodian")
 
 	// get tx
-	tx, ok := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
-	if !ok {
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
 		tx, err = createTx(ctx, pg)
 		if err != nil || tx == nil {
 			sublogger.Error().Err(err).
@@ -624,8 +805,34 @@ func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) 
 		defer pg.RollbackTx(tx)
 	}
 
-	// TODO: check linking limits here
+	// get the count
+	used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert wallet_custodian due to db err checking linking limits")
+		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+	}
 
+	// check for linking limit
+	if used >= max {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			scope.SetTags(map[string]string{
+				"wallet_id":  cl.WalletID.String(),
+				"linking_id": cl.LinkingID.String(),
+			})
+			tooManyCardsCounter.Inc()
+		})
+		return ErrTooManyCardsLinked
+	}
+
+	// check the linking limit does not exceed what is appropriate
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert wallet_custodian due to db err checking linking limits")
+		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+	}
+
+	// TODO: check linking limits here
 	stmt := `
 		insert into wallet_custodian (
 			wallet_id, custodian, deposit_destination, linking_id
@@ -638,13 +845,20 @@ func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) 
 		cl.ID = new(uuid.UUID)
 	}
 
-	fmt.Println("tx: ", tx)
-
 	err = tx.Get(cl, stmt, cl.WalletID, cl.Custodian, cl.DepositDestination, cl.LinkingID)
 	if err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to insert wallet_custodian")
 		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
 	}
 	return nil
 }
@@ -717,6 +931,14 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl CustodianLink
 			return errors.New("should have updated at least one wallet with disconnected custodial")
 		}
 	}
+
+	// commit
+	err = tx.Commit()
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to commit transaction")
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 
@@ -724,12 +946,12 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl CustodianLink
 func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
 	// get or create tx
 	logger(ctx).Debug().
-		Msg("no transaction on context wallet custodian insertion")
+		Msg("no transaction on context")
 	// no tx, create one and rollback on defer, adding to ctx
 	tx, err = pg.RawDB().Beginx()
 	if err != nil {
 		logger(ctx).Error().Err(err).
-			Msg("error creating transaction for insertion of wallet custodian")
+			Msg("error creating transaction")
 		return tx, fmt.Errorf("failed to create transaction: %w", err)
 	}
 	return tx, nil
