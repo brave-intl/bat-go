@@ -512,9 +512,6 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	router.ServeHTTP(w, r)
 
 	if resp := w.Result(); resp.StatusCode != http.StatusOK {
-		t.Logf("%+v\n", resp)
-		body, err := ioutil.ReadAll(resp.Body)
-		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 }

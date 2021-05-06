@@ -701,9 +701,9 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 
 		// get custodian name
 		if err := inputs.DecodeAndValidateString(ctx, custodian, chi.URLParam(r, "custodian")); err != nil {
-			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate custodian from url")
+			logger.Warn().Str("custodian", err.Error()).Msg("failed to decode and validate custodian from url")
 			return handlers.ValidationError(
-				"error validating paymentID url parameter",
+				"error validating custodian url parameter",
 				map[string]interface{}{
 					"custodian": err.Error(),
 				},
@@ -718,9 +718,9 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 		signatureID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
 			return handlers.ValidationError(
-				"error validating paymentID url parameter",
+				"error validating http signature, does not match paymentID url parameter",
 				map[string]interface{}{
-					"paymentID": err.Error(),
+					"signature": err.Error(),
 				},
 			)
 		}
