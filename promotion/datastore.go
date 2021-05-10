@@ -946,6 +946,12 @@ limit 1`
 		return attempted, err
 	}
 
+	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
+	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
+	if job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem" {
+		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
+	}
+
 	if !worker.IsPaused() {
 		err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 		if err != nil {
@@ -957,15 +963,13 @@ limit 1`
 			// inform sentry about this error
 			sentry.CaptureException(err)
 
-			_, errCode, retriable := errToDrainCode(err)
+			_, errCode, _ := errToDrainCode(err)
 
-			if !retriable {
-				if _, err = tx.Exec(
-					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
-					err = tx.Commit()
-				}
-				return attempted, err
+			if _, err = tx.Exec(
+				`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+				err = tx.Commit()
 			}
+			return attempted, err
 		}
 
 		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
@@ -1234,24 +1238,27 @@ limit 1`
 		return attempted, err
 	}
 
+	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
+	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
+	if job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem" {
+		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
+	}
+
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		status, errCode, retriable := errToDrainCode(err)
+		status, errCode, _ := errToDrainCode(err)
 
 		// inform sentry about this error
 		sentry.CaptureException(err)
-
-		if !retriable {
-			if _, err := tx.Exec(`
+		// record as error (retriable or not)
+		if _, err := tx.Exec(`
 				update claim_drain set
 					erred = true,
 					errcode=$1,
 					status=$3
-				where id = $2`, errCode, job.ID, status); err != nil {
-				pg.RollbackTx(tx)
-			}
+				where id = $2`, errCode, job.ID, status); err == nil {
 			_ = tx.Commit()
 		}
 		return attempted, err
