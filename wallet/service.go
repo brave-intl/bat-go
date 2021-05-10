@@ -420,6 +420,8 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 
 // DisconnectCustodianLink - removes the link to the custodian wallet that is active
 func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian string, walletID uuid.UUID) error {
-	// TODO: hook up Datastore to effect the disconnect
+	if err := service.Datastore.DisconnectCustodialWallet(ctx, walletID); err != nil {
+		return handlers.WrapError(err, "unable to disconnect custodian wallet", http.StatusInternalServerError)
+	}
 	return nil
 }

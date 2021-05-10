@@ -722,6 +722,24 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
 	defer pg.RollbackTx(tx)
 
+	// TODO: if this wallet has no wallet_custodian_id set, but
+	// does have provider_linking_id and user_deposit_account_provider and user_deposit_destination
+	// then we need to take the following actions:
+	// 1.) InsertCustodianLink with the aforementioned information
+	// 2.) Update the wallet with the link to the inserted custodian link
+	// 3.) Remove the provider_linking_id, user_deposit_account_provider and user_deposit_destination
+	//     from the wallet table
+	// 4.) Continue processing this method
+	// This will ensure that the record is in the right state prior to the disconnect process.
+	if ok, err := pg.CustodianLinkMigrated(ctx, walletID); err != nil {
+		// error checking if custodian link was migrated
+	} else if !ok {
+		// this wallet has not yet been migrated to the CustodianLink model
+		if err := pg.MigrateCustodianLink(ctx, walletID); err != nil {
+
+		}
+	}
+
 	// sql query to perform
 	stmt := `
 		update 
