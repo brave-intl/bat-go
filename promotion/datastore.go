@@ -965,14 +965,17 @@ limit 1`
 
 			_, errCode, _ := errToDrainCode(err)
 
-			if _, err = tx.Exec(
-				`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
+			stmt := "update suggestion_drain set erred = true, errcode = $1 where id = $2"
+			// if there is no error we want to commit this transaction
+			// otherwise we pass the error back to the caller.
+			if _, err = tx.Exec(stmt, errCode, job.ID); err == nil {
 				err = tx.Commit()
 			}
-			return attempted, err
+			return attempted, fmt.Errorf("failed to commit transaction: %w", err)
 		}
 
-		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		stmt := "delete from suggestion_drain where id = $1"
+		_, err = tx.Exec(stmt, job.ID)
 		if err != nil {
 			return attempted, err
 		}

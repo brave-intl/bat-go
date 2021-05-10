@@ -350,7 +350,7 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 	}
 
 	// check to see if we skip the cbr redemption case
-	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !ok {
+	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
 		err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
 		if err != nil {
 			// error from cbClient should be errorutils.Codified as data

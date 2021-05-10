@@ -233,7 +233,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	// check to see if we skip the cbr redemption case
-	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !ok {
+	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
 		// failed to redeem credentials
 		if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
 			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
