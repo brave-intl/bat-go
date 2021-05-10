@@ -198,6 +198,14 @@ type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
 
+// bitflyerOverTransferLimit - a error bundle "codified" implemented "data" field for error bundle
+// providing the specific drain code for the drain job error codification
+type bitflyerOverTransferLimit struct{}
+
+func (botl *bitflyerOverTransferLimit) DrainCode() (string, bool) {
+	return "bf_transfer_limit", true
+}
+
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error) {
 
@@ -272,7 +280,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		// get quote, make sure we dont go over 100K JPY
 		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch bitflyer quote")
+			return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
 		}
 
 		JPYLimit := decimal.NewFromFloat(100000)
@@ -283,7 +291,12 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()
 			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
-			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
+			overLimitErr = errorutils.New(
+				fmt.Errorf(
+					"over custodian transfer limit - JPY by %s; BAT_JPY rate: %v; BAT: %v",
+					over, quote.Rate, total),
+				"over custodian transfer limit",
+				new(bitflyerOverTransferLimit))
 		}
 
 		tx := new(walletutils.TransactionInfo)
