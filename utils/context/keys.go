@@ -69,6 +69,8 @@ const (
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
+	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials
+	SkipRedeemCredentialsCTXKey CTXKey = "skip_redeem_credentials"
 )
 
 var (

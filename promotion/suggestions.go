@@ -10,6 +10,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/getsentry/sentry-go"
@@ -348,10 +349,13 @@ func (service *Service) RedeemAndCreateSuggestionEvent(ctx context.Context, cred
 		return err
 	}
 
-	err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
-	if err != nil {
-		// error from cbClient should be errorutils.Codified as data
-		return err
+	// check to see if we skip the cbr redemption case
+	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
+		err = service.cbClient.RedeemCredentials(ctx, credentials, suggestionText)
+		if err != nil {
+			// error from cbClient should be errorutils.Codified as data
+			return err
+		}
 	}
 
 	// write the message

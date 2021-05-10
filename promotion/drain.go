@@ -232,10 +232,13 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
 
-	// failed to redeem credentials
-	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
-		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
-		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+	// check to see if we skip the cbr redemption case
+	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
+		// failed to redeem credentials
+		if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
+			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
+			return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+		}
 	}
 
 	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationOnDrainCTXKey); ok {
