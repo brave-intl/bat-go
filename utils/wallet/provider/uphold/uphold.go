@@ -492,7 +492,11 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 
 	respBody, _, err := submit(w.logger, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to submit the transfer: %w", err)
+		// we need this to be draincoded wrapped error so we get the reason for failure in drains
+		if codedErr, ok := err.(Coded); ok {
+			return nil, errorutils.New(err, "failed to submit the transfer", NewDrainData(codedErr))
+		}
+		return nil, errorutils.New(err, "failed to submit the transfer", nil)
 	}
 
 	var uhResp upholdTransactionResponse

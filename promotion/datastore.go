@@ -18,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
@@ -1124,7 +1123,7 @@ func errToDrainCode(err error) (string, string, bool) {
 		// if this is an error bundle, check the "data" for a codified type
 		if c, ok := eb.Data().(errorutils.Codified); ok {
 			errCode, retriable = c.DrainCode()
-			return status, errCode, retriable
+			return status, strings.ToLower(errCode), retriable
 		}
 	}
 
@@ -1152,23 +1151,16 @@ func errToDrainCode(err error) (string, string, bool) {
 		status = "reputation-failed"
 		retriable = false
 	} else {
-		if codedErr, ok := err.(uphold.Coded); ok {
-			// possible wallet provider specific errors
-			errCode = codedErr.GetCode()
-		} else {
-			errCode = "unknown"
-		}
+		errCode = "unknown"
 		var bfe *clients.BitflyerError
 		if errors.As(err, &bfe) {
 			// possible wallet provider specific errors
 			if len(bfe.ErrorIDs) > 0 {
-				errCode = bfe.ErrorIDs[0]
+				errCode = fmt.Sprintf("bitflyer_%s", bfe.ErrorIDs[0])
 			}
-		} else {
-			errCode = "unknown"
 		}
 	}
-	return status, errCode, retriable
+	return status, strings.ToLower(errCode), retriable
 }
 
 // DrainJob - definition of a drain job
