@@ -2,7 +2,26 @@ package uphold
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 )
+
+// DrainData - uphold specific drain error "data" wrapper for errorutils
+type DrainData struct {
+	code string
+}
+
+// NewDrainData - get uphold specific drain data from the coded error
+func NewDrainData(c Coded) *DrainData {
+	return &DrainData{
+		code: strings.ToLower(c.GetCode()),
+	}
+}
+
+// DrainCode - implement the drain code rendering of the error
+func (dd *DrainData) DrainCode() (string, bool) {
+	return fmt.Sprintf("uphold_%s", dd.code), true
+}
 
 // Coded - interface for things that have codes, such as errors
 type Coded interface {

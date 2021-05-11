@@ -2234,7 +2234,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
-	suite.Require().Equal(*drainJob.ErrCode, "NO_INV", "error code should be no inv")
+	suite.Require().Equal(*drainJob.ErrCode, "bitflyer_no_inv", "error code should be no inv")
 
 }
 
