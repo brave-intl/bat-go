@@ -280,7 +280,26 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		// get quote, make sure we dont go over 100K JPY
 		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+			var bfe *clients.BitflyerError
+			if errors.As(err, &bfe) {
+				if bfe.Status == http.StatusUnauthorized {
+					// try to refresh the token and go again
+					logger.Warn().Msg("attempting to refresh the bf token")
+					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+					if err != nil {
+						return nil, fmt.Errorf("failed to get token from bf: %w", err)
+					}
+					// redo the request after token refresh
+					quote, err = service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+					if err != nil {
+						return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+					}
+				}
+			} else {
+				// unknown error
+				return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+			}
 		}
 
 		JPYLimit := decimal.NewFromFloat(100000)
