@@ -10,4 +10,4 @@ tokens:
       - credential_type: "time-limited"
       - credential_valid_duration: "P1M"
       - payment_methods: ["stripe"]
-      - stripe_product_id: "price_1HqUEkHof20bphG6lStdjSUo"
+      - stripe_product_id: "price_1IqgVpHof20bphG6wcCByrRf"

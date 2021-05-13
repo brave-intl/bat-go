@@ -6,8 +6,8 @@ tokens:
       - sku: "brave-unlimited"
       - price: 15
       - currency: "USD"
-      - description: "Premium access to Brave products"
+      - description: "Unlimited access to Brave products"
       - credential_type: "time-limited"
       - credential_valid_duration: "P1M"
       - payment_methods: ["stripe"]
-      - stripe_product_id: "price_1IqgQQHof20bphG6dRrJUDsm"
+      - stripe_product_id: "price_1IqgWmHof20bphG6CGZjzw7U"
