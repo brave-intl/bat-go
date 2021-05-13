@@ -44,8 +44,9 @@ func (bfe BitflyerError) Error() string {
 
 // BitflyerError holds error info directly from bitflyer
 type BitflyerError struct {
-	Message  string   `json:"message"`
-	ErrorIDs []string `json:"errors"`
-	Label    string   `json:"label"`
-	Status   int      `json:"status"` // might be signed
+	Message        string   `json:"message"`
+	ErrorIDs       []string `json:"errors"`
+	Label          string   `json:"label"`
+	Status         int      `json:"status"` // might be signed
+	HTTPStatusCode int      `json:"-"`
 }
