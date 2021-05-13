@@ -283,7 +283,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 			var bfe *clients.BitflyerError
 			if errors.As(err, &bfe) {
-				if bfe.Status == http.StatusUnauthorized {
+				if bfe.HTTPStatusCode == http.StatusUnauthorized {
 					// try to refresh the token and go again
 					logger.Warn().Msg("attempting to refresh the bf token")
 					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
@@ -342,7 +342,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 			var bfe *clients.BitflyerError
 			if errors.As(err, &bfe) {
-				if bfe.Status == http.StatusUnauthorized {
+				if bfe.HTTPStatusCode == http.StatusUnauthorized {
 					// try to refresh the token and go again
 					logger.Warn().Msg("attempting to refresh the bf token")
 					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))

@@ -38,14 +38,15 @@ func NewHTTPError(err error, path, message string, status int, v interface{}) er
 }
 
 // Error returns the error string
-func (bfe BitflyerError) Error() string {
-	return fmt.Sprintf("message: %s - label: %s - status: %d - ids: %v", bfe.Message, bfe.Label, bfe.Status, bfe.ErrorIDs)
+func (bfe *BitflyerError) Error() string {
+	return fmt.Sprintf("message: %s - label: %s - status: %d - ids: %v - http status: %d", bfe.Message, bfe.Label, bfe.Status, bfe.ErrorIDs, bfe.HTTPStatusCode)
 }
 
 // BitflyerError holds error info directly from bitflyer
 type BitflyerError struct {
-	Message  string   `json:"message"`
-	ErrorIDs []string `json:"errors"`
-	Label    string   `json:"label"`
-	Status   int      `json:"status"` // might be signed
+	Message        string   `json:"message"`
+	ErrorIDs       []string `json:"errors"`
+	Label          string   `json:"label"`
+	Status         int      `json:"status"` // might be signed
+	HTTPStatusCode int      `json:"-"`
 }

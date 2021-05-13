@@ -425,9 +425,9 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if err != nil {
 		return err
 	}
-	var bfError clients.BitflyerError
+	var bfError = new(clients.BitflyerError)
 	if len(b) != 0 {
-		err = json.Unmarshal(b, &bfError)
+		err = json.Unmarshal(b, bfError)
 		if err != nil {
 			return err
 		}
@@ -435,6 +435,10 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if len(bfError.Label) == 0 {
 		return e
 	}
+
+	// put the protocol status code on the error too
+	bfError.HTTPStatusCode = resp.StatusCode
+
 	return bfError
 }
 
