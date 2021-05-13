@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -106,9 +105,10 @@ func (suite *BitflyerTestSuite) TestHandleBitflyerError() {
 	err := handleBitflyerError(errors.New("failed"), nil, &resp)
 	var bfError *clients.BitflyerError
 	if errors.As(err, &bfError) {
-		fmt.Println("bf error: ", err)
 		suite.Require().Equal(bfError.HTTPStatusCode, http.StatusUnauthorized, "status should match")
 		suite.Require().Equal(bfError.Status, -1, "status should match")
+	} else {
+		suite.Require().True(false, "should not be another type of error")
 	}
 
 }
