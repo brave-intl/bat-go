@@ -38,7 +38,7 @@ func NewHTTPError(err error, path, message string, status int, v interface{}) er
 }
 
 // Error returns the error string
-func (bfe BitflyerError) Error() string {
+func (bfe *BitflyerError) Error() string {
 	return fmt.Sprintf("message: %s - label: %s - status: %d - ids: %v - http status: %d", bfe.Message, bfe.Label, bfe.Status, bfe.ErrorIDs, bfe.HTTPStatusCode)
 }
 
