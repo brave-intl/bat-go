@@ -1,12 +1,15 @@
 package payment
 
 import (
+	"database/sql"
+	"database/sql/driver"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	stripe "github.com/stripe/stripe-go/v71"
@@ -42,7 +45,32 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	PaymentMethods string               `json:"paymentMethods" db:"payment_methods"`
+	PaymentMethods PaymentMethods       `json:"paymentMethods" db:"payment_methods"`
+}
+
+// PaymentMethods type is a string slice holding payments
+type PaymentMethods []string
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *PaymentMethods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
+		}
+	}
+
+	return nil
+}
+
+// Value the driver.Value representation
+func (pm *PaymentMethods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
 }
 
 const (
@@ -168,7 +196,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			orderItem.CredentialType = value
 		case "payment_methods":
 			// CSV string of payment methods
-			orderItem.PaymentMethods = value
+			orderItem.PaymentMethods = strings.Split(value, ",")
 		}
 
 	}
@@ -192,7 +220,7 @@ func (order Order) IsStripePayable() bool {
 	for _, item := range order.Items {
 
 		// check stripe in payment
-		if !strings.Contains(item.PaymentMethods, STRIPE_PAYMENT_METHOD) {
+		if !strings.Contains(strings.Join(item.PaymentMethods, ","), STRIPE_PAYMENT_METHOD) {
 			return false
 		}
 		// TODO: make sure we have a stripe_product_id caveat

@@ -163,6 +163,9 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	}
 
 	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
 
 	if !order.IsPaid() && order.IsStripePayable() {
 		checkoutSession := order.CreateStripeCheckoutSession(req.Email)

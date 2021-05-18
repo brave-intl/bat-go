@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -197,7 +198,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods
-		`, orderItems[i].OrderID, orderItems[i].SKU, orderItems[i].Quantity, orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal, orderItems[i].Location, orderItems[i].Description, orderItems[i].CredentialType, orderItems[i].PaymentMethods)
+		`, orderItems[i].OrderID, orderItems[i].SKU, orderItems[i].Quantity, orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal, orderItems[i].Location, orderItems[i].Description, orderItems[i].CredentialType, pq.Array(orderItems[i].PaymentMethods))
 
 		if err != nil {
 			return nil, err
