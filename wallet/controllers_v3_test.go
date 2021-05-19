@@ -410,8 +410,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		// setup test variables
 		idFrom    = uuid.NewV4()
 		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
-		idTo      = uuid.NewV4()
 		accountID = uuid.NewV4()
+		idTo      = accountID
 
 		// setup db mocks
 		db, mock, _ = sqlmock.New()
@@ -447,8 +447,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		})
 		w    = httptest.NewRecorder()
 		wcID = uuid.NewV4()
-		rows = sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
-			AddRow(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String()), "12345", "gemini", wcID)
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -467,7 +465,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	// begin linking tx
 	mock.ExpectBegin()
 
-	rows = sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
+	rows := sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
 		AddRow(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String()), "12345", "gemini", wcID)
 
 	// passes the migrate test
@@ -485,7 +483,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		AddRow(clID, time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", accountID.String(), uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", idTo.String(), uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom, clID).WillReturnResult(sqlmock.NewResult(1, 1))
