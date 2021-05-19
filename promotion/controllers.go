@@ -13,6 +13,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -495,36 +496,58 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 			req  DrainSuggestionV2Request
 			resp = DrainSuggestionV2Response{}
 		)
-		err := requestutils.ReadJSON(r.Body, &req)
+
+		ctx := r.Context()
+		// no logger, setup
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+			r = r.WithContext(ctx)
+		}
+
+		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		sublogger := logger.With().
+			Str("wallet_id", req.WalletID.String()).
+			Logger()
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapValidationError(err)
 		}
 
 		logging.AddWalletIDToContext(r.Context(), req.WalletID)
 
 		keyID, err := middleware.GetKeyID(r.Context())
+		sublogger = sublogger.With().Str("key_id", keyID).Logger()
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to get http signature key id")
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
+			sublogger.Error().Err(err).Msg("httpsignature key id != wallet id")
 			return handlers.ValidationError("request",
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
-		resp.DrainID, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		resp.DrainID, err = service.Drain(ctx, req.Credentials, req.WalletID)
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
+				sublogger.Error().Err(err).Msg("validation error")
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
+				sublogger.Error().Err(err).Msg("validation error")
 				return handlers.WrapValidationError(err)
 			default:
 				// FIXME not all remaining errors should be mapped to 400
+				sublogger.Error().Err(err).Msg("error draining")
 				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}
@@ -547,13 +570,27 @@ type DrainSuggestionRequest struct {
 func DrainSuggestion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req DrainSuggestionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+
+		ctx := r.Context()
+		// no logger, setup
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+			r = r.WithContext(ctx)
+		}
+
+		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		sublogger := logger.With().Str("wallet_id", req.WalletID.String()).Logger()
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("validating request body")
 			return handlers.WrapValidationError(err)
 		}
 
@@ -561,15 +598,18 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
+			sublogger.Error().Err(err).Msg("error getting keyid from http signature")
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
+			sublogger.Error().Err(err).Msg("keyid doesnt match wallet in url")
 			return handlers.ValidationError("request",
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
 		_, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to drain")
 			switch err.(type) {
 			case govalidator.Error:
 				return handlers.WrapValidationError(err)

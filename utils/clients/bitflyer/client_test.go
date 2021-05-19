@@ -3,12 +3,16 @@
 package bitflyer
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"testing"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -71,4 +75,40 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	}
 	suite.Require().NoError(err, "should not error during bulk payout uploading")
 	suite.Require().Equal(&expectedPayoutResults, bulkPayoutResponse, "the response should be predictable")
+}
+
+type nopCloser struct {
+	*bytes.Buffer
+}
+
+func (nc nopCloser) Close() error {
+	return nil
+}
+
+func (suite *BitflyerTestSuite) TestHandleBitflyerError() {
+	buf := bytes.NewBufferString(`
+{
+	"status": -1,
+	"label": "JsonError.TOKEN_ERROR",
+	"message": "認証に失敗しました。",
+	"errors": [
+		"242503"
+	]
+}
+	`)
+	body := nopCloser{buf}
+	resp := http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Body:       body,
+	}
+
+	err := handleBitflyerError(errors.New("failed"), nil, &resp)
+	var bfError *clients.BitflyerError
+	if errors.As(err, &bfError) {
+		suite.Require().Equal(bfError.HTTPStatusCode, http.StatusUnauthorized, "status should match")
+		suite.Require().Equal(bfError.Status, -1, "status should match")
+	} else {
+		suite.Require().True(false, "should not be another type of error")
+	}
+
 }

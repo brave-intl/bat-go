@@ -39,21 +39,36 @@ var (
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
+
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	var batchID = uuid.NewV4()
+
+	sublogger := logger.With().
+		Str("wallet_id", walletID.String()).
+		Str("batch_id", batchID.String()).
+		Logger()
 
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
+		sublogger.Error().Err(err).Msg("failed to get wallet by id")
 		return nil, fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
+		sublogger.Error().Err(err).Msg("wallet is not linked/verified")
 		return nil, errors.New("wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
 	_, _, fundingSources, promotions, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get credential redemptions")
 		return nil, err
 	}
 	var (
@@ -72,11 +87,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// is this from wallet reputable as an iOS device?
 		isFromOnPlatform, err := service.reputationClient.IsWalletOnPlatform(ctx, walletID, "ios")
 		if err != nil {
+			sublogger.Error().Err(err).Str("provider", "brave").Msg("wallet is not on ios platform")
 			return nil, fmt.Errorf("invalid device: %w", err)
 		}
 
 		if !isFromOnPlatform {
 			// wallet is not reputable, decline
+			sublogger.Error().Str("provider", "brave").Msg("wallet is not on ios platform")
 			return nil, fmt.Errorf("unable to drain to wallet: invalid device")
 		}
 
@@ -88,11 +105,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		walletID, err := uuid.FromString(wallet.ID)
 		if err != nil {
+			sublogger.Error().Str("provider", "brave").Msg("wallet id is invalid")
 			return nil, fmt.Errorf("invalid wallet id: %w", err)
 		}
 
 		err = service.Datastore.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
 		if err != nil {
+			sublogger.Error().Str("provider", "brave").Msg("failed to add ios transfer job")
 			return nil, fmt.Errorf("error adding mint drain: %w", err)
 		}
 	}
@@ -106,21 +125,25 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
+			sublogger.Error().Msg("invalid promotion platform, must be ads")
 			return nil, errors.New("only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
+			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
 			return nil, fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
+			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
 			return nil, fmt.Errorf("error calculating expected number of suggestions: %w", err)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
+			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
 			return nil, errors.New("cannot claim more funds than were earned")
 		}
 
@@ -129,6 +152,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// Mark corresponding claim as drained
 			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
+				sublogger.Error().Msg("failed to drain the claim")
 				return nil, fmt.Errorf("error draining claim: %w", err)
 			}
 
@@ -198,6 +222,14 @@ type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
 
+// bitflyerOverTransferLimit - a error bundle "codified" implemented "data" field for error bundle
+// providing the specific drain code for the drain job error codification
+type bitflyerOverTransferLimit struct{}
+
+func (botl *bitflyerOverTransferLimit) DrainCode() (string, bool) {
+	return "bf_transfer_limit", true
+}
+
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error) {
 
@@ -232,10 +264,13 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
 
-	// failed to redeem credentials
-	if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
-		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
-		return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+	// check to see if we skip the cbr redemption case
+	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
+		// failed to redeem credentials
+		if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
+			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
+			return nil, fmt.Errorf("failed to redeem credentials: %w", err)
+		}
 	}
 
 	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationOnDrainCTXKey); ok {
@@ -269,7 +304,26 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		// get quote, make sure we dont go over 100K JPY
 		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch bitflyer quote")
+			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+			var bfe *clients.BitflyerError
+			if errors.As(err, &bfe) {
+				if bfe.HTTPStatusCode == http.StatusUnauthorized {
+					// try to refresh the token and go again
+					logger.Warn().Msg("attempting to refresh the bf token")
+					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+					if err != nil {
+						return nil, fmt.Errorf("failed to get token from bf: %w", err)
+					}
+					// redo the request after token refresh
+					quote, err = service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+					if err != nil {
+						return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+					}
+				}
+			} else {
+				// unknown error
+				return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+			}
 		}
 
 		JPYLimit := decimal.NewFromFloat(100000)
@@ -280,7 +334,12 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()
 			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
-			overLimitErr = fmt.Errorf("transfer is over 100K JPY by %s; BAT_JPY rate: %v; BAT: %v", over, quote.Rate, total)
+			overLimitErr = errorutils.New(
+				fmt.Errorf(
+					"over custodian transfer limit - JPY by %s; BAT_JPY rate: %v; BAT: %v",
+					over, quote.Rate, total),
+				"over custodian transfer limit",
+				new(bitflyerOverTransferLimit))
 		}
 
 		tx := new(walletutils.TransactionInfo)
@@ -307,7 +366,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
 			var bfe *clients.BitflyerError
 			if errors.As(err, &bfe) {
-				if bfe.Status == http.StatusUnauthorized {
+				if bfe.HTTPStatusCode == http.StatusUnauthorized {
 					// try to refresh the token and go again
 					logger.Warn().Msg("attempting to refresh the bf token")
 					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))

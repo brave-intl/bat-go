@@ -18,7 +18,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
@@ -946,6 +945,12 @@ limit 1`
 		return attempted, err
 	}
 
+	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
+	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
+	if job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem" {
+		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
+	}
+
 	if !worker.IsPaused() {
 		err = worker.RedeemAndCreateSuggestionEvent(ctx, credentials, job.SuggestionText, job.SuggestionEvent)
 		if err != nil {
@@ -957,18 +962,19 @@ limit 1`
 			// inform sentry about this error
 			sentry.CaptureException(err)
 
-			_, errCode, retriable := errToDrainCode(err)
+			_, errCode, _ := errToDrainCode(err)
 
-			if !retriable {
-				if _, err = tx.Exec(
-					`update suggestion_drain set erred = true, errcode=$1 where id = $2`, errCode, job.ID); err == nil {
-					err = tx.Commit()
-				}
-				return attempted, err
+			stmt := "update suggestion_drain set erred = true, errcode = $1 where id = $2"
+			// if there is no error we want to commit this transaction
+			// otherwise we pass the error back to the caller.
+			if _, err = tx.Exec(stmt, errCode, job.ID); err == nil {
+				err = tx.Commit()
 			}
+			return attempted, fmt.Errorf("failed to commit transaction: %w", err)
 		}
 
-		_, err = tx.Exec(`delete from suggestion_drain where id = $1`, job.ID)
+		stmt := "delete from suggestion_drain where id = $1"
+		_, err = tx.Exec(stmt, job.ID)
 		if err != nil {
 			return attempted, err
 		}
@@ -1117,7 +1123,7 @@ func errToDrainCode(err error) (string, string, bool) {
 		// if this is an error bundle, check the "data" for a codified type
 		if c, ok := eb.Data().(errorutils.Codified); ok {
 			errCode, retriable = c.DrainCode()
-			return status, errCode, retriable
+			return status, strings.ToLower(errCode), retriable
 		}
 	}
 
@@ -1145,23 +1151,16 @@ func errToDrainCode(err error) (string, string, bool) {
 		status = "reputation-failed"
 		retriable = false
 	} else {
-		if codedErr, ok := err.(uphold.Coded); ok {
-			// possible wallet provider specific errors
-			errCode = codedErr.GetCode()
-		} else {
-			errCode = "unknown"
-		}
+		errCode = "unknown"
 		var bfe *clients.BitflyerError
 		if errors.As(err, &bfe) {
 			// possible wallet provider specific errors
 			if len(bfe.ErrorIDs) > 0 {
-				errCode = bfe.ErrorIDs[0]
+				errCode = fmt.Sprintf("bitflyer_%s", bfe.ErrorIDs[0])
 			}
-		} else {
-			errCode = "unknown"
 		}
 	}
-	return status, errCode, retriable
+	return status, strings.ToLower(errCode), retriable
 }
 
 // DrainJob - definition of a drain job
@@ -1234,24 +1233,27 @@ limit 1`
 		return attempted, err
 	}
 
+	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
+	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
+	if job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem" {
+		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
+	}
+
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		status, errCode, retriable := errToDrainCode(err)
+		status, errCode, _ := errToDrainCode(err)
 
 		// inform sentry about this error
 		sentry.CaptureException(err)
-
-		if !retriable {
-			if _, err := tx.Exec(`
+		// record as error (retriable or not)
+		if _, err := tx.Exec(`
 				update claim_drain set
 					erred = true,
 					errcode=$1,
 					status=$3
-				where id = $2`, errCode, job.ID, status); err != nil {
-				pg.RollbackTx(tx)
-			}
+				where id = $2`, errCode, job.ID, status); err == nil {
 			_ = tx.Commit()
 		}
 		return attempted, err
