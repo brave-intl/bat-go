@@ -1383,16 +1383,23 @@ where
 	}
 
 	attempted = true
+
 	// mint the grant to the wallet's deposit destination
 	statement = `
 select
-	user_deposit_destination
+	case when w.user_deposit_destination!='' then w.user_deposit_destination
+	else wc.deposit_destination
+	end as deposit_destination
 from
-	wallets
+	wallets w
+left join
+	wallet_custodian wc on (w.wallet_custodian_id=wc.id)
 where
-	id = $1
+	w.id = $1
 `
-	var depositDestination string
+	var (
+		depositDestination string
+	)
 	err = tx.Get(&depositDestination, statement, job.WalletID)
 	if err != nil {
 		return attempted, err

@@ -199,16 +199,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			return blr.HandleErrors(err)
 		}
 
-		// get the wallet
-		wallet, err := s.GetWallet(ctx, *id.UUID())
-		if err != nil {
-			if strings.Contains(err.Error(), "looking up wallet") {
-				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
-			}
-			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
-		}
-
-		err = s.LinkBitFlyerWallet(ctx, wallet, blr.DepositID, blr.AccountHash)
+		err = s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -269,16 +260,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return glr.HandleErrors(err)
 		}
 
-		// get the wallet
-		wallet, err := s.GetWallet(ctx, *id.UUID())
-		if err != nil {
-			if strings.Contains(err.Error(), "looking up wallet") {
-				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
-			}
-			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
-		}
-
-		err = s.LinkGeminiWallet(ctx, wallet, glr.VerificationToken)
+		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}

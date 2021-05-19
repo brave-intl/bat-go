@@ -128,13 +128,13 @@ func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, c
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutils.Info, depositID, accountHash string) error {
+func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash string) error {
 	// during validation we verified that the account hash and deposit id were signed by bitflyer
 	// we also validated that this "info" signed the request to perform the linking with http signature
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "bitflyer")
+	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer")
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
@@ -146,7 +146,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutil
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, verificationToken string) error {
+func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
@@ -165,7 +165,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, accountID, providerLinkingID, nil, "gemini")
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini")
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
