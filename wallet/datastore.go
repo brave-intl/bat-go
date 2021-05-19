@@ -2,7 +2,6 @@ package wallet
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -42,7 +41,6 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	TxLinkWalletInfo(ctx context.Context, tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error)
@@ -197,29 +195,6 @@ func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.I
 	return nil, nil
 }
 
-// txGetWallet by ID
-func (pg *Postgres) txHasDestination(ctx context.Context, tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
-	statement := `
-	select
-		true
-	from
-		wallets
-	where
-		user_deposit_destination is not null and
-		user_deposit_destination != '' and
-		id = $1`
-	var result bool
-	err := tx.GetContext(ctx, &result, statement, ID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return result, nil
-}
-
 // GetWalletByPublicKey gets a wallet by a public key
 func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walletutils.Info, error) {
 	statement := `
@@ -280,75 +255,6 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 		return err
 	}
 
-	return nil
-}
-
-// TxLinkWalletInfo pass a tx to set the anonymous address
-func (pg *Postgres) TxLinkWalletInfo(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	ID string,
-	userDepositDestination string,
-	providerLinkingID uuid.UUID,
-	anonymousAddress *uuid.UUID,
-	userDepositAccountProvider string) error {
-
-	var (
-		statement string
-		sqlErr    error
-		r         sql.Result
-	)
-
-	id, err := uuid.FromString(ID)
-	if err != nil {
-		return err
-	}
-
-	if ok, err := pg.txHasDestination(ctx, tx, id); err != nil {
-		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
-	} else if ok {
-		statement = `
-			UPDATE wallets
-			SET
-				provider_linking_id = $2,
-				user_deposit_account_provider = $3
-			WHERE id = $1;`
-		r, sqlErr = tx.ExecContext(
-			ctx,
-			statement,
-			ID,
-			providerLinkingID,
-			userDepositAccountProvider,
-		)
-	} else {
-		statement = `
-			UPDATE wallets
-			SET
-					provider_linking_id = $2,
-					anonymous_address = $3,
-					user_deposit_account_provider = $4,
-					user_deposit_destination = $5
-			WHERE id = $1;`
-		r, sqlErr = tx.ExecContext(
-			ctx,
-			statement,
-			ID,
-			providerLinkingID,
-			anonymousAddress,
-			userDepositAccountProvider,
-			userDepositDestination,
-		)
-	}
-
-	if sqlErr != nil {
-		return sqlErr
-	}
-	if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			return errors.New("should have updated at least one wallet")
-		}
-	}
 	return nil
 }
 
@@ -451,42 +357,47 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
+	sublogger := logger(ctx).With().
+		Str("wallet_id", ID).
+		Logger()
+
+	// create tx
+	tx, err := createTx(ctx, pg)
+	if err != nil || tx == nil {
+		sublogger.Error().Err(err).
+			Msg("error creating tx for wallet linking")
+		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
 	}
+	// add tx to ctx for future
+	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
 	defer pg.RollbackTx(tx)
 
-	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID.String())
+	id, err := uuid.FromString(ID)
 	if err != nil {
-		return errorutils.Wrap(err, "error looking up max linkings for wallet")
+		return errorutils.Wrap(err, "invalid id")
 	}
 
-	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID.String())
-	if err != nil {
-		return errorutils.Wrap(err, "error looking up used linkings for wallet")
+	// has wallet been migrated?
+	if ok, err := pg.IsCustodianLinkMigrated(ctx, id); err != nil {
+		return fmt.Errorf("failed to check custodian linkage migration status: %w", err)
+	} else if !ok {
+		// if no then perform migration
+		if err := pg.MigrateCustodianLink(ctx, id); err != nil {
+			return fmt.Errorf("failed to migrate custodian linkage: %w", err)
+		}
 	}
 
-	if usedLinkings >= maxLinkings {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			anonAddr := ""
-			if anonymousAddress != nil {
-				anonAddr = anonymousAddress.String()
-			}
-			scope.SetTags(map[string]string{
-				"walletId":               ID,
-				"providerLinkingId":      providerLinkingID.String(),
-				"anonymousAddress":       anonAddr,
-				"userDepositDestination": userDepositDestination,
-			})
-			tooManyCardsCounter.Inc()
-		})
-		return ErrTooManyCardsLinked
-	}
-
-	err = pg.TxLinkWalletInfo(ctx, tx, ID, userDepositDestination, providerLinkingID, anonymousAddress, depositProvider)
-	if err != nil {
-		return errorutils.Wrap(err, "unable to set an anonymous address")
+	// connect custodian link (does the link limit checking in insert)
+	if err = pg.ConnectCustodialWallet(ctx, CustodianLink{
+		WalletID:           &id,
+		Custodian:          depositProvider,
+		LinkingID:          &providerLinkingID,
+		DepositDestination: userDepositDestination,
+		LinkedAt:           time.Now(),
+	}); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert new custodian link")
+		return fmt.Errorf("failed to insert new custodian link: %w", err)
 	}
 
 	err = tx.Commit()
@@ -643,6 +554,169 @@ func (pg *Postgres) GetCustodianLinkByID(ctx context.Context, ID uuid.UUID) (*Cu
 	return cl, nil
 }
 
+// MigrateCustodianLink - check if this wallet has migrated to multi custodian linkage
+func (pg *Postgres) MigrateCustodianLink(ctx context.Context, walletID uuid.UUID) error {
+	var (
+		wallet walletutils.Info
+		err    error
+	)
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", walletID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting MigrateCustodianLink")
+
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().
+			Msg("no tx in context")
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx")
+			return fmt.Errorf("failed to create tx for GetCustodianLinkByID: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+	// query
+	stmt := `
+		select
+			w.provider_linking_id, w.user_deposit_destination, w.user_deposit_account_provider, w.wallet_custodian_id
+		from
+			wallets w
+		where
+			w.id = $1
+	`
+	err = tx.GetContext(ctx, &wallet, stmt, walletID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get wallet from DB")
+		return fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	}
+
+	cl := &CustodianLink{
+		WalletID:           &walletID,
+		Custodian:          *wallet.UserDepositAccountProvider,
+		DepositDestination: wallet.UserDepositDestination,
+		LinkingID:          wallet.ProviderLinkingID,
+		CreatedAt:          time.Now(),
+	}
+	// insert this custodian link
+	if err = pg.InsertCustodianLink(ctx, cl); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert new custodian link")
+		return fmt.Errorf("failed to insert new custodian link: %w", err)
+	}
+
+	// remove the wallet user deposit information
+	// query
+	stmt = `
+		update wallets
+		set
+			provider_linking_id=null, 
+			user_deposit_destination='', 
+			user_deposit_account_provider=null
+		where
+			wallets.id = $1
+	`
+	// perform query to set disconnected time on wallet custodian
+	if r, err := tx.ExecContext(
+		ctx,
+		stmt,
+		walletID,
+	); err != nil {
+		sublogger.Error().Err(err).Msg("failed to update wallet deposit information for wallet")
+		return err
+	} else if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			sublogger.Error().Msg("at least one record should be updated for changing deposit info")
+			return errors.New("should have updated at least one wallet deposit info")
+		}
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// IsCustodianLinkMigrated - check if this wallet has migrated to multi custodian linkage
+func (pg *Postgres) IsCustodianLinkMigrated(ctx context.Context, walletID uuid.UUID) (bool, error) {
+	var (
+		wallet walletutils.Info
+		err    error
+	)
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", walletID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting IsCustodianLinkMigrated")
+
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().
+			Msg("no tx in context")
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx")
+			return false, fmt.Errorf("failed to create tx for GetCustodianLinkByID: %w", err)
+		}
+		// add tx to ctx for future
+		defer pg.RollbackTx(tx)
+	}
+	// query
+	stmt := `
+		select
+			w.provider_linking_id, w.user_deposit_destination, w.user_deposit_account_provider, w.wallet_custodian_id
+		from
+			wallets w
+		where
+			w.id = $1
+	`
+	err = tx.GetContext(ctx, &wallet, stmt, walletID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get wallet from DB")
+		return false, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	}
+
+	if wallet.CustodianLinkID == nil {
+		if wallet.UserDepositAccountProvider != nil && wallet.UserDepositDestination != "" {
+			// user deposit information is set, and there is no custodian link
+			return false, nil
+		}
+		// no deposit information set, and no custodian link, we can say it IS migrated
+		// because it has never had the old mono-custodian link performed
+	}
+
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return false, fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	// if the wallet custodian link id is set, we have been migrated
+	return true, nil
+}
+
 // GetCustodianLinkByWalletID - get the wallet custodian record by id
 func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
 	var (
@@ -729,21 +803,22 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	// 2.) Update the wallet with the link to the inserted custodian link
 	// 3.) Remove the provider_linking_id, user_deposit_account_provider and user_deposit_destination
 	//     from the wallet table
-	// 4.) Continue processing this method
 	// This will ensure that the record is in the right state prior to the disconnect process.
-	if ok, err := pg.CustodianLinkMigrated(ctx, walletID); err != nil {
+	if ok, err := pg.IsCustodianLinkMigrated(ctx, walletID); err != nil {
 		// error checking if custodian link was migrated
+		return fmt.Errorf("failed to check custodian linkage migration status: %w", err)
 	} else if !ok {
 		// this wallet has not yet been migrated to the CustodianLink model
+		// perform the migration which does 1-3 from above
 		if err := pg.MigrateCustodianLink(ctx, walletID); err != nil {
-
+			return fmt.Errorf("failed to migrate custodian linkage: %w", err)
 		}
 	}
+	// 4.) Continue processing this method
 
 	// sql query to perform
 	stmt := `
-		update 
-			wallet_custodian as wc
+		update wallet_custodian as wc
 		set disconnected_at=now()
 		from wallets as w
 		where 
@@ -823,6 +898,16 @@ func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) 
 		defer pg.RollbackTx(tx)
 	}
 
+	// TODO: check here that prior provider linking ids match this new custodian link entry for the given provider
+	/*
+		providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
+		if info.ProviderLinkingID != nil {
+			// check if the member matches the associated member
+			if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
+				return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+			}
+	*/
+
 	// get the count
 	used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
 	if err != nil {
@@ -850,7 +935,6 @@ func (pg *Postgres) InsertCustodianLink(ctx context.Context, cl *CustodianLink) 
 		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
 	}
 
-	// TODO: check linking limits here
 	stmt := `
 		insert into wallet_custodian (
 			wallet_id, custodian, deposit_destination, linking_id
@@ -906,15 +990,19 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl CustodianLink
 		Msg("creating linking of wallet custodian")
 
 	// create tx
-	tx, err := createTx(ctx, pg)
-	if err != nil || tx == nil {
-		sublogger.Error().Err(err).
-			Msg("error creating tx for wallet linking")
-		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		tx, err = createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).
+				Msg("error creating tx for wallet linking")
+			return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+		}
+		// add tx to ctx for future
+		ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
+		defer pg.RollbackTx(tx)
 	}
-	// add tx to ctx for future
-	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
-	defer pg.RollbackTx(tx)
 
 	// if cl is not defined, this must be a new wallet linking attempt
 	if cl.ID == nil {
@@ -950,11 +1038,13 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl CustodianLink
 		}
 	}
 
-	// commit
-	err = tx.Commit()
-	if err != nil {
-		sublogger.Error().Err(err).Msg("failed to commit transaction")
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	if !noContextTx {
+		// commit
+		err = tx.Commit()
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to commit transaction")
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
 	}
 
 	return nil

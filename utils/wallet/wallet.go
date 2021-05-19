@@ -27,7 +27,7 @@ type Info struct {
 	// will be deprecated
 	UserDepositDestination string `json:"userDepositCardId" db:"user_deposit_destination"`
 	// link to the WalletCustodian record of the currently active wallet
-	WalletCustodianID *uuid.UUID `json:"walletCustodianID" db:"wallet_custodian_id"`
+	CustodianLinkID *uuid.UUID `json:"walletCustodianID" db:"wallet_custodian_id"`
 }
 
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,
