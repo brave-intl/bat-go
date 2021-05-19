@@ -39,21 +39,36 @@ var (
 
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
+
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
 	var batchID = uuid.NewV4()
+
+	sublogger := logger.With().
+		Str("wallet_id", walletID.String()).
+		Str("batch_id", batchID.String()).
+		Logger()
 
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil || wallet == nil {
+		sublogger.Error().Err(err).Msg("failed to get wallet by id")
 		return nil, fmt.Errorf("error getting wallet: %w", err)
 	}
 
 	// A verified wallet will have a payout address
 	if wallet.UserDepositDestination == "" {
+		sublogger.Error().Err(err).Msg("wallet is not linked/verified")
 		return nil, errors.New("wallet is not verified")
 	}
 
 	// Iterate through each credential and assemble list of funding sources
 	_, _, fundingSources, promotions, err := service.GetCredentialRedemptions(ctx, credentials)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get credential redemptions")
 		return nil, err
 	}
 	var (
@@ -72,11 +87,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// is this from wallet reputable as an iOS device?
 		isFromOnPlatform, err := service.reputationClient.IsWalletOnPlatform(ctx, walletID, "ios")
 		if err != nil {
+			sublogger.Error().Err(err).Str("provider", "brave").Msg("wallet is not on ios platform")
 			return nil, fmt.Errorf("invalid device: %w", err)
 		}
 
 		if !isFromOnPlatform {
 			// wallet is not reputable, decline
+			sublogger.Error().Str("provider", "brave").Msg("wallet is not on ios platform")
 			return nil, fmt.Errorf("unable to drain to wallet: invalid device")
 		}
 
@@ -88,11 +105,13 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 
 		walletID, err := uuid.FromString(wallet.ID)
 		if err != nil {
+			sublogger.Error().Str("provider", "brave").Msg("wallet id is invalid")
 			return nil, fmt.Errorf("invalid wallet id: %w", err)
 		}
 
 		err = service.Datastore.EnqueueMintDrainJob(ctx, walletID, promotionIDs...)
 		if err != nil {
+			sublogger.Error().Str("provider", "brave").Msg("failed to add ios transfer job")
 			return nil, fmt.Errorf("error adding mint drain: %w", err)
 		}
 	}
@@ -106,21 +125,25 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
 		if v.Type != "ads" &&
 			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
+			sublogger.Error().Msg("invalid promotion platform, must be ads")
 			return nil, errors.New("only ads suggestions can be drained")
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
+			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
 			return nil, fmt.Errorf("error finding claim for wallet: %w", err)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
+			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
 			return nil, fmt.Errorf("error calculating expected number of suggestions: %w", err)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
+			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
 			return nil, errors.New("cannot claim more funds than were earned")
 		}
 
@@ -129,6 +152,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			// Mark corresponding claim as drained
 			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount)
 			if err != nil {
+				sublogger.Error().Msg("failed to drain the claim")
 				return nil, fmt.Errorf("error draining claim: %w", err)
 			}
 
