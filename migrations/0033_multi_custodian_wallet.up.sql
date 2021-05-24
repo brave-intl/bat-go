@@ -5,14 +5,14 @@ create table wallet_custodian (
     linking_id uuid not null,
     created_at timestamp with time zone not null default current_timestamp,
     linked_at timestamp with time zone not null default current_timestamp,
-    disconnected_at timestamp with time zone
-    deposit_destination text not null,
+    disconnected_at timestamp with time zone,
     primary key (wallet_id, linking_id, custodian)
 );
 
 --- only one custodian can be connected at a time
 create unique index wallet_custodian_unique_connected
-    on wallet_custodian (custodian, wallet_id, linking_id, coalesce(disconnected_at, -1));
+    on wallet_custodian (
+        custodian, wallet_id, linking_id, coalesce(disconnected_at, '1970-01-01'));
 
 --- create an index on the linking_id (which is how we check linking limits)
 create index wallet_custodian_linking_id_idx on wallet_custodian(linking_id);

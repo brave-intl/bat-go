@@ -115,13 +115,11 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 
 	// perform a connect custodial wallet
 	suite.Require().NoError(
-		pg.ConnectCustodialWallet(ctx, CustodianLink{
-			ID:                 nil, // to create a new custodian link
-			WalletID:           &id,
-			Custodian:          "gemini",
-			DepositDestination: depositDest.String(),
-			LinkingID:          &linkingID,
-		}),
+		pg.ConnectCustodialWallet(ctx, &CustodianLink{
+			WalletID:  &id,
+			Custodian: "gemini",
+			LinkingID: &linkingID,
+		}, depositDest.String()),
 		"Connect Custodial Wallet wallet should succeed")
 
 	// get the wallet and check that the custodian link entry id is right
@@ -132,7 +130,6 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	suite.Require().True(cl.WalletID.String() == id.String(), "wallet id is not right")
 	suite.Require().True(cl.Custodian == "gemini", "custodian is not right")
 
-	clID := cl.ID
 	// check the link count is 1 for this wallet
 	used, max, err := pg.GetCustodianLinkCount(ctx, linkingID)
 	suite.Require().NoError(err, "should have no error getting custodian link count")
@@ -147,8 +144,4 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	// should return sql not found error after a disconnect
 	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
 	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
-
-	// make sure the immutable record still exists
-	cl, err = pg.GetCustodianLinkByID(ctx, *clID)
-	suite.Require().NoError(err, "should be no errors, should still exist")
 }

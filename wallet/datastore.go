@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -393,13 +394,13 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 // CustodianLink - representation of wallet_custodian record
 type CustodianLink struct {
-	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
-	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
-	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
-	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
-	DisconnectedAt     time.Time  `json:"disconnected_at" db:"disconnected_at" valid:"-"`
-	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
-	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+	WalletID           *uuid.UUID   `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string       `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time    `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time    `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     sql.NullTime `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string       `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID   `json:"linking_id" db:"linking_id" valid:"uuid"`
 }
 
 // GetWalletIDString - get string version of the WalletID
@@ -580,7 +581,7 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		set
 			user_deposit_destination=''
 		where
-			wallet_id=$1
+			id=$1
 	`
 	// perform query
 	if r, err := tx.ExecContext(
@@ -653,22 +654,22 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	// will rollback if tx created at this scope
 	defer rollback()
 
-	var existingLinkingID = new(uuid.UUID)
+	var existingLinkingID uuid.UUID
 	// get the custodial provider's linking id from db
 	stmt := `
 		select linking_id from wallet_custodian
 		where wallet_id=$1 and custodian=$2
 	`
-	err = tx.Get(existingLinkingID, stmt, cl.WalletID, cl.Custodian)
-	if err != nil {
+	err = tx.Get(&existingLinkingID, stmt, cl.WalletID, cl.Custodian)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sublogger.Error().Err(err).
 			Msg("failed to insert wallet_custodian")
 		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
 	}
 
-	if existingLinkingID != nil {
+	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
 		// check if the member matches the associated member
-		if !uuid.Equal(*cl.LinkingID, *existingLinkingID) {
+		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
 		}
 	}
@@ -706,8 +707,8 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		) values (
 			$1, $2, $3
 		)
-		on conflict do
-		update set disconnected_at=null, linked_at=now()
+		on conflict (wallet_id, custodian, linking_id) 
+		do update set disconnected_at=null, linked_at=now()
 		returning *
 	`
 
