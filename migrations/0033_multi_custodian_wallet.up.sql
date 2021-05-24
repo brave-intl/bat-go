@@ -1,19 +1,18 @@
 --- wallet_custodian - provides the ability to support multiple custodians per anonymous wallet
---- this log table is immutable, and referenced from the wallets table for linking information.
 create table wallet_custodian (
-    id uuid primary key not null default uuid_generate_v4(),
     wallet_id uuid not null,
     custodian text not null,
+    linking_id uuid not null,
     created_at timestamp with time zone not null default current_timestamp,
     linked_at timestamp with time zone not null default current_timestamp,
-    disconnected_at timestamp with time zone not null default current_timestamp,
+    disconnected_at timestamp with time zone
     deposit_destination text not null,
-    linking_id uuid not null
+    primary key (wallet_id, linking_id, custodian)
 );
 
---- wallet_custodian_id is the link to the currently active custodial linking from the immutable 
---- table of linkings
-alter table wallets add column wallet_custodian_id uuid default null;
+--- only one custodian can be connected at a time
+create unique index wallet_custodian_unique_connected
+    on wallet_custodian (custodian, wallet_id, linking_id, coalesce(disconnected_at, -1));
 
 --- create an index on the linking_id (which is how we check linking limits)
 create index wallet_custodian_linking_id_idx on wallet_custodian(linking_id);

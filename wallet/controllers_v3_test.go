@@ -99,13 +99,10 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	// begin linking tx
 	mock.ExpectBegin()
 
-	wcID := uuid.NewV4()
-
-	rows := sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
-		AddRow(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), "12345", "brave", wcID)
-
-	// passes the migrate test
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "brave").WillReturnRows(linkingIDRows)
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -114,15 +111,14 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(open)
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), 4).WillReturnRows(max)
 
-	clID := uuid.NewV4()
-	clRows := sqlmock.NewRows([]string{"id", "created_at", "linked_at"}).
-		AddRow(clID, time.Now(), time.Now())
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", idTo.String(), uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
 
-	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom, clID).WillReturnResult(sqlmock.NewResult(1, 1))
+	// updates the user_deposit_destination
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -353,16 +349,13 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	)
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
-	wcID := uuid.NewV4()
-
-	rows := sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
-		AddRow(uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String()), "12345", "bitflyer", wcID)
-
 	// begin linking tx
 	mock.ExpectBegin()
 
-	// passes the migrate test
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "bitflyer").WillReturnRows(linkingIDRows)
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -371,15 +364,14 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(open)
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String()), 4).WillReturnRows(max)
 
-	clID := uuid.NewV4()
-	clRows := sqlmock.NewRows([]string{"id", "created_at", "linked_at"}).
-		AddRow(clID, time.Now(), time.Now())
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", idTo.String(), uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom, clID).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -445,8 +437,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
 			Datastore: datastore,
 		})
-		w    = httptest.NewRecorder()
-		wcID = uuid.NewV4()
+		w = httptest.NewRecorder()
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -465,11 +456,10 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	// begin linking tx
 	mock.ExpectBegin()
 
-	rows := sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
-		AddRow(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String()), "12345", "gemini", wcID)
-
-	// passes the migrate test
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
@@ -478,15 +468,14 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(open)
 	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String()), 4).WillReturnRows(max)
 
-	clID := uuid.NewV4()
-	clRows := sqlmock.NewRows([]string{"id", "created_at", "linked_at"}).
-		AddRow(clID, time.Now(), time.Now())
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", idTo.String(), uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom, clID).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -543,20 +532,11 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 	// create transaction
 	mock.ExpectBegin()
 
-	wcID := uuid.NewV4()
-	idTo := uuid.NewV4()
-
-	rows := sqlmock.NewRows([]string{"provider_linking_id", "user_deposit_destination", "user_deposit_account_provider", "wallet_custodian_id"}).
-		AddRow(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), "12345", "uphold", wcID)
-
-	// passes the migrate test
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
+	// removes the link to the user_deposit_destination record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// updates the disconnected date on the record, and returns no error and one changed row
 	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// removes the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()

@@ -1389,13 +1389,9 @@ where
 	// mint the grant to the wallet's deposit destination
 	statement = `
 select
-	case when w.user_deposit_destination!='' then w.user_deposit_destination
-	else wc.deposit_destination
-	end as deposit_destination
+	w.user_deposit_destination
 from
 	wallets w
-left join
-	wallet_custodian wc on (w.wallet_custodian_id=wc.id)
 where
 	w.id = $1
 `
