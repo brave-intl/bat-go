@@ -759,10 +759,8 @@ func logger(ctx context.Context) *zerolog.Logger {
 
 // helper to create a tx
 func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
-	// get or create tx
 	logger(ctx).Debug().
 		Msg("creating transaction")
-	// no tx, create one and rollback on defer, adding to ctx
 	tx, err = pg.RawDB().Beginx()
 	if err != nil {
 		logger(ctx).Error().Err(err).
