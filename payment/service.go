@@ -7,12 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stripe/stripe-go/client"
+
 	"errors"
 
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
+	"github.com/stripe/stripe-go"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -31,6 +34,7 @@ var (
 type Service struct {
 	wallet           *wallet.Service
 	cbClient         cbr.Client
+	scClient         *client.API
 	Datastore        Datastore
 	codecs           map[string]*goavro.Codec
 	kafkaWriter      *kafka.Writer
@@ -82,15 +86,29 @@ func (s *Service) InitKafka(ctx context.Context) error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
+	sublogger := logger(ctx).With().Str("func", "InitService").Logger()
+
+	// setup stripe if exists in context and enabled
+	var scClient = &client.API{}
+	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
+		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
+		if err != nil {
+			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+		}
+		// initialize stripe client
+		scClient.Init(stripe.Key, nil)
+	}
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
 	}
 
-	service := &Service{
+	service = &Service{
 		wallet:           walletService,
 		cbClient:         cbClient,
+		scClient:         scClient,
 		Datastore:        datastore,
 		pauseVoteUntilMu: sync.RWMutex{},
 	}
@@ -121,9 +139,13 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
-	var currency string
-	var location string
-	var status string
+	var (
+		currency         string
+		location         string
+		stripeSuccessURI string
+		stripeCancelURI  string
+		status           string
+	)
 
 	for i := 0; i < len(req.Items); i++ {
 		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
@@ -144,6 +166,20 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		if currency != orderItem.Currency {
 			return nil, errors.New("all order items must be the same currency")
 		}
+		// stripe related
+		if stripeSuccessURI == "" {
+			stripeSuccessURI = orderItem.Metadata["stripe_success_uri"]
+		}
+		if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
+			return nil, errors.New("all order items must have same stripe success uri")
+		}
+		if stripeCancelURI == "" {
+			stripeCancelURI = orderItem.Metadata["stripe_cancel_uri"]
+		}
+		if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
+			return nil, errors.New("all order items must have same stripe cancel uri")
+		}
+
 		orderItems = append(orderItems, *orderItem)
 	}
 
@@ -155,6 +191,23 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	}
 
 	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if !order.IsPaid() && order.IsStripePayable() {
+		checkoutSession, err := order.CreateStripeCheckoutSession(
+			req.Email, stripeSuccessURI, stripeCancelURI)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
 
 	return order, err
 }
@@ -178,6 +231,15 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 		}
 	}
 
+	return nil
+}
+
+// UpdateOrderMetadata checks to see if an order has been paid and updates it if so
+func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

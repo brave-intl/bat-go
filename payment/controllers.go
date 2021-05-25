@@ -23,6 +23,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
+	"github.com/stripe/stripe-go"
+	"github.com/stripe/stripe-go/webhook"
 )
 
 func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
@@ -212,11 +214,13 @@ type OrderItemRequest struct {
 // CreateOrderRequest includes information needed to create an order
 type CreateOrderRequest struct {
 	Items []OrderItemRequest `json:"items" valid:"-"`
+	Email string             `json:"email" valie:"-"`
 }
 
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
 		var req CreateOrderRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -238,7 +242,9 @@ func CreateOrder(service *Service) handlers.AppHandler {
 
 		// Validates the SKU is one of our previously created SKUs
 		for _, item := range req.Items {
-			if !IsValidSKU(item.SKU) {
+			if ok, err := IsValidSKU(ctx, item.SKU); err != nil {
+				return handlers.WrapError(err, "failed to check sku validity", http.StatusInternalServerError)
+			} else if !ok {
 				return handlers.WrapError(err, "Invalid SKU Token provided in request", http.StatusBadRequest)
 			}
 		}
@@ -483,7 +489,7 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err := service.Datastore.DeleteOrderCreds(*orderID.UUID())
+		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), false)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
@@ -702,5 +708,104 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+	})
+}
+
+// WebhookRouter - handles calls from various payment method webhooks informing payments of completion
+func WebhookRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	return r
+}
+
+// HandleStripeWebhook is the handler for stripe checkout session webhooks
+func HandleStripeWebhook(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		// get logger
+		sublogger := logger(ctx).With().
+			Str("func", "HandleStripeWebhook").
+			Logger()
+
+		// get webhook secret from ctx
+		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
+			return handlers.WrapError(
+				err, "error getting stripe_webhook_secret from context",
+				http.StatusInternalServerError)
+		}
+
+		b, err := requestutils.ReadWithLimit(r.Body, 65536)
+		if err != nil {
+			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
+		}
+
+		event, err := webhook.ConstructEvent(
+			b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		if err != nil {
+			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
+		}
+
+		// Handle invoice events
+		if event.Type == "invoice.updated" {
+			// Retrieve invoice from update events
+			var invoice stripe.Invoice
+			err := json.Unmarshal(event.Data.Raw, &invoice)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+
+			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
+			}
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+			}
+
+			// If the invoice is paid set order status to paid, otherwise
+			if invoice.Paid {
+				err = service.Datastore.UpdateOrder(orderID, "paid")
+				if err != nil {
+					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				}
+				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				if err != nil {
+					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+				}
+				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+			}
+			err = service.Datastore.UpdateOrder(orderID, "pending")
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+			if err != nil {
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
+		}
+
+		// Handle subscription cancellations
+		if event.Type == "customer.subscription.deleted" {
+			var subscription stripe.Subscription
+			err := json.Unmarshal(event.Data.Raw, &subscription)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+			}
+			err = service.Datastore.UpdateOrder(orderID, "canceled")
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "subscription canceled", w, http.StatusOK)
+		}
+
+		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
 	})
 }

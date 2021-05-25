@@ -3,11 +3,13 @@ package payment
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
@@ -30,6 +32,8 @@ type Datastore interface {
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
+	// UpdateOrderMetadata adds a key value pair to an order's metadata
+	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetTransaction returns a transaction given an external transaction id
@@ -51,7 +55,7 @@ type Datastore interface {
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	// DeleteOrderCreds
-	DeleteOrderCreds(orderID uuid.UUID) error
+	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
 	// RunNextOrderJob
@@ -178,12 +182,11 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 	for i := 0; i < len(orderItems); i++ {
 		orderItems[i].OrderID = order.ID
 
-		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
-		`)
-		err = nstmt.Get(&orderItems[i], orderItems[i])
+		err = tx.Get(&orderItems[i], `
+			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods
+		`, orderItems[i].OrderID, orderItems[i].SKU, orderItems[i].Quantity, orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal, orderItems[i].Location, orderItems[i].Description, orderItems[i].CredentialType, pq.Array(orderItems[i].PaymentMethods))
 
 		if err != nil {
 			return nil, err
@@ -214,7 +217,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type, payment_methods
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
@@ -467,12 +470,16 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 }
 
 // DeleteOrderCreds deletes the order credentials for a OrderID
-func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID) error {
+func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 
 	query := `
 		delete
 		from order_creds
 		where order_id = $1`
+
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
 
 	_, err := pg.RawDB().Exec(query, orderID)
 	if err != nil {
@@ -668,4 +675,44 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	}
 
 	return attempted, nil
+}
+
+// Metadata - type which represents key/value pair metadata
+type Metadata map[string]string
+
+// Value - implement driver.Valuer interface for conversion to and from sql
+func (m Metadata) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+// Scan - implement driver.Scanner interface for conversion to and from sql
+func (m *Metadata) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan Metadata, not byte slice")
+	}
+	return json.Unmarshal(b, &m)
+}
+
+// UpdateOrderMetadata adds a key value pair to an order's metadata
+func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+	// create order
+	om := Metadata{
+		key: value,
+	}
+
+	stmt := `update orders set metadata = $1, updated_at = current_timestamp where id = $2`
+
+	result, err := pg.RawDB().Exec(stmt, om, orderID.String)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
 }

@@ -1,16 +1,26 @@
 package payment
 
 import (
-	"os"
+	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	stripe "github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	macaroon "gopkg.in/macaroon.v2"
 )
+
+//StripePaymentMethod - the label for stripe payment method
+const StripePaymentMethod = "stripe"
 
 // Order includes information about a particular order
 type Order struct {
@@ -23,6 +33,7 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
+	Metadata   Metadata             `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
@@ -39,49 +50,33 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
+	PaymentMethods Methods              `json:"paymentMethods" db:"payment_methods"`
+	Metadata       Metadata             `json:"metadata" db:"metadata"`
 }
 
-// IsValidSKU checks to see if the token provided is one that we've previously created
-func IsValidSKU(sku string) bool {
-	env := os.Getenv("ENV")
-	if env == "production" {
-		switch sku {
-		case
-			// Production - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J",
-			// Production - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o=",
-			// Production - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlILeuqgF6G9nPczv/CLyEtAQB/evX8RGFqXAxjga4++3HCg==":
-			return true
-		}
-	} else {
-		switch sku {
-		case
-			// Dev - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
-			// Dev - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
-			// Dev - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIAs+/paWWm0Kxm/do/8bPGga5ETPVRx1w6J8SPq0mzBFCg==",
-			// Staging - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W",
-			// Staging - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
-			// Staging - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
-			return true
+// Methods type is a string slice holding payments
+type Methods []string
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *Methods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
 		}
 	}
 
-	whitelistedSKUs := strings.Split(os.Getenv("SKUS_WHITELIST"), ",")
-	for _, whitelistedSKU := range whitelistedSKUs {
-		if sku == whitelistedSKU {
-			return true
-		}
-	}
+	return nil
+}
 
-	return false
+// Value the driver.Value representation
+func (pm *Methods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
@@ -133,8 +128,14 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 			orderItem.Currency = value
 		case "credential_type":
 			orderItem.CredentialType = value
+		case "payment_methods":
+			orderItem.PaymentMethods = strings.Split(value, ",")
+		case "metadata":
+			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
 		}
-
 	}
 	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
@@ -144,6 +145,91 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
 	return &orderItem, nil
+}
+
+// IsStripePayable returns true if every item is payable by Stripe
+func (order Order) IsStripePayable() bool {
+	for _, item := range order.Items {
+
+		// check stripe in payment
+		if !strings.Contains(strings.Join(item.PaymentMethods, ","), StripePaymentMethod) {
+			return false
+		}
+		// TODO: make sure we have a stripe_product_id caveat
+		// TODO: if not we need to look into subscription trials:
+		/// -> https://stripe.com/docs/billing/subscriptions/trials
+	}
+	return true
+}
+
+// CreateCheckoutSessionResponse - the structure of a checkout session response
+type CreateCheckoutSessionResponse struct {
+	SessionID string `json:"checkoutSessionId"`
+}
+
+// CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
+func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string) (CreateCheckoutSessionResponse, error) {
+	// Create customer if not already created
+	i := customer.List(&stripe.CustomerListParams{
+		Email: stripe.String(email),
+	})
+
+	matchingCustomers := 0
+	for i.Next() {
+		matchingCustomers++
+	}
+
+	var customerID string
+	if matchingCustomers > 0 {
+		customerID = i.Customer().ID
+	} else {
+		customer, err := customer.New(&stripe.CustomerParams{
+			Email: stripe.String(email),
+		})
+		if err != nil {
+			return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe customer: %w", err)
+		}
+		customerID = customer.ID
+	}
+
+	params := &stripe.CheckoutSessionParams{
+		Customer: stripe.String(customerID),
+		PaymentMethodTypes: stripe.StringSlice([]string{
+			"card",
+		}),
+		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:        stripe.String(successURI),
+		CancelURL:         stripe.String(cancelURI),
+		ClientReferenceID: stripe.String(order.ID.String()),
+		SubscriptionData:  &stripe.CheckoutSessionSubscriptionDataParams{},
+		LineItems:         order.CreateStripeLineItems(),
+	}
+
+	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
+
+	session, err := session.New(params)
+	if err != nil {
+		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe session: %w", err)
+	}
+
+	data := CreateCheckoutSessionResponse{
+		SessionID: session.ID,
+	}
+	return data, nil
+}
+
+// CreateStripeLineItems - create line items for a checkout session with stripe
+func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
+	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
+	for index, item := range order.Items {
+		// since we are creating stripe line item, we can assume
+		// that the stripe product is embedded in macaroon as metadata
+		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
+			Price:    stripe.String(item.Metadata["stripe_product_id"]),
+			Quantity: stripe.Int64(int64(item.Quantity)),
+		}
+	}
+	return lineItems
 }
 
 // IsPaid returns true if the order is paid
