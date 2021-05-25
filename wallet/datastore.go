@@ -263,6 +263,7 @@ func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID st
 		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
 	`
 	err := tx.Get(&max, statement, providerLinkingID, getEnvMaxCards())
+	fmt.Println("err: ", err)
 	return max, err
 }
 
@@ -271,7 +272,7 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 		used int
 	)
 	statement := `
-		select count(1) as used from wallets where provider_linking_id = $1
+		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
 	`
 	err := tx.Get(&used, statement, providerLinkingID)
 	return used, err
@@ -319,11 +320,13 @@ type LinkingInfo struct {
 func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error) {
 	var info = LinkingInfo{}
 
-	tx, err := pg.RawDB().Beginx()
+	// get tx
+	_, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		return info, err
+		return LinkingInfo{}, fmt.Errorf("failed to create db transaction GetLinkingLimitInfo: %w", err)
 	}
-	defer pg.RollbackTx(tx)
+	// will rollback if tx created at this scope
+	defer rollback()
 
 	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID)
 	if err != nil {
@@ -333,6 +336,11 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID)
 	if err != nil {
 		return info, errorutils.Wrap(err, "error looking up used linkings for wallet")
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return info, fmt.Errorf("failed to commit GetLinkingLimitInfo transaction: %w", err)
 	}
 
 	info.WalletsLinked = usedLinkings
@@ -422,8 +430,6 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 // GetCustodianLinkCount - get the wallet custodian link count across all wallets
 func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error) {
 	// the count of linked wallets
-	used := 0
-	max := 0
 	var err error
 
 	// create a sublogger
@@ -435,28 +441,14 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 		Msg("starting GetCustodianLinkCount")
 
 	// get tx
-	_, tx, rollback, commit, err := getTx(ctx, pg)
+	ctx, _, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to create db transaction GetCustodianLinkByWalletID: %w", err)
 	}
 	// will rollback if tx created at this scope
 	defer rollback()
 
-	// get used
-	stmt := `
-		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
-	`
-	err = tx.Get(&used, stmt, linkingID)
-	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("failed to get CustodianLinkCount from DB")
-		return 0, 0, fmt.Errorf("failed to get CustodianLinkCount from DB: %w", err)
-	}
-	// get max
-	stmt = `
-		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
-	`
-	err = tx.Get(&max, stmt, linkingID, getEnvMaxCards())
+	li, err := pg.GetLinkingLimitInfo(ctx, linkingID.String())
 	if err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to get CustodianLinkCount from DB")
@@ -468,7 +460,8 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 		return 0, 0, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
 	}
 
-	return used, max, nil
+	// max is wallets linked + open slots
+	return li.WalletsLinked, li.WalletsLinked + li.OpenLinkingSlots, nil
 }
 
 func rollbackFn(ctx context.Context, pg *Postgres, tx *sqlx.Tx) func() {
@@ -720,13 +713,17 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	}
 	// update wallets with new deposit destination
 	stmt = `
-		update wallets set user_deposit_destination=$1 where id=$2
+		update wallets set
+			user_deposit_destination=$1,provider_linking_id=$2,user_deposit_account_provider=$3
+		where id=$4
 	`
 	// perform query
 	if r, err := tx.ExecContext(
 		ctx,
 		stmt,
 		depositDest,
+		cl.LinkingID,
+		cl.Custodian,
 		cl.WalletID,
 	); err != nil {
 		sublogger.Error().Err(err).

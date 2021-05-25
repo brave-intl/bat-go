@@ -108,8 +108,8 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
 	// linking limit checks
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -118,7 +118,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
 
 	// updates the user_deposit_destination
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "brave", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -361,8 +361,8 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
 	// linking limit checks
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String()), 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -371,7 +371,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -465,8 +465,8 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
 	// linking limit checks
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, accountID.String()), 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -475,7 +475,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
-	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
