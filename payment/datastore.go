@@ -151,9 +151,12 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 
 	var keys []Key
 	err := pg.RawDB().Select(&keys, `
-			SELECT id, name, merchant_id, created_at, expiry FROM api_keys
-			WHERE merchant_id = $1
-		`+expiredQuery+" ORDER BY name, created_at",
+			select
+				id, name, merchant_id, created_at, expiry,
+				encrypted_secret_key, nonce
+			from api_keys
+			where
+			merchant_id = $1`+expiredQuery+" ORDER BY name, created_at",
 		merchant)
 
 	if err != nil {

@@ -79,24 +79,49 @@ func (pm *Methods) Value() (driver.Value, error) {
 	return pq.Array(pm), nil
 }
 
-// CreateOrderItemFromMacaroon creates an order item from a macaroon
-func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to b64 decode sku token: %w", err)
 	}
 	mac := &macaroon.Macaroon{}
-	err = mac.UnmarshalBinary(macBytes)
-	if err != nil {
-		return nil, err
+	if err = mac.UnmarshalBinary(macBytes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal sku token: %w", err)
 	}
 
-	// TODO Figure out how to verify macaroon using library
-	// I think we have to call .Bind()
-	// https://github.com/go-macaroon/macaroon#func-macaroon-bind
-	// I think we simply want to verify the signature and not the caveats?
-	// SO maybe VerifySignature
-	// https://github.com/go-macaroon/macaroon#func-macaroon-verifysignature
+	return mac, nil
+}
+
+// CreateOrderItemFromMacaroon creates an order item from a macaroon
+func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+	mac, err := decodeAndUnmarshalSku(sku)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
+	}
+
+	// get the merchant's keys
+	keys, err := s.Datastore.GetKeys(mac.Location(), false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
+	}
+	// check if any of the keys for the merchant will validate the mac
+	var valid bool
+	for _, k := range *keys {
+		// decrypt the merchant's secret key from db
+		if err := k.SetSecretKey(); err != nil {
+			return nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
+		}
+		// perform verify
+		if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
+			// valid
+			valid = true
+		}
+	}
+
+	// perform validation
+	if !valid {
+		return nil, fmt.Errorf("invalid sku token")
+	}
 
 	caveats := mac.Caveats()
 	orderItem := OrderItem{}
@@ -108,7 +133,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		caveat := mac.Caveats()[i]
 		values := strings.Split(string(caveat.Id), "=")
 		key := strings.TrimSpace(values[0])
-		value := strings.TrimSpace(values[1])
+		value := strings.TrimSpace(strings.Join(values[1:], "="))
 
 		switch key {
 		case "sku":

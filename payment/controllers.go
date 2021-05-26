@@ -220,7 +220,6 @@ type CreateOrderRequest struct {
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		ctx := r.Context()
 		var req CreateOrderRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -239,16 +238,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 				},
 			)
 		}
-
-		// Validates the SKU is one of our previously created SKUs
-		for _, item := range req.Items {
-			if ok, err := IsValidSKU(ctx, item.SKU); err != nil {
-				return handlers.WrapError(err, "failed to check sku validity", http.StatusInternalServerError)
-			} else if !ok {
-				return handlers.WrapError(err, "Invalid SKU Token provided in request", http.StatusBadRequest)
-			}
-		}
-
+		// validation of sku tokens happens in createorderitemfrommacaroon
 		order, err := service.CreateOrderFromRequest(req)
 
 		if err != nil {

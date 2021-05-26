@@ -148,7 +148,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, err := s.CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}
