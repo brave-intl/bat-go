@@ -126,11 +126,9 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	if dirty {
 		suite.Require().NoError(m.Force(int(ver)))
 	}
-	/*
-		if ver > 0 {
-			suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
-		}
-	*/
+	if ver > 0 {
+		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
+	}
 
 	suite.mockCtrl = gomock.NewController(suite.T())
 	suite.mockCB = mockcb.NewMockClient(suite.mockCtrl)

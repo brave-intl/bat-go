@@ -690,6 +690,9 @@ func (m Metadata) Value() (driver.Value, error) {
 
 // Scan - implement driver.Scanner interface for conversion to and from sql
 func (m *Metadata) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("failed to scan Metadata, not byte slice")
