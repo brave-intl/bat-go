@@ -70,6 +70,22 @@ func init() {
 		Bind("reputation-on-drain").
 		Env("REPUTATION_ON_DRAIN")
 
+	// stripe configurations
+	flagBuilder.Flag().Bool("stripe-enabled", false,
+		"is stripe enabled for payments").
+		Bind("stripe-enabled").
+		Env("STRIPE_ENABLED")
+
+	flagBuilder.Flag().String("stripe-webhook-secret", "",
+		"the stripe webhook secret").
+		Bind("stripe-webhook-secret").
+		Env("STRIPE_WEBHOOK_SECRET")
+
+	flagBuilder.Flag().String("stripe-secret", "",
+		"the stripe secret").
+		Bind("stripe-secret").
+		Env("STRIPE_SECRET")
+
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
@@ -202,6 +218,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
+
 	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -213,7 +230,11 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
+	// for payment webhook integrations
+	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+
+	// add in webhooks for stripe if enabled
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
@@ -338,6 +359,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
 	ctx = context.WithValue(ctx, appctx.BitflyerClientSecretCTXKey, viper.GetString("bitflyer-client-secret"))
 	ctx = context.WithValue(ctx, appctx.BitflyerClientIDCTXKey, viper.GetString("bitflyer-client-id"))
+
+	// stripe variables
+	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
+	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
+	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

@@ -80,9 +80,6 @@ const (
 	StripeWebhookSecretCTXKey CTXKey = "stripe_webhook_secret"
 	// StripeSecretCTXKey - the secret key for stripe integration
 	StripeSecretCTXKey CTXKey = "stripe_secret"
-
-	// ValidHardCodedSKUsCTXKey - skus related keys
-	ValidHardCodedSKUsCTXKey CTXKey = "valid_hardcoded_skus"
 )
 
 var (
