@@ -14,6 +14,7 @@ import (
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
+	"github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 	"github.com/stripe/stripe-go"
 
@@ -122,7 +123,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		},
 		{
 			Func:    service.RunNextOrderJob,
-			Cadence: 5 * time.Second,
+			Cadence: 1 * time.Second,
 			Workers: 1,
 		},
 	}
@@ -326,5 +327,15 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 
 // RunNextOrderJob takes the next order job and completes it
 func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextOrderJob(ctx, s)
+	for {
+		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
+		if err != nil {
+			sentry.CaptureMessage(err.Error())
+			sentry.Flush(time.Second * 2)
+			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
+		}
+		if !attempted {
+			return attempted, err
+		}
+	}
 }
