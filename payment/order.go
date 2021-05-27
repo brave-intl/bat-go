@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -21,6 +22,11 @@ import (
 
 //StripePaymentMethod - the label for stripe payment method
 const StripePaymentMethod = "stripe"
+
+var (
+	// ErrInvalidSKU - this sku is malformed or failed signature validation
+	ErrInvalidSKU = errors.New("Invalid SKU Token provided in request")
+)
 
 // Order includes information about a particular order
 type Order struct {
@@ -104,6 +110,7 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
 	}
+
 	// check if any of the keys for the merchant will validate the mac
 	var valid bool
 	for _, k := range *keys {
@@ -120,7 +127,7 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 
 	// perform validation
 	if !valid {
-		return nil, fmt.Errorf("invalid sku token")
+		return nil, ErrInvalidSKU
 	}
 
 	caveats := mac.Caveats()

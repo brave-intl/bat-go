@@ -31,9 +31,11 @@ func (suite *OrderTestSuite) SetupSuite() {
 	if dirty {
 		suite.Require().NoError(m.Force(int(ver)))
 	}
-	if ver > 0 {
-		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
-	}
+	/*
+		if ver > 0 {
+			suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
+		}
+	*/
 
 	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
 	InitEncryptionKeys()
@@ -44,6 +46,23 @@ func (suite *OrderTestSuite) SetupSuite() {
 	}
 }
 
+func (suite *OrderTestSuite) TearDownTest() {
+	//	suite.CleanDB()
+}
+
+/*
+func (suite *OrderTestSuite) CleanDB() {
+	tables := []string{"api_keys"}
+
+	pg, err := NewPostgres("", false, "")
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	for _, table := range tables {
+		_, err = pg.RawDB().Exec("delete from " + table)
+		suite.Require().NoError(err, "Failed to get clean table")
+	}
+}
+*/
 func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	// encrypt merchant key
 	cipher, nonce, err := cryptography.EncryptMessage(byteEncryptionKey, []byte("testing123"))
@@ -91,5 +110,5 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	suite.Require().NoError(err)
 
 	_, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
-	suite.Require().Equal(err.Error(), "invalid sku token")
+	suite.Require().Equal(err.Error(), "Invalid SKU Token provided in request")
 }

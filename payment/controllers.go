@@ -214,7 +214,7 @@ type OrderItemRequest struct {
 // CreateOrderRequest includes information needed to create an order
 type CreateOrderRequest struct {
 	Items []OrderItemRequest `json:"items" valid:"-"`
-	Email string             `json:"email" valie:"-"`
+	Email string             `json:"email" valid:"-"`
 }
 
 // CreateOrder is the handler for creating a new order
@@ -242,6 +242,9 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		order, err := service.CreateOrderFromRequest(req)
 
 		if err != nil {
+			if errors.Is(err, ErrInvalidSKU) {
+				return handlers.ValidationError(ErrInvalidSKU.Error(), nil)
+			}
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
