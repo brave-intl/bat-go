@@ -90,6 +90,6 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	badsku, err := t.Generate("321testing")
 	suite.Require().NoError(err)
 
-	orderItem, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
+	_, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
 	suite.Require().Equal(err.Error(), "invalid sku token")
 }
