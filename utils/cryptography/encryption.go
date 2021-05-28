@@ -27,7 +27,7 @@ func EncryptMessage(encryptionKey [32]byte, field []byte) (encrypted []byte, non
 
 	// large amounts of data should be chunked
 	// If in doubt, 16KB is a reasonable chunk size.
-	if len(field) >= (16 * 1000) {
+	if len(field) >= (4 * 1000) {
 		return nil, nonce, ErrEncryptedFieldTooLarge
 	}
 

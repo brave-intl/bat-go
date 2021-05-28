@@ -3,10 +3,10 @@ package payment
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -182,25 +183,41 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		return nil, err
 	}
 
+	query := `
+		insert into order_items 
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
+		values `
+	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
-		orderItems[i].OrderID = order.ID
+		// put all our params together
+		params = append(params,
+			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
+			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
+			orderItems[i].Location, orderItems[i].Description,
+			orderItems[i].CredentialType, pq.Array(orderItems[i].PaymentMethods),
+		)
+		numFields := 10 // the number of fields you are inserting
+		n := i * numFields
 
-		err = tx.Get(&orderItems[i], `
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods
-		`, orderItems[i].OrderID, orderItems[i].SKU, orderItems[i].Quantity, orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal, orderItems[i].Location, orderItems[i].Description, orderItems[i].CredentialType, pq.Array(orderItems[i].PaymentMethods))
-
-		if err != nil {
-			return nil, err
+		query += `(`
+		for j := 0; j < numFields; j++ {
+			query += `$` + strconv.Itoa(n+j+1) + `,`
 		}
+		query = query[:len(query)-1] + `),`
+	}
+	query = query[:len(query)-1] // remove the trailing comma
+	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods`
+
+	order.Items = []OrderItem{}
+
+	err = tx.Select(&order.Items, query, params...)
+	if err != nil {
+		return nil, err
 	}
 	err = tx.Commit()
 	if err != nil {
 		return nil, err
 	}
-
-	order.Items = orderItems
 
 	return &order, nil
 }
@@ -680,30 +697,10 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	return attempted, nil
 }
 
-// Metadata - type which represents key/value pair metadata
-type Metadata map[string]string
-
-// Value - implement driver.Valuer interface for conversion to and from sql
-func (m Metadata) Value() (driver.Value, error) {
-	return json.Marshal(m)
-}
-
-// Scan - implement driver.Scanner interface for conversion to and from sql
-func (m *Metadata) Scan(value interface{}) error {
-	if value == nil {
-		return nil
-	}
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("failed to scan Metadata, not byte slice")
-	}
-	return json.Unmarshal(b, &m)
-}
-
 // UpdateOrderMetadata adds a key value pair to an order's metadata
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
 	// create order
-	om := Metadata{
+	om := datastore.Metadata{
 		key: value,
 	}
 

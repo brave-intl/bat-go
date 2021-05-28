@@ -2,9 +2,58 @@ package datastore
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"strings"
+
+	"github.com/lib/pq"
 )
+
+// Methods type is a string slice holding payments
+type Methods []string
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *Methods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
+		}
+	}
+
+	return nil
+}
+
+// Value the driver.Value representation
+func (pm *Methods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
+}
+
+// Metadata - type which represents key/value pair metadata
+type Metadata map[string]string
+
+// Value - implement driver.Valuer interface for conversion to and from sql
+func (m Metadata) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+// Scan - implement driver.Scanner interface for conversion to and from sql
+func (m *Metadata) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan Metadata, not byte slice")
+	}
+	return json.Unmarshal(b, &m)
+}
 
 // NullString is a type that lets ya get a null field from the database
 type NullString struct {

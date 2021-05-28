@@ -1,8 +1,6 @@
 package payment
 
 import (
-	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +9,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
-	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	stripe "github.com/stripe/stripe-go/v71"
@@ -39,7 +36,7 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
-	Metadata   Metadata             `json:"metadata" db:"metadata"`
+	Metadata   datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
@@ -56,33 +53,8 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	PaymentMethods Methods              `json:"paymentMethods" db:"payment_methods"`
-	Metadata       Metadata             `json:"metadata" db:"metadata"`
-}
-
-// Methods type is a string slice holding payments
-type Methods []string
-
-// Scan the src sql type into the passed JSONStringArray
-func (pm *Methods) Scan(src interface{}) error {
-	var x []sql.NullString
-	var v = pq.Array(&x)
-
-	if err := v.Scan(src); err != nil {
-		return err
-	}
-	for i := 0; i < len(x); i++ {
-		if x[i].Valid {
-			*pm = append(*pm, x[i].String)
-		}
-	}
-
-	return nil
-}
-
-// Value the driver.Value representation
-func (pm *Methods) Value() (driver.Value, error) {
-	return pq.Array(pm), nil
+	PaymentMethods datastore.Methods    `json:"paymentMethods" db:"payment_methods"`
+	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {

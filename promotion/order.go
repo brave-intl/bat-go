@@ -3,7 +3,6 @@ package promotion
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -23,7 +22,7 @@ type Order struct {
 	Location   datastore.NullString `json:"location" db:"location"`
 	Status     string               `json:"status" db:"status"`
 	Items      []OrderItem          `json:"items"`
-	Metadata   payment.Metadata     `json:"metadata" db:"metadata"`
+	Metadata   datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
@@ -40,8 +39,8 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	PaymentMethods payment.Methods      `json:"paymentMethods" db:"payment_methods"`
-	Metadata       payment.Metadata     `json:"metadata" db:"metadata"`
+	PaymentMethods datastore.Methods    `json:"paymentMethods" db:"payment_methods"`
+	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 // IsPaid returns true if the order is paid
