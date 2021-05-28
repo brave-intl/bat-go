@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+/* Following chromium style (e.g. sync_pb) is the usage for the sync protobuf */
+package payout_transaction_pb;
+
+enum State {
+  INITIALIZED = 0;
+  AUTHORIZING = 1;
+  SUBMITTING = 2;
+  CONFIRMING = 3;
+  CONFIRMED = 4;
+  RETRYABLE = 5;
+  FAILED_NON_RETRYABLE = 6;
+}
+
+enum Custodian {
+  UPHOLD = 0;
+  GEMINI = 1;
+  BITFLYER = 2;
+}
+
+enum PayoutType {
+  CONTRIBUTION = 0;
+  REFERRAL = 1;
+  MANUAL = 2;
+  ADS_DIRECT_DEPOSIT = 3;
+}
+
+message PublisherContext {
+  string publisher_id = 1;
+  string channel_id = 2;
+}
+
+message AdsContext {
+  string drain_id = 1;
+}
+
+message Context {
+  oneof provider {
+    PublisherContext publisher_context = 1;
+    AdsContext ads_context = 2;
+  }
+}
+
+message StateChange {
+  State state = 1;
+  Timestamp timestamp = 2;
+}
+
+/**
+Timestamp is copied from https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/timestamp.proto
+*/
+message Timestamp {
+  // Represents seconds of UTC time since Unix epoch
+  // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+  // 9999-12-31T23:59:59Z inclusive.
+  int64 seconds = 1;
+
+  // Non-negative fractions of a second at nanosecond resolution. Negative
+  // second values with fractions must still have non-negative nanos values
+  // that count forward in time. Must be from 0 to 999,999,999
+  // inclusive.
+  int32 nanos = 2;
+}
+
+message PayoutTransaction {
+  string transaction_id = 1;
+  repeated StateChange state_change = 2;
+  Custodian custodian = 3;
+  string payout_id = 4;
+  string account_from = 5;
+  string account_to = 6;
+  uint64 amount = 7;
+  uint64 fees = 8;
+  PayoutType payout_type = 9;
+}
