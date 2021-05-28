@@ -481,8 +481,10 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 				},
 			)
 		}
+		// is signed param
+		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), false)
+		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
