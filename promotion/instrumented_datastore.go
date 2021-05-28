@@ -12,6 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/outputs"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -225,6 +226,20 @@ func (_d DatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, grantType 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimSummary", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetClaimSummary(walletID, grantType)
+}
+
+// GetCustodianDrainInfo implements Datastore
+func (_d DatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []outputs.CustodianDrain, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianDrainInfo", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianDrainInfo(paymentID)
 }
 
 // GetDrainPoll implements Datastore

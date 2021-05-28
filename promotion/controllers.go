@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
@@ -61,6 +62,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
+	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
 	return r
 }
 
@@ -816,5 +818,47 @@ func PostReportBAPEvent(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error inserting bap report", http.StatusInternalServerError)
 		}
 		return handlers.RenderContent(r.Context(), BapReportResp{ReportBapID: bapReportID}, w, http.StatusOK)
+	})
+}
+
+// CustodianDrainInfoResponse - the response to a custodian drain info request
+type CustodianDrainInfoResponse struct {
+	outputs.Meta
+	Drains []outputs.CustodianDrain `json:"drains,omitempty"`
+}
+
+// GetCustodianDrainInfo is the handler which provides information about a particular paymentId's drains
+func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var paymentID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), paymentID, chi.URLParam(r, "paymentId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"paymentId": err.Error(),
+				},
+			)
+		}
+
+		var resp = &CustodianDrainInfoResponse{}
+
+		drainInfo, err := service.Datastore.GetCustodianDrainInfo(paymentID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting custodian drain info payment id", http.StatusBadRequest)
+		}
+
+		if drainInfo == nil {
+			return &handlers.AppError{
+				Message: "Drain Info does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		resp.Drains = drainInfo
+		resp.Status = "success"
+
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }

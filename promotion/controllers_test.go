@@ -2050,6 +2050,23 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	suite.Require().True(drainJob.Erred)
 	suite.Require().Equal(*drainJob.Status, "reputation-failed", "error code should be reputation-failed")
 
+	// testing out the drain info handler
+	drainInfoHandler := GetCustodianDrainInfo(service)
+
+	req, err = http.NewRequestWithContext(ctx, "GET", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	// setup url param
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentId", info.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	drainInfoHandler.ServeHTTP(rr, req)
+	b, _ = httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
@@ -2810,6 +2827,23 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
+
+	// testing out the drain info handler
+	drainInfoHandler := GetCustodianDrainInfo(service)
+
+	req, err = http.NewRequestWithContext(ctx, "GET", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	// setup url param
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentId", info.ID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	drainInfoHandler.ServeHTTP(rr, req)
+	b, _ = httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
 // THIS CODE IS A QUICK AND DIRTY HACK

@@ -17,6 +17,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/outputs"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -119,6 +120,8 @@ type Datastore interface {
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
+	// GetCustodianDrainInfo gets the information about a drain poll job
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -148,6 +151,8 @@ type ReadOnlyDatastore interface {
 
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
+	// GetCustodianDrainInfo gets the information about a drain poll job
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -678,6 +683,93 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
+}
+
+// GetCustodianDrainInfo Get the status of the custodian drain info
+func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error) {
+	resp := []outputs.CustodianDrain{}
+	// get the linked wallet info
+	stmt := `
+select
+	user_deposit_account_provider, user_deposit_destination
+from
+	wallets
+where
+	id = $1
+`
+	var custodian outputs.Custodian
+	if err := pg.RawDB().Get(&custodian, stmt, paymentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// get all of the drain jobs for this payment id
+	stmt = `
+select
+	batch_id,
+	split_part(credentials->0->>'issuer',':',1) as promotion_id,
+	completed_at,
+	json_array_length(credentials)*0.25 as value,
+	case when erred then 'errored' else 'succeeded' end as state,
+	errcode,
+	transaction_id
+from
+	claim_drain
+where
+	wallet_id = $1
+`
+	type batchedPromotionsDrained struct {
+		outputs.PromotionDrained
+		BatchID uuid.UUID `db:"batch_id"`
+	}
+
+	var promosDrained = []batchedPromotionsDrained{}
+	if err := pg.RawDB().Select(&promosDrained, stmt, paymentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	batches := map[uuid.UUID][]outputs.PromotionDrained{}
+	batchValue := map[uuid.UUID]decimal.Decimal{}
+
+	// chunk all these into related batches
+	for i := 0; i < len(promosDrained); i++ {
+		if _, ok := batches[promosDrained[i].BatchID]; !ok {
+			batches[promosDrained[i].BatchID] = []outputs.PromotionDrained{}
+		}
+		if _, ok := batchValue[promosDrained[i].BatchID]; !ok {
+			batchValue[promosDrained[i].BatchID] = decimal.Zero
+		}
+		batches[promosDrained[i].BatchID] = append(
+			batches[promosDrained[i].BatchID],
+			outputs.PromotionDrained{
+				PromotionID:   promosDrained[i].PromotionID,
+				TransactionID: promosDrained[i].TransactionID,
+				CompletedAt:   promosDrained[i].CompletedAt,
+				State:         promosDrained[i].State,
+				ErrCode:       promosDrained[i].ErrCode,
+				Value:         promosDrained[i].Value,
+			},
+		)
+		batchValue[promosDrained[i].BatchID] = batchValue[promosDrained[i].BatchID].Add(promosDrained[i].Value)
+	}
+
+	// for each batch go through and create a custodian drain and add to resp drain
+	// add values along the way
+	for k := range batches {
+		resp = append(resp, outputs.CustodianDrain{
+			BatchID:           k,
+			Custodian:         custodian,
+			PromotionsDrained: batches[k],
+			Value:             batchValue[k],
+		})
+	}
+
+	return resp, nil
 }
 
 // GetDrainPoll Get the status of the drain poll job
