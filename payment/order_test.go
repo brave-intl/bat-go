@@ -31,11 +31,9 @@ func (suite *OrderTestSuite) SetupSuite() {
 	if dirty {
 		suite.Require().NoError(m.Force(int(ver)))
 	}
-	/*
-		if ver > 0 {
-			suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
-		}
-	*/
+	if ver > 0 {
+		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
+	}
 
 	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
 	InitEncryptionKeys()
@@ -47,10 +45,9 @@ func (suite *OrderTestSuite) SetupSuite() {
 }
 
 func (suite *OrderTestSuite) TearDownTest() {
-	//	suite.CleanDB()
+	suite.CleanDB()
 }
 
-/*
 func (suite *OrderTestSuite) CleanDB() {
 	tables := []string{"api_keys"}
 
@@ -62,7 +59,7 @@ func (suite *OrderTestSuite) CleanDB() {
 		suite.Require().NoError(err, "Failed to get clean table")
 	}
 }
-*/
+
 func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	// encrypt merchant key
 	cipher, nonce, err := cryptography.EncryptMessage(byteEncryptionKey, []byte("testing123"))
