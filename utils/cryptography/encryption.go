@@ -11,9 +11,12 @@ import (
 // Both what the encryption key length should be
 var keyLength = 32
 
+// 4KB is a reasonable chunk size.
+const secretBoxMaxChunkSize = 4000
+
 var (
 	// ErrEncryptedFieldTooLarge - the sku was invalid
-	ErrEncryptedFieldTooLarge = errors.New("encrypted field is greater than 16 KB - this must be chunked")
+	ErrEncryptedFieldTooLarge = errors.New("encrypted field is greater than 4 KB - this must be chunked")
 )
 
 // EncryptMessage uses SecretBox to encrypt the message
@@ -26,8 +29,7 @@ func EncryptMessage(encryptionKey [32]byte, field []byte) (encrypted []byte, non
 	}
 
 	// large amounts of data should be chunked
-	// If in doubt, 16KB is a reasonable chunk size.
-	if len(field) >= (4 * 1000) {
+	if len(field) >= secretBoxMaxChunkSize {
 		return nil, nonce, ErrEncryptedFieldTooLarge
 	}
 
