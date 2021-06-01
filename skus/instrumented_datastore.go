@@ -1,4 +1,4 @@
-package payment
+package skus
 
 // DO NOT EDIT!
 // This code is generated with http://github.com/hexdigest/gowrap tool

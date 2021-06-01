@@ -1,4 +1,4 @@
-package payment
+package skus
 
 import (
 	"encoding/hex"
