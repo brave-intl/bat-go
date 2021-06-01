@@ -743,7 +743,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Handle invoice events
-		if event.Type == "invoice.updated" {
+		if event.Type == StripePaymentUpdated {
 			// Retrieve invoice from update events
 			var invoice stripe.Invoice
 			err := json.Unmarshal(event.Data.Raw, &invoice)
@@ -784,7 +784,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// Handle subscription cancellations
-		if event.Type == "customer.subscription.deleted" {
+		if event.Type == StripeCustomerSubscriptionDeleted {
 			var subscription stripe.Subscription
 			err := json.Unmarshal(event.Data.Raw, &subscription)
 			if err != nil {

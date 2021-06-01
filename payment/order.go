@@ -18,7 +18,11 @@ import (
 )
 
 //StripePaymentMethod - the label for stripe payment method
-const StripePaymentMethod = "stripe"
+const (
+	StripePaymentMethod               = "stripe"
+	StripePaymentUpdated              = "invoice.updated"
+	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
+)
 
 var (
 	// ErrInvalidSKU - this sku is malformed or failed signature validation
