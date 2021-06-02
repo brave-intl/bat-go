@@ -133,6 +133,22 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	// check the link count is 1 for this wallet
 	used, max, err := pg.GetCustodianLinkCount(ctx, linkingID)
 	suite.Require().NoError(err, "should have no error getting custodian link count")
+
+	// disconnect the wallet
+	suite.Require().NoError(
+		pg.DisconnectCustodialWallet(ctx, id),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// perform a connect custodial wallet to make sure not more than one linking is added for same cust/wallet
+	suite.Require().NoError(
+		pg.ConnectCustodialWallet(ctx, &CustodianLink{
+			WalletID:  &id,
+			Custodian: "gemini",
+			LinkingID: &linkingID,
+		}, depositDest.String()),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// only one slot should be taken
 	suite.Require().True(used == 1, "linking count is not right")
 	suite.Require().True(max == getEnvMaxCards(), "linking count is not right")
 
