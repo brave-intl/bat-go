@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -194,6 +195,10 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 
 	suite.CheckBalance(w1, bat1)
 	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	// attempt a disconnect
+	suite.disconnectCardV3(service, w1, http.StatusOK)
+	// reconnect to existing card
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
 	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
@@ -211,6 +216,36 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w3, bat1)
 	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, bat1)
+}
+
+func (suite *WalletControllersTestSuite) disconnectCardV3(
+	service *Service,
+	w *uphold.Wallet,
+	status int,
+) {
+	info := w.GetWalletInfo()
+	// V3 Handler
+	handler := DisconnectCustodianLinkV3(service)
+
+	req, err := http.NewRequest("DELETE", "/v3/wallet/{custodian}/{paymentID}/claim", nil)
+	suite.Require().NoError(err, "wallet claim disconnect request creation failed")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("paymentID", info.ID)
+	rctx.URLParams.Add("custodian", "uphold")
+	ctx := req.Context()
+	// add signature key id to context
+	ctx = middleware.AddKeyID(ctx, info.ID)
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
+	linked, err := service.Datastore.GetWallet(context.Background(), uuid.Must(uuid.FromString(w.ID)))
+	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
+	suite.Require().Equal(linked.UserDepositDestination, "", "disconnected is supposed to wipe out the deposit dest")
 }
 
 func (suite *WalletControllersTestSuite) claimCardV3(
