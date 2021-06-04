@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.5.3 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/vault v1.1.1
-	github.com/jmoiron/sqlx v1.3.3
+	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.1
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mitchellh/copystructure v1.0.0 // indirect
