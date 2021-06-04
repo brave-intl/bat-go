@@ -26,7 +26,7 @@ require (
 	github.com/lib/pq v1.10.1
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mitchellh/copystructure v1.0.0 // indirect
-	github.com/mssola/user_agent v0.5.2
+	github.com/mssola/user_agent v0.5.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rs/zerolog v1.21.0
