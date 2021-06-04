@@ -17,7 +17,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/outputs"
+	"github.com/brave-intl/bat-go/utils/responses"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -121,7 +121,7 @@ type Datastore interface {
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
-	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error)
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]responses.CustodianDrain, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -152,7 +152,7 @@ type ReadOnlyDatastore interface {
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
-	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error)
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]responses.CustodianDrain, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -686,8 +686,8 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 }
 
 // GetCustodianDrainInfo Get the status of the custodian drain info
-func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]outputs.CustodianDrain, error) {
-	resp := []outputs.CustodianDrain{}
+func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]responses.CustodianDrain, error) {
+	resp := []responses.CustodianDrain{}
 	// get the linked wallet info
 	stmt := `
 select
@@ -697,7 +697,7 @@ from
 where
 	id = $1
 `
-	var custodian outputs.Custodian
+	var custodian responses.Custodian
 	if err := pg.RawDB().Get(&custodian, stmt, paymentID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -721,7 +721,7 @@ where
 	wallet_id = $1
 `
 	type batchedPromotionsDrained struct {
-		outputs.PromotionDrained
+		responses.PromotionDrained
 		BatchID uuid.UUID `db:"batch_id"`
 	}
 
@@ -733,20 +733,20 @@ where
 		return nil, err
 	}
 
-	batches := map[uuid.UUID][]outputs.PromotionDrained{}
+	batches := map[uuid.UUID][]responses.PromotionDrained{}
 	batchValue := map[uuid.UUID]decimal.Decimal{}
 
 	// chunk all these into related batches
 	for i := 0; i < len(promosDrained); i++ {
 		if _, ok := batches[promosDrained[i].BatchID]; !ok {
-			batches[promosDrained[i].BatchID] = []outputs.PromotionDrained{}
+			batches[promosDrained[i].BatchID] = []responses.PromotionDrained{}
 		}
 		if _, ok := batchValue[promosDrained[i].BatchID]; !ok {
 			batchValue[promosDrained[i].BatchID] = decimal.Zero
 		}
 		batches[promosDrained[i].BatchID] = append(
 			batches[promosDrained[i].BatchID],
-			outputs.PromotionDrained{
+			responses.PromotionDrained{
 				PromotionID:   promosDrained[i].PromotionID,
 				TransactionID: promosDrained[i].TransactionID,
 				CompletedAt:   promosDrained[i].CompletedAt,
@@ -761,7 +761,7 @@ where
 	// for each batch go through and create a custodian drain and add to resp drain
 	// add values along the way
 	for k := range batches {
-		resp = append(resp, outputs.CustodianDrain{
+		resp = append(resp, responses.CustodianDrain{
 			BatchID:           k,
 			Custodian:         custodian,
 			PromotionsDrained: batches[k],

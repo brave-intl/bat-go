@@ -20,8 +20,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
@@ -823,8 +823,8 @@ func PostReportBAPEvent(service *Service) handlers.AppHandler {
 
 // CustodianDrainInfoResponse - the response to a custodian drain info request
 type CustodianDrainInfoResponse struct {
-	outputs.Meta
-	Drains []outputs.CustodianDrain `json:"drains,omitempty"`
+	responses.Meta
+	Drains []responses.CustodianDrain `json:"drains,omitempty"`
 }
 
 // GetCustodianDrainInfo is the handler which provides information about a particular paymentId's drains

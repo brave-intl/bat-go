@@ -12,7 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/utils/outputs"
+	"github.com/brave-intl/bat-go/utils/responses"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -229,7 +229,7 @@ func (_d DatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, grantType 
 }
 
 // GetCustodianDrainInfo implements Datastore
-func (_d DatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []outputs.CustodianDrain, err error) {
+func (_d DatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []responses.CustodianDrain, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

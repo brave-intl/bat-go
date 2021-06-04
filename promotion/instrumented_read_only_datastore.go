@@ -9,7 +9,7 @@ package promotion
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/outputs"
+	"github.com/brave-intl/bat-go/utils/responses"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
 	"github.com/jmoiron/sqlx"
@@ -113,7 +113,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, gr
 }
 
 // GetCustodianDrainInfo implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []outputs.CustodianDrain, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []responses.CustodianDrain, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
