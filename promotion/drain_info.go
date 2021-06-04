@@ -1,4 +1,4 @@
-package responses
+package promotion
 
 import (
 	"time"
@@ -7,8 +7,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// PromotionDrained - generic custodian output data
-type PromotionDrained struct {
+// DrainInfo - generic custodian output data
+type DrainInfo struct {
 	PromotionID   *uuid.UUID      `json:"promotion_id,omitempty" db:"promotion_id"`
 	TransactionID *uuid.UUID      `json:"transaction_id,omitempty" db:"transaction_id"`
 	CompletedAt   *time.Time      `json:"completed_at,omitempty" db:"completed_at"`

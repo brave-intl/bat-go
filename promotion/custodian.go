@@ -1,4 +1,4 @@
-package responses
+package promotion
 
 import (
 	uuid "github.com/satori/go.uuid"
@@ -13,8 +13,8 @@ type Custodian struct {
 
 // CustodianDrain - representation of a drain job
 type CustodianDrain struct {
-	BatchID           uuid.UUID          `json:"batch_id"`
-	Custodian         Custodian          `json:"custodian,omitempty"`
-	PromotionsDrained []PromotionDrained `json:"promotions_drained,omitempty"`
-	Value             decimal.Decimal    `json:"value"`
+	BatchID           uuid.UUID       `json:"batch_id"`
+	Custodian         Custodian       `json:"custodian,omitempty"`
+	PromotionsDrained []DrainInfo     `json:"promotions_drained,omitempty"`
+	Value             decimal.Decimal `json:"value"`
 }

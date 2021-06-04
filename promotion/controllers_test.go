@@ -2157,11 +2157,10 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
+	<-time.After(2 * time.Second)
 	drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
 	suite.Require().Equal(*drainJob.Status, "reputation-failed", "error code should be reputation-failed")
-
-	<-time.After(1 * time.Second)
 
 	// validate that the batching works
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
