@@ -259,7 +259,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/captchas", proxyRouter)
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
 		// v3/captcha
-		r.Mount("/v3/captcha/", proxyRouter)
+		r.Mount("/v3/captcha", proxyRouter)
 	}
 
 	return ctx, r, promotionService, jobs
