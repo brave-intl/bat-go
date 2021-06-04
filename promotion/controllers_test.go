@@ -1930,7 +1930,25 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		true,
 		nil,
 	)
+	// the second batch submitted
+	mockReputation.EXPECT().IsWalletReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		true,
+		nil,
+	)
 	// the drain reputation check fails
+	mockReputation.EXPECT().IsWalletAdsReputable(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		false,
+		nil,
+	)
+	// for the second batch
 	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
@@ -2053,7 +2071,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	// testing out the drain info handler
 	drainInfoHandler := GetCustodianDrainInfo(service)
 
-	req, err = http.NewRequestWithContext(ctx, "GET", "/suggestion/drain", bytes.NewBuffer(body))
+	req, err = http.NewRequestWithContext(ctx, "GET", "/custodian-drain-info/{paymentId}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
 	// setup url param
@@ -2066,6 +2084,103 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	b, _ = httputil.DumpResponse(rr.Result(), true)
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	var resp = CustodianDrainInfoResponse{}
+	suite.Require().NoError(json.Unmarshal(rr.Body.Bytes(), &resp))
+	// make sure there is a drain created by the test
+	suite.Require().Equal(1, len(resp.Drains))
+	// make sure we only have one promition drained
+	suite.Require().Equal(1, len(resp.Drains[0].PromotionsDrained))
+	// check that the values match
+	suite.Require().True(resp.Drains[0].PromotionsDrained[0].Value.Equal(resp.Drains[0].Value))
+
+	_, err = pg.RawDB().Exec("delete from claim_creds")
+	suite.Require().NoError(err, "Failed to get clean table")
+	_, err = pg.RawDB().Exec("delete from issuers")
+	suite.Require().NoError(err, "Failed to get clean table")
+	_, err = pg.RawDB().Exec("delete from claims")
+	suite.Require().NoError(err, "Failed to get clean table")
+	_, err = pg.RawDB().Exec("delete from promotions")
+	suite.Require().NoError(err, "Failed to get clean table")
+	// perform another drain
+
+	promotion, err = service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
+	suite.Require().NoError(err, "Failed to create promotion")
+	err = service.Datastore.ActivatePromotion(promotion)
+	suite.Require().NoError(err, "Failed to activate promotion")
+
+	_, err = service.Datastore.CreateClaim(promotion.ID, info.ID, grantAmount, decimal.NewFromFloat(claimBonus), false)
+	suite.Require().NoError(err, "create a claim for a promotion")
+
+	issuerName = promotion.ID.String() + ":control"
+	mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
+
+	mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
+		Name:      issuerName,
+		PublicKey: issuerPublicKey,
+	}, nil)
+	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCreds)).Return(&cbr.CredentialsIssueResponse{
+		BatchProof:   proof,
+		SignedTokens: signedCreds,
+	}, nil)
+
+	claimID = suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	suite.WaitForClaimToPropagate(service, promotion, claimID)
+
+	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
+		Issuer:        issuerName,
+		TokenPreimage: preimage,
+		Signature:     sig,
+	}}), gomock.Eq(walletID.String())).Return(nil)
+
+	drainReq = DrainSuggestionRequest{
+		WalletID: walletID,
+		Credentials: []CredentialBinding{{
+			PublicKey:     issuerPublicKey,
+			Signature:     sig,
+			TokenPreimage: preimage,
+		}},
+	}
+
+	body, err = json.Marshal(&drainReq)
+	suite.Require().NoError(err)
+
+	req, err = http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+	rr = httptest.NewRecorder()
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	handler.ServeHTTP(rr, req)
+	b, _ = httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
+	suite.Require().True(drainJob.Erred)
+	suite.Require().Equal(*drainJob.Status, "reputation-failed", "error code should be reputation-failed")
+
+	<-time.After(1 * time.Second)
+
+	// validate that the batching works
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	drainInfoHandler.ServeHTTP(rr, req)
+	b, _ = httputil.DumpResponse(rr.Result(), true)
+	fmt.Printf("%s", b)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	resp = CustodianDrainInfoResponse{}
+	suite.Require().NoError(json.Unmarshal(rr.Body.Bytes(), &resp))
+	// make sure there is a drain created by the test
+	suite.Require().Equal(2, len(resp.Drains))
+	// make sure we only have one promition drained for each batch
+	suite.Require().Equal(1, len(resp.Drains[0].PromotionsDrained))
+	suite.Require().Equal(1, len(resp.Drains[1].PromotionsDrained))
+	// check that the sum of each drained promotion matches
+	suite.Require().True(resp.Drains[0].PromotionsDrained[0].Value.Equal(resp.Drains[0].Value))
 
 }
 
