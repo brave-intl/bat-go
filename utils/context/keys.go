@@ -71,6 +71,9 @@ const (
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials
 	SkipRedeemCredentialsCTXKey CTXKey = "skip_redeem_credentials"
+
+	// QLDBSessionCTXKey - the key to grab the qldb session
+	QLDBSessionCTXKey CTXKey = "qldb_session"
 )
 
 var (

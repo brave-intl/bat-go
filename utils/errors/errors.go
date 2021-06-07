@@ -30,6 +30,9 @@ var (
 	ErrMissingWallet = errors.New("missing wallet")
 	// ErrNoDepositProviderDestination - no linked wallet
 	ErrNoDepositProviderDestination = errors.New("no deposit provider destination for wallet for transfer")
+
+	// ErrNotYetImplemented - Error given back for methods not implemented
+	ErrNotYetImplemented = errors.New("not yet implemented")
 )
 
 // ErrorBundle creates a new response error
