@@ -8,6 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.14.5
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/aws/aws-sdk-go v1.38.56
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -17,6 +18,7 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
+	github.com/google/uuid v1.1.2
 	github.com/hashicorp/go-hclog v0.8.0 // indirect
 	github.com/hashicorp/go-plugin v1.0.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.5.3 // indirect
@@ -46,7 +48,9 @@ require (
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899
-	golang.org/x/net v0.0.0-20201029221708-28c70e62bb1d
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	google.golang.org/grpc v1.33.1
+	google.golang.org/protobuf v1.26.0-rc.1
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.6.0

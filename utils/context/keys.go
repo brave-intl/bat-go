@@ -96,6 +96,11 @@ const (
 	StripeSecretCTXKey CTXKey = "stripe_secret"
 	// WhitelistSKUsCTXKey - context key for whitelisted skus
 	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
+
+	// nitro payments
+
+	// QLDBSessionCTXKey - the key to grab the qldb session
+	QLDBSessionCTXKey CTXKey = "qldb_session"
 )
 
 var (
