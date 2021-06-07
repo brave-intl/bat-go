@@ -227,6 +227,20 @@ func (_d DatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, grantType 
 	return _d.base.GetClaimSummary(walletID, grantType)
 }
 
+// GetCustodianDrainInfo implements Datastore
+func (_d DatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []CustodianDrain, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianDrainInfo", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianDrainInfo(paymentID)
+}
+
 // GetDrainPoll implements Datastore
 func (_d DatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPoll, err error) {
 	_since := time.Now()
