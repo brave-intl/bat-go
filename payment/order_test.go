@@ -2,6 +2,7 @@ package payment
 
 import (
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/asaskevich/govalidator"
@@ -70,12 +71,12 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	suite.Require().NoError(err)
 
 	c := macarooncmd.Caveats{
-		"sku":             "sku",
-		"price":           "5.01",
-		"description":     "coffee",
-		"currency":        "usd",
-		"credential_type": "time_bound",
-		"payment_methods": "stripe",
+		"sku":                     "sku",
+		"price":                   "5.01",
+		"description":             "coffee",
+		"currency":                "usd",
+		"credential_type":         "time_bound",
+		"allowed_payment_methods": "stripe",
 		"metadata": `
 				{
 					"stripe_product_id":"stripe_product_id",
@@ -94,9 +95,10 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	sku, err := t.Generate("testing123")
 	suite.Require().NoError(err)
 
-	orderItem, err := suite.service.CreateOrderItemFromMacaroon(sku, 1)
+	orderItem, apm, err := suite.service.CreateOrderItemFromMacaroon(sku, 1)
 	suite.Require().NoError(err)
 
+	suite.Assert().Equal("stripe", strings.Join(*apm, ","))
 	suite.Assert().Equal("usd", orderItem.Currency)
 	suite.Assert().Equal("sku", orderItem.SKU)
 	suite.Assert().Equal("5.01", orderItem.Price.String())
@@ -106,6 +108,6 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	badsku, err := t.Generate("321testing")
 	suite.Require().NoError(err)
 
-	_, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
+	_, _, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
 	suite.Require().Equal(err.Error(), "Invalid SKU Token provided in request")
 }

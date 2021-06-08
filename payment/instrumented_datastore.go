@@ -72,7 +72,7 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 }
 
 // CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -82,7 +82,7 @@ func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, mercha
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems)
+	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems, allowedPaymentMethods)
 }
 
 // CreateTransaction implements Datastore

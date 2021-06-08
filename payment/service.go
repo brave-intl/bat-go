@@ -141,18 +141,30 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	var (
-		currency         string
-		location         string
-		stripeSuccessURI string
-		stripeCancelURI  string
-		status           string
+		currency              string
+		location              string
+		stripeSuccessURI      string
+		stripeCancelURI       string
+		status                string
+		allowedPaymentMethods = new(Methods)
 	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := s.CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, pm, err := s.CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}
+
+		// make sure all the order item skus have the same allowed Payment Methods
+		if i > 1 {
+			if !allowedPaymentMethods.Equal(pm) {
+				return nil, errors.New("all order items must have the same allowed payment methods")
+			}
+		} else {
+			// first order item
+			*allowedPaymentMethods = *pm
+		}
+
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
 		if location == "" {
@@ -170,14 +182,12 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		// stripe related
 		if stripeSuccessURI == "" {
 			stripeSuccessURI = orderItem.Metadata["stripe_success_uri"]
-		}
-		if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
+		} else if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
 			return nil, errors.New("all order items must have same stripe success uri")
 		}
 		if stripeCancelURI == "" {
 			stripeCancelURI = orderItem.Metadata["stripe_cancel_uri"]
-		}
-		if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
+		} else if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
 			return nil, errors.New("all order items must have same stripe cancel uri")
 		}
 
@@ -191,7 +201,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		status = "pending"
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)

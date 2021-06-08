@@ -731,7 +731,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.ReadWithLimit(r.Body, 65536)
+		b, err := requestutils.Read(r.Body)
 		if err != nil {
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
@@ -742,8 +742,11 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
+		// log the event
+		sublogger.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
+
 		// Handle invoice events
-		if event.Type == StripePaymentUpdated {
+		if event.Type == StripeInvoiceUpdated {
 			// Retrieve invoice from update events
 			var invoice stripe.Invoice
 			err := json.Unmarshal(event.Data.Raw, &invoice)

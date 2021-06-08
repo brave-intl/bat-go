@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,11 +25,65 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+// Methods type is a string slice holding payments
+type Methods []string
+
+// Equal - check equality
+func (pm *Methods) Equal(b *Methods) bool {
+	// make sure elements in pm are in b
+	for _, v := range *pm {
+		var seen bool
+		for _, vv := range *b {
+			if v == vv {
+				seen = true
+			}
+		}
+		if !seen {
+			return false
+		}
+	}
+	// make sure elements in b are in pm
+	for _, v := range *b {
+		var seen bool
+		for _, vv := range *pm {
+			if v == vv {
+				seen = true
+			}
+		}
+		if !seen {
+			return false
+		}
+	}
+	return true
+}
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *Methods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
+		}
+	}
+
+	return nil
+}
+
+// Value the driver.Value representation
+func (pm *Methods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
+}
+
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	grantserver.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
@@ -168,16 +223,16 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
 	tx := pg.RawDB().MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency, location)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status
+			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
 		`,
-		totalPrice, merchantID, status, currency, location)
+		totalPrice, merchantID, status, currency, location, pq.Array(allowedPaymentMethods))
 
 	if err != nil {
 		return nil, err
@@ -185,7 +240,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, payment_methods)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -194,8 +249,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, pq.Array(orderItems[i].PaymentMethods),
-		)
+			orderItems[i].CredentialType)
 		numFields := 10 // the number of fields you are inserting
 		n := i * numFields
 
@@ -206,7 +260,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 		query = query[:len(query)-1] + `),`
 	}
 	query = query[:len(query)-1] // remove the trailing comma
-	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, payment_methods`
+	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal`
 
 	order.Items = []OrderItem{}
 

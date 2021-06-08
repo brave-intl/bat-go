@@ -20,7 +20,7 @@ import (
 //StripePaymentMethod - the label for stripe payment method
 const (
 	StripePaymentMethod               = "stripe"
-	StripePaymentUpdated              = "invoice.updated"
+	StripeInvoiceUpdated              = "invoice.updated"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
 )
 
@@ -31,16 +31,17 @@ var (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID            `json:"id" db:"id"`
-	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
-	Currency   string               `json:"currency" db:"currency"`
-	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
-	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID string               `json:"merchantId" db:"merchant_id"`
-	Location   datastore.NullString `json:"location" db:"location"`
-	Status     string               `json:"status" db:"status"`
-	Items      []OrderItem          `json:"items"`
-	Metadata   datastore.Metadata   `json:"metadata" db:"metadata"`
+	ID                    uuid.UUID            `json:"id" db:"id"`
+	CreatedAt             time.Time            `json:"createdAt" db:"created_at"`
+	Currency              string               `json:"currency" db:"currency"`
+	UpdatedAt             time.Time            `json:"updatedAt" db:"updated_at"`
+	TotalPrice            decimal.Decimal      `json:"totalPrice" db:"total_price"`
+	MerchantID            string               `json:"merchantId" db:"merchant_id"`
+	Location              datastore.NullString `json:"location" db:"location"`
+	Status                string               `json:"status" db:"status"`
+	Items                 []OrderItem          `json:"items"`
+	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
@@ -57,7 +58,6 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	PaymentMethods datastore.Methods    `json:"paymentMethods" db:"payment_methods"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
@@ -75,16 +75,16 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
+func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, *Methods, error) {
 	mac, err := decodeAndUnmarshalSku(sku)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
+		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
 	}
 
 	// get the merchant's keys
 	keys, err := s.Datastore.GetKeys(mac.Location(), false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
+		return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
 	}
 
 	// check if any of the keys for the merchant will validate the mac
@@ -92,7 +92,7 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 	for _, k := range *keys {
 		// decrypt the merchant's secret key from db
 		if err := k.SetSecretKey(); err != nil {
-			return nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
+			return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
 		}
 		// perform verify
 		if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
@@ -103,10 +103,11 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 
 	// perform validation
 	if !valid {
-		return nil, ErrInvalidSKU
+		return nil, nil, ErrInvalidSKU
 	}
 
 	caveats := mac.Caveats()
+	allowedPaymentMethods := new(Methods)
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
 	orderItem.Location.String = mac.Location()
@@ -124,50 +125,43 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		case "description":
 			orderItem.Description.String = value
 			orderItem.Description.Valid = true
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		case "currency":
 			orderItem.Currency = value
 		case "credential_type":
 			orderItem.CredentialType = value
-		case "payment_methods":
-			orderItem.PaymentMethods = strings.Split(value, ",")
+		case "allowed_payment_methods":
+			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
 			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
 		}
 	}
 	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
-	return &orderItem, nil
+	return &orderItem, allowedPaymentMethods, nil
 }
 
 // IsStripePayable returns true if every item is payable by Stripe
 func (order Order) IsStripePayable() bool {
-	for _, item := range order.Items {
-
-		// check stripe in payment
-		if !strings.Contains(strings.Join(item.PaymentMethods, ","), StripePaymentMethod) {
-			return false
-		}
-		// TODO: make sure we have a stripe_product_id caveat
-		// TODO: if not we need to look into subscription trials:
-		/// -> https://stripe.com/docs/billing/subscriptions/trials
-	}
-	return true
+	// TODO: make sure we have a stripe_product_id caveat
+	// TODO: if not we need to look into subscription trials:
+	/// -> https://stripe.com/docs/billing/subscriptions/trials
+	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), StripePaymentMethod)
 }
 
 // CreateCheckoutSessionResponse - the structure of a checkout session response

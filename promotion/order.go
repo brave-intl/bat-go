@@ -3,6 +3,7 @@ package promotion
 import (
 	"time"
 
+	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -13,16 +14,17 @@ import (
 
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID            `json:"id" db:"id"`
-	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
-	Currency   string               `json:"currency" db:"currency"`
-	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
-	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID string               `json:"merchantId" db:"merchant_id"`
-	Location   datastore.NullString `json:"location" db:"location"`
-	Status     string               `json:"status" db:"status"`
-	Items      []OrderItem          `json:"items"`
-	Metadata   datastore.Metadata   `json:"metadata" db:"metadata"`
+	ID                    uuid.UUID            `json:"id" db:"id"`
+	CreatedAt             time.Time            `json:"createdAt" db:"created_at"`
+	Currency              string               `json:"currency" db:"currency"`
+	UpdatedAt             time.Time            `json:"updatedAt" db:"updated_at"`
+	TotalPrice            decimal.Decimal      `json:"totalPrice" db:"total_price"`
+	MerchantID            string               `json:"merchantId" db:"merchant_id"`
+	Location              datastore.NullString `json:"location" db:"location"`
+	Status                string               `json:"status" db:"status"`
+	Items                 []OrderItem          `json:"items"`
+	AllowedPaymentMethods payment.Methods      `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
 // OrderItem includes information about a particular order item
@@ -39,7 +41,6 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	PaymentMethods datastore.Methods    `json:"paymentMethods" db:"payment_methods"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
