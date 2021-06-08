@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -209,7 +210,9 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 
 	if !order.IsPaid() && order.IsStripePayable() {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
-			req.Email, stripeSuccessURI, stripeCancelURI)
+			req.Email,
+			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
+			parseURLAddOrderIDParam(stripeCancelURI, order.ID))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
@@ -354,4 +357,17 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 			return attempted, err
 		}
 	}
+}
+
+func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
+	// add order id to the stripe success and cancel urls
+	surl, err := url.Parse(u)
+	if err == nil {
+		surlv := surl.Query()
+		surlv.Add("order_id", orderID.String())
+		surl.RawQuery = surlv.Encode()
+		return surl.String()
+	}
+	// there was a parse error, return whatever was given
+	return u
 }
