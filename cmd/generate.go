@@ -9,7 +9,7 @@ import (
 
 	"github.com/alecthomas/jsonschema"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/outputs"
+	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -51,7 +51,7 @@ func jsonSchemaRun(command *cobra.Command, args []string) error {
 	logger.Info().Msg("starting json-schema generation")
 
 	// Wallet Outputs ./wallet/outputs.go
-	for _, t := range outputs.APIResponseTypes {
+	for _, t := range responses.APIResponseTypes {
 
 		logger.Info().Str("path", t.PkgPath()).Str("name", t.Name()).Str("str", t.String()).Msg("type being processed")
 

@@ -18,8 +18,8 @@ import (
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
@@ -631,7 +631,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		}
 
 		// Build Response
-		response := &outputs.PaginationResponse{
+		response := &responses.PaginationResponse{
 			Page:    pagination.Page,
 			Items:   pagination.Items,
 			MaxPage: total/pagination.Items - 1, // 0 indexed
