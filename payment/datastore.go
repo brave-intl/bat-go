@@ -232,7 +232,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
 		`,
-		totalPrice, merchantID, status, currency, location, pq.Array(allowedPaymentMethods))
+		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods))
 
 	if err != nil {
 		return nil, err
@@ -250,7 +250,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
 			orderItems[i].CredentialType)
-		numFields := 10 // the number of fields you are inserting
+		numFields := 9 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -279,7 +279,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := `
-		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status
+		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)
@@ -291,7 +291,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type, payment_methods
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 

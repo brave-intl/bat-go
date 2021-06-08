@@ -296,6 +296,11 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
+
+	sublogger := logger(ctx).With().
+		Str("func", "CreateAnonCardTransaction").
+		Logger()
+
 	txInfo, err := s.wallet.SubmitAnonCardTransaction(
 		ctx,
 		walletID,
@@ -313,6 +318,7 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 
 	err = s.UpdateOrderStatus(orderID)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to update order status")
 		return nil, errorutils.Wrap(err, "error updating order status")
 	}
 

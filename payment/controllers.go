@@ -220,6 +220,10 @@ type CreateOrderRequest struct {
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		ctx := r.Context()
+		sublogger := logger(ctx).With().Str("func", "CreateOrderHandler").Logger()
+
 		var req CreateOrderRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -243,8 +247,10 @@ func CreateOrder(service *Service) handlers.AppHandler {
 
 		if err != nil {
 			if errors.Is(err, ErrInvalidSKU) {
+				sublogger.Error().Err(err).Msg("invalid sku")
 				return handlers.ValidationError(ErrInvalidSKU.Error(), nil)
 			}
+			sublogger.Error().Err(err).Msg("error creating the order")
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
@@ -359,6 +365,10 @@ type CreateAnonCardTransactionRequest struct {
 // CreateAnonCardTransaction creates a transaction against an order
 func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		sublogger := logger(ctx).With().
+			Str("func", "CreateAnonCardTransaction").
+			Logger()
 		var req CreateAnonCardTransactionRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -377,6 +387,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 
 		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, *orderID.UUID())
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to create anon card transaction")
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
 
