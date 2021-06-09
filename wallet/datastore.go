@@ -263,7 +263,6 @@ func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID st
 		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
 	`
 	err := tx.Get(&max, statement, providerLinkingID, getEnvMaxCards())
-	fmt.Println("err: ", err)
 	return max, err
 }
 
