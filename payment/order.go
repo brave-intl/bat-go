@@ -98,6 +98,7 @@ func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderI
 		if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
 			// valid
 			valid = true
+			break
 		}
 	}
 
