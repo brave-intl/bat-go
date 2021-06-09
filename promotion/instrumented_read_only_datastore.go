@@ -111,6 +111,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetClaimSummary(walletID uuid.UUID, gr
 	return _d.base.GetClaimSummary(walletID, grantType)
 }
 
+// GetCustodianDrainInfo implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianDrainInfo(paymentID *uuid.UUID) (ca1 []CustodianDrain, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetCustodianDrainInfo", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetCustodianDrainInfo(paymentID)
+}
+
 // GetDrainPoll implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPoll, err error) {
 	_since := time.Now()
