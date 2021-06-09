@@ -4,6 +4,8 @@ package wallet
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -92,4 +94,70 @@ func (suite *WalletPostgresTestSuite) TestGetWallet() {
 	wallet, err := pg.GetWallet(context.Background(), id)
 	suite.Require().NoError(err, "Get wallet should succeed")
 	suite.Assert().Equal(origWallet, wallet)
+}
+
+func (suite *WalletPostgresTestSuite) TestCustodianLink() {
+
+	ctx := context.Background()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	// setup a wallet
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	id := uuid.NewV4()
+	depositDest := uuid.NewV4()
+	linkingID := uuid.NewV4()
+
+	tmp := altcurrency.BAT
+	origWallet := &walletutils.Info{ID: id.String(), Provider: "uphold", AltCurrency: &tmp, ProviderID: uuid.NewV4().String(), PublicKey: publicKey}
+	suite.Require().NoError(pg.UpsertWallet(context.Background(), origWallet), "Save wallet should succeed")
+
+	// perform a connect custodial wallet
+	suite.Require().NoError(
+		pg.ConnectCustodialWallet(ctx, &CustodianLink{
+			WalletID:  &id,
+			Custodian: "gemini",
+			LinkingID: &linkingID,
+		}, depositDest.String()),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// get the wallet and check that the custodian link entry id is right
+	// get the custodian link entry and validate that the data is correct
+	cl, err := pg.GetCustodianLinkByWalletID(ctx, id)
+	suite.Require().NoError(err, "should have no error getting custodian link")
+	suite.Require().True(cl.LinkingID.String() == linkingID.String(), "linking id is not right")
+	suite.Require().True(cl.WalletID.String() == id.String(), "wallet id is not right")
+	suite.Require().True(cl.Custodian == "gemini", "custodian is not right")
+
+	// check the link count is 1 for this wallet
+	used, max, err := pg.GetCustodianLinkCount(ctx, linkingID)
+	suite.Require().NoError(err, "should have no error getting custodian link count")
+
+	// disconnect the wallet
+	suite.Require().NoError(
+		pg.DisconnectCustodialWallet(ctx, id),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// perform a connect custodial wallet to make sure not more than one linking is added for same cust/wallet
+	suite.Require().NoError(
+		pg.ConnectCustodialWallet(ctx, &CustodianLink{
+			WalletID:  &id,
+			Custodian: "gemini",
+			LinkingID: &linkingID,
+		}, depositDest.String()),
+		"Connect Custodial Wallet wallet should succeed")
+
+	// only one slot should be taken
+	suite.Require().True(used == 1, "linking count is not right")
+	suite.Require().True(max == getEnvMaxCards(), "linking count is not right")
+
+	// perform a disconnect custodial wallet
+	suite.Require().NoError(
+		pg.DisconnectCustodialWallet(ctx, id),
+		"disconnect Custodial Wallet wallet should succeed")
+
+	// should return sql not found error after a disconnect
+	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
+	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
 }

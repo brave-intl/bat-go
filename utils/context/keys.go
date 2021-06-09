@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
+	// DatabaseTransactionCTXKey - context key for database transactions
+	DatabaseTransactionCTXKey CTXKey = "db_tx"
 	// RODatastoreCTXKey - the context key for getting the datastore
 	RODatastoreCTXKey CTXKey = "ro_datastore"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key

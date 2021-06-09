@@ -128,32 +128,25 @@ func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, c
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBitFlyerWallet(ctx context.Context, info *walletutils.Info, depositID, accountHash string) error {
+func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash string) error {
 	// during validation we verified that the account hash and deposit id were signed by bitflyer
 	// we also validated that this "info" signed the request to perform the linking with http signature
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
-	if info.ProviderLinkingID != nil {
-		// check if the member matches the associated member
-		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
-			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer")
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrTooManyCardsLinked {
+			status = http.StatusConflict
 		}
-	} else {
-		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(ctx, info.ID, depositID, providerLinkingID, nil, "bitflyer")
-		if err != nil {
-			status := http.StatusInternalServerError
-			if err == ErrTooManyCardsLinked {
-				status = http.StatusConflict
-			}
-			return handlers.WrapError(err, "unable to link wallets", status)
-		}
+		return handlers.WrapError(err, "unable to link wallets", status)
 	}
 	return nil
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.Info, verificationToken string) error {
+func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
@@ -171,21 +164,14 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, info *walletutils.
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
-	if info.ProviderLinkingID != nil {
-		// check if the member matches the associated member
-		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
-			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini")
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrTooManyCardsLinked {
+			status = http.StatusConflict
 		}
-	} else {
-		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(ctx, info.ID, accountID, providerLinkingID, nil, "gemini")
-		if err != nil {
-			status := http.StatusInternalServerError
-			if err == ErrTooManyCardsLinked {
-				status = http.StatusConflict
-			}
-			return handlers.WrapError(err, "unable to link wallets", status)
-		}
+		return handlers.WrapError(err, "unable to link wallets", status)
 	}
 	return nil
 }
@@ -238,21 +224,14 @@ func (service *Service) LinkWallet(
 	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
-	if info.ProviderLinkingID != nil {
-		// check if the member matches the associated member
-		if !uuid.Equal(*info.ProviderLinkingID, providerLinkingID) {
-			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
+	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == ErrTooManyCardsLinked {
+			status = http.StatusConflict
 		}
-	} else {
-		// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-		err := service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
-		if err != nil {
-			status := http.StatusInternalServerError
-			if err == ErrTooManyCardsLinked {
-				status = http.StatusConflict
-			}
-			return handlers.WrapError(err, "unable to link wallets", status)
-		}
+		return handlers.WrapError(err, "unable to link wallets", status)
 	}
 
 	// if this wallet is linking a deposit account do not submit a transaction
@@ -387,22 +366,8 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		return fmt.Errorf("unable to link wallet: invalid device")
 	}
 
-	// get the from wallet from the database, so that we can check that the fromInfo.ProviderLinkingID matches
-	// if it is not null later
-	fromInfo, err := service.GetWallet(ctx, from)
-	if err != nil {
-		return fmt.Errorf("failed to get to wallet: %w", err)
-	}
-
 	// link the wallet in our datastore, provider linking id will be on the deposit wallet (to wallet)
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, to.String())
-
-	if fromInfo.ProviderLinkingID != nil { // if the from wallet already has a provider linking id
-		if !uuid.Equal(*fromInfo.ProviderLinkingID, providerLinkingID) {
-			// make sure that the providerLinking id from the database matches.
-			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
-		}
-	}
 
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
@@ -420,6 +385,8 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 
 // DisconnectCustodianLink - removes the link to the custodian wallet that is active
 func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian string, walletID uuid.UUID) error {
-	// TODO: hook up Datastore to effect the disconnect
+	if err := service.Datastore.DisconnectCustodialWallet(ctx, walletID); err != nil {
+		return handlers.WrapError(err, "unable to disconnect custodian wallet", http.StatusInternalServerError)
+	}
 	return nil
 }
