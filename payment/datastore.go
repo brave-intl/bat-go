@@ -238,6 +238,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		return nil, err
 	}
 
+// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
 			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
