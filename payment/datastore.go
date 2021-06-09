@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
@@ -30,31 +32,11 @@ type Methods []string
 
 // Equal - check equality
 func (pm *Methods) Equal(b *Methods) bool {
-	// make sure elements in pm are in b
-	for _, v := range *pm {
-		var seen bool
-		for _, vv := range *b {
-			if v == vv {
-				seen = true
-			}
-		}
-		if !seen {
-			return false
-		}
-	}
-	// make sure elements in b are in pm
-	for _, v := range *b {
-		var seen bool
-		for _, vv := range *pm {
-			if v == vv {
-				seen = true
-			}
-		}
-		if !seen {
-			return false
-		}
-	}
-	return true
+	s1 := []string(*pm)
+	s2 := []string(*b)
+	sort.Strings(s1)
+	sort.Strings(s2)
+	return reflect.DeepEqual(s1, s2)
 }
 
 // Scan the src sql type into the passed JSONStringArray
@@ -238,7 +220,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		return nil, err
 	}
 
-// TODO: We should make a generalized helper to handle bulk inserts
+	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
 			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
