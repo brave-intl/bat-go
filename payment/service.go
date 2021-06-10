@@ -157,7 +157,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		}
 
 		// make sure all the order item skus have the same allowed Payment Methods
-		if i > 1 {
+		if i >= 1 {
 			if !allowedPaymentMethods.Equal(pm) {
 				return nil, errors.New("all order items must have the same allowed payment methods")
 			}
