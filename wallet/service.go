@@ -147,6 +147,13 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
 func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+	// setup logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
@@ -158,6 +165,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// perform an Account Validation call to gemini to get the accountID
 	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to validate gemini account")
 		return handlers.WrapError(
 			errors.New("invalid linking_info"), "unable to validate gemini account", http.StatusBadRequest)
 	}
