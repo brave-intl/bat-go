@@ -8,7 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.14.3
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
-	github.com/aws/aws-sdk-go v1.38.56 // indirect
+	github.com/aws/aws-sdk-go v1.38.56
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/frankban/quicktest v1.4.2 // indirect
 	github.com/getsentry/sentry-go v0.10.0

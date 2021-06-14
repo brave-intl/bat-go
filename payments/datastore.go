@@ -2,9 +2,11 @@ package payments
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go/service/qldbsession"
 	"github.com/brave-intl/bat-go/payments/pb"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/google/uuid"
 )
@@ -36,7 +38,10 @@ func getQLDBSessionFromContext(ctx context.Context) (*qldbsession.QLDBSession, e
 // Returns Document ID from QLDB
 func InitializeBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
 	// get the qldb session from context
-
+	_, err := getQLDBSessionFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get qldb session from context: %w", err)
+	}
 	// perform insert of all transactions provided
 
 	// insert into qldb the set of transactions for the given custodian

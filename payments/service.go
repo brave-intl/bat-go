@@ -76,7 +76,8 @@ func (s *Service) Submit(ctx context.Context, sm *pb.SubmitRequest) (*pb.SubmitR
 		}, pbErr
 	}
 
-	auths, txs, err := RetrieveTransactionsByID(ctx, &documentID)
+	// auths, txs, err := ...
+	_, _, err = RetrieveTransactionsByID(ctx, &documentID)
 	if err != nil {
 		pbErr := fmt.Errorf("failed to retrieve transactions by document id: %w", err)
 		return &pb.SubmitResponse{
