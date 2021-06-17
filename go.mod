@@ -25,6 +25,8 @@ require (
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/mdlayher/vsock v0.0.0-20210303205602-10d591861736 // indirect
+	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mssola/user_agent v0.5.3
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
