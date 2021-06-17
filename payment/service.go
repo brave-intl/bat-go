@@ -16,6 +16,7 @@ import (
 	"github.com/linkedin/goavro"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
@@ -182,26 +183,97 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	return nil
 }
 
-// CreateTransactionFromRequest queries the endpoints and creates a transaciton
-func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, orderID uuid.UUID) (*Transaction, error) {
+// getCustodialTxFn - type definition of a get custodial tx function
+// return amount, status, currency, kind, err
+type getCustodialTxFn func(context.Context, string) (*decimal.Decimal, string, string, string, error)
+
+// getUpholdCustodialTx - the the custodial tx information from uphold
+func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	var wallet uphold.Wallet
-	upholdTransaction, err := wallet.GetTransaction(req.ExternalTransactionID.String())
+	upholdTransaction, err := wallet.GetTransaction(txRef)
 
 	if err != nil {
-		return nil, err
+		return nil, "", "", "", err
 	}
 
 	amount := upholdTransaction.AltCurrency.FromProbi(upholdTransaction.Probi)
 	status := upholdTransaction.Status
 	currency := upholdTransaction.AltCurrency.String()
-	kind := "uphold"
+	custodian := "uphold"
 
 	// check if destination is the right address
 	if upholdTransaction.Destination != uphold.UpholdSettlementAddress {
-		return nil, errors.New("error recording transaction: invalid settlement address")
+		return nil, "", "", custodian, errors.New("error recording transaction: invalid settlement address")
 	}
 
-	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, amount)
+	return &amount, status, currency, custodian, nil
+}
+
+// returns gemini client, api key, client id, settlement address, error
+func getGeminiInfoFromCtx(ctx context.Context) (gemini.Client, string, string, string, error) {
+	// get gemini client from context
+	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
+	if !ok {
+		return nil, "", "", "", fmt.Errorf("no gemini client in ctx: %w", appctx.ErrNotInContext)
+	}
+	// get gemini client from context
+	apiKey, ok := ctx.Value(appctx.GeminiAPIKeyCTXKey).(string)
+	if !ok {
+		return nil, "", "", "", fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	// get gemini client id from context
+	clientID, ok := ctx.Value(appctx.GeminiClientIDCTXKey).(string)
+	if !ok {
+		return nil, "", "", "", fmt.Errorf("no gemini client id in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	// get gemini settlement address from context
+	settlementAddress, ok := ctx.Value(appctx.GeminiSettlementAddressCTXKey).(string)
+	if !ok {
+		return nil, "", "", "", fmt.Errorf("no gemini settlement address in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	return geminiClient, apiKey, clientID, settlementAddress, nil
+}
+
+// getGeminiCustodialTx - the the custodial tx information from gemini
+func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+	custodian := "gemini"
+	// get gemini client from tx
+	client, geminiAPIKey, geminiClientID, settlementAddress, err := getGeminiInfoFromCtx(ctx)
+	if err != nil {
+		return nil, "", "", custodian, fmt.Errorf("error getting gemini client/info from ctx: %w", err)
+	}
+
+	// call client.CheckTxStatus
+	resp, err := client.CheckTxStatus(ctx, geminiAPIKey, geminiClientID, txRef)
+	if err != nil {
+		return nil, "", "", custodian, fmt.Errorf("error getting tx status: %w", err)
+	}
+
+	// check if destination is the right address
+	if *resp.Destination != settlementAddress {
+		return nil, "", "", custodian, errors.New("error recording transaction: invalid settlement address")
+	}
+	// return back the amount
+	amount := *resp.Amount
+	status := *resp.Status
+	currency := *resp.Currency
+
+	return &amount, status, currency, custodian, nil
+}
+
+// CreateTransactionFromRequest queries the endpoints and creates a transaciton
+func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
+
+	// get the information from the custodian
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	if err != nil {
+		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
+	}
+
+	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording transaction")
 	}

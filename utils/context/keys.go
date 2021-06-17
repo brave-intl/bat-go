@@ -51,6 +51,12 @@ const (
 	ReputationClientCTXKey CTXKey = "reputation_client"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
+	// GeminiClientIDCTXKey - context key for the gemini client id
+	GeminiClientIDCTXKey CTXKey = "gemini_client_id"
+	// GeminiAPIKeyCTXKey - context key for the gemini api key
+	GeminiAPIKeyCTXKey CTXKey = "gemini_api_key"
+	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
+	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code
