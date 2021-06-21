@@ -40,7 +40,6 @@ services:
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
-      - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
@@ -109,7 +108,6 @@ services:
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
-      - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
