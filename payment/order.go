@@ -76,36 +76,49 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
 func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, *Methods, error) {
-	mac, err := decodeAndUnmarshalSku(sku)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
-	}
 
-	// get the merchant's keys
-	keys, err := s.Datastore.GetKeys(mac.Location(), false)
+	// validation prior to decoding/unmarshaling
+	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
-	}
-
-	// check if any of the keys for the merchant will validate the mac
-	var valid bool
-	for _, k := range *keys {
-		// decrypt the merchant's secret key from db
-		if err := k.SetSecretKey(); err != nil {
-			return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
-		}
-		// perform verify
-		if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
-			// valid
-			valid = true
-			break
-		}
+		return nil, nil, fmt.Errorf("failed to validate sku: %w", err)
 	}
 
 	// perform validation
 	if !valid {
 		return nil, nil, ErrInvalidSKU
 	}
+
+	// read the macaroon, its valid
+	mac, err := decodeAndUnmarshalSku(sku)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
+	}
+
+	/*
+		 * TODO: macaroon library to validate macaroons
+		 * don't delete the below, when we have a good macaroon lib it will be applicable
+
+		// get the merchant's keys
+		keys, err := s.Datastore.GetKeys(mac.Location(), false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
+		}
+
+		// check if any of the keys for the merchant will validate the mac
+		var valid bool
+		for _, k := range *keys {
+			// decrypt the merchant's secret key from db
+			if err := k.SetSecretKey(); err != nil {
+				return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
+			}
+			// perform verify
+			if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
+				// valid
+				valid = true
+				break
+			}
+		}
+	*/
 
 	caveats := mac.Caveats()
 	allowedPaymentMethods := new(Methods)
