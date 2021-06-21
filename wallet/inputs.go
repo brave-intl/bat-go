@@ -179,6 +179,7 @@ func (bcr *BraveCreationRequest) HandleErrors(err error) *handlers.AppError {
 type LinkUpholdDepositAccountRequest struct {
 	SignedLinkingRequest string `json:"signedLinkingRequest"`
 	AnonymousAddress     string `json:"anonymousAddress"`
+	CountryCode          string `json:"countryCode"`
 }
 
 // Validate - implementation of validatable interface
@@ -228,6 +229,7 @@ func (ludar *LinkUpholdDepositAccountRequest) HandleErrors(err error) *handlers.
 // LinkBraveDepositAccountRequest - the structure for a linking request for uphold deposit account
 type LinkBraveDepositAccountRequest struct {
 	DepositDestination string `json:"depositDestination"`
+	CountryCode        string `json:"countryCode"`
 }
 
 // Validate - implementation of validatable interface
@@ -274,6 +276,7 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 // GeminiLinkingRequest holds info needed to link gemini account
 type GeminiLinkingRequest struct {
 	VerificationToken string `json:"linking_info"`
+	CountryCode       string `json:"countryCode"`
 }
 
 // Validate - implementation of validatable interface
@@ -316,6 +319,7 @@ func (glr *GeminiLinkingRequest) HandleErrors(err error) *handlers.AppError {
 // BitFlyerLinkingRequest - the structure for a brave provider wallet creation request
 type BitFlyerLinkingRequest struct {
 	LinkingInfo string `json:"linkingInfo"`
+	CountryCode string `json:"countryCode"`
 	DepositID   string `json:"-"`
 	AccountHash string `json:"-"`
 }

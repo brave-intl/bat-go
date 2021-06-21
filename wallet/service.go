@@ -128,13 +128,13 @@ func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, c
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash string) error {
+func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UUID, depositID, accountHash, countryCode string) error {
 	// during validation we verified that the account hash and deposit id were signed by bitflyer
 	// we also validated that this "info" signed the request to perform the linking with http signature
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer")
+	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer", countryCode)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
@@ -146,7 +146,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken, countryCode string) error {
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
@@ -165,7 +165,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini")
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini", countryCode)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
@@ -182,6 +182,7 @@ func (service *Service) LinkWallet(
 	wallet uphold.Wallet,
 	transaction string,
 	anonymousAddress *uuid.UUID,
+	countryCode string,
 ) error {
 	// do not confirm this transaction yet
 	info := wallet.GetWalletInfo()
@@ -225,7 +226,7 @@ func (service *Service) LinkWallet(
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider, countryCode)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
@@ -347,7 +348,7 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 }
 
 // LinkBraveWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID) error {
+func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID, countryCode string) error {
 
 	// get reputation client from context
 	repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client)
@@ -370,7 +371,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, to.String())
 
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave", countryCode); err != nil {
 		status := http.StatusInternalServerError
 		if err == ErrTooManyCardsLinked {
 			// we are not allowing draining to wallets that exceed the linking limits

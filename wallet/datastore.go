@@ -44,7 +44,7 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
+	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, countryCode string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
@@ -360,7 +360,7 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 }
 
 // LinkWallet links a wallet together
-func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
+func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider, countryCode string) error {
 	sublogger := logger(ctx).With().
 		Str("wallet_id", ID).
 		Logger()
@@ -382,11 +382,9 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 	}
 
 	// connect custodian link (does the link limit checking in insert)
-	if err = pg.ConnectCustodialWallet(ctx, &CustodianLink{
-		WalletID:  &id,
-		Custodian: depositProvider,
-		LinkingID: &providerLinkingID,
-	}, userDepositDestination); err != nil {
+	if err = pg.ConnectCustodialWallet(ctx,
+		NewCustodianLink(&id, &providerLinkingID, depositProvider, countryCode),
+		userDepositDestination); err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to insert new custodian link")
 		return fmt.Errorf("failed to insert new custodian link: %w", err)
@@ -401,13 +399,25 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 // CustodianLink - representation of wallet_custodian record
 type CustodianLink struct {
-	WalletID           *uuid.UUID   `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
-	Custodian          string       `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
-	CreatedAt          time.Time    `json:"created_at" db:"created_at" valid:"-"`
-	LinkedAt           time.Time    `json:"linked_at" db:"linked_at" valid:"-"`
-	DisconnectedAt     sql.NullTime `json:"disconnected_at" db:"disconnected_at" valid:"-"`
-	DepositDestination string       `json:"deposit_destination" db:"deposit_destination" valid:"-"`
-	LinkingID          *uuid.UUID   `json:"linking_id" db:"linking_id" valid:"uuid"`
+	WalletID           *uuid.UUID     `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string         `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time      `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time      `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     sql.NullTime   `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string         `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID     `json:"linking_id" db:"linking_id" valid:"uuid"`
+	CountryCode        sql.NullString `json:"country_code" db:"country_code"`
+}
+
+// NewCustodianLink - Create a new custodian link typed structure
+func NewCustodianLink(wID, lID *uuid.UUID, c, cc string) *CustodianLink {
+	cl := &CustodianLink{
+		WalletID:  wID,
+		Custodian: c,
+		LinkingID: lID,
+	}
+	cl.SetCountryCodeString(cc)
+	return cl
 }
 
 // GetWalletIDString - get string version of the WalletID
@@ -422,6 +432,29 @@ func (cl *CustodianLink) GetWalletIDString() string {
 func (cl *CustodianLink) GetLinkingIDString() string {
 	if cl.LinkingID != nil {
 		return cl.LinkingID.String()
+	}
+	return ""
+}
+
+// SetCountryCodeString - get string version of the LinkingID
+func (cl *CustodianLink) SetCountryCodeString(cc string) {
+	if cc != "" {
+		cl.CountryCode = sql.NullString{
+			String: cc,
+			Valid:  true,
+		}
+	} else {
+		cl.CountryCode = sql.NullString{
+			String: cc,
+			Valid:  false,
+		}
+	}
+}
+
+// GetCountryCodeString - get string version of the LinkingID
+func (cl *CustodianLink) GetCountryCodeString() string {
+	if cl.CountryCode.Valid {
+		return cl.CountryCode.String
 	}
 	return ""
 }
@@ -633,6 +666,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		Str("wallet_id", cl.GetWalletIDString()).
 		Str("custodian", cl.Custodian).
 		Str("linking_id", cl.GetLinkingIDString()).
+		Str("country_code", cl.GetCountryCodeString()).
 		Logger()
 
 	sublogger.Debug().
@@ -695,16 +729,16 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 
 	stmt = `
 		insert into wallet_custodian (
-			wallet_id, custodian, linking_id
+			wallet_id, custodian, linking_id, country_code
 		) values (
-			$1, $2, $3
+			$1, $2, $3, $4
 		)
 		on conflict (wallet_id, custodian, linking_id) 
 		do update set disconnected_at=null, linked_at=now()
 		returning *
 	`
 
-	err = tx.Get(cl, stmt, cl.WalletID, cl.Custodian, cl.LinkingID)
+	err = tx.Get(cl, stmt, cl.WalletID, cl.Custodian, cl.LinkingID, cl.CountryCode)
 	if err != nil {
 		sublogger.Error().Err(err).
 			Msg("failed to insert wallet_custodian")

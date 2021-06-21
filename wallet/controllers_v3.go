@@ -199,7 +199,12 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			return blr.HandleErrors(err)
 		}
 
-		err = s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash)
+		var countryCode string
+		if blr.CountryCode != "" {
+			countryCode = blr.CountryCode
+		}
+
+		err = s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash, countryCode)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -260,7 +265,12 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return glr.HandleErrors(err)
 		}
 
-		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken)
+		var countryCode string
+		if glr.CountryCode != "" {
+			countryCode = glr.CountryCode
+		}
+
+		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, countryCode)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -310,13 +320,20 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
 		}
 
-		var aa uuid.UUID
+		var (
+			aa          uuid.UUID
+			countryCode string
+		)
 
 		if cuw.AnonymousAddress != "" {
 			aa, err = uuid.FromString(cuw.AnonymousAddress)
 			if err != nil {
 				return handlers.WrapError(err, "error parsing anonymous address", http.StatusBadRequest)
 			}
+		}
+
+		if cuw.CountryCode != "" {
+			countryCode = cuw.CountryCode
 		}
 
 		publicKey, err := hex.DecodeString(wallet.PublicKey)
@@ -332,7 +349,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 		}
 
-		err = s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa)
+		err = s.LinkWallet(ctx, uwallet, cuw.SignedLinkingRequest, &aa, countryCode)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -567,8 +584,12 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 		if err != nil {
 			return handlers.WrapError(err, "error parsing depositDestination", http.StatusBadRequest)
 		}
+		var countryCode string
+		if lbw.CountryCode != "" {
+			countryCode = lbw.CountryCode
+		}
 
-		err = s.LinkBraveWallet(r.Context(), *id.UUID(), linkedPaymentID)
+		err = s.LinkBraveWallet(r.Context(), *id.UUID(), linkedPaymentID, countryCode)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
