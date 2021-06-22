@@ -112,7 +112,7 @@ func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID st
 }
 
 // GetLinkingInfo - Get data about the linking info
-func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, custodianID string) (LinkingInfo, error) {
+func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, custodianID string) (map[string]LinkingInfo, error) {
 	// compute the provider linking id based on custodian id if there is one
 
 	if custodianID != "" {
@@ -120,11 +120,11 @@ func (service *Service) GetLinkingInfo(ctx context.Context, providerLinkingID, c
 		providerLinkingID = uuid.NewV5(WalletClaimNamespace, custodianID).String()
 	}
 
-	info, err := service.Datastore.GetLinkingLimitInfo(ctx, providerLinkingID)
+	infos, err := service.Datastore.GetLinkingLimitInfo(ctx, providerLinkingID)
 	if err != nil {
-		return info, fmt.Errorf("unable to increase linking limit: %w", err)
+		return infos, fmt.Errorf("unable to increase linking limit: %w", err)
 	}
-	return info, nil
+	return infos, nil
 }
 
 // LinkBitFlyerWallet links a wallet and transfers funds to newly linked wallet

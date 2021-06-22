@@ -46,7 +46,7 @@ type Datastore interface {
 	grantserver.Datastore
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
-	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error)
+	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -255,6 +255,32 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 	return nil
 }
 
+type custodianLinkingID struct {
+	Custodian string     `db:"custodian"`
+	LinkingID *uuid.UUID `db:"linking_id"`
+}
+
+func txGetCustodianLinkingIDs(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (map[string]string, error) {
+	var (
+		custodianLinkingIDs = []custodianLinkingID{}
+		resp                = map[string]string{}
+	)
+	statement := `
+		select wc1.custodian, wc1.linking_id from wallet_custodian wc1 join wallet_custodian wc2 on
+		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1
+	`
+	err := tx.Select(&custodianLinkingIDs, statement, providerLinkingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to associate linking id to custodians: %w", err)
+	}
+
+	for _, v := range custodianLinkingIDs {
+		resp[v.Custodian] = v.LinkingID.String()
+	}
+
+	return resp, nil
+}
+
 func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (int, error) {
 	var (
 		max int
@@ -311,42 +337,61 @@ func getEnvMaxCards() int {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	WalletsLinked    int `json:"walletsLinked"`
-	OpenLinkingSlots int `json:"openLinkingSlots"`
+	LinkingID        *uuid.UUID `json:"-"`
+	WalletsLinked    int        `json:"walletsLinked"`
+	OpenLinkingSlots int        `json:"openLinkingSlots"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
-func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error) {
-	var info = LinkingInfo{}
+func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error) {
+	var infos = map[string]LinkingInfo{}
 
 	// get tx
 	_, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		return LinkingInfo{}, fmt.Errorf("failed to create db transaction GetLinkingLimitInfo: %w", err)
+		return nil, fmt.Errorf("failed to create db transaction GetLinkingLimitInfo: %w", err)
 	}
 	// will rollback if tx created at this scope
 	defer rollback()
 
-	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID)
+	// find all custodians that have been linked to this wallet based on providerLinkingID
+	custodianLinkingIDs, err := txGetCustodianLinkingIDs(ctx, tx, providerLinkingID)
 	if err != nil {
-		return info, errorutils.Wrap(err, "error looking up max linkings for wallet")
+		return nil, fmt.Errorf("failed to get custodian linking ids: %w", err)
 	}
 
-	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID)
-	if err != nil {
-		return info, errorutils.Wrap(err, "error looking up used linkings for wallet")
+	// for each custodian linking id found, get the max/used
+	for custodian, linkingID := range custodianLinkingIDs {
+		maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, linkingID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error looking up max linkings for wallet")
+		}
+
+		usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, linkingID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error looking up used linkings for wallet")
+		}
+
+		// convert linking id to uuid
+		lID, err := uuid.FromString(linkingID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse linking id: %w", err)
+		}
+
+		// add to result
+		infos[custodian] = LinkingInfo{
+			LinkingID:        &lID,
+			WalletsLinked:    usedLinkings,
+			OpenLinkingSlots: maxLinkings - usedLinkings,
+		}
 	}
 
 	// if the tx was created in this scope we will commit here
 	if err := commit(); err != nil {
-		return info, fmt.Errorf("failed to commit GetLinkingLimitInfo transaction: %w", err)
+		return nil, fmt.Errorf("failed to commit GetLinkingLimitInfo transaction: %w", err)
 	}
 
-	info.WalletsLinked = usedLinkings
-	info.OpenLinkingSlots = maxLinkings - usedLinkings
-
-	return info, nil
-
+	return infos, nil
 }
 
 // IncreaseLinkingLimit - increase the linking limit for the given walletID by one
@@ -459,8 +504,15 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 		return 0, 0, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
 	}
 
-	// max is wallets linked + open slots
-	return li.WalletsLinked, li.WalletsLinked + li.OpenLinkingSlots, nil
+	for _, linkingInfo := range li {
+		// find the right linking id
+		if linkingInfo.LinkingID.String() == linkingID.String() {
+			// max is wallets linked + open slots
+			return linkingInfo.WalletsLinked, linkingInfo.WalletsLinked + linkingInfo.OpenLinkingSlots, nil
+		}
+	}
+	return 0, 0, nil
+
 }
 
 func rollbackFn(ctx context.Context, pg *Postgres, tx *sqlx.Tx) func() {

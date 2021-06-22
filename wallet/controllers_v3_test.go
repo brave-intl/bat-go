@@ -107,7 +107,10 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
+	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("brave", linkingID.String())
+
 	// linking limit checks
+	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
@@ -360,7 +363,10 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
+	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("bitflyer", linkingID.String())
+
 	// linking limit checks
+	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
@@ -463,8 +469,10 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
+	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("gemini", linkingID.String())
 
 	// linking limit checks
+	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 
