@@ -511,7 +511,10 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 			return linkingInfo.WalletsLinked, linkingInfo.WalletsLinked + linkingInfo.OpenLinkingSlots, nil
 		}
 	}
-	return 0, 0, nil
+	// wallets linked/ open linking slots not found
+	// this is the case where there is no prior linkages
+	// 0 linked, get max from environment
+	return 0, getEnvMaxCards(), nil
 
 }
 
