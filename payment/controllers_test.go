@@ -106,11 +106,20 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	UserWalletVoteTestSkuToken, err = UserWalletToken.Generate("testing123")
 	suite.Require().NoError(err)
 
+	// hacky, put this in development sku check
+	skuMap["development"][UserWalletVoteTestSkuToken] = true
+
 	AnonCardVoteTestSkuToken, err = AnonCardToken.Generate("testing123")
 	suite.Require().NoError(err)
 
+	// hacky, put this in development sku check
+	skuMap["development"][AnonCardVoteTestSkuToken] = true
+
 	FreeTestSkuToken, err = FreeTestToken.Generate("testing123")
 	suite.Require().NoError(err)
+
+	// hacky, put this in development sku check
+	skuMap["development"][FreeTestSkuToken] = true
 
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
@@ -195,6 +204,8 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity in
 	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -259,6 +270,8 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 
 	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -726,6 +739,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

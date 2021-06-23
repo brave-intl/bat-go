@@ -94,8 +94,11 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 		FirstPartyCaveats: []macarooncmd.Caveats{c},
 	}
 
-	sku := devUserWalletVote
+	sku, err := t.Generate("testing123")
 	suite.Require().NoError(err)
+
+	// hacky add to skuMap
+	skuMap["development"][sku] = true
 
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, "development")
 
