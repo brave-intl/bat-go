@@ -21,6 +21,9 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -217,6 +220,98 @@ func (suite *ControllersTestSuite) TestGetMissingOrder() {
 	rr := httptest.NewRecorder()
 	getOrderHandler.ServeHTTP(rr, getReq)
 	suite.Assert().Equal(http.StatusNotFound, rr.Code)
+}
+
+func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
+	pg, err := NewPostgres("", false, "")
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	service := &Service{
+		Datastore: pg,
+	}
+	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 1/.25)
+
+	handler := CreateGeminiTransaction(service)
+
+	createRequest := &CreateTransactionRequest{
+		ExternalTransactionID: uuid.Must(uuid.FromString("150d7a21-c203-4ba4-8fdf-c5fc36aca004")),
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/orders/{orderID}/transactions/gemini", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	// setup fake gemini client
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+	mockGemini := mockgemini.NewMockClient(mockCtrl)
+
+	settlementAddress := "settlement"
+	currency := "BAT"
+	status := "completed"
+	amount, err := decimal.NewFromString("1")
+	suite.Require().NoError(err)
+	// make sure we get a call to CheckTxStatus and return the right things
+	mockGemini.EXPECT().
+		CheckTxStatus(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(
+			&gemini.PayoutResult{
+				Destination: &settlementAddress,
+				Amount:      &amount,
+				Currency:    &currency,
+				Status:      &status,
+			}, nil)
+
+	// setup context
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientCTXKey, mockGemini))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiAPIKeyCTXKey, "key"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientIDCTXKey, "client_id"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiSettlementAddressCTXKey, settlementAddress))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, postReq)
+
+	suite.Require().Equal(http.StatusCreated, rr.Code)
+
+	var transaction Transaction
+	err = json.Unmarshal(rr.Body.Bytes(), &transaction)
+	suite.Require().NoError(err)
+
+	// Check the transaction
+	suite.Assert().Equal(amount, transaction.Amount)
+	suite.Assert().Equal("gemini", transaction.Kind)
+	suite.Assert().Equal("completed", transaction.Status)
+	suite.Assert().Equal("BAT", transaction.Currency)
+	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
+	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
+
+	// Check the order was updated to paid
+	// Old order
+	suite.Assert().Equal("pending", order.Status)
+	// Check the new order
+	updatedOrder, err := service.Datastore.GetOrder(order.ID)
+	suite.Require().NoError(err)
+	suite.Assert().Equal("paid", updatedOrder.Status)
+
+	// Test to make sure we can't submit the same externalTransactionID twice
+
+	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/gemini", bytes.NewBuffer(body))
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	suite.Require().NoError(err)
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, postReq)
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: external Transaction ID: 150d7a21-c203-4ba4-8fdf-c5fc36aca004 has already been added to the order\",\"code\":400}\n")
 }
 
 func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {

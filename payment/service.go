@@ -256,10 +256,22 @@ func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 	if *resp.Destination != settlementAddress {
 		return nil, "", "", custodian, errors.New("error recording transaction: invalid settlement address")
 	}
+
+	var (
+		amount   decimal.Decimal
+		status   string
+		currency string
+	)
 	// return back the amount
-	amount := *resp.Amount
-	status := *resp.Status
-	currency := *resp.Currency
+	if resp.Amount != nil {
+		amount = *resp.Amount
+	}
+	if resp.Status != nil {
+		status = *resp.Status
+	}
+	if resp.Currency != nil {
+		currency = *resp.Currency
+	}
 
 	return &amount, status, currency, custodian, nil
 }
