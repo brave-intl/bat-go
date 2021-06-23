@@ -222,7 +222,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		ctx := r.Context()
-		sublogger := logger(ctx).With().Str("func", "CreateOrderHandler").Logger()
+		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
 
 		var req CreateOrderRequest
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -243,7 +243,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 			)
 		}
 		// validation of sku tokens happens in createorderitemfrommacaroon
-		order, err := service.CreateOrderFromRequest(req)
+		order, err := service.CreateOrderFromRequest(ctx, req)
 
 		if err != nil {
 			if errors.Is(err, ErrInvalidSKU) {
@@ -366,7 +366,7 @@ type CreateAnonCardTransactionRequest struct {
 func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
-		sublogger := logger(ctx).With().
+		sublogger := logging.Logger(ctx, "payments").With().
 			Str("func", "CreateAnonCardTransaction").
 			Logger()
 		var req CreateAnonCardTransactionRequest
@@ -729,7 +729,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		ctx := r.Context()
 		// get logger
-		sublogger := logger(ctx).With().
+		sublogger := logging.Logger(ctx, "payments").With().
 			Str("func", "HandleStripeWebhook").
 			Logger()
 

@@ -234,8 +234,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
-	// add in webhooks for stripe if enabled
-
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		payment.InitEncryptionKeys()
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")

@@ -1,12 +1,14 @@
 package payment
 
 import (
+	"context"
 	"encoding/hex"
 	"strings"
 	"testing"
 
 	"github.com/asaskevich/govalidator"
 	macarooncmd "github.com/brave-intl/bat-go/cmd/macaroon"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/stretchr/testify/suite"
 )
@@ -92,10 +94,12 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 		FirstPartyCaveats: []macarooncmd.Caveats{c},
 	}
 
-	sku, err := t.Generate("testing123")
+	sku := devUserWalletVote
 	suite.Require().NoError(err)
 
-	orderItem, apm, err := suite.service.CreateOrderItemFromMacaroon(sku, 1)
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, "development")
+
+	orderItem, apm, err := suite.service.CreateOrderItemFromMacaroon(ctx, sku, 1)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal("stripe", strings.Join(*apm, ","))
@@ -108,6 +112,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	badsku, err := t.Generate("321testing")
 	suite.Require().NoError(err)
 
-	_, _, err = suite.service.CreateOrderItemFromMacaroon(badsku, 1)
+	ctx = context.WithValue(context.Background(), appctx.EnvironmentCTXKey, "development")
+	_, _, err = suite.service.CreateOrderItemFromMacaroon(ctx, badsku, 1)
 	suite.Require().Equal(err.Error(), "Invalid SKU Token provided in request")
 }

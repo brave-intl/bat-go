@@ -3,12 +3,9 @@ package payment
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
@@ -26,40 +23,6 @@ import (
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
-
-// Methods type is a string slice holding payments
-type Methods []string
-
-// Equal - check equality
-func (pm *Methods) Equal(b *Methods) bool {
-	s1 := []string(*pm)
-	s2 := []string(*b)
-	sort.Strings(s1)
-	sort.Strings(s2)
-	return reflect.DeepEqual(s1, s2)
-}
-
-// Scan the src sql type into the passed JSONStringArray
-func (pm *Methods) Scan(src interface{}) error {
-	var x []sql.NullString
-	var v = pq.Array(&x)
-
-	if err := v.Scan(src); err != nil {
-		return err
-	}
-	for i := 0; i < len(x); i++ {
-		if x[i].Valid {
-			*pm = append(*pm, x[i].String)
-		}
-	}
-
-	return nil
-}
-
-// Value the driver.Value representation
-func (pm *Methods) Value() (driver.Value, error) {
-	return pq.Array(pm), nil
-}
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {

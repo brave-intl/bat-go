@@ -36,6 +36,8 @@ tokens:
 
 ### Creating a Free Trial 
 
+Given the knowledge of a free trial SKU unlimited numbers of trials can be created.  Care must be taken to keep free trial SKUs secret.
+
 Certain SKU tokens do not have a price, and once users have created an order for them they may redeem credentials to access the related service. In this example, we will create a free trial order for Brave Talk: 
 
 Construct a `POST` request to ```/v1/orders``` with the following metadata

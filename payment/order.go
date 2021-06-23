@@ -1,14 +1,20 @@
 package payment
 
 import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	stripe "github.com/stripe/stripe-go/v71"
@@ -28,6 +34,40 @@ var (
 	// ErrInvalidSKU - this sku is malformed or failed signature validation
 	ErrInvalidSKU = errors.New("Invalid SKU Token provided in request")
 )
+
+// Methods type is a string slice holding payments
+type Methods []string
+
+// Equal - check equality
+func (pm *Methods) Equal(b *Methods) bool {
+	s1 := []string(*pm)
+	s2 := []string(*b)
+	sort.Strings(s1)
+	sort.Strings(s2)
+	return reflect.DeepEqual(s1, s2)
+}
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *Methods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
+		}
+	}
+
+	return nil
+}
+
+// Value the driver.Value representation
+func (pm *Methods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
+}
 
 // Order includes information about a particular order
 type Order struct {
@@ -75,7 +115,7 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, *Methods, error) {
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, error) {
 
 	// validation prior to decoding/unmarshaling
 	valid, err := validateHardcodedSku(ctx, sku)

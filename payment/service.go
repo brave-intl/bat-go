@@ -12,6 +12,7 @@ import (
 
 	"errors"
 
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -89,7 +90,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
-	sublogger := logger(ctx).With().Str("func", "InitService").Logger()
+	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
 
 	// setup stripe if exists in context and enabled
 	var scClient = &client.API{}
@@ -138,7 +139,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 }
 
 // CreateOrderFromRequest creates an order from the request
-func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
 	var (
@@ -151,7 +152,7 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, pm, err := s.CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, pm, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +249,7 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 	return nil
 }
 
-// UpdateOrderMetadata checks to see if an order has been paid and updates it if so
+// UpdateOrderMetadata updates the metadata on an order
 func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
 	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
 	if err != nil {
@@ -300,7 +301,7 @@ func (s *Service) CreateTransactionFromRequest(req CreateTransactionRequest, ord
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
 
-	sublogger := logger(ctx).With().
+	sublogger := logging.Logger(ctx, "payments").With().
 		Str("func", "CreateAnonCardTransaction").
 		Logger()
 
