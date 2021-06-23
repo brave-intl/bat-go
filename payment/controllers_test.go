@@ -318,7 +318,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	service := &Service{
 		Datastore: pg,
 	}
-	order := suite.setupCreateOrder(USER_WALLET_VOTE_TEST_SKU_TOKEN, 1/.25)
+	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 1/.25)
 
 	handler := CreateGeminiTransaction(service)
 
