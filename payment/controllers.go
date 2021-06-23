@@ -57,6 +57,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
@@ -307,6 +308,50 @@ type CreateTransactionRequest struct {
 	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
 }
 
+// CreateGeminiTransaction creates a transaction against an order
+func CreateGeminiTransaction(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateTransactionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		// Ensure the external transaction ID hasn't already been added to any orders.
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		if err != nil {
+			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
+		}
+
+		if transaction != nil {
+			err = fmt.Errorf("external Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+		if err != nil {
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
+	})
+}
+
 // CreateUpholdTransaction creates a transaction against an order
 func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -342,7 +387,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(req, *orderID.UUID())
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTx)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
