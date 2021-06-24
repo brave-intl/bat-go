@@ -88,6 +88,8 @@ const (
 	StripeWebhookSecretCTXKey CTXKey = "stripe_webhook_secret"
 	// StripeSecretCTXKey - the secret key for stripe integration
 	StripeSecretCTXKey CTXKey = "stripe_secret"
+	// FreeTrialSKUsCTXKey - context key for free trial skus
+	FreeTrialSKUsCTXKey CTXKey = "free_trial_skus"
 )
 
 var (

@@ -60,6 +60,11 @@ func init() {
 		Bind("brave-transfer-promotion-ids").
 		Env("BRAVE_TRANSFER_PROMOTION_IDS")
 
+	flagBuilder.Flag().StringSlice("free-trial-skus", []string{""},
+		"the list of free trial skus").
+		Bind("free-trial-skus").
+		Env("FREE_TRIAL_SKUS")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
@@ -364,6 +369,9 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
+
+	// free trial skus
+	ctx = context.WithValue(ctx, appctx.FreeTrialSKUsCTXKey, viper.GetStringSlice("free-trial-skus"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 
