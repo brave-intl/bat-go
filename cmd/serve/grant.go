@@ -60,10 +60,10 @@ func init() {
 		Bind("brave-transfer-promotion-ids").
 		Env("BRAVE_TRANSFER_PROMOTION_IDS")
 
-	flagBuilder.Flag().StringSlice("free-trial-skus", []string{""},
-		"the list of free trial skus").
-		Bind("free-trial-skus").
-		Env("FREE_TRIAL_SKUS")
+	flagBuilder.Flag().StringSlice("skus-whitelist", []string{""},
+		"the whitelist of skus").
+		Bind("skus-whitelist").
+		Env("SKUS_WHITELIST")
 
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
@@ -370,8 +370,8 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
 
-	// free trial skus
-	ctx = context.WithValue(ctx, appctx.FreeTrialSKUsCTXKey, viper.GetStringSlice("free-trial-skus"))
+	// whitelisted skus
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

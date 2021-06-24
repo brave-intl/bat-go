@@ -59,17 +59,17 @@ var skuMap = map[string]map[string]bool{
 
 // temporary, until we can validate macaroon signatures
 func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
-	// check free trial list from environment
-	freeSKUs, ok := ctx.Value(appctx.FreeTrialSKUsCTXKey).([]string)
+	// check sku white list from environment
+	whitelistSKUs, ok := ctx.Value(appctx.WhitelistSKUsCTXKey).([]string)
 	if ok {
-		for _, freeSKU := range freeSKUs {
-			if sku == freeSKU {
+		for _, whitelistSKU := range whitelistSKUs {
+			if sku == whitelistSKU {
 				return true, nil
 			}
 		}
 	}
 
-	// check hardcoded based on environment (non free trials)
+	// check hardcoded based on environment (non whitelisted)
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to get environment: %w", err)
