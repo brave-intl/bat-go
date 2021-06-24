@@ -79,6 +79,17 @@ const (
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials
 	SkipRedeemCredentialsCTXKey CTXKey = "skip_redeem_credentials"
+
+	// stripe related keys
+
+	// StripeEnabledCTXKey - this informs if stripe is enabled
+	StripeEnabledCTXKey CTXKey = "stripe_enabled"
+	// StripeWebhookSecretCTXKey - the webhook secret key for stripe integration
+	StripeWebhookSecretCTXKey CTXKey = "stripe_webhook_secret"
+	// StripeSecretCTXKey - the secret key for stripe integration
+	StripeSecretCTXKey CTXKey = "stripe_secret"
+	// WhitelistSKUsCTXKey - context key for whitelisted skus
+	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
 )
 
 var (
