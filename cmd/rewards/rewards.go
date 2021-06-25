@@ -3,9 +3,13 @@ package rewards
 import (
 
 	// pprof imports
+	"context"
 	_ "net/http/pprof"
+	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -19,6 +23,30 @@ func init() {
 	cmd.ServeCmd.AddCommand(rewardsCmd)
 
 	// setup the flags
+
+	// ratiosAccessToken (required by all)
+	rewardsCmd.PersistentFlags().String("ratios-token", "",
+		"the ratios service token for this service")
+	cmd.Must(viper.BindPFlag("ratios-token", rewardsCmd.PersistentFlags().Lookup("ratios-token")))
+	cmd.Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
+
+	// ratiosService (required by all)
+	rewardsCmd.PersistentFlags().String("ratios-service", "",
+		"the ratios service address")
+	cmd.Must(viper.BindPFlag("ratios-service", rewardsCmd.PersistentFlags().Lookup("ratios-service")))
+	cmd.Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
+
+	// ratiosClientExpiry
+	rewardsCmd.PersistentFlags().Duration("ratios-client-cache-expiry", 5*time.Second,
+		"the ratios client cache default eviction duration")
+	cmd.Must(viper.BindPFlag("ratios-client-cache-expiry", rewardsCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
+	cmd.Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
+
+	// ratiosClientPurge
+	rewardsCmd.PersistentFlags().Duration("ratios-client-cache-purge", 1*time.Minute,
+		"the ratios client cache default purge duration")
+	cmd.Must(viper.BindPFlag("ratios-client-cache-purge", rewardsCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
+	cmd.Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 
 	// defaultCurrency - defaults to USD
 	rewardsCmd.PersistentFlags().String("default-currency", "USD",
@@ -69,3 +97,15 @@ var (
 		Run:   GRPCRun,
 	}
 )
+
+func CommonRun(command *cobra.Command, args []string) (context.Context, *zerolog.Logger) {
+	ctx := command.Context()
+	logger, err := appctx.GetLogger(ctx)
+	cmd.Must(err)
+
+	// setup ratios service values
+	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
+	ctx = context.WithValue(ctx, appctx.RatiosAccessTokenCTXKey, viper.Get("ratios-token"))
+
+	return ctx, logger
+}

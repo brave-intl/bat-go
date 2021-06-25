@@ -22,9 +22,7 @@ import (
 // This function takes a cobra command and starts up the
 // rewards rest microservice.
 func RestRun(command *cobra.Command, args []string) {
-	ctx := command.Context()
-	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
+	ctx, logger := CommonRun(command, args)
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux

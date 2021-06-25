@@ -9,6 +9,9 @@ require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.18.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/aws/aws-sdk-go-v2/config v1.6.0
+	github.com/aws/aws-sdk-go-v2/credentials v1.3.2
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.4.0
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/getsentry/sentry-go v0.12.0
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -25,8 +28,7 @@ require (
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
-	github.com/mdlayher/vsock v0.0.0-20210303205602-10d591861736 // indirect
-	github.com/mitchellh/copystructure v1.0.0 // indirect
+	github.com/mdlayher/vsock v0.0.0-20210303205602-10d591861736
 	github.com/mssola/user_agent v0.5.3
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible

@@ -28,7 +28,7 @@ var vsockAddrRegex = regexp.MustCompile(`vm\((\d)\)`)
 
 func parseVsockAddr(addr string) (uint32, uint32, error) {
 	parts := strings.Split(addr, ":")
-	if len(parts) != 1 {
+	if len(parts) != 1 && len(parts) != 2 {
 		return 0, 0, NotVsockAddrError{}
 	}
 
