@@ -3,17 +3,22 @@ package payment
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/stripe/stripe-go/client"
+
 	"errors"
 
+	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
+	"github.com/stripe/stripe-go"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -33,6 +38,7 @@ var (
 type Service struct {
 	wallet           *wallet.Service
 	cbClient         cbr.Client
+	scClient         *client.API
 	Datastore        Datastore
 	codecs           map[string]*goavro.Codec
 	kafkaWriter      *kafka.Writer
@@ -84,15 +90,29 @@ func (s *Service) InitKafka(ctx context.Context) error {
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
-func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (*Service, error) {
+func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
+	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
+
+	// setup stripe if exists in context and enabled
+	var scClient = &client.API{}
+	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
+		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
+		if err != nil {
+			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
+		}
+		// initialize stripe client
+		scClient.Init(stripe.Key, nil)
+	}
+
 	cbClient, err := cbr.New()
 	if err != nil {
 		return nil, err
 	}
 
-	service := &Service{
+	service = &Service{
 		wallet:           walletService,
 		cbClient:         cbClient,
+		scClient:         scClient,
 		Datastore:        datastore,
 		pauseVoteUntilMu: sync.RWMutex{},
 	}
@@ -120,18 +140,34 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 }
 
 // CreateOrderFromRequest creates an order from the request
-func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error) {
+func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
 	orderItems := []OrderItem{}
-	var currency string
-	var location string
-	var status string
+	var (
+		currency              string
+		location              string
+		stripeSuccessURI      string
+		stripeCancelURI       string
+		status                string
+		allowedPaymentMethods = new(Methods)
+	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, err := CreateOrderItemFromMacaroon(req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, pm, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
 		}
+
+		// make sure all the order item skus have the same allowed Payment Methods
+		if i >= 1 {
+			if !allowedPaymentMethods.Equal(pm) {
+				return nil, errors.New("all order items must have the same allowed payment methods")
+			}
+		} else {
+			// first order item
+			*allowedPaymentMethods = *pm
+		}
+
 		totalPrice = totalPrice.Add(orderItem.Subtotal)
 
 		if location == "" {
@@ -146,6 +182,18 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		if currency != orderItem.Currency {
 			return nil, errors.New("all order items must be the same currency")
 		}
+		// stripe related
+		if stripeSuccessURI == "" {
+			stripeSuccessURI = orderItem.Metadata["stripe_success_uri"]
+		} else if stripeSuccessURI != orderItem.Metadata["stripe_success_uri"] {
+			return nil, errors.New("all order items must have same stripe success uri")
+		}
+		if stripeCancelURI == "" {
+			stripeCancelURI = orderItem.Metadata["stripe_cancel_uri"]
+		} else if stripeCancelURI != orderItem.Metadata["stripe_cancel_uri"] {
+			return nil, errors.New("all order items must have same stripe cancel uri")
+		}
+
 		orderItems = append(orderItems, *orderItem)
 	}
 
@@ -156,7 +204,26 @@ func (s *Service) CreateOrderFromRequest(req CreateOrderRequest) (*Order, error)
 		status = "pending"
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems, allowedPaymentMethods)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create order: %w", err)
+	}
+
+	if !order.IsPaid() && order.IsStripePayable() {
+		checkoutSession, err := order.CreateStripeCheckoutSession(
+			req.Email,
+			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
+			parseURLAddOrderIDParam(stripeCancelURI, order.ID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
 
 	return order, err
 }
@@ -180,6 +247,15 @@ func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
 		}
 	}
 
+	return nil
+}
+
+// UpdateOrderMetadata updates the metadata on an order
+func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+	err := s.Datastore.UpdateOrderMetadata(orderID, key, value)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -308,6 +384,11 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
+
+	sublogger := logging.Logger(ctx, "payments").With().
+		Str("func", "CreateAnonCardTransaction").
+		Logger()
+
 	txInfo, err := s.wallet.SubmitAnonCardTransaction(
 		ctx,
 		walletID,
@@ -325,6 +406,7 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 
 	err = s.UpdateOrderStatus(orderID)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to update order status")
 		return nil, errorutils.Wrap(err, "error updating order status")
 	}
 
@@ -360,4 +442,17 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 			return attempted, err
 		}
 	}
+}
+
+func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
+	// add order id to the stripe success and cancel urls
+	surl, err := url.Parse(u)
+	if err == nil {
+		surlv := surl.Query()
+		surlv.Add("order_id", orderID.String())
+		surl.RawQuery = surlv.Encode()
+		return surl.String()
+	}
+	// there was a parse error, return whatever was given
+	return u
 }

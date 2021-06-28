@@ -72,7 +72,7 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 }
 
 // CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -82,7 +82,7 @@ func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, mercha
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems)
+	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems, allowedPaymentMethods)
 }
 
 // CreateTransaction implements Datastore
@@ -114,7 +114,7 @@ func (_d DatastoreWithPrometheus) DeleteKey(id uuid.UUID, delaySeconds int) (kp1
 }
 
 // DeleteOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID) (err error) {
+func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -124,7 +124,7 @@ func (_d DatastoreWithPrometheus) DeleteOrderCreds(orderID uuid.UUID) (err error
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DeleteOrderCreds", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DeleteOrderCreds(orderID)
+	return _d.base.DeleteOrderCreds(orderID, isSigned)
 }
 
 // GetIssuer implements Datastore
@@ -426,4 +426,18 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.UpdateOrder(orderID, status)
+}
+
+// UpdateOrderMetadata implements Datastore
+func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrderMetadata", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateOrderMetadata(orderID, key, value)
 }

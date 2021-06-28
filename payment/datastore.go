@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -25,11 +28,13 @@ import (
 type Datastore interface {
 	grantserver.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
+	// UpdateOrderMetadata adds a key value pair to an order's metadata
+	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetTransaction returns a transaction given an external transaction id
@@ -51,7 +56,7 @@ type Datastore interface {
 	// GetOrderCreds
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	// DeleteOrderCreds
-	DeleteOrderCreds(orderID uuid.UUID) error
+	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
 	// RunNextOrderJob
@@ -147,9 +152,12 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 
 	var keys []Key
 	err := pg.RawDB().Select(&keys, `
-			SELECT id, name, merchant_id, created_at, expiry FROM api_keys
-			WHERE merchant_id = $1
-		`+expiredQuery+" ORDER BY name, created_at",
+			select
+				id, name, merchant_id, created_at, expiry,
+				encrypted_secret_key, nonce
+			from api_keys
+			where
+			merchant_id = $1`+expiredQuery+" ORDER BY name, created_at",
 		merchant)
 
 	if err != nil {
@@ -160,41 +168,56 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
 	tx := pg.RawDB().MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency, location)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status
+			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
 		`,
-		totalPrice, merchantID, status, currency, location)
+		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods))
 
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO: We should make a generalized helper to handle bulk inserts
+	query := `
+		insert into order_items 
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
+		values `
+	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
-		orderItems[i].OrderID = order.ID
+		// put all our params together
+		params = append(params,
+			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
+			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
+			orderItems[i].Location, orderItems[i].Description,
+			orderItems[i].CredentialType)
+		numFields := 9 // the number of fields you are inserting
+		n := i * numFields
 
-		nstmt, _ := tx.PrepareNamed(`
-			INSERT INTO order_items (order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
-			VALUES (:order_id, :sku, :quantity, :price, :currency, :subtotal, :location, :description, :credential_type)
-			RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal
-		`)
-		err = nstmt.Get(&orderItems[i], orderItems[i])
-
-		if err != nil {
-			return nil, err
+		query += `(`
+		for j := 0; j < numFields; j++ {
+			query += `$` + strconv.Itoa(n+j+1) + `,`
 		}
+		query = query[:len(query)-1] + `),`
+	}
+	query = query[:len(query)-1] // remove the trailing comma
+	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal`
+
+	order.Items = []OrderItem{}
+
+	err = tx.Select(&order.Items, query, params...)
+	if err != nil {
+		return nil, err
 	}
 	err = tx.Commit()
 	if err != nil {
 		return nil, err
 	}
-
-	order.Items = orderItems
 
 	return &order, nil
 }
@@ -202,7 +225,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID string, s
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := `
-		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status
+		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)
@@ -467,12 +490,16 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 }
 
 // DeleteOrderCreds deletes the order credentials for a OrderID
-func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID) error {
+func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 
 	query := `
 		delete
 		from order_creds
 		where order_id = $1`
+
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
 
 	_, err := pg.RawDB().Exec(query, orderID)
 	if err != nil {
@@ -668,4 +695,27 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	}
 
 	return attempted, nil
+}
+
+// UpdateOrderMetadata adds a key value pair to an order's metadata
+func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
+	// create order
+	om := datastore.Metadata{
+		key: value,
+	}
+
+	stmt := `update orders set metadata = $1, updated_at = current_timestamp where id = $2`
+
+	result, err := pg.RawDB().Exec(stmt, om, orderID.String)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("No rows updated")
+	}
+
+	return nil
 }

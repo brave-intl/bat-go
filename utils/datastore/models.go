@@ -2,9 +2,31 @@ package datastore
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"strings"
 )
+
+// Metadata - type which represents key/value pair metadata
+type Metadata map[string]string
+
+// Value - implement driver.Valuer interface for conversion to and from sql
+func (m Metadata) Value() (driver.Value, error) {
+	return json.Marshal(m)
+}
+
+// Scan - implement driver.Scanner interface for conversion to and from sql
+func (m *Metadata) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("failed to scan Metadata, not byte slice")
+	}
+	return json.Unmarshal(b, &m)
+}
 
 // NullString is a type that lets ya get a null field from the database
 type NullString struct {

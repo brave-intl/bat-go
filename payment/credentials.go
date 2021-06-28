@@ -176,6 +176,7 @@ type OrderWorker interface {
 
 // SignOrderCreds signs the blinded credentials
 func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
+
 	resp, err := service.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
 		return nil, err

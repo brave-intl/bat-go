@@ -257,7 +257,7 @@ func (c *HTTPClient) CheckTxStatus(
 	clientID string,
 	txRef string,
 ) (*PayoutResult, error) {
-	urlPath := fmt.Sprintf("/v1/payment/%s/%s", clientID, txRef)
+	urlPath := fmt.Sprintf("/v1/payments/%s/%s", clientID, txRef)
 	req, err := c.client.NewRequest(ctx, "POST", urlPath, nil, nil)
 	if err != nil {
 		return nil, err
