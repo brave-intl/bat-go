@@ -1,7 +1,7 @@
 tokens:
   - id: "brave-talk-premium sku token v1"
     version: 1
-    location: "account.brave.software"
+    location: "talk.brave.software"
     first_party_caveats:
       - sku: "brave-talk-premium"
       - price: 9.99
