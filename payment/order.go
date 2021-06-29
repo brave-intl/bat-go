@@ -212,7 +212,6 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 
 // IsStripePayable returns true if every item is payable by Stripe
 func (order Order) IsStripePayable() bool {
-	// TODO: make sure we have a stripe_product_id caveat
 	// TODO: if not we need to look into subscription trials:
 	/// -> https://stripe.com/docs/billing/subscriptions/trials
 	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), StripePaymentMethod)
@@ -281,7 +280,7 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 		// since we are creating stripe line item, we can assume
 		// that the stripe product is embedded in macaroon as metadata
 		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(item.Metadata["stripe_product_id"]),
+			Price:    stripe.String(item.Metadata["stripe_item_id"]),
 			Quantity: stripe.Int64(int64(item.Quantity)),
 		}
 	}
