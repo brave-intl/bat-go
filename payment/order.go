@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -116,21 +117,25 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
 func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, error) {
+	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
 	// validation prior to decoding/unmarshaling
 	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to validate sku")
 		return nil, nil, fmt.Errorf("failed to validate sku: %w", err)
 	}
 
 	// perform validation
 	if !valid {
+		sublogger.Error().Err(err).Msg("invalid sku")
 		return nil, nil, ErrInvalidSKU
 	}
 
 	// read the macaroon, its valid
 	mac, err := decodeAndUnmarshalSku(sku)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to decode sku")
 		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
 	}
 
@@ -195,7 +200,10 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
 			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
+			sublogger.Debug().Str("value", value).Msg("metadata string")
+			sublogger.Debug().Str("metadata", fmt.Sprintf("%+v", orderItem.Metadata)).Msg("metadata structure")
 			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku metadata")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
 		}
@@ -212,7 +220,6 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 
 // IsStripePayable returns true if every item is payable by Stripe
 func (order Order) IsStripePayable() bool {
-	// TODO: make sure we have a stripe_product_id caveat
 	// TODO: if not we need to look into subscription trials:
 	/// -> https://stripe.com/docs/billing/subscriptions/trials
 	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), StripePaymentMethod)
@@ -281,7 +288,7 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 		// since we are creating stripe line item, we can assume
 		// that the stripe product is embedded in macaroon as metadata
 		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
-			Price:    stripe.String(item.Metadata["stripe_product_id"]),
+			Price:    stripe.String(item.Metadata["stripe_item_id"]),
 			Quantity: stripe.Int64(int64(item.Quantity)),
 		}
 	}
