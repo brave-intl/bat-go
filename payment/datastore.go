@@ -706,7 +706,7 @@ func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value str
 
 	stmt := `update orders set metadata = $1, updated_at = current_timestamp where id = $2`
 
-	result, err := pg.RawDB().Exec(stmt, om, orderID.String)
+	result, err := pg.RawDB().Exec(stmt, om, orderID.String())
 
 	if err != nil {
 		return err
