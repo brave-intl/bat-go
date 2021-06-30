@@ -33,12 +33,10 @@ var skuMap = map[string]map[string]bool{
 		prodBraveTogetherPaid: true,
 	},
 	"staging": {
-		stagingBraveUnlimited:    true,
-		stagingBravePremium:      true,
-		stagingUserWalletVote:    true,
-		stagingAnonCardVote:      true,
-		stagingBraveTogetherPaid: true,
-		stagingWebtestPJSKUDemo:  true,
+		stagingUserWalletVote:   true,
+		stagingAnonCardVote:     true,
+		stagingWebtestPJSKUDemo: true,
+		stagingBraveTalkPremium: true,
 	},
 	"development": {
 		devUserWalletVote:   true,
