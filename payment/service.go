@@ -102,7 +102,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
 		}
 		// initialize stripe client
-		sublogger.Debug().Str("key", fmt.Sprintf("%+v", stripe.Key)).Msg("stripe initialized with key")
 		scClient.Init(stripe.Key, nil)
 	}
 
