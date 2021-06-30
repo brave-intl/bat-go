@@ -225,7 +225,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := `
-		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
+		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, metadata
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)
@@ -237,7 +237,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
