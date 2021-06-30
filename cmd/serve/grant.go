@@ -391,6 +391,12 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
 
+	logger.Debug().
+		Bool("stripe-enabled", viper.GetBool("stripe-enabled")).
+		Str("stripe-webhook-secret", viper.GetString("stripe-webhook-secret")).
+		Str("stripe-secret", viper.GetString("stripe-secret")).
+		Msg("stripe configuration")
+
 	// whitelisted skus
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
 

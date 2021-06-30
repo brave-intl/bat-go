@@ -186,7 +186,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -195,8 +195,8 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType)
-		numFields := 9 // the number of fields you are inserting
+			orderItems[i].CredentialType, orderItems[i].Metadata)
+		numFields := 10 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -206,7 +206,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		query = query[:len(query)-1] + `),`
 	}
 	query = query[:len(query)-1] // remove the trailing comma
-	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal`
+	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata`
 
 	order.Items = []OrderItem{}
 

@@ -18,7 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
-	"github.com/stripe/stripe-go"
+	stripe "github.com/stripe/stripe-go/v71"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -96,11 +96,13 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	// setup stripe if exists in context and enabled
 	var scClient = &client.API{}
 	if enabled, ok := ctx.Value(appctx.StripeEnabledCTXKey).(bool); ok && enabled {
+		sublogger.Debug().Msg("stripe enabled")
 		stripe.Key, err = appctx.GetStringFromContext(ctx, appctx.StripeSecretCTXKey)
 		if err != nil {
 			sublogger.Panic().Err(err).Msg("failed to get Stripe secret from context, and Stripe enabled")
 		}
 		// initialize stripe client
+		sublogger.Debug().Str("key", fmt.Sprintf("%+v", stripe.Key)).Msg("stripe initialized with key")
 		scClient.Init(stripe.Key, nil)
 	}
 

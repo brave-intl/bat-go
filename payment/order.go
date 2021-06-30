@@ -201,6 +201,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "metadata":
 			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
 			sublogger.Debug().Str("value", value).Msg("metadata string")
+			sublogger.Debug().Str("metadata", fmt.Sprintf("%+v", orderItem.Metadata)).Msg("metadata structure")
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku metadata")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
