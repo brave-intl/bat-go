@@ -8,7 +8,7 @@ tokens:
       - currency: "USD"
       - description: "Premium access to Brave Talk"
       - credential_type: "single-use"
-      - payment_methods: ["stripe"]
+      - allowed_payment_methods: "stripe"
       - metadata: '
 {
   "stripe_product_id": "prod_JlHZ9RZ98l3N2k",
