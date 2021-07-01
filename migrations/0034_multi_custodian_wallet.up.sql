@@ -22,3 +22,6 @@ create index wallet_custodian_wallet_id_idx on wallet_custodian(wallet_id);
 alter table wallet_custodian add constraint check_custodian check (
     custodian IN (
         'brave', 'uphold', 'bitflyer', 'gemini'));
+
+-- add index to improve ETL speeds (run manually concurrently, added here after the fact)
+create index wallets_updated_at_idx on wallets(updated_at);
