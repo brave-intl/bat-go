@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -114,10 +115,10 @@ type AppHandler func(http.ResponseWriter, *http.Request) *AppError
 
 // ServeHTTP responds via the passed handler and handles returned errors
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.Header.Get("Accept") {
-	case "application/json", "", "*/*":
+	if strings.Contains(r.Header.Get("Accept"), "application/json") ||
+		strings.Contains(r.Header.Get("Accept"), "*/*") || r.Header.Get("Accept") == "" {
 		w.Header().Set("content-type", "application/json")
-	default:
+	} else {
 		w.WriteHeader(http.StatusBadRequest)
 		// return a 400 error here as we cannot supply the encoding type the client is asking for
 	}
