@@ -849,16 +849,23 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order not paid, set pending")
 			err = service.Datastore.UpdateOrder(orderID, "pending")
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
 			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set ok response")
 			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
 		}
 
