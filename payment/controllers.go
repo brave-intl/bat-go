@@ -812,17 +812,27 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				sublogger.Error().Err(err).Msg("error parsing webhook json")
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
+			sublogger.Debug().
+				Str("event_type", event.Type).
+				Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
 
 			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("error getting subscription")
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
+
+			sublogger.Debug().
+				Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
+
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
 				sublogger.Error().Err(err).Msg("error getting order id from subscription metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order id")
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
