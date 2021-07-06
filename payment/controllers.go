@@ -789,12 +789,14 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 		b, err := requestutils.Read(r.Body)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
 		}
 
 		event, err := webhook.ConstructEvent(
 			b, r.Header.Get("Stripe-Signature"), endpointSecret)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to verify stripe signature")
 			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
 		}
 
@@ -807,38 +809,63 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			var invoice stripe.Invoice
 			err := json.Unmarshal(event.Data.Raw, &invoice)
 			if err != nil {
+				sublogger.Error().Err(err).Msg("error parsing webhook json")
 				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
 			}
+			sublogger.Debug().
+				Str("event_type", event.Type).
+				Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
 
 			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
 			if err != nil {
+				sublogger.Error().Err(err).Msg("error getting subscription")
 				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
 			}
+
+			sublogger.Debug().
+				Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
+
 			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
 			if err != nil {
+				sublogger.Error().Err(err).Msg("error getting order id from subscription metadata")
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order id")
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
 				err = service.Datastore.UpdateOrder(orderID, "paid")
 				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 				}
 				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
 				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order metadata")
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
+				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order not paid, set pending")
 			err = service.Datastore.UpdateOrder(orderID, "pending")
 			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to update order status")
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
 			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
 			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to update order metadata")
 				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set ok response")
 			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
 		}
 
