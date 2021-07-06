@@ -188,6 +188,8 @@ func NewPostgres(
 	// set max open connections to default to 80 (will get overwritten later by calculation
 	// depending of if we have environment variables set
 	db.SetMaxOpenConns(80)
+	// 50% of max open
+	db.SetMaxIdleConns(40)
 
 	// using desired/max tasks to calculate the right number of max open connections
 	desiredTasks, dterr := strconv.Atoi(os.Getenv("DESIRED_TASKS"))
@@ -201,6 +203,8 @@ func NewPostgres(
 			// also taking into account that payments/grants/promotions are all using the same database instance to
 			// calculate the max open connections:
 			db.SetMaxOpenConns(maxConns / (maxTasks / desiredTasks) / 3)
+			// 50% of max open
+			db.SetMaxIdleConns((maxConns / (maxTasks / desiredTasks) / 3) / 2)
 		}
 	}
 
