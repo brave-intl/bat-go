@@ -107,6 +107,11 @@ func init() {
 		Bind("gemini-client-id").
 		Env("GEMINI_CLIENT_ID")
 
+	flagBuilder.Flag().String("gemini-client-secret", "",
+		"the client secret for gemini").
+		Bind("gemini-client-secret").
+		Env("GEMINI_CLIENT_SECRET")
+
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
 		"tells bitflyer what the client id is during token generation").
@@ -385,6 +390,7 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("gemini-settlement-address"))
 	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, viper.GetString("gemini-api-key"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
+	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
 	// stripe variables
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))

@@ -14,6 +14,7 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/google/go-querystring/query"
 	"github.com/shengdoushi/base58"
@@ -263,7 +264,15 @@ func (c *HTTPClient) CheckTxStatus(
 		return nil, err
 	}
 
-	err = setHeaders(req, APIKey, nil, "", "api")
+	// get client secret from context
+	clientSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiClientSecretCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
+	}
+	//create a new hmac hasher
+	signer := cryptography.NewHMACHasher([]byte(clientSecret))
+
+	err = setHeaders(req, APIKey, &signer, "{}", "hmac")
 	if err != nil {
 		return nil, err
 	}
