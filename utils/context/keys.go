@@ -53,6 +53,8 @@ const (
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiClientIDCTXKey - context key for the gemini client id
 	GeminiClientIDCTXKey CTXKey = "gemini_client_id"
+	// GeminiClientSecretCTXKey - context key for the gemini client secret
+	GeminiClientSecretCTXKey CTXKey = "gemini_client_secret"
 	// GeminiAPIKeyCTXKey - context key for the gemini api key
 	GeminiAPIKeyCTXKey CTXKey = "gemini_api_key"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
