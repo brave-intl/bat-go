@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -38,6 +39,12 @@ type PayoutPayload struct {
 	Currency    string          `json:"currency"`
 	Destination string          `json:"destination"`
 	Account     *string         `json:"account,omitempty"`
+}
+
+// CheckTxPayload get the tx status payload structure
+type CheckTxPayload struct {
+	Request string `json:"request"`
+	Nonce   int64  `json:"nonce"`
 }
 
 // AccountListPayload retrieves all accounts associated with a gemini key
@@ -105,6 +112,14 @@ func NewBulkPayoutPayload(account *string, oauthClientID string, payouts *[]Payo
 		Request:       "/v1/payments/bulkPay",
 		Nonce:         nonce(),
 		Payouts:       *payouts,
+	}
+}
+
+// NewCheckTxPayload generate a new payload for the check tx api
+func NewCheckTxPayload(url string) CheckTxPayload {
+	return CheckTxPayload{
+		Request: url,
+		Nonce:   nonce(),
 	}
 }
 
@@ -264,6 +279,12 @@ func (c *HTTPClient) CheckTxStatus(
 		return nil, err
 	}
 
+	// create the gemini payload
+	payload, err := json.Marshal(NewCheckTxPayload(urlPath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gemini payload for api: %w", err)
+	}
+
 	// get client secret from context
 	clientSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiClientSecretCTXKey)
 	if err != nil {
@@ -272,7 +293,7 @@ func (c *HTTPClient) CheckTxStatus(
 	//create a new hmac hasher
 	signer := cryptography.NewHMACHasher([]byte(clientSecret))
 
-	err = setHeaders(req, APIKey, &signer, "{}", "hmac")
+	err = setHeaders(req, APIKey, &signer, string(payload), "hmac")
 	if err != nil {
 		return nil, err
 	}
