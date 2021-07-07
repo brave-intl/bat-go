@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/google/go-querystring/query"
 	"github.com/shengdoushi/base58"
@@ -37,6 +39,12 @@ type PayoutPayload struct {
 	Currency    string          `json:"currency"`
 	Destination string          `json:"destination"`
 	Account     *string         `json:"account,omitempty"`
+}
+
+// CheckTxPayload get the tx status payload structure
+type CheckTxPayload struct {
+	Request string `json:"request"`
+	Nonce   int64  `json:"nonce"`
 }
 
 // AccountListPayload retrieves all accounts associated with a gemini key
@@ -104,6 +112,14 @@ func NewBulkPayoutPayload(account *string, oauthClientID string, payouts *[]Payo
 		Request:       "/v1/payments/bulkPay",
 		Nonce:         nonce(),
 		Payouts:       *payouts,
+	}
+}
+
+// NewCheckTxPayload generate a new payload for the check tx api
+func NewCheckTxPayload(url string) CheckTxPayload {
+	return CheckTxPayload{
+		Request: url,
+		Nonce:   nonce(),
 	}
 }
 
@@ -263,7 +279,21 @@ func (c *HTTPClient) CheckTxStatus(
 		return nil, err
 	}
 
-	err = setHeaders(req, APIKey, nil, "", "api")
+	// create the gemini payload
+	payload, err := json.Marshal(NewCheckTxPayload(urlPath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gemini payload for api: %w", err)
+	}
+
+	// get client secret from context
+	clientSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiClientSecretCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
+	}
+	//create a new hmac hasher
+	signer := cryptography.NewHMACHasher([]byte(clientSecret))
+
+	err = setHeaders(req, APIKey, &signer, string(payload), "hmac")
 	if err != nil {
 		return nil, err
 	}
