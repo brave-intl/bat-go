@@ -113,7 +113,7 @@ func (_d DatastoreWithPrometheus) GetCustodianLinkCount(ctx context.Context, lin
 }
 
 // GetLinkingLimitInfo implements Datastore
-func (_d DatastoreWithPrometheus) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (l1 LinkingInfo, err error) {
+func (_d DatastoreWithPrometheus) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (m1 map[string]LinkingInfo, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
