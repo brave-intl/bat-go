@@ -296,6 +296,8 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 	var (
 		used int
 	)
+	// we need to exclude `this` wallet from the used computation in the event we are attempting
+	// to re-link the 4th slot
 	statement := `
 		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
 	`
@@ -714,10 +716,17 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
 	}
 
+	var consumesLinkingSlot bool
+
 	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
 		// check if the member matches the associated member
 		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		} else {
+			// it does match the existing slot, this means that this
+			// wallet is consuming one of the used slots, therefore
+			// set consumesLinkingSlot true
+			consumesLinkingSlot = true
 		}
 	}
 
@@ -727,6 +736,16 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		sublogger.Error().Err(err).
 			Msg("failed to insert wallet_custodian due to db err checking linking limits")
 		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+	}
+
+	// GetCustodianLinkCount gives back a used as a total of used slots,
+	// which also includes this particular wallet.  If someone is at 4 linking slots
+	// used on a custodian, AND disconnects/reconnects their wallet, this
+	// function will return 4 total "used".
+
+	if consumesLinkingSlot {
+		// subtract 1 from used as this wallet is consuming the one slot
+		used--
 	}
 
 	// check for linking limit

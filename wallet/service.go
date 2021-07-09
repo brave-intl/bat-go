@@ -137,7 +137,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer")
 	if err != nil {
 		status := http.StatusInternalServerError
-		if err == ErrTooManyCardsLinked {
+		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
 		return handlers.WrapError(err, "unable to link wallets", status)
@@ -168,7 +168,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini")
 	if err != nil {
 		status := http.StatusInternalServerError
-		if err == ErrTooManyCardsLinked {
+		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
 		return handlers.WrapError(err, "unable to link wallets", status)
@@ -228,7 +228,7 @@ func (service *Service) LinkWallet(
 	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if err == ErrTooManyCardsLinked {
+		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
 		return handlers.WrapError(err, "unable to link wallets", status)
@@ -372,7 +372,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
 	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
 		status := http.StatusInternalServerError
-		if err == ErrTooManyCardsLinked {
+		if errors.Is(err, ErrTooManyCardsLinked) {
 			// we are not allowing draining to wallets that exceed the linking limits
 			// this will cause an error in the client prior to attempting draining
 			status = http.StatusTeapot
