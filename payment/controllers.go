@@ -10,11 +10,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -500,28 +502,93 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
-		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
-		}
+		var credentialType string
+		const (
+			singleUse   = "single-use"
+			timeLimited = "time-limited"
+		)
 
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Credentials do not exist",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
+		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		// look through order, find out what all the order item's credential types are
+		for i, v := range order.Items {
+			if i > 0 {
+				if v.CredentialType != credentialType {
+					// all the order items on the order need the same credential type
+					return handlers.WrapError(
+						fmt.Errorf("all order item credential types must converge"),
+						"failed to get credentials", http.StatusConflict)
+				}
+			} else {
+				credentialType = v.CredentialType
 			}
 		}
 
-		status := http.StatusOK
-		for i := 0; i < len(*creds); i++ {
-			if (*creds)[i].SignedCreds == nil {
-				status = http.StatusAccepted
-				break
+		if credentialType == singleUse {
+			creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
+			if err != nil {
+				return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 			}
-		}
 
-		return handlers.RenderContent(r.Context(), creds, w, status)
+			if creds == nil {
+				return &handlers.AppError{
+					Message: "Credentials do not exist",
+					Code:    http.StatusNotFound,
+					Data:    map[string]interface{}{},
+				}
+			}
+
+			status := http.StatusOK
+			for i := 0; i < len(*creds); i++ {
+				if (*creds)[i].SignedCreds == nil {
+					status = http.StatusAccepted
+					break
+				}
+			}
+
+			return handlers.RenderContent(r.Context(), creds, w, status)
+		} else if credentialType == timeLimited {
+			// only brave merchant
+			if !order.Location.Valid || order.Location.String != "brave" {
+				return handlers.WrapError(
+					fmt.Errorf("failed to create time limited credentials"),
+					"only the Brave merchant can have time limited credentials", http.StatusBadRequest)
+			}
+			// is the order paid?
+			if !order.IsPaid() {
+				return handlers.WrapError(
+					fmt.Errorf("order is not paid"),
+					"cannot get credentials for unpaid orders", http.StatusBadRequest)
+			}
+
+			issuedAt := order.CreatedAt
+			expiresAt := issuedAt.AddDate(0, 0, 35)
+
+			var credentials []TimeLimitedCreds
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+
+			for _, item := range order.Items {
+				// iterate through order items, derive the time limited creds
+				timeBasedToken, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
+				if err != nil {
+					return handlers.WrapError(err, "error generating time-limited credential", http.StatusInternalServerError)
+				}
+				credentials = append(credentials, TimeLimitedCreds{
+					ID:        item.ID,
+					OrderID:   order.ID,
+					IssuedAt:  issuedAt.Format("2006-01-02"),
+					ExpiresAt: expiresAt.Format("2006-01-02"),
+					Token:     timeBasedToken,
+				})
+			}
+
+			if len(credentials) > 0 {
+				return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
+			}
+
+			return handlers.RenderContent(r.Context(), creds, w, status)
+		}
+		return handlers.WrapError(
+			fmt.Errorf("credentials must be single-use|time-limited"), "invalid credential type on order", http.StatusBadRequest)
 	})
 }
 
@@ -756,6 +823,47 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			}
 
 			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+		} else if req.Type == "time-limited" {
+			// Presentation includes a token and token metadata test test
+			type Presentation struct {
+				IssuedAt  string `json:"issuedAt"`
+				ExpiresAt string `json:"expiresAt"`
+				Token     string `json:"token"`
+			}
+
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+
+			var presentation Presentation
+			err = json.Unmarshal(bytes, &presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+
+			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+			}
+			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+			}
+
+			verified, err := timeLimitedSecret.Verify(issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+			}
+
+			if verified {
+				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+			}
+
+			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
+
 		}
 
 		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
