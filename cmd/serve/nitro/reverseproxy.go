@@ -21,6 +21,7 @@ func init() {
 	// upstream-url - sets the upstream-url of the server to be started
 	ReverseProxyServerCmd.PersistentFlags().String("upstream-url", "",
 		"the upstream url to proxy requests to")
+	cmd.Must(ReverseProxyServerCmd.MarkPersistentFlagRequired("upstream-url"))
 	cmd.Must(viper.BindPFlag("upstream-url", ReverseProxyServerCmd.PersistentFlags().Lookup("upstream-url")))
 	cmd.Must(viper.BindEnv("upstream-url", "UPSTREAM_URL"))
 }
