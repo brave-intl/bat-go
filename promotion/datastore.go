@@ -586,7 +586,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 						from issuers
 						group by promotion_id
 					) issuer_keys join promotions on promotions.id = issuer_keys.promotion_id
-						where ( promotions.platform = '' or promotions.platform = '')
+						where ( promotions.platform = '' or promotions.platform = $2)
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
