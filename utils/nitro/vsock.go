@@ -34,7 +34,11 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 
 	// default to port 80 if none is specified
 	port := 80
-	cid, err := strconv.Atoi(vsockAddrRegex.FindStringSubmatch(parts[0])[1])
+	matches := vsockAddrRegex.FindStringSubmatch(parts[0])
+	if len(matches) < 2 {
+		return 0, 0, NotVsockAddrError{}
+	}
+	cid, err := strconv.Atoi(matches[1])
 	if err != nil || cid < 0 {
 		return 0, 0, fmt.Errorf("cid must be a valid uint32: %v", err)
 	}
