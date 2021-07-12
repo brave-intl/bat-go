@@ -18,7 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -578,13 +578,15 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 			true as available
 		from
 			(
-				select
-					promotions.*,
-					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
-				from
-				promotions left join issuers on promotions.id = issuers.promotion_id
-				where ( promotions.platform = '' or promotions.platform = $2)
-				group by promotions.id
+				select * from 
+					(
+						select
+						promotion_id,
+						array_to_json(array_remove(array_agg(public_key), null)) as public_keys
+						from issuers
+						group by promotion_id
+					) issuer_keys join promotions on promotions.id = issuer_keys.promotion_id
+						where ( promotions.platform = '' or promotions.platform = $2)
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
