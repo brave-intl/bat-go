@@ -269,7 +269,7 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 	}
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
-
+	params.AddExtra("allow_promotion_codes", "true")
 	session, err := session.New(params)
 	if err != nil {
 		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe session: %w", err)
