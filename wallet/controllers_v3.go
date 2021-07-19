@@ -260,7 +260,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			return glr.HandleErrors(err)
 		}
 
-		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken)
+		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
