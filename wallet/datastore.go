@@ -633,19 +633,13 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 			id=$1
 	`
 	// perform query
-	if r, err := tx.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		stmt,
 		walletID,
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
-	} else if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
-			return errors.New("should have updated at least one wallet with disconnected custodial")
-		}
 	}
 
 	// set disconnected on the custodian link
@@ -658,19 +652,13 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 			wallet_id=$1 and disconnected_at is null
 	`
 	// perform query
-	if r, err := tx.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		stmt,
 		walletID,
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
-	} else if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
-			return errors.New("should have updated at least one wallet with disconnected custodial")
-		}
 	}
 
 	// if the tx was created in this scope we will commit here
