@@ -448,6 +448,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mockGeminiClient.EXPECT().ValidateAccount(
 		gomock.Any(),
 		gomock.Any(),
+		gomock.Any(),
 	).Return(
 		accountID.String(),
 		nil,
@@ -550,6 +551,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 
 	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 	).Return(
