@@ -146,7 +146,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 }
 
 // LinkGeminiWallet links a wallet and transfers funds to newly linked wallet
-func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken string) error {
+func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID, verificationToken, depositID string) error {
 	// get gemini client from context
 	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
 	if !ok {
@@ -156,7 +156,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	// perform an Account Validation call to gemini to get the accountID
-	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken)
+	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
 		return handlers.WrapError(
 			errors.New("invalid linking_info"), "unable to validate gemini account", http.StatusBadRequest)
@@ -165,7 +165,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), accountID, providerLinkingID, nil, "gemini")
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "gemini")
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
