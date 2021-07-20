@@ -430,8 +430,9 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
 			bytes.NewBufferString(fmt.Sprintf(`
 				{
-					"linking_info": "%s"
-				}`, linkingInfo)),
+					"linking_info": "%s",
+					"deposit_id": "%s"
+				}`, linkingInfo, idTo)),
 		)
 		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
 			Datastore: datastore,
@@ -445,6 +446,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 
 	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 	).Return(
@@ -533,8 +535,9 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
 			bytes.NewBufferString(fmt.Sprintf(`
 				{
-					"linking_info": "%s"
-				}`, linkingInfo)),
+					"linking_info": "%s",
+					"deposit_id": "%s"
+				}`, linkingInfo, idTo)),
 		)
 		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
 			Datastore: datastore,
@@ -548,6 +551,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
 
 	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
 	).Return(

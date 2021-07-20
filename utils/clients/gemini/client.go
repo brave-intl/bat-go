@@ -180,7 +180,7 @@ func (pr PayoutResult) GenerateLog() string {
 // Client abstracts over the underlying client
 type Client interface {
 	// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-	ValidateAccount(ctx context.Context, verificationToken string) (string, error)
+	ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error)
 	// FetchAccountList requests account information to scope future requests
 	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
@@ -332,7 +332,8 @@ func (c *HTTPClient) UploadBulkPayout(
 
 // ValidateAccountReq - request structure for inputs to validate account client call
 type ValidateAccountReq struct {
-	Token string `url:"token"`
+	Token       string `url:"token"`
+	RecipientID string `url:"recipient_id"`
 }
 
 // GenerateQueryString - implement the QueryStringBody interface
@@ -346,7 +347,7 @@ type ValidateAccountRes struct {
 }
 
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken string) (string, error) {
+func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
 	// create the query string parameters
 	var (
 		res = new(ValidateAccountRes)
@@ -354,7 +355,8 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken stri
 
 	// create the request
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/validate", nil, &ValidateAccountReq{
-		Token: verificationToken,
+		Token:       verificationToken,
+		RecipientID: recipientID,
 	})
 
 	if err != nil {

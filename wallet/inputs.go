@@ -274,6 +274,7 @@ func (lbdar *LinkBraveDepositAccountRequest) HandleErrors(err error) *handlers.A
 // GeminiLinkingRequest holds info needed to link gemini account
 type GeminiLinkingRequest struct {
 	VerificationToken string `json:"linking_info"`
+	DepositID         string `json:"deposit_id"`
 }
 
 // Validate - implementation of validatable interface
