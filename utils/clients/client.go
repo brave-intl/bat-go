@@ -189,6 +189,7 @@ func (c *SimpleHTTPClient) NewRequest(
 	if err != nil {
 		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}
+	logOut(ctx, "request", *req.URL, 0, req.Header, body)
 	return req, err
 }
 
@@ -212,26 +213,17 @@ func (c *SimpleHTTPClient) do(
 			}).Dec()
 	}()
 
-	logger := log.Ctx(ctx)
-
-	// dump out the full request, right before we submit it
-	requestDump, err := httputil.DumpRequestOut(req, true)
-	if err != nil {
-		panic(err)
-	}
-	logger.Debug().Str("type", "http.Request").Msg(string(requestDump))
-
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
+	logger := log.Ctx(ctx)
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		panic(err)
 	}
-
 	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
 	// // helpful if you want to read the body as it is
