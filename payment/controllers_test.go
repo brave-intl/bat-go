@@ -374,6 +374,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientCTXKey, mockGemini))
 	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiAPIKeyCTXKey, "key"))
 	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientIDCTXKey, "client_id"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiBrowserClientIDCTXKey, "browser_client_id"))
 	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiSettlementAddressCTXKey, settlementAddress))
 
 	rr := httptest.NewRecorder()
