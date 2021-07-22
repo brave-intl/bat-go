@@ -431,7 +431,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 			bytes.NewBufferString(fmt.Sprintf(`
 				{
 					"linking_info": "%s",
-					"deposit_id": "%s"
+					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
 		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
@@ -536,7 +536,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 			bytes.NewBufferString(fmt.Sprintf(`
 				{
 					"linking_info": "%s",
-					"deposit_id": "%s"
+					"recipient_id": "%s"
 				}`, linkingInfo, idTo)),
 		)
 		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
