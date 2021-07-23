@@ -108,7 +108,7 @@ func init() {
 		Env("GEMINI_API_SECRET")
 
 	flagBuilder.Flag().String("gemini-browser-client-id", "",
-		"the client id for gemini").
+		"the browser client id for gemini, which is the oauth client id the browser uses, required to validate transactions for AC flow").
 		Bind("gemini-browser-client-id").
 		Env("GEMINI_BROWSER_CLIENT_ID")
 
