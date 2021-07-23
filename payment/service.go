@@ -300,9 +300,9 @@ func getGeminiInfoFromCtx(ctx context.Context) (gemini.Client, string, string, s
 	}
 
 	// get gemini client id from context
-	clientID, ok := ctx.Value(appctx.GeminiClientIDCTXKey).(string)
+	clientID, ok := ctx.Value(appctx.GeminiBrowserClientIDCTXKey).(string)
 	if !ok {
-		return nil, "", "", "", fmt.Errorf("no gemini client id in ctx: %w", appctx.ErrNotInContext)
+		return nil, "", "", "", fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
 	}
 
 	// get gemini settlement address from context
@@ -316,21 +316,28 @@ func getGeminiInfoFromCtx(ctx context.Context) (gemini.Client, string, string, s
 
 // getGeminiCustodialTx - the the custodial tx information from gemini
 func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+	sublogger := logging.Logger(ctx, "payments").With().
+		Str("func", "getGeminiCustodialTx").
+		Logger()
+
 	custodian := "gemini"
 	// get gemini client from tx
-	client, geminiAPIKey, geminiClientID, settlementAddress, err := getGeminiInfoFromCtx(ctx)
+	client, geminiAPIKey, geminiBrowserClientID, settlementAddress, err := getGeminiInfoFromCtx(ctx)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get gemini configuration")
 		return nil, "", "", custodian, fmt.Errorf("error getting gemini client/info from ctx: %w", err)
 	}
 
 	// call client.CheckTxStatus
-	resp, err := client.CheckTxStatus(ctx, geminiAPIKey, geminiClientID, txRef)
+	resp, err := client.CheckTxStatus(ctx, geminiAPIKey, geminiBrowserClientID, txRef)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to check tx status")
 		return nil, "", "", custodian, fmt.Errorf("error getting tx status: %w", err)
 	}
 
 	// check if destination is the right address
 	if *resp.Destination != settlementAddress {
+		sublogger.Error().Err(err).Msg("settlement address does not match tx destination")
 		return nil, "", "", custodian, errors.New("error recording transaction: invalid settlement address")
 	}
 

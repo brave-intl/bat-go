@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -229,7 +230,8 @@ func setHeaders(
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("Cache-Control", "no-cache")
 	if payload != "" {
-		req.Header.Set("X-GEMINI-PAYLOAD", payload)
+		// base64 encode the payload
+		req.Header.Set("X-GEMINI-PAYLOAD", base64.StdEncoding.EncodeToString([]byte(payload)))
 	}
 	if submitType != "oauth" {
 		// do not send when oauth
@@ -285,13 +287,13 @@ func (c *HTTPClient) CheckTxStatus(
 		return nil, fmt.Errorf("failed to create gemini payload for api: %w", err)
 	}
 
-	// get client secret from context
-	clientSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiClientSecretCTXKey)
+	// get api secret from context
+	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
 	}
 	//create a new hmac hasher
-	signer := cryptography.NewHMACHasher([]byte(clientSecret))
+	signer := cryptography.NewHMACHasher([]byte(apiSecret))
 
 	err = setHeaders(req, APIKey, &signer, string(payload), "hmac")
 	if err != nil {
