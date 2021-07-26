@@ -12,6 +12,7 @@ func TestTimeLimitedCredentialVerification(t *testing.T) {
 	timeLimitedSecret := NewTimeLimitedSecret([]byte("1cdd2af5-1c5a-47f6-bdad-89090acee31c"))
 
 	verifyTime, err := time.Parse("2006-01-02", "2020-12-23")
+	assert.NoError(t, err)
 	expirationTime, err := time.Parse("2006-01-02", "2020-12-30")
 	assert.NoError(t, err)
 

@@ -508,7 +508,14 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			timeLimited = "time-limited"
 		)
 
+		// get the order from datastore
 		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(
+				err,
+				"failed to get order", http.StatusInternalServerError)
+		}
+
 		// look through order, find out what all the order item's credential types are
 		for i, v := range order.Items {
 			if i > 0 {
@@ -585,7 +592,8 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 				return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
 			}
 
-			return handlers.RenderContent(r.Context(), creds, w, status)
+			return handlers.WrapError(
+				fmt.Errorf("did not issue more than zero credentials"), "failed to issue credentials", http.StatusBadRequest)
 		}
 		return handlers.WrapError(
 			fmt.Errorf("credentials must be single-use|time-limited"), "invalid credential type on order", http.StatusBadRequest)
