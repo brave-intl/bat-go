@@ -51,7 +51,6 @@ You can run the unit and integration tests via `make docker-test`. (Accurate?)
 
 ## In Docker Container
 `make docker-dev` 
-`> go run /src/grant-server/main.go` # run this in the shell (Accurate? Do we need this?)
 
 Services are split up for testing:
 `cd /src/grant-server/payment ; > go test --tags=integration -v`
