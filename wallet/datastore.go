@@ -633,19 +633,13 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 			id=$1
 	`
 	// perform query
-	if r, err := tx.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		stmt,
 		walletID,
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
-	} else if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
-			return errors.New("should have updated at least one wallet with disconnected custodial")
-		}
 	}
 
 	// set disconnected on the custodian link
@@ -658,19 +652,13 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 			wallet_id=$1 and disconnected_at is null
 	`
 	// perform query
-	if r, err := tx.ExecContext(
+	if _, err := tx.ExecContext(
 		ctx,
 		stmt,
 		walletID,
 	); err != nil {
 		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
 		return err
-	} else if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			sublogger.Error().Msg("at least one record should be updated for disconnecting a verified wallet")
-			return errors.New("should have updated at least one wallet with disconnected custodial")
-		}
 	}
 
 	// if the tx was created in this scope we will commit here
@@ -716,55 +704,40 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
 	}
 
-	var consumesLinkingSlot bool
-
 	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
 		// check if the member matches the associated member
 		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
 			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
-		} else {
-			// it does match the existing slot, this means that this
-			// wallet is consuming one of the used slots, therefore
-			// set consumesLinkingSlot true
-			consumesLinkingSlot = true
 		}
-	}
+	} else {
+		// if the existingLinkingID is null then we need to check the linking limits
 
-	// get the count
-	used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
-	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("failed to insert wallet_custodian due to db err checking linking limits")
-		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
-	}
+		// get the count
+		used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
+		if err != nil {
+			sublogger.Error().Err(err).
+				Msg("failed to insert wallet_custodian due to db err checking linking limits")
+			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		}
 
-	// GetCustodianLinkCount gives back a used as a total of used slots,
-	// which also includes this particular wallet.  If someone is at 4 linking slots
-	// used on a custodian, AND disconnects/reconnects their wallet, this
-	// function will return 4 total "used".
-
-	if consumesLinkingSlot {
-		// subtract 1 from used as this wallet is consuming the one slot
-		used--
-	}
-
-	// check for linking limit
-	if used >= max {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			scope.SetTags(map[string]string{
-				"wallet_id":  cl.WalletID.String(),
-				"linking_id": cl.LinkingID.String(),
+		// check for linking limit
+		if used >= max {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTags(map[string]string{
+					"wallet_id":  cl.WalletID.String(),
+					"linking_id": cl.LinkingID.String(),
+				})
+				tooManyCardsCounter.Inc()
 			})
-			tooManyCardsCounter.Inc()
-		})
-		return ErrTooManyCardsLinked
-	}
+			return ErrTooManyCardsLinked
+		}
 
-	// check the linking limit does not exceed what is appropriate
-	if err != nil {
-		sublogger.Error().Err(err).
-			Msg("failed to insert wallet_custodian due to db err checking linking limits")
-		return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		// check the linking limit does not exceed what is appropriate
+		if err != nil {
+			sublogger.Error().Err(err).
+				Msg("failed to insert wallet_custodian due to db err checking linking limits")
+			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		}
 	}
 
 	stmt = `

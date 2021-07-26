@@ -102,6 +102,16 @@ func init() {
 		Bind("gemini-api-key").
 		Env("GEMINI_API_KEY")
 
+	flagBuilder.Flag().String("gemini-api-secret", "",
+		"the api secret for gemini").
+		Bind("gemini-api-secret").
+		Env("GEMINI_API_SECRET")
+
+	flagBuilder.Flag().String("gemini-browser-client-id", "",
+		"the browser client id for gemini, which is the oauth client id the browser uses, required to validate transactions for AC flow").
+		Bind("gemini-browser-client-id").
+		Env("GEMINI_BROWSER_CLIENT_ID")
+
 	flagBuilder.Flag().String("gemini-client-id", "",
 		"the client id for gemini").
 		Bind("gemini-client-id").
@@ -389,6 +399,8 @@ func GrantServer(
 	// gemini variables
 	ctx = context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("gemini-settlement-address"))
 	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, viper.GetString("gemini-api-key"))
+	ctx = context.WithValue(ctx, appctx.GeminiAPISecretCTXKey, viper.GetString("gemini-api-secret"))
+	ctx = context.WithValue(ctx, appctx.GeminiBrowserClientIDCTXKey, viper.GetString("gemini-browser-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
 
