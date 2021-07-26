@@ -492,6 +492,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // GetOrderCreds is the handler for fetching order credentials
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -555,7 +556,7 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.RenderContent(r.Context(), creds, w, status)
 		} else if credentialType == timeLimited {
 			// only brave merchant
-			if !order.Location.Valid || order.Location.String != "brave" {
+			if !order.Location.Valid || order.Location.String != "brave.com" {
 				return handlers.WrapError(
 					fmt.Errorf("failed to create time limited credentials"),
 					"only the Brave merchant can have time limited credentials", http.StatusBadRequest)

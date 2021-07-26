@@ -44,6 +44,7 @@ var (
 	UserWalletVoteTestSkuToken string
 	AnonCardVoteTestSkuToken   string
 	FreeTestSkuToken           string
+	FreeTLTestSkuToken         string
 	InvalidFreeTestSkuToken    string
 )
 
@@ -85,6 +86,15 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.00",
 	}
 
+	FreeTLC := macarooncmd.Caveats{
+		"sku":                       "integration-test-free",
+		"description":               "integration test free sku token",
+		"credential_type":           "time-limited",
+		"credential_valid_duration": "P1M",
+		"currency":                  "BAT",
+		"price":                     "0.00",
+	}
+
 	// create sku using key
 	UserWalletToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
@@ -99,6 +109,11 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	FreeTestToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeC},
+	}
+
+	FreeTLTestToken := macarooncmd.Token{
+		ID: "id", Version: 2, Location: "brave.com",
+		FirstPartyCaveats: []macarooncmd.Caveats{FreeTLC},
 	}
 
 	var err error
@@ -120,6 +135,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 
 	// hacky, put this in development sku check
 	skuMap["development"][FreeTestSkuToken] = true
+
+	FreeTLTestSkuToken, err = FreeTLTestToken.Generate("testing123")
+	suite.Require().NoError(err)
+
+	// hacky, put this in development sku check
+	skuMap["development"][FreeTLTestSkuToken] = true
 
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
@@ -579,6 +600,40 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
+func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Context, service *Service, order Order) (ordercreds []TimeLimitedCreds) {
+
+	// Check to see if we have HTTP Accepted
+	handler := GetOrderCreds(service)
+	req, err := http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	// see if we can get our order creds
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	suite.Require().NoError(err)
+
+	return
+}
+
 func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
 	issuerName = "brave.com?sku=" + order.Items[0].SKU
 	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
@@ -883,6 +938,41 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
 	// check that the funding source matches the issuer
 	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
+}
+
+func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {
+	ctx, cancel := context.WithCancel(context.Background())
+	var err error
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, err = suite.service.RunNextOrderJob(ctx)
+				suite.Require().NoError(err, "Failed to drain order queue")
+				<-time.After(50 * time.Millisecond)
+			}
+		}
+	}()
+	defer cancel()
+
+	order := suite.setupCreateOrder(FreeTLTestSkuToken, 1)
+
+	ordercreds := suite.fetchTimeLimitedCredentials(ctx, suite.service, order)
+
+	// assert order creds validate
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+	for _, cred := range ordercreds {
+		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
+		suite.Require().NoError(err, "error attempting to parse issued at")
+		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
+		suite.Require().NoError(err, "error attempting to parse expires at")
+
+		ok, err := timeLimitedSecret.Verify(issued, expires, cred.Token)
+		suite.Require().NoError(err, "error attempting to verify time limited cred")
+		suite.Require().True(ok, "verify failed")
+	}
 }
 
 func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
