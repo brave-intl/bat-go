@@ -259,7 +259,7 @@ func setPrivateRequestHeaders(
 		}
 		signs := *signer
 		// only set if sending an hmac salt
-		signature, err := signs.HMACSha384([]byte(payload))
+		signature, err := signs.HMACSha384([]byte(base64.StdEncoding.EncodeToString([]byte(payload))))
 		if err != nil {
 			return err
 		}
