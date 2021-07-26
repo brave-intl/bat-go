@@ -46,7 +46,7 @@ some auxiliary binaries.
 
 ### Testing
 
-## Automated
+## Default Testing Behavior
 You can run the unit and integration tests via `make docker-test`. (Accurate?)
 
 ## In Docker Container
