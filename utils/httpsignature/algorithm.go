@@ -11,14 +11,18 @@ const (
 	invalid Algorithm = iota
 	// ED25519 EdDSA
 	ED25519
+	//HMAC-SHA512
+	HS2019
 )
 
 var algorithmName = map[Algorithm]string{
 	ED25519: "ed25519",
+	HS2019: "hs2019",
 }
 
 var algorithmID = map[string]Algorithm{
 	"ed25519": ED25519,
+	"hs2019": HS2019,
 }
 
 func (a Algorithm) String() string {

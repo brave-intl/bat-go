@@ -5,7 +5,9 @@ package httpsignature
 import (
 	"bytes"
 	"crypto"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha512"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -21,13 +23,17 @@ import (
 // SignatureParams contains parameters needed to create and verify signatures
 type SignatureParams struct {
 	Algorithm Algorithm
+	Hash	  *crypto.Hash
 	KeyID     string
+	HMACKey   string
 	Headers   []string // optional
 }
 
 // Signature represents an http signature and it's parameters
 type Signature struct {
 	SignatureParams
+	Signator crypto.Signer
+	SignatorOpts crypto.SignerOpts
 	Sig string // FIXME remove since we should always use http.Request header?
 }
 
@@ -79,8 +85,14 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 				return nil, fmt.Errorf("request must have a URL and Method to use the %s pseudo-header", RequestTargetHeader)
 			}
 		} else if header == DigestHeader {
+			// Just like before default to SHA256
 			var d digest.Instance
 			d.Hash = crypto.SHA256
+			
+			// If something else is set though use that hash instead
+			if s.Hash != nil {
+				d.Hash = *s.Hash
+			}
 
 			if req.Body != nil {
 				body, err := requestutils.Read(req.Body)
@@ -121,6 +133,36 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Signature", string(sHeader))
+	return nil
+}
+
+// Sign the included HTTP request req using signator and options opts
+func (s *Signature) SignRequest(req *http.Request) error {
+	ss, err := s.BuildSigningString(req)
+	if err != nil {
+		return err
+	}
+	
+	if s.Algorithm == ED25519 {
+		sig, err := s.Signator.Sign(rand.Reader, ss, s.SignatorOpts)
+		if err != nil {
+			return err
+		}
+		s.Sig = base64.StdEncoding.EncodeToString(sig)
+		
+	} else if s.Algorithm == HS2019 {
+		hhash := hmac.New(sha512.New, []byte(s.HMACKey))
+		hhash.Write([]byte(ss))
+		
+		s.Sig = base64.StdEncoding.EncodeToString(hhash.Sum(nil))
+	}
+	
+	sHeader, err := s.MarshalText()
+	if err != nil {
+		return err
+	}
+	
 	req.Header.Set("Signature", string(sHeader))
 	return nil
 }
