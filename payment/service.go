@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -351,7 +352,8 @@ func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 		amount = *resp.Amount
 	}
 	if resp.Status != nil {
-		status = *resp.Status
+		// response values are Titled from Gemini
+		status = strings.ToLower(*resp.Status)
 	}
 	if resp.Currency != nil {
 		currency = *resp.Currency
