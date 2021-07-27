@@ -12,7 +12,7 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/sub"
+	sub "github.com/stripe/stripe-go/v71/sub"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -375,16 +375,18 @@ func (pg *Postgres) isStripeSub(orderID uuid.UUID) (bool, string, error) {
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
-
-	// check the order, do we have a stripe subscription?
-	ok, subID, err := pg.isStripeSub(orderID)
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("failed to check stripe subscription: %w", err)
-	}
-	if ok && subID != "" {
-		// cancel the stripe subscription
-		if _, err := sub.Cancel(subID, nil); err != nil {
-			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+	// if the order is cancelled we might need to inform other systems
+	if status == "canceled" {
+		// check the order, do we have a stripe subscription?
+		ok, subID, err := pg.isStripeSub(orderID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("failed to check stripe subscription: %w", err)
+		}
+		if ok && subID != "" {
+			// cancel the stripe subscription
+			if _, err := sub.Cancel(subID, nil); err != nil {
+				return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+			}
 		}
 	}
 
