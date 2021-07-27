@@ -167,6 +167,87 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+func TestVerifyRequest(t *testing.T) {
+// 	var pubKey Ed25519PubKey
+// 	pubKey, err := hex.DecodeString("e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d")
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 
+// 	var s Signature
+// 	s.Algorithm = ED25519
+// 	s.Verifier = pubKey
+// 	s.VerifierOpts = crypto.Hash(0)
+// 	s.KeyID = "primary"
+// 	s.Headers = []string{"foo"}
+// 	s.Sig = "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
+// 
+// 	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
+// 	if err != nil {
+// 		t.Error(err)
+// 	}
+// 
+// 	r.Header.Set("Foo", "bar")
+// 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
+// 
+// 	valid, err := s.VerifyRequest(r)
+// 	if err != nil {
+// 		t.Error("Unexpected error while building signing string")
+// 	}
+// 	if !valid {
+// 		t.Error("The signature should be valid")
+// 	}
+// 
+// 	s.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+// 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+s.Sig+`"`)
+// 
+// 	valid, err = s.Verify(pubKey, crypto.Hash(0), r)
+// 	if err != nil {
+// 		t.Error("Unexpected error while building signing string")
+// 	}
+// 	if valid {
+// 		t.Error("The signature should be invalid")
+// 	}
+	
+	var hmacVerifier HMACKey = "yyqz64U$eG?eUAp24Pm!Fn!Cn"
+	var s2 Signature
+	s2.Algorithm = HS2019
+	s2.Verifier = hmacVerifier
+	s2.VerifierOpts = crypto.Hash(0)
+	s2.KeyID = "secondary"
+	s2.Headers = []string{"foo"}
+	s2.Sig = "3RCLz6TH2I32nj1NY5YaUWDSCNPiKsAVIXjX4merDeNvrGondy7+f3sWQQJWRwEo90FCrthWrrVcgHqqFevS9Q=="
+	
+	req, reqErr := http.NewRequest("GET", "http://example.org/foo2", nil)
+	if reqErr != nil {
+		t.Error(reqErr)
+	}
+
+	req.Header.Set("Foo", "bar")
+	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+s2.Sig+`"`)
+	
+	var valid bool
+	var err error
+	valid, err = s2.VerifyRequest(req)
+	if err != nil {
+		t.Error("Unexpected error while building signing string:", err)
+	}
+	if !valid {
+		t.Error("The signature should be valid")
+	}
+	
+// 	s2.Sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+// 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+s2.Sig+`"`)
+// 
+// 	valid, err = s2.VerifyRequest(req)
+// 	if err != nil {
+// 		t.Error("Unexpected error while building signing string")
+// 	}
+// 	if valid {
+// 		t.Error("The signature should be invalid")
+// 	}
+}
+
 func TestTextMarshal(t *testing.T) {
 	var s Signature
 	s.Algorithm = ED25519

@@ -34,6 +34,8 @@ type Signature struct {
 	SignatureParams
 	Signator crypto.Signer
 	SignatorOpts crypto.SignerOpts
+	Verifier Verifier
+	VerifierOpts crypto.SignerOpts // duplicate of SignatorOpts to make naming more intuitive
 	Sig string // FIXME remove since we should always use http.Request header?
 }
 
@@ -191,6 +193,29 @@ func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.
 		return false, err
 	}
 	return verifier.Verify(signingStr, sig, opts)
+}
+
+// Verify the HTTP signature s over HTTP request req using verifier with options opts
+func (s *Signature) VerifyRequest(req *http.Request) (bool, error) {
+	signingStr, err := s.BuildSigningString(req)
+	if err != nil {
+		return false, err
+	}
+
+	var tmp Signature
+	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
+	if err != nil {
+		return false, err
+	}
+	
+	fmt.Printf("tmp: %+v\n", tmp)
+
+	sig, err := base64.StdEncoding.DecodeString(tmp.Sig)
+	if err != nil {
+		return false, err
+	}
+	// fmt.Printf("Signature: %v\n", sig)
+	return s.Verifier.Verify(signingStr, sig, s.VerifierOpts)
 }
 
 // MarshalText marshalls the signature into text.
