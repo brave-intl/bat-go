@@ -2,7 +2,6 @@ package promotion
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -498,12 +497,12 @@ func redeemAndTransferGeminiFunds(
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
-	b64Payload := base64.StdEncoding.EncodeToString([]byte(serializedPayload))
+	// gemini client will base64 encode the payload prior to sending
 	_, err = service.geminiClient.UploadBulkPayout(
 		ctx,
 		service.geminiConf.APIKey,
 		signer,
-		b64Payload,
+		string(serializedPayload),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
