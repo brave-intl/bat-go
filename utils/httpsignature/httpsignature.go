@@ -208,14 +208,24 @@ func (s *Signature) VerifyRequest(req *http.Request) (bool, error) {
 		return false, err
 	}
 	
-	fmt.Printf("tmp: %+v\n", tmp)
+	fmt.Println("tmp sig:", tmp.Sig)
 
 	sig, err := base64.StdEncoding.DecodeString(tmp.Sig)
 	if err != nil {
 		return false, err
 	}
-	// fmt.Printf("Signature: %v\n", sig)
-	return s.Verifier.Verify(signingStr, sig, s.VerifierOpts)
+	
+	// hhash := hmac.New(sha512.New, []byte(s.HMACKey))
+	// hhash.Write([]byte(signingStr))
+	// 
+	// fmt.Println("Calc hash:", base64.StdEncoding.EncodeToString(hhash.Sum(nil)))
+	// calcHash := base64.StdEncoding.EncodeToString(hhash.Sum(nil))
+	
+	// fmt.Println("Equal:", calcHash == string(sig))
+	// fmt.Println("Calc hash:", calcHash)
+	// fmt.Printf("sig: %T", sig)
+	
+	return s.Verifier.Verify(signingStr, []byte(tmp.Sig), s.VerifierOpts)
 }
 
 // MarshalText marshalls the signature into text.
