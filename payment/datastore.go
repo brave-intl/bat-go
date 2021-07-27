@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stripe/stripe-go/sub"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -350,9 +351,43 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 	return &transaction, nil
 }
 
+func (pg *Postgres) isStripeSub(orderID uuid.UUID) (bool, string, error) {
+	var (
+		ok  bool
+		md  datastore.Metadata
+		err error
+	)
+
+	err = pg.RawDB().Get(&md, `
+		SELECT metadata
+		FROM orders
+		WHERE order_id = $1 AND metadata is not null
+	`, orderID)
+
+	if err == nil {
+		if v, ok := md["stripeSubscriptionId"]; ok {
+			return ok, v, err
+		}
+	}
+	return ok, "", err
+}
+
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+
+	// check the order, do we have a stripe subscription?
+	ok, subID, err := pg.isStripeSub(orderID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	}
+	if ok && subID != "" {
+		// cancel the stripe subscription
+		if _, err := sub.Cancel(subID, nil); err != nil {
+			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+		}
+	}
+
 	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
