@@ -223,10 +223,11 @@ func InitService(
 		geminiConf   *gemini.Conf
 	)
 	if os.Getenv("GEMINI_ENABLED") == "true" {
+		// get the correct env variables for bulk pay API call
 		geminiConf = &gemini.Conf{
 			ClientID: os.Getenv("GEMINI_CLIENT_ID"),
-			APIKey:   os.Getenv("GEMINI_CLIENT_KEY"),
-			Secret:   os.Getenv("GEMINI_CLIENT_SECRET"),
+			APIKey:   os.Getenv("GEMINI_API_KEY"),
+			Secret:   os.Getenv("GEMINI_API_SECRET"),
 		}
 
 		gc, err := gemini.New()
