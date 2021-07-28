@@ -461,7 +461,7 @@ func redeemAndTransferGeminiFunds(
 	}
 	txType := "drain"
 	channel := "wallet"
-	transferID := uuid.NewV5(ns, txType+channel).String()
+	transferID := uuid.NewV4().String()
 
 	tx := new(walletutils.TransactionInfo)
 
