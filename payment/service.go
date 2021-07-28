@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stripe/stripe-go/checkout/session"
 	"github.com/stripe/stripe-go/client"
 
 	"errors"
@@ -230,8 +231,51 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	return order, err
 }
 
+// GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
+func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
+	// get the order
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// check if this order has an expired checkout session
+	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(orderID)
+	if expired {
+		// if expired update with new checkout session
+		if !order.IsPaid() && order.IsStripePayable() {
+
+			// get old checkout session from stripe by id
+			stripeSession, err := session.Get(cs, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
+			}
+
+			checkoutSession, err := order.CreateStripeCheckoutSession(
+				stripeSession.CustomerEmail,
+				stripeSession.SuccessURL, stripeSession.CancelURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create checkout session: %w", err)
+			}
+
+			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
+		}
+
+		// get the order
+		order, err = s.Datastore.GetOrder(orderID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return order, err
+}
+
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	// get the order
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err

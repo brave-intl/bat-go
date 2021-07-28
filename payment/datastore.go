@@ -75,6 +75,8 @@ type Datastore interface {
 	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	InsertVote(ctx context.Context, vr VoteRecord) error
+
+	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -349,6 +351,29 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 	}
 
 	return &transaction, nil
+}
+
+// CheckExpiredCheckoutSession - check order metadata for an expired checkout session id
+func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
+	var (
+		expired         bool
+		checkoutSession string
+		err             error
+	)
+
+	err = pg.RawDB().Get(&checkoutSession, `
+		SELECT metadata->>'stripeCheckoutSessionId'
+		FROM orders
+		WHERE order_id = $1 
+			AND metadata is not null
+			AND status='pending'
+			AND updated_at<now() - interval '1 hour'
+	`, orderID)
+
+	if err == nil && checkoutSession != "" {
+		expired = true
+	}
+	return expired, checkoutSession, err
 }
 
 func (pg *Postgres) isStripeSub(orderID uuid.UUID) (bool, string, error) {

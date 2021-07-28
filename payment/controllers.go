@@ -295,7 +295,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		order, err := service.GetOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}

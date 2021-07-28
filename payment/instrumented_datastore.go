@@ -43,6 +43,20 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// CheckExpiredCheckoutSession implements Datastore
+func (_d DatastoreWithPrometheus) CheckExpiredCheckoutSession(u1 uuid.UUID) (b1 bool, s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckExpiredCheckoutSession", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CheckExpiredCheckoutSession(u1)
+}
+
 // CommitVote implements Datastore
 func (_d DatastoreWithPrometheus) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) (err error) {
 	_since := time.Now()
