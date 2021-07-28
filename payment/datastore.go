@@ -391,7 +391,7 @@ func (pg *Postgres) isStripeSub(orderID uuid.UUID) (bool, string, error) {
 	err = pg.RawDB().Get(&md, `
 		SELECT metadata
 		FROM orders
-		WHERE order_id = $1 AND metadata is not null
+		WHERE id = $1 AND metadata is not null
 	`, orderID)
 
 	if err == nil {

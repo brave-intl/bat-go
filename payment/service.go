@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stripe/stripe-go/checkout/session"
-	"github.com/stripe/stripe-go/client"
+	session "github.com/stripe/stripe-go/v71/checkout/session"
+	client "github.com/stripe/stripe-go/v71/client"
 
 	"errors"
 
