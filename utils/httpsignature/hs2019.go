@@ -1,32 +1,25 @@
 package httpsignature
 
 import (
-	"fmt"
 	"crypto"
+	"crypto/hmac"
 	"crypto/sha512"
 	"crypto/subtle"
-	"crypto/hmac"
-	"encoding/base64"
 )
 
 type HMACKey string
 
 func (key HMACKey) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
+	// Recalculate the hash by setting up the hash
 	hhash := hmac.New(sha512.New, []byte(key))
+	// then writing the message (HTTP headers) to it
 	hhash.Write(message)
-	calcHash := base64.StdEncoding.EncodeToString(hhash.Sum(nil))
-	fmt.Println("Calc hash:", calcHash)
-	calcHashByte := []byte(calcHash)
+	// Get the hash sum, do not base64 encode it since sig was decoded already
+	hashSum := hhash.Sum(nil)
 	
-	
-	fmt.Println("message:", calcHashByte)
-	fmt.Println("signature:", sig)
-	valid := subtle.ConstantTimeCompare(calcHashByte, sig)
-	fmt.Println("HMAC valid:", valid)
-	
-	valid2 := hmac.Equal(calcHashByte, sig)
-	fmt.Println("Vaild 2:", valid2)
-	return valid != 0, nil
+	// Return bool by checking whether or not the calculated hash is equal to
+	// sig pulled out of the header. Check if returned int is equal to 1 to return a bool
+	return subtle.ConstantTimeCompare(hashSum, sig) == 1, nil
 }
 
 func (key HMACKey) String() string {
