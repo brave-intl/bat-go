@@ -455,13 +455,9 @@ func redeemAndTransferGeminiFunds(
 		return nil, errGeminiMisconfigured
 	}
 
-	ns, err := uuid.FromString(wallet.UserDepositDestination)
-	if err != nil {
-		return nil, fmt.Errorf("invalid user deposit destination: %w", err)
-	}
 	txType := "drain"
 	channel := "wallet"
-	transferID := uuid.NewV5(ns, txType+channel).String()
+	transferID := uuid.NewV4().String()
 
 	tx := new(walletutils.TransactionInfo)
 
