@@ -364,7 +364,7 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	err = pg.RawDB().Get(&checkoutSession, `
 		SELECT metadata->>'stripeCheckoutSessionId'
 		FROM orders
-		WHERE order_id = $1 
+		WHERE id = $1 
 			AND metadata is not null
 			AND status='pending'
 			AND updated_at<now() - interval '1 hour'
@@ -372,6 +372,11 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 
 	if err == nil && checkoutSession != "" {
 		expired = true
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		// if there are no rows, then we are not expired
+		// drop this error
+		return expired, checkoutSession, nil
 	}
 	return expired, checkoutSession, err
 }
