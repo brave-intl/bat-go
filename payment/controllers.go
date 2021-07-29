@@ -859,6 +859,24 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
+				// is this an existing subscription??
+				ok, subID, err := service.Datastore.IsStripeSub(orderID)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
+					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
+				}
+				if ok && subID != "" {
+					// okay, this is a subscription renewal, not first time,
+					err = service.Datastore.RenewOrder(ctx, orderID)
+					if err != nil {
+						sublogger.Error().Err(err).Msg("failed to renew the order")
+						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
+					}
+					// end flow for renew order
+					return handlers.RenderContent(r.Context(), "subscription renewed", w, http.StatusOK)
+				}
+
+				// not a renewal, first time
 				err = service.Datastore.UpdateOrder(orderID, "paid")
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order status")

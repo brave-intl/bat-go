@@ -86,7 +86,7 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 }
 
 // CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -96,7 +96,7 @@ func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, mercha
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems, allowedPaymentMethods)
+	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
 }
 
 // CreateTransaction implements Datastore
@@ -401,6 +401,20 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RawDB", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RawDB()
+}
+
+// RenewOrder implements Datastore
+func (_d DatastoreWithPrometheus) RenewOrder(ctx context.Context, orderID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RenewOrder", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RenewOrder(ctx, orderID)
 }
 
 // RollbackTx implements Datastore
