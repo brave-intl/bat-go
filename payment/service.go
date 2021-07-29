@@ -2,6 +2,7 @@ package payment
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	session "github.com/stripe/stripe-go/v71/checkout/session"
 	client "github.com/stripe/stripe-go/v71/client"
+	sub "github.com/stripe/stripe-go/v71/sub"
 
 	"errors"
 
@@ -34,6 +36,11 @@ import (
 
 var (
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
+)
+
+const (
+	// OrderStatusCanceled - string literal used in db for canceled status
+	OrderStatusCanceled = "canceled"
 )
 
 // Service contains datastore
@@ -271,6 +278,22 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 		}
 	}
 	return order, err
+}
+
+// CancelOrder - cancels an order, propogates to stripe if needed
+func (s *Service) CancelOrder(orderID uuid.UUID) error {
+	// check the order, do we have a stripe subscription?
+	ok, subID, err := s.Datastore.IsStripeSub(orderID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	}
+	if ok && subID != "" {
+		// cancel the stripe subscription
+		if _, err := sub.Cancel(subID, nil); err != nil {
+			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+		}
+	}
+	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so

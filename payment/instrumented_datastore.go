@@ -337,6 +337,20 @@ func (_d DatastoreWithPrometheus) InsertVote(ctx context.Context, vr VoteRecord)
 	return _d.base.InsertVote(ctx, vr)
 }
 
+// IsStripeSub implements Datastore
+func (_d DatastoreWithPrometheus) IsStripeSub(u1 uuid.UUID) (b1 bool, s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IsStripeSub", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IsStripeSub(u1)
+}
+
 // MarkVoteErrored implements Datastore
 func (_d DatastoreWithPrometheus) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) (err error) {
 	_since := time.Now()
