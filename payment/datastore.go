@@ -74,6 +74,9 @@ type Datastore interface {
 	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	InsertVote(ctx context.Context, vr VoteRecord) error
+
+	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
+	IsStripeSub(uuid.UUID) (bool, string, error)
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -350,9 +353,60 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 	return &transaction, nil
 }
 
+// CheckExpiredCheckoutSession - check order metadata for an expired checkout session id
+func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
+	var (
+		expired         bool
+		checkoutSession string
+		err             error
+	)
+
+	err = pg.RawDB().Get(&checkoutSession, `
+		SELECT metadata->>'stripeCheckoutSessionId'
+		FROM orders
+		WHERE id = $1 
+			AND metadata is not null
+			AND status='pending'
+			AND updated_at<now() - interval '1 hour'
+	`, orderID)
+
+	if err == nil && checkoutSession != "" {
+		expired = true
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		// if there are no rows, then we are not expired
+		// drop this error
+		return expired, checkoutSession, nil
+	}
+	return expired, checkoutSession, err
+}
+
+// IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
+func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
+	var (
+		ok  bool
+		md  datastore.Metadata
+		err error
+	)
+
+	err = pg.RawDB().Get(&md, `
+		SELECT metadata
+		FROM orders
+		WHERE id = $1 AND metadata is not null
+	`, orderID)
+
+	if err == nil {
+		if v, ok := md["stripeSubscriptionId"]; ok {
+			return ok, v, err
+		}
+	}
+	return ok, "", err
+}
+
 // UpdateOrder updates the orders status.
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
 func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+
 	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
 
 	if err != nil {
