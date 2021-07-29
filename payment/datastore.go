@@ -29,7 +29,7 @@ import (
 type Datastore interface {
 	grantserver.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// RenewOrder - renew the order with this id
@@ -174,7 +174,7 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
 	tx := pg.RawDB().MustBegin()
 
 	var order Order
@@ -419,7 +419,7 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 	// how long should the order be valid for?
 	var orderTimeBounds = struct {
 		ValidFor *time.Duration `db:"valid_for"`
-		LastPaid *time.Time     `db:"last_paid"`
+		LastPaid sql.NullTime   `db:"last_paid"`
 	}{}
 
 	err = tx.GetContext(ctx, &orderTimeBounds, `
@@ -433,6 +433,10 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 
 	// update last paid
 	lastPaid := time.Now()
+	var expiresAt time.Time
+	if orderTimeBounds.ValidFor != nil && orderTimeBounds.LastPaid.Valid {
+		expiresAt = orderTimeBounds.LastPaid.Time.Add(*orderTimeBounds.ValidFor)
+	}
 
 	result, err := tx.ExecContext(ctx, `
 		UPDATE orders
@@ -443,7 +447,7 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 			expires_at = $2
 		WHERE 
 			id = $3
-	`, lastPaid, (*orderTimeBounds.LastPaid).Add(*orderTimeBounds.ValidFor), orderID)
+	`, lastPaid, expiresAt, orderID)
 
 	if err != nil {
 		return err

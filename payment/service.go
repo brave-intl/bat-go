@@ -156,7 +156,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	var (
 		currency              string
 		location              string
-		validFor              *time.Duration = new(time.Duration)
+		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
@@ -185,7 +185,8 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 			location = orderItem.Location.String
 		}
 
-		if validFor != nil {
+		if orderItem.ValidFor != nil {
+			validFor = new(time.Duration)
 			*validFor = *orderItem.ValidFor
 		}
 
@@ -220,7 +221,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = "pending"
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, *validFor, orderItems, allowedPaymentMethods)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
