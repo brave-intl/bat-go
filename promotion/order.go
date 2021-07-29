@@ -1,6 +1,7 @@
 package promotion
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/payment"
@@ -25,6 +26,8 @@ type Order struct {
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods payment.Methods      `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
+	LastPaidAt            sql.NullTime         `json:"last_paid_at" db:"last_paid_at"`
+	ValidFor              *time.Duration       `json:"valid_for" db:"valid_for"`
 }
 
 // OrderItem includes information about a particular order item
@@ -41,6 +44,7 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
+	ValidFor       *time.Duration       `json:"valid_for" db:"valid_for"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
