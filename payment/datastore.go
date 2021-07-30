@@ -469,7 +469,11 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("failed to record order payment: %w", err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction to renew order: %w", err)
+	}
+
+	return pg.DeleteOrderCreds(orderID, true)
 }
 
 func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
