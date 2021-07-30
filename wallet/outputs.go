@@ -154,7 +154,7 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		// this brave wallet has a linked deposit account
 		resp.DepositAccountProvider = &DepositAccountProviderDetailsV3{
 			Name:             info.UserDepositAccountProvider,
-			ID:               &info.ProviderID,
+			ID:               &info.UserDepositDestination,
 			LinkingID:        linkingID,
 			AnonymousAddress: anonymousAddress,
 		}
