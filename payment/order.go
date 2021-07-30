@@ -83,6 +83,9 @@ type Order struct {
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
+	LastPaidAt            sql.NullTime         `json:"last_paid_at" db:"last_paid_at"`
+	ExpiresAt             sql.NullTime         `json:"expires_at" db:"expires_at"`
+	ValidFor              *time.Duration       `json:"valid_for" db:"valid_for"`
 }
 
 // OrderItem includes information about a particular order item
@@ -99,6 +102,7 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
+	ValidFor       *time.Duration       `json:"valid_for" db:"valid_for"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
@@ -196,6 +200,12 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			orderItem.Currency = value
 		case "credential_type":
 			orderItem.CredentialType = value
+		case "credential_valid_duration":
+			*orderItem.ValidFor, err = time.ParseDuration(value)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
 		case "allowed_payment_methods":
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
@@ -297,5 +307,5 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
-	return order.Status == "paid"
+	return order.Status == OrderStatusPaid
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -28,9 +29,11 @@ import (
 type Datastore interface {
 	grantserver.Datastore
 	// CreateOrder is used to create an order for payments
-	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
+	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
+	// RenewOrder - renew the order with this id
+	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
@@ -171,25 +174,32 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
-func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
+func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
 	tx := pg.RawDB().MustBegin()
 
 	var order Order
 	err := tx.Get(&order, `
-			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods
+			INSERT INTO orders (total_price, merchant_id, status, currency, location, allowed_payment_methods, valid_for)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, valid_for
 		`,
-		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods))
+		totalPrice, merchantID, status, currency, location, pq.Array(*allowedPaymentMethods), validFor)
 
 	if err != nil {
 		return nil, err
 	}
 
+	if status == OrderStatusPaid {
+		// record the order payment
+		if err := recordOrderPayment(context.Background(), tx, order.ID, time.Now()); err != nil {
+			return nil, fmt.Errorf("failed to record order payment: %w", err)
+		}
+	}
+
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -198,8 +208,8 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, orderItems[i].Metadata)
-		numFields := 10 // the number of fields you are inserting
+			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor)
+		numFields := 11 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -209,7 +219,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		query = query[:len(query)-1] + `),`
 	}
 	query = query[:len(query)-1] // remove the trailing comma
-	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata`
+	query += ` RETURNING id, order_id, sku, created_at, updated_at, currency, quantity, price, location, description, credential_type, (quantity * price) as subtotal, metadata, valid_for`
 
 	order.Items = []OrderItem{}
 
@@ -403,11 +413,48 @@ func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 	return ok, "", err
 }
 
-// UpdateOrder updates the orders status.
+// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
 // 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
 
-	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	// how long should the order be valid for?
+	var orderTimeBounds = struct {
+		ValidFor *time.Duration `db:"valid_for"`
+		LastPaid sql.NullTime   `db:"last_paid"`
+	}{}
+
+	err = tx.GetContext(ctx, &orderTimeBounds, `
+		SELECT valid_for, last_paid
+		FROM orders
+		WHERE id = $1
+	`, orderID)
+	if err != nil {
+		return fmt.Errorf("unable to get order time bounds: %w", err)
+	}
+
+	// update last paid
+	lastPaid := time.Now()
+	var expiresAt time.Time
+	if orderTimeBounds.ValidFor != nil && orderTimeBounds.LastPaid.Valid {
+		expiresAt = lastPaid.Add(*orderTimeBounds.ValidFor)
+	}
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE orders
+		SET
+			status = 'paid',
+			updated_at = CURRENT_TIMESTAMP,
+			last_paid_at = $1,
+			expires_at = $2
+		WHERE 
+			id = $3
+	`, lastPaid, expiresAt, orderID)
 
 	if err != nil {
 		return err
@@ -418,7 +465,73 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 		return errors.New("no rows updated")
 	}
 
+	if err := recordOrderPayment(ctx, tx, orderID, lastPaid); err != nil {
+		return fmt.Errorf("failed to record order payment: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction to renew order: %w", err)
+	}
+
+	return pg.DeleteOrderCreds(orderID, true)
+}
+
+func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
+
+	// record the order payment
+	// on renewal and initial payment
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO order_payment_history
+			(order_id, last_paid)
+		VALUES
+			( $1, $2 )
+	`, id, t)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+// UpdateOrder updates the orders status.
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	ctx := context.Background()
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	if status == OrderStatusPaid {
+		// record the order payment
+		if err := recordOrderPayment(ctx, tx, orderID, time.Now()); err != nil {
+			return fmt.Errorf("failed to record order payment: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
