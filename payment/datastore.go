@@ -477,7 +477,7 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 	// record the order payment
 	// on renewal and initial payment
 	result, err := tx.ExecContext(ctx, `
-		INSERT INTO order_payments
+		INSERT INTO order_payment_history
 			(order_id, last_paid)
 		VALUES
 			( $1, $2 )
