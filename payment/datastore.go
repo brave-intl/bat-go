@@ -189,6 +189,13 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		return nil, err
 	}
 
+	if status == OrderStatusPaid {
+		// record the order payment
+		if err := recordOrderPayment(context.Background(), tx, order.ID, time.Now()); err != nil {
+			return nil, fmt.Errorf("failed to record order payment: %w", err)
+		}
+	}
+
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
@@ -435,7 +442,7 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 	lastPaid := time.Now()
 	var expiresAt time.Time
 	if orderTimeBounds.ValidFor != nil && orderTimeBounds.LastPaid.Valid {
-		expiresAt = orderTimeBounds.LastPaid.Time.Add(*orderTimeBounds.ValidFor)
+		expiresAt = lastPaid.Add(*orderTimeBounds.ValidFor)
 	}
 
 	result, err := tx.ExecContext(ctx, `
@@ -458,30 +465,23 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return errors.New("no rows updated")
 	}
 
-	result, err = tx.ExecContext(ctx, `
-		INSERT INTO order_renewal
-			(order_id, last_paid)
-		VALUES
-			( $1, $2 )
-	`, orderID, lastPaid)
-
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err = result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
+	if err := recordOrderPayment(ctx, tx, orderID, lastPaid); err != nil {
+		return fmt.Errorf("failed to record order payment: %w", err)
 	}
 
 	return tx.Commit()
 }
 
-// UpdateOrder updates the orders status.
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.Time) error {
 
-	result, err := pg.RawDB().Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+	// record the order payment
+	// on renewal and initial payment
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO order_renewal
+			(order_id, last_paid)
+		VALUES
+			( $1, $2 )
+	`, id, t)
 
 	if err != nil {
 		return err
@@ -492,7 +492,42 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 		return errors.New("no rows updated")
 	}
 
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+// UpdateOrder updates the orders status.
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
+	ctx := context.Background()
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, status, orderID)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	if status == OrderStatusPaid {
+		// record the order payment
+		if err := recordOrderPayment(ctx, tx, orderID, time.Now()); err != nil {
+			return fmt.Errorf("failed to record order payment: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // CreateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction

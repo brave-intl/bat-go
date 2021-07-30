@@ -41,6 +41,8 @@ var (
 const (
 	// OrderStatusCanceled - string literal used in db for canceled status
 	OrderStatusCanceled = "canceled"
+	// OrderStatusPaid - string literal used in db for canceled status
+	OrderStatusPaid = "paid"
 )
 
 // Service contains datastore

@@ -307,5 +307,5 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
-	return order.Status == "paid"
+	return order.Status == OrderStatusPaid
 }

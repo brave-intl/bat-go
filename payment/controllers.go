@@ -877,7 +877,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 
 				// not a renewal, first time
-				err = service.Datastore.UpdateOrder(orderID, "paid")
+				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
