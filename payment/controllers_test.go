@@ -961,6 +961,9 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 
 	ordercreds := suite.fetchTimeLimitedCredentials(ctx, suite.service, order)
 
+	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free")
+	suite.Require().NoError(err, "error attempting to encode issuer id")
+
 	// assert order creds validate
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 	for _, cred := range ordercreds {
@@ -969,7 +972,7 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
 		suite.Require().NoError(err, "error attempting to parse expires at")
 
-		ok, err := timeLimitedSecret.Verify(issued, expires, cred.Token)
+		ok, err := timeLimitedSecret.Verify([]byte(issuerID), issued, expires, cred.Token)
 		suite.Require().NoError(err, "error attempting to verify time limited cred")
 		suite.Require().True(ok, "verify failed")
 	}

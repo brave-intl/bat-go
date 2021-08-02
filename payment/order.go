@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/logging"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -201,7 +202,8 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		case "credential_type":
 			orderItem.CredentialType = value
 		case "credential_valid_duration":
-			*orderItem.ValidFor, err = time.ParseDuration(value)
+			orderItem.ValidFor = new(time.Duration)
+			*orderItem.ValidFor, err = timeutils.ParseDuration(value)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)

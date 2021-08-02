@@ -45,6 +45,8 @@ const (
 	OrderStatusCanceled = "canceled"
 	// OrderStatusPaid - string literal used in db for canceled status
 	OrderStatusPaid = "paid"
+	// OrderStatusPending - string literal used in db for pending status
+	OrderStatusPending = "pending"
 )
 
 // Service contains datastore
@@ -220,9 +222,9 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 
 	// If order consists entirely of zero cost items ( e.g. trials ), we can consider it paid
 	if totalPrice.IsZero() {
-		status = "paid"
+		status = OrderStatusPaid
 	} else {
-		status = "pending"
+		status = OrderStatusPending
 	}
 
 	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
