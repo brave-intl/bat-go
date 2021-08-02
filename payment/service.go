@@ -640,7 +640,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 
 	for _, item := range order.Items {
 		// iterate through order items, derive the time limited creds
-		timeBasedToken, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
+		timeBasedToken, err := timeLimitedSecret.Derive([]byte(item.ID.String()), issuedAt, expiresAt)
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
 		}

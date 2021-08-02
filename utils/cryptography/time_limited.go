@@ -12,10 +12,10 @@ type TimeLimitedSecret struct {
 }
 
 // Derive - derive time limited credential based on date and expiration date
-func (secret TimeLimitedSecret) Derive(date time.Time, expirationDate time.Time) (string, error) {
+func (secret TimeLimitedSecret) Derive(metadata []byte, date time.Time, expirationDate time.Time) (string, error) {
 	interval := date.Format("2006-01-02") + expirationDate.Format("2006-01-02")
 
-	result, err := secret.hasher.HMACSha384([]byte(interval))
+	result, err := secret.hasher.HMACSha384(append(metadata, []byte(interval)...))
 	if err != nil {
 		return "", err
 	}
@@ -23,8 +23,8 @@ func (secret TimeLimitedSecret) Derive(date time.Time, expirationDate time.Time)
 }
 
 // Verify - verify time limited credential based on date being bound within the expiration date of the credential
-func (secret TimeLimitedSecret) Verify(date time.Time, expirationDate time.Time, token string) (bool, error) {
-	result, err := secret.Derive(date, expirationDate)
+func (secret TimeLimitedSecret) Verify(metadata []byte, date time.Time, expirationDate time.Time, token string) (bool, error) {
+	result, err := secret.Derive(metadata, date, expirationDate)
 	if err != nil {
 		return false, err
 	}

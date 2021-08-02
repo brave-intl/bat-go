@@ -777,6 +777,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		} else if req.Type == "time-limited" {
 			// Presentation includes a token and token metadata test test
 			type Presentation struct {
+				ItemID    string `json:"itemId"`
 				IssuedAt  string `json:"issuedAt"`
 				ExpiresAt string `json:"expiresAt"`
 				Token     string `json:"token"`
@@ -804,7 +805,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
-			verified, err := timeLimitedSecret.Verify(issuedAt, expiresAt, presentation.Token)
+			verified, err := timeLimitedSecret.Verify([]byte(presentation.ItemID), issuedAt, expiresAt, presentation.Token)
 			if err != nil {
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
