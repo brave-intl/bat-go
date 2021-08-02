@@ -15,8 +15,9 @@ func TestTimeLimitedCredentialVerification(t *testing.T) {
 	assert.NoError(t, err)
 	expirationTime, err := time.Parse("2006-01-02", "2020-12-30")
 	assert.NoError(t, err)
+	metadata := []byte("metadata")
 
-	result, err := timeLimitedSecret.Derive(verifyTime, expirationTime)
+	result, err := timeLimitedSecret.Derive(metadata, verifyTime, expirationTime)
 	assert.NoError(t, err, "Error deriving token")
 
 	correctVerifyTime, err := time.Parse("2006-01-02", "2020-12-23")
@@ -24,11 +25,15 @@ func TestTimeLimitedCredentialVerification(t *testing.T) {
 	incorrectVerifyTime, err := time.Parse("2006-01-02", "2020-12-24")
 	assert.NoError(t, err)
 
-	correctlyVerified, err := timeLimitedSecret.Verify(correctVerifyTime, expirationTime, result)
+	correctlyVerified, err := timeLimitedSecret.Verify(metadata, correctVerifyTime, expirationTime, result)
 	assert.NoError(t, err, "Error verifying token")
 	assert.True(t, correctlyVerified, "Error verifying with correct verify time")
 
-	incorrectlyVerified, err := timeLimitedSecret.Verify(incorrectVerifyTime, expirationTime, result)
+	incorrectlyVerified, err := timeLimitedSecret.Verify(metadata, incorrectVerifyTime, expirationTime, result)
 	assert.NoError(t, err, "Error verifying token")
 	assert.False(t, incorrectlyVerified, "Token should not have verified with incorrect verify time")
+
+	incorrectMetadataVerified, err := timeLimitedSecret.Verify([]byte("not metadata"), correctVerifyTime, expirationTime, result)
+	assert.NoError(t, err, "Error verifying token")
+	assert.False(t, incorrectMetadataVerified, "Error verifying with invalid metadata")
 }

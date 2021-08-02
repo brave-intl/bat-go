@@ -639,8 +639,14 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 	for _, item := range order.Items {
+
+		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
+		}
+
 		// iterate through order items, derive the time limited creds
-		timeBasedToken, err := timeLimitedSecret.Derive([]byte(item.ID.String()), issuedAt, expiresAt)
+		timeBasedToken, err := timeLimitedSecret.Derive([]byte(issuerID), issuedAt, expiresAt)
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
 		}

@@ -777,7 +777,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		} else if req.Type == "time-limited" {
 			// Presentation includes a token and token metadata test test
 			type Presentation struct {
-				ItemID    string `json:"itemId"`
+				Issuer    string `json:"issuer"`
 				IssuedAt  string `json:"issuedAt"`
 				ExpiresAt string `json:"expiresAt"`
 				Token     string `json:"token"`
@@ -794,6 +794,16 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			if err != nil {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
+
+			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
+			if err != nil {
+				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+			}
+			if issuerID != presentation.Issuer {
+				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+			}
+
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
@@ -805,7 +815,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
-			verified, err := timeLimitedSecret.Verify([]byte(presentation.ItemID), issuedAt, expiresAt, presentation.Token)
+			verified, err := timeLimitedSecret.Verify([]byte(presentation.Issuer), issuedAt, expiresAt, presentation.Token)
 			if err != nil {
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
