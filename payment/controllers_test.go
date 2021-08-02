@@ -5,6 +5,7 @@ package payment
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -1209,4 +1211,30 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	suite.Assert().NoError(err)
 
 	suite.Assert().Equal(2, len(keys))
+}
+
+func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
+	ctx := context.Background()
+	valid := 1 * time.Second
+	lastPaid := time.Now().Add(1 * time.Minute)
+
+	order := &Order{
+		Location: datastore.NullString{
+			sql.NullString{
+				Valid: true, String: "brave.com",
+			},
+		},
+		Status: OrderStatusPaid, LastPaidAt: sql.NullTime{
+			Valid: true, Time: lastPaid,
+		},
+		ExpiresAt: sql.NullTime{
+			Valid: true, Time: lastPaid.Add(valid),
+		}, ValidFor: &valid,
+	}
+
+	creds, status, err := suite.service.GetTimeLimitedCreds(ctx, order)
+	suite.Require().True(creds == nil, "should not get creds back")
+	suite.Require().True(status == http.StatusBadRequest, "should not get creds back")
+	suite.Require().Error(err, "should get an error")
+
 }

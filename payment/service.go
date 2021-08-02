@@ -624,11 +624,15 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	issuedAt := order.LastPaidAt.Time
-	// default expires as 35 days
-	expiresAt := issuedAt.AddDate(0, 0, 35)
+	var expiresAt time.Time
 
+	// default expires as whatever valid for is from the order
+	if order.ValidFor != nil {
+		expiresAt = order.LastPaidAt.Time.Add(*order.ValidFor)
+	}
+
+	// if the order has an expiry, use that
 	if order.ExpiresAt.Valid {
-		// if the order has an expiry, use that
 		expiresAt = order.ExpiresAt.Time
 	}
 
