@@ -3,6 +3,8 @@ package time_test
 import (
 	"testing"
 	"time"
+
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 )
 
 func TestParse(t *testing.T) {
@@ -38,39 +40,39 @@ func TestParse(t *testing.T) {
 		{"-P0.123W", nil, -74390.4},
 
 		// Not supported since fields in the wrong order
-		{"P1M2Y", duration.ErrUnsupportedFormat, 0},
+		{"P1M2Y", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since negative value
-		{"P-1Y", duration.ErrUnsupportedFormat, 0},
+		{"P-1Y", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since negative value
-		{"P1YT-1M", duration.ErrUnsupportedFormat, 0},
+		{"P1YT-1M", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since missing T
-		{"P1S", duration.ErrUnsupportedFormat, 0},
+		{"P1S", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since missing P
-		{"1Y", duration.ErrUnsupportedFormat, 0},
+		{"1Y", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since no value is specified for months
-		{"P1YM5D", duration.ErrUnsupportedFormat, 0},
+		{"P1YM5D", timeutils.ErrUnsupportedFormat, 0},
 
 		// Not supported since wrong format of string
-		{"FOOBAR", duration.ErrUnsupportedFormat, 0},
+		{"FOOBAR", timeutils.ErrUnsupportedFormat, 0},
 
 		// Invalid since empty string
-		{"", duration.ErrInvalidString, 0},
+		{"", timeutils.ErrInvalidString, 0},
 
 		// Invalid since no time fields present
-		{"P", duration.ErrInvalidString, 0},
+		{"P", timeutils.ErrInvalidString, 0},
 
 		// Invalid since no time fields present
-		{"PT", duration.ErrInvalidString, 0},
+		{"PT", timeutils.ErrInvalidString, 0},
 
 		// Invalid since ending with T
-		{"P1Y2M3DT", duration.ErrInvalidString, 0},
+		{"P1Y2M3DT", timeutils.ErrInvalidString, 0},
 	} {
-		d, err := duration.Parse(tt.dur)
+		d, err := timeutils.ParseDuration(tt.dur)
 		if err != tt.err {
 			t.Fatalf("[%d] unexpected error: %s", i, err)
 		}
@@ -93,7 +95,7 @@ func TestCompareWithTimeParseDuration(t *testing.T) {
 		{"169h", "P1WT1H"},
 	} {
 		td, _ := time.ParseDuration(tt.timeStr)
-		dd, _ := duration.Parse(tt.durationStr)
+		dd, _ := timeutils.ParseDuration(tt.durationStr)
 
 		if td != dd {
 			t.Errorf(`[%d] not equal: %q->%v != %q->%v`, i, tt.timeStr, td, tt.durationStr, dd)

@@ -1,4 +1,4 @@
-//package time parses RFC3339 duration strings into time.Duration
+// Package time parses RFC3339 duration strings into time.Duration
 // taken from https://github.com/peterhellberg/duration
 package time
 
