@@ -58,6 +58,7 @@ func Router(service *Service) chi.Router {
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
+	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(middleware.SimpleTokenAuthorizedOnly(CancelOrder(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -261,6 +262,28 @@ func CreateOrder(service *Service) handlers.AppHandler {
 	})
 }
 
+// CancelOrder is the handler for cancelling an order
+func CancelOrder(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		err := service.CancelOrder(*orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+	})
+}
+
 // GetOrder is the handler for getting an order
 func GetOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -274,7 +297,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		order, err := service.GetOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -953,7 +976,25 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 			// If the invoice is paid set order status to paid, otherwise
 			if invoice.Paid {
-				err = service.Datastore.UpdateOrder(orderID, "paid")
+				// is this an existing subscription??
+				ok, subID, err := service.Datastore.IsStripeSub(orderID)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
+					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
+				}
+				if ok && subID != "" {
+					// okay, this is a subscription renewal, not first time,
+					err = service.Datastore.RenewOrder(ctx, orderID)
+					if err != nil {
+						sublogger.Error().Err(err).Msg("failed to renew the order")
+						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
+					}
+					// end flow for renew order
+					return handlers.RenderContent(r.Context(), "subscription renewed", w, http.StatusOK)
+				}
+
+				// not a renewal, first time
+				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order status")
 					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
@@ -997,7 +1038,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 			if err != nil {
 				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
 			}
-			err = service.Datastore.UpdateOrder(orderID, "canceled")
+			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
 			if err != nil {
 				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
 			}

@@ -2,13 +2,17 @@ package payment
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/stripe/stripe-go/client"
+	session "github.com/stripe/stripe-go/v71/checkout/session"
+	client "github.com/stripe/stripe-go/v71/client"
+	sub "github.com/stripe/stripe-go/v71/sub"
 
 	"errors"
 
@@ -32,6 +36,13 @@ import (
 
 var (
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
+)
+
+const (
+	// OrderStatusCanceled - string literal used in db for canceled status
+	OrderStatusCanceled = "canceled"
+	// OrderStatusPaid - string literal used in db for canceled status
+	OrderStatusPaid = "paid"
 )
 
 // Service contains datastore
@@ -147,6 +158,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	var (
 		currency              string
 		location              string
+		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
@@ -174,6 +186,12 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		if location == "" {
 			location = orderItem.Location.String
 		}
+
+		if orderItem.ValidFor != nil {
+			validFor = new(time.Duration)
+			*validFor = *orderItem.ValidFor
+		}
+
 		if location != orderItem.Location.String {
 			return nil, errors.New("all order items must be from the same location")
 		}
@@ -205,7 +223,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = "pending"
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems, allowedPaymentMethods)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
@@ -229,8 +247,67 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	return order, err
 }
 
+// GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
+func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
+	// get the order
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// check if this order has an expired checkout session
+	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(orderID)
+	if expired {
+		// if expired update with new checkout session
+		if !order.IsPaid() && order.IsStripePayable() {
+
+			// get old checkout session from stripe by id
+			stripeSession, err := session.Get(cs, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
+			}
+
+			checkoutSession, err := order.CreateStripeCheckoutSession(
+				stripeSession.CustomerEmail,
+				stripeSession.SuccessURL, stripeSession.CancelURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create checkout session: %w", err)
+			}
+
+			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order metadata: %w", err)
+			}
+		}
+
+		// get the order
+		order, err = s.Datastore.GetOrder(orderID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return order, err
+}
+
+// CancelOrder - cancels an order, propogates to stripe if needed
+func (s *Service) CancelOrder(orderID uuid.UUID) error {
+	// check the order, do we have a stripe subscription?
+	ok, subID, err := s.Datastore.IsStripeSub(orderID)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check stripe subscription: %w", err)
+	}
+	if ok && subID != "" {
+		// cancel the stripe subscription
+		if _, err := sub.Cancel(subID, nil); err != nil {
+			return fmt.Errorf("failed to cancel stripe subscription: %w", err)
+		}
+	}
+	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+}
+
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
 func (s *Service) UpdateOrderStatus(orderID uuid.UUID) error {
+	// get the order
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
@@ -351,7 +428,8 @@ func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 		amount = *resp.Amount
 	}
 	if resp.Status != nil {
-		status = *resp.Status
+		// response values are Titled from Gemini
+		status = strings.ToLower(*resp.Status)
 	}
 	if resp.Currency != nil {
 		currency = *resp.Currency

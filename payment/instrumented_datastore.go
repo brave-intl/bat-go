@@ -43,6 +43,20 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// CheckExpiredCheckoutSession implements Datastore
+func (_d DatastoreWithPrometheus) CheckExpiredCheckoutSession(u1 uuid.UUID) (b1 bool, s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckExpiredCheckoutSession", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CheckExpiredCheckoutSession(u1)
+}
+
 // CommitVote implements Datastore
 func (_d DatastoreWithPrometheus) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) (err error) {
 	_since := time.Now()
@@ -72,7 +86,7 @@ func (_d DatastoreWithPrometheus) CreateKey(merchant string, name string, encryp
 }
 
 // CreateOrder implements Datastore
-func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
+func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -82,7 +96,7 @@ func (_d DatastoreWithPrometheus) CreateOrder(totalPrice decimal.Decimal, mercha
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateOrder", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, orderItems, allowedPaymentMethods)
+	return _d.base.CreateOrder(totalPrice, merchantID, status, currency, location, validFor, orderItems, allowedPaymentMethods)
 }
 
 // CreateTransaction implements Datastore
@@ -323,6 +337,20 @@ func (_d DatastoreWithPrometheus) InsertVote(ctx context.Context, vr VoteRecord)
 	return _d.base.InsertVote(ctx, vr)
 }
 
+// IsStripeSub implements Datastore
+func (_d DatastoreWithPrometheus) IsStripeSub(u1 uuid.UUID) (b1 bool, s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "IsStripeSub", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IsStripeSub(u1)
+}
+
 // MarkVoteErrored implements Datastore
 func (_d DatastoreWithPrometheus) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) (err error) {
 	_since := time.Now()
@@ -373,6 +401,20 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RawDB", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RawDB()
+}
+
+// RenewOrder implements Datastore
+func (_d DatastoreWithPrometheus) RenewOrder(ctx context.Context, orderID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RenewOrder", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RenewOrder(ctx, orderID)
 }
 
 // RollbackTx implements Datastore
