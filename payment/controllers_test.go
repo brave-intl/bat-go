@@ -976,6 +976,7 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 		suite.Require().NoError(err, "error attempting to verify time limited cred")
 		suite.Require().True(ok, "verify failed")
 	}
+
 }
 
 func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {

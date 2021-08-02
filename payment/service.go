@@ -596,7 +596,7 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	}
 
 	if creds == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials")
+		return nil, http.StatusNotFound, fmt.Errorf("Credentials do not exist")
 	}
 
 	status := http.StatusOK
