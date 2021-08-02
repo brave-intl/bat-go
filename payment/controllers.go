@@ -526,101 +526,20 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		var credentialType string
-		const (
-			singleUse   = "single-use"
-			timeLimited = "time-limited"
-		)
-
-		// get the order from datastore
-		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		// get credentials, either single-use/time-limited
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(
-				err,
-				"failed to get order", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error getting credentials", status)
 		}
 
-		// look through order, find out what all the order item's credential types are
-		for i, v := range order.Items {
-			if i > 0 {
-				if v.CredentialType != credentialType {
-					// all the order items on the order need the same credential type
-					return handlers.WrapError(
-						fmt.Errorf("all order item credential types must converge"),
-						"failed to get credentials", http.StatusConflict)
-				}
-			} else {
-				credentialType = v.CredentialType
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "Credentials do not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
 			}
 		}
-
-		if credentialType == singleUse {
-			creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
-			if err != nil {
-				return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
-			}
-
-			if creds == nil {
-				return &handlers.AppError{
-					Message: "Credentials do not exist",
-					Code:    http.StatusNotFound,
-					Data:    map[string]interface{}{},
-				}
-			}
-
-			status := http.StatusOK
-			for i := 0; i < len(*creds); i++ {
-				if (*creds)[i].SignedCreds == nil {
-					status = http.StatusAccepted
-					break
-				}
-			}
-
-			return handlers.RenderContent(r.Context(), creds, w, status)
-		} else if credentialType == timeLimited {
-			// only brave merchant
-			if !order.Location.Valid || order.Location.String != "brave.com" {
-				return handlers.WrapError(
-					fmt.Errorf("failed to create time limited credentials"),
-					"only the Brave merchant can have time limited credentials", http.StatusBadRequest)
-			}
-			// is the order paid?
-			if !order.IsPaid() {
-				return handlers.WrapError(
-					fmt.Errorf("order is not paid"),
-					"cannot get credentials for unpaid orders", http.StatusBadRequest)
-			}
-
-			issuedAt := order.CreatedAt
-			expiresAt := issuedAt.AddDate(0, 0, 35)
-
-			var credentials []TimeLimitedCreds
-			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
-
-			for _, item := range order.Items {
-				// iterate through order items, derive the time limited creds
-				timeBasedToken, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
-				if err != nil {
-					return handlers.WrapError(err, "error generating time-limited credential", http.StatusInternalServerError)
-				}
-				credentials = append(credentials, TimeLimitedCreds{
-					ID:        item.ID,
-					OrderID:   order.ID,
-					IssuedAt:  issuedAt.Format("2006-01-02"),
-					ExpiresAt: expiresAt.Format("2006-01-02"),
-					Token:     timeBasedToken,
-				})
-			}
-
-			if len(credentials) > 0 {
-				return handlers.RenderContent(r.Context(), credentials, w, http.StatusOK)
-			}
-
-			return handlers.WrapError(
-				fmt.Errorf("did not issue more than zero credentials"), "failed to issue credentials", http.StatusBadRequest)
-		}
-		return handlers.WrapError(
-			fmt.Errorf("credentials must be single-use|time-limited"), "invalid credential type on order", http.StatusBadRequest)
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
 
@@ -891,6 +810,10 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			}
 
 			if verified {
+				// check against expiration time
+				if time.Now().After(expiresAt) {
+					return handlers.RenderContent(r.Context(), "Credentials expired", w, http.StatusBadRequest)
+				}
 				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 			}
 

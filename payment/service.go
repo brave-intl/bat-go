@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"errors"
 
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -541,4 +543,119 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 	}
 	// there was a parse error, return whatever was given
 	return u
+}
+
+const (
+	singleUse   = "single-use"
+	timeLimited = "time-limited"
+)
+
+var errInvalidCredentialType = errors.New("invalid credential type on order")
+
+// GetCredentials - based on the order, get the associated credentials
+func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interface{}, int, error) {
+	var credentialType string
+	// get the order from datastore
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return nil, http.StatusNotFound, fmt.Errorf("failed to get order: %w", err)
+	}
+	// look through order, find out what all the order item's credential types are
+	for i, v := range order.Items {
+		if i > 0 {
+			if v.CredentialType != credentialType {
+				// all the order items on the order need the same credential type
+				return nil, http.StatusConflict, fmt.Errorf("all items must have the same credential type")
+			}
+		} else {
+			credentialType = v.CredentialType
+		}
+	}
+
+	switch credentialType {
+	case singleUse:
+		return s.GetSingleUseCreds(ctx, order)
+	case timeLimited:
+		return s.GetTimeLimitedCreds(ctx, order)
+	}
+	return nil, http.StatusConflict, errInvalidCredentialType
+}
+
+// GetSingleUseCreds get an order's single use creds
+func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderCreds, int, error) {
+
+	if order == nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
+	}
+
+	creds, err := s.Datastore.GetOrderCreds(order.ID, false)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if creds == nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials")
+	}
+
+	status := http.StatusOK
+	for i := 0; i < len(*creds); i++ {
+		if (*creds)[i].SignedCreds == nil {
+			status = http.StatusAccepted
+			break
+		}
+	}
+	return *creds, status, nil
+}
+
+// GetTimeLimitedCreds get an order's time limited creds
+func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
+	if order == nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
+	}
+	// only brave merchant
+	if !order.Location.Valid || order.Location.String != "brave.com" {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create time limited credentials")
+	}
+	// is the order paid?
+	if !order.IsPaid() || !order.LastPaidAt.Valid {
+		return nil, http.StatusBadRequest, fmt.Errorf("order is not paid, or invalid last paid at")
+	}
+
+	issuedAt := order.LastPaidAt.Time
+	// default expires as 35 days
+	expiresAt := issuedAt.AddDate(0, 0, 35)
+
+	if order.ExpiresAt.Valid {
+		// if the order has an expiry, use that
+		expiresAt = order.ExpiresAt.Time
+	}
+
+	// check if we are past expiration, if so issue nothing
+	if time.Now().After(expiresAt) {
+		return nil, http.StatusBadRequest, fmt.Errorf("order has expired")
+	}
+
+	var credentials []TimeLimitedCreds
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+
+	for _, item := range order.Items {
+		// iterate through order items, derive the time limited creds
+		timeBasedToken, err := timeLimitedSecret.Derive(issuedAt, expiresAt)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
+		}
+		credentials = append(credentials, TimeLimitedCreds{
+			ID:        item.ID,
+			OrderID:   order.ID,
+			IssuedAt:  issuedAt.Format("2006-01-02"),
+			ExpiresAt: expiresAt.Format("2006-01-02"),
+			Token:     timeBasedToken,
+		})
+	}
+
+	if len(credentials) > 0 {
+		return credentials, http.StatusOK, nil
+	}
+	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
+
 }
