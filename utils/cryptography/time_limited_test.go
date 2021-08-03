@@ -7,6 +7,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestTimeLimitedCredential(t *testing.T) {
+	secret := "placeholder"
+	metadata := "test"
+	start := time.Date(2006, time.January, 2, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2006, time.January, 3, 0, 0, 0, 0, time.UTC)
+
+	timeLimitedSecret := NewTimeLimitedSecret([]byte(secret))
+	result, err := timeLimitedSecret.Derive([]byte(metadata), start, end)
+	assert.NoError(t, err)
+
+	if result != "/OXS+mLpp6NrDWV3dKOMBHX8lOoCnavWXvkSjPK6yye0JQwomvzoLsKqUwSB4Oya" {
+		t.Error("failed to match")
+	}
+}
+
 func TestTimeLimitedCredentialVerification(t *testing.T) {
 
 	timeLimitedSecret := NewTimeLimitedSecret([]byte("1cdd2af5-1c5a-47f6-bdad-89090acee31c"))
