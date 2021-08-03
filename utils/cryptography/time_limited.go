@@ -31,7 +31,7 @@ func (secret TimeLimitedSecret) Verify(metadata []byte, date time.Time, expirati
 	return subtle.ConstantTimeCompare([]byte(result), []byte(token)) == 1, nil
 }
 
-// NewTimeLimitedSecret - create a new time limited secret structuree
+// NewTimeLimitedSecret - create a new time limited secret structure
 func NewTimeLimitedSecret(secret []byte) TimeLimitedSecret {
 	return TimeLimitedSecret{
 		hasher: NewHMACHasher(secret),
