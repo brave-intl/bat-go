@@ -10,11 +10,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -513,6 +515,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // GetOrderCreds is the handler for fetching order credentials
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -523,27 +526,11 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
+		// get credentials, either single-use/time-limited
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error getting credentials", status)
 		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Credentials do not exist",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		status := http.StatusOK
-		for i := 0; i < len(*creds); i++ {
-			if (*creds)[i].SignedCreds == nil {
-				status = http.StatusAccepted
-				break
-			}
-		}
-
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
@@ -779,6 +766,62 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			}
 
 			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+		} else if req.Type == "time-limited" {
+			// Presentation includes a token and token metadata test test
+			type Presentation struct {
+				Issuer    string `json:"issuer"`
+				IssuedAt  string `json:"issuedAt"`
+				ExpiresAt string `json:"expiresAt"`
+				Token     string `json:"token"`
+			}
+
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+
+			var presentation Presentation
+			err = json.Unmarshal(bytes, &presentation)
+			if err != nil {
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
+			if err != nil {
+				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+			}
+			if issuerID != presentation.Issuer {
+				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+			}
+
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+
+			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+			}
+			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+			if err != nil {
+				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+			}
+
+			verified, err := timeLimitedSecret.Verify([]byte(presentation.Issuer), issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+			}
+
+			if verified {
+				// check against expiration time, issued time
+				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
+				}
+				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+			}
+
+			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
+
 		}
 
 		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)

@@ -26,7 +26,7 @@ func TestPromotionTestSuite(t *testing.T) {
 
 func (suite *PromotionTestSuite) TestPromotionExpired() {
 	p := Promotion{
-		ExpiresAt: time.Now(),
+		ExpiresAt: time.Now().Add(-1 * time.Second),
 	}
 	suite.Require().True(p.Expired())
 	p.ExpiresAt = p.ExpiresAt.AddDate(0, 0, 1)

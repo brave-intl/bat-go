@@ -5,6 +5,7 @@ package payment
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -44,6 +46,7 @@ var (
 	UserWalletVoteTestSkuToken string
 	AnonCardVoteTestSkuToken   string
 	FreeTestSkuToken           string
+	FreeTLTestSkuToken         string
 	InvalidFreeTestSkuToken    string
 )
 
@@ -85,6 +88,15 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.00",
 	}
 
+	FreeTLC := macarooncmd.Caveats{
+		"sku":                       "integration-test-free",
+		"description":               "integration test free sku token",
+		"credential_type":           "time-limited",
+		"credential_valid_duration": "P1M",
+		"currency":                  "BAT",
+		"price":                     "0.00",
+	}
+
 	// create sku using key
 	UserWalletToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
@@ -99,6 +111,11 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	FreeTestToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeC},
+	}
+
+	FreeTLTestToken := macarooncmd.Token{
+		ID: "id", Version: 2, Location: "brave.com",
+		FirstPartyCaveats: []macarooncmd.Caveats{FreeTLC},
 	}
 
 	var err error
@@ -120,6 +137,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 
 	// hacky, put this in development sku check
 	skuMap["development"][FreeTestSkuToken] = true
+
+	FreeTLTestSkuToken, err = FreeTLTestToken.Generate("testing123")
+	suite.Require().NoError(err)
+
+	// hacky, put this in development sku check
+	skuMap["development"][FreeTLTestSkuToken] = true
 
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
@@ -579,6 +602,44 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
+func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Context, service *Service, order Order) (ordercreds []TimeLimitedCreds) {
+
+	// Check to see if we have HTTP Accepted
+	handler := GetOrderCreds(service)
+	req, err := http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	// see if we can get our order creds
+	handler = GetOrderCreds(service)
+	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	suite.Require().NoError(err)
+
+	rctx = chi.NewRouteContext()
+	rctx.URLParams.Add("orderID", order.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	suite.Require().NoError(err)
+
+	// validate we get the right number of creds back, 1 per day
+	numTokens := int((*order.ValidFor).Hours() / 24)
+	suite.Require().Equal(numTokens, len(ordercreds))
+
+	return
+}
+
 func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
 	issuerName = "brave.com?sku=" + order.Items[0].SKU
 	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
@@ -885,6 +946,64 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
 }
 
+func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {
+	ctx, cancel := context.WithCancel(context.Background())
+	var err error
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, err = suite.service.RunNextOrderJob(ctx)
+				suite.Require().NoError(err, "Failed to drain order queue")
+				<-time.After(50 * time.Millisecond)
+			}
+		}
+	}()
+	defer cancel()
+
+	order := suite.setupCreateOrder(FreeTLTestSkuToken, 1)
+
+	ordercreds := suite.fetchTimeLimitedCredentials(ctx, suite.service, order)
+
+	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free")
+	suite.Require().NoError(err, "error attempting to encode issuer id")
+
+	// assert order creds validate
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+	for _, cred := range ordercreds {
+		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
+		suite.Require().NoError(err, "error attempting to parse issued at")
+		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
+		suite.Require().NoError(err, "error attempting to parse expires at")
+
+		ok, err := timeLimitedSecret.Verify([]byte(issuerID), issued, expires, cred.Token)
+		suite.Require().NoError(err, "error attempting to verify time limited cred")
+		suite.Require().True(ok, "verify failed")
+	}
+
+	var (
+		lastIssued  time.Time
+		lastExpired time.Time
+	)
+
+	for _, cred := range ordercreds {
+		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
+		suite.Require().NoError(err, "error attempting to parse issued at")
+		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
+		suite.Require().NoError(err, "error attempting to parse expires at")
+
+		// validate each cred is for a different day
+		suite.Require().True(issued.Day() != lastIssued.Day())
+		suite.Require().True(expires.Day() != lastExpired.Day())
+
+		lastIssued = issued
+		lastExpired = expires
+	}
+
+}
+
 func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
@@ -1115,4 +1234,30 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	suite.Assert().NoError(err)
 
 	suite.Assert().Equal(2, len(keys))
+}
+
+func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
+	ctx := context.Background()
+	valid := 1 * time.Second
+	lastPaid := time.Now().Add(1 * time.Minute)
+
+	order := &Order{
+		Location: datastore.NullString{
+			sql.NullString{
+				Valid: true, String: "brave.com",
+			},
+		},
+		Status: OrderStatusPaid, LastPaidAt: sql.NullTime{
+			Valid: true, Time: lastPaid,
+		},
+		ExpiresAt: sql.NullTime{
+			Valid: true, Time: lastPaid.Add(valid),
+		}, ValidFor: &valid,
+	}
+
+	creds, status, err := suite.service.GetTimeLimitedCreds(ctx, order)
+	suite.Require().True(creds == nil, "should not get creds back")
+	suite.Require().True(status == http.StatusBadRequest, "should not get creds back")
+	suite.Require().Error(err, "should get an error")
+
 }
