@@ -813,9 +813,9 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			}
 
 			if verified {
-				// check against expiration time
-				if time.Now().After(expiresAt) {
-					return handlers.RenderContent(r.Context(), "Credentials expired", w, http.StatusForbidden)
+				// check against expiration time, issued time
+				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
 				}
 				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 			}
