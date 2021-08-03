@@ -609,6 +609,8 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	return *creds, status, nil
 }
 
+const oneDay = 24 * time.Hour
+
 // GetTimeLimitedCreds get an order's time limited creds
 func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
@@ -651,8 +653,8 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 		}
 
-		dStart := issuedAt.Truncate(24 * time.Hour)
-		dEnd := issuedAt.Add(24 * time.Hour).Truncate(24 * time.Hour)
+		dStart := issuedAt.Truncate(oneDay)
+		dEnd := issuedAt.Add(oneDay).Truncate(oneDay)
 
 		// for the number of days order is valid for, create per day creds
 		for i := 0; i < int((*order.ValidFor).Hours()/24); i++ {
@@ -672,6 +674,10 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 				ExpiresAt: dEnd.Format("2006-01-02"),
 				Token:     timeBasedToken,
 			})
+
+			// increment dStart and dEnd
+			dStart = dStart.Add(oneDay)
+			dEnd = dEnd.Add(oneDay)
 		}
 	}
 
