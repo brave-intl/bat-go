@@ -41,6 +41,8 @@ var (
 const (
 	// OrderStatusCanceled - string literal used in db for canceled status
 	OrderStatusCanceled = "canceled"
+	// OrderStatusPaid - string literal used in db for canceled status
+	OrderStatusPaid = "paid"
 )
 
 // Service contains datastore
@@ -156,6 +158,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	var (
 		currency              string
 		location              string
+		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
@@ -183,6 +186,12 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		if location == "" {
 			location = orderItem.Location.String
 		}
+
+		if orderItem.ValidFor != nil {
+			validFor = new(time.Duration)
+			*validFor = *orderItem.ValidFor
+		}
+
 		if location != orderItem.Location.String {
 			return nil, errors.New("all order items must be from the same location")
 		}
@@ -214,7 +223,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = "pending"
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, orderItems, allowedPaymentMethods)
+	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
