@@ -651,18 +651,28 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 		}
 
-		// iterate through order items, derive the time limited creds
-		timeBasedToken, err := timeLimitedSecret.Derive([]byte(issuerID), issuedAt, expiresAt)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
+		dStart := issuedAt.Truncate(24 * time.Hour)
+		dEnd := issuedAt.Add(24 * time.Hour).Truncate(24 * time.Hour)
+
+		// for the number of days order is valid for, create per day creds
+		for i := 0; i < int((*order.ValidFor).Hours()/24); i++ {
+
+			// iterate through order items, derive the time limited creds
+			timeBasedToken, err := timeLimitedSecret.Derive(
+				[]byte(issuerID),
+				dStart,
+				dEnd)
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
+			}
+			credentials = append(credentials, TimeLimitedCreds{
+				ID:        item.ID,
+				OrderID:   order.ID,
+				IssuedAt:  dStart.Format("2006-01-02"),
+				ExpiresAt: dEnd.Format("2006-01-02"),
+				Token:     timeBasedToken,
+			})
 		}
-		credentials = append(credentials, TimeLimitedCreds{
-			ID:        item.ID,
-			OrderID:   order.ID,
-			IssuedAt:  issuedAt.Format("2006-01-02"),
-			ExpiresAt: expiresAt.Format("2006-01-02"),
-			Token:     timeBasedToken,
-		})
 	}
 
 	if len(credentials) > 0 {

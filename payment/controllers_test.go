@@ -633,6 +633,10 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
 	suite.Require().NoError(err)
 
+	// validate we get the right number of creds back, 1 per day
+	numTokens := int((*order.ValidFor).Hours() / 24)
+	suite.Require().Equal(numTokens, len(ordercreds))
+
 	return
 }
 
