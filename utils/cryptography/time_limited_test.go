@@ -22,13 +22,15 @@ func TestTimeLimitedCredentialVerification(t *testing.T) {
 
 	correctVerifyTime, err := time.Parse("2006-01-02", "2020-12-23")
 	assert.NoError(t, err)
-	incorrectVerifyTime, err := time.Parse("2006-01-02", "2020-12-24")
+	// incorrect time needs to be in the bucket outside (beginning of month after expirationTime)
+	incorrectVerifyTime, err := time.Parse("2006-01-02", "2020-01-02")
 	assert.NoError(t, err)
 
 	correctlyVerified, err := timeLimitedSecret.Verify(metadata, correctVerifyTime, expirationTime, result)
 	assert.NoError(t, err, "Error verifying token")
 	assert.True(t, correctlyVerified, "Error verifying with correct verify time")
 
+	// outside of the bucketed time
 	incorrectlyVerified, err := timeLimitedSecret.Verify(metadata, incorrectVerifyTime, expirationTime, result)
 	assert.NoError(t, err, "Error verifying token")
 	assert.False(t, incorrectlyVerified, "Token should not have verified with incorrect verify time")

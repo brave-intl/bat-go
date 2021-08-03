@@ -13,7 +13,12 @@ type TimeLimitedSecret struct {
 
 // Derive - derive time limited credential based on date and expiration date
 func (secret TimeLimitedSecret) Derive(metadata []byte, date time.Time, expirationDate time.Time) (string, error) {
-	interval := date.Format("2006-01-02") + expirationDate.Format("2006-01-02")
+
+	// bucket the interval (start of this month, start of the month after expiry)
+	beginEpoch := time.Date(date.Year(), date.Month(), 0, 0, 0, 0, 0, time.UTC)
+	endEpoch := time.Date(date.Year(), expirationDate.AddDate(0, 1, 0).Month(), 0, 0, 0, 0, 0, time.UTC)
+
+	interval := beginEpoch.Format("2006-01-02") + endEpoch.Format("2006-01-02")
 
 	result, err := secret.hasher.HMACSha384(append(metadata, []byte(interval)...))
 	if err != nil {
