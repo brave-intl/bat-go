@@ -5,12 +5,11 @@ package httpsignature
 import (
 	"bytes"
 	"crypto"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha512"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -22,21 +21,34 @@ import (
 
 // SignatureParams contains parameters needed to create and verify signatures
 type SignatureParams struct {
-	Algorithm Algorithm
-	Hash	  *crypto.Hash
-	KeyID     string
-	HMACKey   string
-	Headers   []string // optional
+	Algorithm       Algorithm
+	KeyID           string
+	DigestAlgorithm *crypto.Hash // optional
+	Headers         []string     // optional
 }
 
-// Signature represents an http signature and it's parameters
-type Signature struct {
+// signature is an internal represention of an http signature and it's parameters
+type signature struct {
 	SignatureParams
-	Signator crypto.Signer
-	SignatorOpts crypto.SignerOpts
-	Verifier Verifier
-	VerifierOpts crypto.SignerOpts // duplicate of SignatorOpts to make naming more intuitive
-	Sig string // FIXME remove since we should always use http.Request header?
+	Sig string
+}
+
+// Signator is an interface for cryptographic signature creation
+type Signator interface {
+	Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error)
+}
+
+// Verifier is an interface for cryptographic signature verification
+type Verifier interface {
+	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
+	String() string
+}
+
+// ParameterizedSignator contains the parameters / options needed to create signatures and a signator
+type ParameterizedSignator struct {
+	SignatureParams
+	Signator Signator
+	Opts     crypto.SignerOpts
 }
 
 const (
@@ -90,10 +102,10 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			// Just like before default to SHA256
 			var d digest.Instance
 			d.Hash = crypto.SHA256
-			
+
 			// If something else is set though use that hash instead
-			if s.Hash != nil {
-				d.Hash = *s.Hash
+			if s.DigestAlgorithm != nil {
+				d.Hash = *s.DigestAlgorithm
 			}
 
 			if req.Body != nil {
@@ -105,7 +117,6 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 				d.Update(body)
 			}
 			req.Header.Add("Digest", d.String())
-
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
@@ -120,8 +131,8 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 }
 
 // Sign the included HTTP request req using signator and options opts
-func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *http.Request) error {
-	ss, err := s.BuildSigningString(req)
+func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *http.Request) error {
+	ss, err := sp.BuildSigningString(req)
 	if err != nil {
 		return err
 	}
@@ -129,7 +140,10 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 	if err != nil {
 		return err
 	}
-	s.Sig = base64.StdEncoding.EncodeToString(sig)
+	s := signature{
+		SignatureParams: *sp,
+		Sig:             base64.StdEncoding.EncodeToString(sig),
+	}
 
 	sHeader, err := s.MarshalText()
 	if err != nil {
@@ -140,49 +154,18 @@ func (s *Signature) Sign(signator crypto.Signer, opts crypto.SignerOpts, req *ht
 }
 
 // Sign the included HTTP request req using signator and options opts
-func (s *Signature) SignRequest(req *http.Request) error {
-	ss, err := s.BuildSigningString(req)
-	if err != nil {
-		return err
-	}
-	
-	if s.Algorithm == ED25519 {
-		sig, err := s.Signator.Sign(rand.Reader, ss, s.SignatorOpts)
-		if err != nil {
-			return err
-		}
-		s.Sig = base64.StdEncoding.EncodeToString(sig)
-		
-	} else if s.Algorithm == HS2019 {
-		hhash := hmac.New(sha512.New, []byte(s.HMACKey))
-		hhash.Write([]byte(ss))
-		
-		s.Sig = base64.StdEncoding.EncodeToString(hhash.Sum(nil))
-	}
-	
-	sHeader, err := s.MarshalText()
-	if err != nil {
-		return err
-	}
-	
-	req.Header.Set("Signature", string(sHeader))
-	return nil
-}
-
-// Verifier is an interface for cryptographic signature verification
-type Verifier interface {
-	Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error)
-	String() string
+func (p *ParameterizedSignator) SignRequest(req *http.Request) error {
+	return p.SignatureParams.Sign(p.Signator, p.Opts, req)
 }
 
 // Verify the HTTP signature s over HTTP request req using verifier with options opts
-func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
+func (s *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
 	signingStr, err := s.BuildSigningString(req)
 	if err != nil {
 		return false, err
 	}
 
-	var tmp Signature
+	var tmp signature
 	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
 	if err != nil {
 		return false, err
@@ -195,29 +178,8 @@ func (s *Signature) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.
 	return verifier.Verify(signingStr, sig, opts)
 }
 
-// Verify the HTTP signature s over HTTP request req using verifier with options opts
-func (s *Signature) VerifyRequest(req *http.Request) (bool, error) {
-	signingStr, err := s.BuildSigningString(req)
-	if err != nil {
-		return false, err
-	}
-
-	var tmp Signature
-	err = tmp.UnmarshalText([]byte(req.Header.Get("Signature")))
-	if err != nil {
-		return false, err
-	}
-
-	sig, err := base64.StdEncoding.DecodeString(tmp.Sig)
-	if err != nil {
-		return false, err
-	}
-	
-	return s.Verifier.Verify(signingStr, sig, s.VerifierOpts)
-}
-
 // MarshalText marshalls the signature into text.
-func (s *Signature) MarshalText() (text []byte, err error) {
+func (s *signature) MarshalText() (text []byte, err error) {
 	if s.IsMalformed() {
 		return nil, errors.New("not a valid Algorithm")
 	}
@@ -237,7 +199,7 @@ func (s *Signature) MarshalText() (text []byte, err error) {
 }
 
 // UnmarshalText unmarshalls the signature from text.
-func (s *Signature) UnmarshalText(text []byte) (err error) {
+func (s *signature) UnmarshalText(text []byte) (err error) {
 	var key string
 	var value string
 
@@ -272,4 +234,13 @@ func (s *Signature) UnmarshalText(text []byte) (err error) {
 	}
 
 	return nil
+}
+
+func SignatureParamsFromRequest(req *http.Request) (*SignatureParams, error) {
+	var s signature
+	err := s.UnmarshalText([]byte(req.Header.Get("Signature")))
+	if err != nil {
+		return nil, err
+	}
+	return &s.SignatureParams, nil
 }

@@ -35,8 +35,7 @@ func GetKeyID(ctx context.Context) (string, error) {
 func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var s httpsignature.Signature
-			err := s.UnmarshalText([]byte(r.Header.Get("Signature")))
+			s, err := httpsignature.SignatureParamsFromRequest(r)
 			if err != nil {
 				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return

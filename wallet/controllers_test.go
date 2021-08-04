@@ -544,7 +544,7 @@ func (suite *WalletControllersTestSuite) SignRequest(
 	publicKey httpsignature.Ed25519PubKey,
 	privateKey ed25519.PrivateKey,
 ) {
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}

@@ -43,8 +43,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 
 func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) (string, error) {
 	// validate that the signature in the header is valid based on public key provided
-	var s httpsignature.Signature
-	err := s.UnmarshalText([]byte(signature))
+	s, err := httpsignature.SignatureParamsFromRequest(r)
 	if err != nil {
 		return "", fmt.Errorf("invalid signature: %w", err)
 	}

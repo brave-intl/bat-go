@@ -43,7 +43,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code, "request without signature should fail")
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest", "(request-target)"}

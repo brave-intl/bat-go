@@ -29,7 +29,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -40,7 +39,7 @@ func must(t *testing.T, msg string, err error) {
 }
 
 func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}
