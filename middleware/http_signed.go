@@ -38,14 +38,15 @@ func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 				Opts:     crypto.Hash(0),
 			}
 
-			_, err := verifier.VerifyRequest(r)
+			keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(r.Context()))
+			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, keyID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

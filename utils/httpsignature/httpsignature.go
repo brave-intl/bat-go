@@ -216,6 +216,10 @@ func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (stri
 		return "", err
 	}
 
+	if verifier == nil {
+		return "", fmt.Errorf("no verifier matching keyId %s was found", sp.KeyID)
+	}
+
 	// Override algorithm and headers to those we want to enforce
 	sp.Algorithm = pkv.SignatureParams.Algorithm
 	sp.Headers = pkv.SignatureParams.Headers
