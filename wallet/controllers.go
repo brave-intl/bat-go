@@ -2,11 +2,9 @@ package wallet
 
 import (
 	"context"
-	"crypto"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/http"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -41,41 +39,19 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 	return &tmp, nil
 }
 
-func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) (string, error) {
-	// validate that the signature in the header is valid based on public key provided
-	s, err := httpsignature.SignatureParamsFromRequest(r)
-	if err != nil {
-		return "", fmt.Errorf("invalid signature: %w", err)
-	}
+type DecodeEd25519Keystore struct{}
 
-	// Override algorithm and headers to those we want to enforce
-	s.Algorithm = httpsignature.ED25519
-	s.Headers = []string{"digest", "(request-target)"}
+func (d *DecodeEd25519Keystore) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	var publicKey httpsignature.Ed25519PubKey
-	if len(s.KeyID) > 0 {
+	if len(keyID) > 0 {
 		var err error
-		publicKey, err = hex.DecodeString(s.KeyID)
+		publicKey, err = hex.DecodeString(keyID)
 		if err != nil {
-			return "", fmt.Errorf("failed to hex decode public key: %w", err)
+			return nil, fmt.Errorf("failed to hex decode public key: %w", err)
 		}
 	} else {
-		// there was no KeyId in the Signature
-		if err != nil {
-			return "", errors.New("no KeyId found in the HTTP Signature")
-		}
+		return nil, errors.New("empty KeyId is not valid")
 	}
-	pubKey := httpsignature.Verifier(publicKey)
-	if len(pubKey.String()) == 0 {
-		return "", errors.New("invalid public key")
-	}
-
-	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
-
-	if err != nil {
-		return "", fmt.Errorf("failed to verify signature: %w", err)
-	}
-	if !valid {
-		return "", errors.New("invalid signature")
-	}
-	return s.KeyID, nil
+	verifier := httpsignature.Verifier(publicKey)
+	return &verifier, nil
 }

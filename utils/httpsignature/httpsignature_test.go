@@ -198,10 +198,10 @@ func TestVerify(t *testing.T) {
 	}
 
 	var hmacVerifier HMACKey = "yyqz64U$eG?eUAp24Pm!Fn!Cn"
-	var sp2 signature
-	sp2.Algorithm = HS2019
-	sp2.KeyID = "secondary"
-	sp2.Headers = []string{"foo"}
+	var s2 signature
+	s2.Algorithm = HS2019
+	s2.KeyID = "secondary"
+	s2.Headers = []string{"foo"}
 	sig := "3RCLz6TH2I32nj1NY5YaUWDSCNPiKsAVIXjX4merDeNvrGondy7+f3sWQQJWRwEo90FCrthWrrVcgHqqFevS9Q=="
 
 	req, reqErr := http.NewRequest("GET", "http://example.org/foo2", nil)
@@ -212,7 +212,7 @@ func TestVerify(t *testing.T) {
 	req.Header.Set("Foo", "bar")
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = sp2.Verify(hmacVerifier, nil, req)
+	valid, err = s2.Verify(hmacVerifier, nil, req)
 	if err != nil {
 		t.Error("Unexpected error while building signing string:", err)
 	}
@@ -223,12 +223,101 @@ func TestVerify(t *testing.T) {
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	valid, err = sp2.Verify(hmacVerifier, nil, req)
+	valid, err = s2.Verify(hmacVerifier, nil, req)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}
 	if valid {
 		t.Error("The signature should be invalid")
+	}
+}
+
+func TestVerifyRequest(t *testing.T) {
+	var pubKey Ed25519PubKey
+	pubKey, err := hex.DecodeString("e7876fd5cc3a228dad634816f4ec4b80a258b2a552467e5d26f30003211bc45d")
+	if err != nil {
+		t.Error(err)
+	}
+
+	var sp SignatureParams
+	sp.Algorithm = ED25519
+	sp.KeyID = "primary"
+	sp.Headers = []string{"foo"}
+
+	pkv := ParameterizedKeystoreVerifier{
+		SignatureParams: sp,
+		Keystore:        &StaticKeystore{pubKey},
+		Opts:            crypto.Hash(0),
+	}
+
+	sig := "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ=="
+
+	r, err := http.NewRequest("GET", "http://example.org/foo", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	r.Header.Set("Foo", "bar")
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
+
+	keyId, err := pkv.VerifyRequest(r)
+	if err != nil {
+		t.Error("Unexpected error, signature should be valid:", err)
+	}
+	if keyId != "primary" {
+		t.Error("The keyId should match")
+	}
+
+	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
+
+	keyId, err = pkv.VerifyRequest(r)
+	if err == nil {
+		t.Error("Missing expected error, signature should be invalid:", err)
+	}
+	if keyId == "primary" {
+		t.Error("The keyId should not match")
+	}
+
+	var hmacVerifier HMACKey = "yyqz64U$eG?eUAp24Pm!Fn!Cn"
+	var sp2 SignatureParams
+	sp2.Algorithm = HS2019
+	sp2.KeyID = "secondary"
+	sp2.Headers = []string{"foo"}
+
+	pkv2 := ParameterizedKeystoreVerifier{
+		SignatureParams: sp2,
+		Keystore:        &StaticKeystore{hmacVerifier},
+		Opts:            crypto.Hash(0),
+	}
+
+	sig = "3RCLz6TH2I32nj1NY5YaUWDSCNPiKsAVIXjX4merDeNvrGondy7+f3sWQQJWRwEo90FCrthWrrVcgHqqFevS9Q=="
+
+	req, reqErr := http.NewRequest("GET", "http://example.org/foo2", nil)
+	if reqErr != nil {
+		t.Error(reqErr)
+	}
+
+	req.Header.Set("Foo", "bar")
+	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
+
+	keyId, err = pkv2.VerifyRequest(req)
+	if err != nil {
+		t.Error("Unexpected error, signature should be valid:", err)
+	}
+	if keyId != "secondary" {
+		t.Error("The keyId should match")
+	}
+
+	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
+
+	keyId, err = pkv2.VerifyRequest(req)
+	if err == nil {
+		t.Error("Missing expected error, signature should be invalid:", err)
+	}
+	if keyId == "secondary" {
+		t.Error("The keyId should not match")
 	}
 }
 

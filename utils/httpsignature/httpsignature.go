@@ -4,6 +4,7 @@ package httpsignature
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"encoding/base64"
@@ -51,6 +52,24 @@ type ParameterizedSignator struct {
 	Opts     crypto.SignerOpts
 }
 
+// Keystore provides a way to lookup a public key based on the keyID a request was signed with
+type Keystore interface {
+	// LookupPublicKey based on the keyID
+	LookupPublicKey(ctx context.Context, keyID string) (*Verifier, error)
+}
+
+// StaticKeystore is a keystore that always returns a static verifier independent of keyID
+type StaticKeystore struct {
+	Verifier
+}
+
+// ParameterizedKeystoreVerifier is an interface for cryptographic signature verification
+type ParameterizedKeystoreVerifier struct {
+	SignatureParams
+	Keystore Keystore
+	Opts     crypto.SignerOpts
+}
+
 const (
 	// DigestHeader is the header where a digest of the body will be stored
 	DigestHeader = "digest"
@@ -61,6 +80,10 @@ const (
 var (
 	signatureRegex = regexp.MustCompile(`(\w+)="([^"]*)"`)
 )
+
+func (sk *StaticKeystore) LookupPublicKey(ctx context.Context, keyID string) (*Verifier, error) {
+	return &sk.Verifier, nil
+}
 
 // TODO Add New function
 // NOTE New function should check that all added headers are lower-cased
@@ -178,6 +201,34 @@ func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req
 	return verifier.Verify(signingStr, sig, opts)
 }
 
+// VerifyRequest using keystore to lookup verifier with options opts
+// returns the key id if the signature is valid and an error otherwise
+func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (string, error) {
+	sp, err := SignatureParamsFromRequest(req)
+	if err != nil {
+		return "", err
+	}
+
+	verifier, err := pkv.Keystore.LookupPublicKey(req.Context(), sp.KeyID)
+	if err != nil {
+		return "", err
+	}
+
+	// Override algorithm and headers to those we want to enforce
+	sp.Algorithm = pkv.SignatureParams.Algorithm
+	sp.Headers = pkv.SignatureParams.Headers
+
+	valid, err := sp.Verify(*verifier, pkv.Opts, req)
+	if err != nil {
+		return "", err
+	}
+	if !valid {
+		return "", errors.New("signature is not valid")
+	}
+
+	return sp.KeyID, nil
+}
+
 // MarshalText marshalls the signature into text.
 func (s *signature) MarshalText() (text []byte, err error) {
 	if s.IsMalformed() {
@@ -200,6 +251,10 @@ func (s *signature) MarshalText() (text []byte, err error) {
 
 // UnmarshalText unmarshalls the signature from text.
 func (s *signature) UnmarshalText(text []byte) (err error) {
+	if len(text) == 0 {
+		return errors.New("signature header is empty")
+	}
+
 	var key string
 	var value string
 
