@@ -39,8 +39,10 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 	return &tmp, nil
 }
 
+// DecodeEd25519Keystore is a keystore that "looks up" a verifier by attempting to decode the keyID as a base64 encoded ed25519 public key
 type DecodeEd25519Keystore struct{}
 
+// LookupPublicKey by decoding keyID
 func (d *DecodeEd25519Keystore) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	var publicKey httpsignature.Ed25519PubKey
 	if len(keyID) > 0 {

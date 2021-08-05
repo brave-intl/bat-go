@@ -45,7 +45,7 @@ func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(r.Context()))
 		})
 	}
 }

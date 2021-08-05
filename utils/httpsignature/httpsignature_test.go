@@ -260,22 +260,22 @@ func TestVerifyRequest(t *testing.T) {
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
 
-	keyId, err := pkv.VerifyRequest(r)
+	keyID, err := pkv.VerifyRequest(r)
 	if err != nil {
 		t.Error("Unexpected error, signature should be valid:", err)
 	}
-	if keyId != "primary" {
-		t.Error("The keyId should match")
+	if keyID != "primary" {
+		t.Error("The keyID should match")
 	}
 
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
 
-	keyId, err = pkv.VerifyRequest(r)
+	keyID, err = pkv.VerifyRequest(r)
 	if err == nil {
 		t.Error("Missing expected error, signature should be invalid:", err)
 	}
-	if keyId == "primary" {
+	if keyID == "primary" {
 		t.Error("The keyId should not match")
 	}
 
@@ -301,22 +301,22 @@ func TestVerifyRequest(t *testing.T) {
 	req.Header.Set("Foo", "bar")
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	keyId, err = pkv2.VerifyRequest(req)
+	keyID, err = pkv2.VerifyRequest(req)
 	if err != nil {
 		t.Error("Unexpected error, signature should be valid:", err)
 	}
-	if keyId != "secondary" {
+	if keyID != "secondary" {
 		t.Error("The keyId should match")
 	}
 
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	keyId, err = pkv2.VerifyRequest(req)
+	keyID, err = pkv2.VerifyRequest(req)
 	if err == nil {
 		t.Error("Missing expected error, signature should be invalid:", err)
 	}
-	if keyId == "secondary" {
+	if keyID == "secondary" {
 		t.Error("The keyId should not match")
 	}
 }

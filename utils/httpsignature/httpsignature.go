@@ -81,6 +81,7 @@ var (
 	signatureRegex = regexp.MustCompile(`(\w+)="([^"]*)"`)
 )
 
+// LookupPublicKey by returning a static verifier
 func (sk *StaticKeystore) LookupPublicKey(ctx context.Context, keyID string) (*Verifier, error) {
 	return &sk.Verifier, nil
 }
