@@ -8,16 +8,22 @@ import (
 	"io"
 )
 
+// HMACKey is a symmetric key that can be used for HMAC-SHA512 request signing and verification
 type HMACKey string
 
+// Sign the message using the hmac key
 func (key HMACKey) Sign(rand io.Reader, message []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	hhash := hmac.New(sha512.New, []byte(key))
 	//  writing the message (HTTP signing string) to it
-	hhash.Write(message)
+	_, err = hhash.Write(message)
+	if err != nil {
+		return nil, err
+	}
 	// Get the hash sum, do not base64 encode it since sig was decoded already
 	return hhash.Sum(nil), nil
 }
 
+// Verify the signature sig for message using the hmac key
 func (key HMACKey) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
 	hashSum, err := key.Sign(nil, message, nil)
 	if err != nil {

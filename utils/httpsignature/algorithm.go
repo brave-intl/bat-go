@@ -11,7 +11,7 @@ const (
 	invalid Algorithm = iota
 	// ED25519 EdDSA - deprecated, all algorithm strings should be replaced with HS2019
 	ED25519
-	// This is a catch-all value for all algorithms
+	// HS2019 is a catch-all value for all algorithms
 	HS2019
 )
 

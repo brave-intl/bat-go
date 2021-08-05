@@ -66,11 +66,11 @@ var (
 // NOTE New function should check that all added headers are lower-cased
 
 // IsMalformed returns true if the signature parameters are invalid
-func (s *SignatureParams) IsMalformed() bool {
-	if s.Algorithm == invalid {
+func (sp *SignatureParams) IsMalformed() bool {
+	if sp.Algorithm == invalid {
 		return true
 	}
-	for _, header := range s.Headers {
+	for _, header := range sp.Headers {
 		if header != strings.ToLower(header) {
 			return true // all headers must be lower-cased
 		}
@@ -81,12 +81,12 @@ func (s *SignatureParams) IsMalformed() bool {
 // BuildSigningString builds the signing string according to the SignatureParams s and
 // HTTP request req
 // TODO Add support for digest generation based on req.Body?
-func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err error) {
-	if s.IsMalformed() {
+func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err error) {
+	if sp.IsMalformed() {
 		return nil, errors.New("refusing to build signing string with malformed params")
 	}
 
-	headers := s.Headers
+	headers := sp.Headers
 	if len(headers) == 0 {
 		headers = []string{"date"}
 	}
@@ -104,8 +104,8 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			d.Hash = crypto.SHA256
 
 			// If something else is set though use that hash instead
-			if s.DigestAlgorithm != nil {
-				d.Hash = *s.DigestAlgorithm
+			if sp.DigestAlgorithm != nil {
+				d.Hash = *sp.DigestAlgorithm
 			}
 
 			if req.Body != nil {
@@ -123,7 +123,7 @@ func (s *SignatureParams) BuildSigningString(req *http.Request) (out []byte, err
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		}
 
-		if i != len(s.Headers)-1 {
+		if i != len(sp.Headers)-1 {
 			out = append(out, byte('\n'))
 		}
 	}
@@ -153,14 +153,14 @@ func (sp *SignatureParams) Sign(signator Signator, opts crypto.SignerOpts, req *
 	return nil
 }
 
-// Sign the included HTTP request req using signator and options opts
+// SignRequest using signator and options opts in the parameterized signator
 func (p *ParameterizedSignator) SignRequest(req *http.Request) error {
 	return p.SignatureParams.Sign(p.Signator, p.Opts, req)
 }
 
 // Verify the HTTP signature s over HTTP request req using verifier with options opts
-func (s *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
-	signingStr, err := s.BuildSigningString(req)
+func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req *http.Request) (bool, error) {
+	signingStr, err := sp.BuildSigningString(req)
 	if err != nil {
 		return false, err
 	}
@@ -236,6 +236,7 @@ func (s *signature) UnmarshalText(text []byte) (err error) {
 	return nil
 }
 
+// SignatureParamsFromRequest extracts the signature parameters from a signed http request
 func SignatureParamsFromRequest(req *http.Request) (*SignatureParams, error) {
 	var s signature
 	err := s.UnmarshalText([]byte(req.Header.Get("Signature")))
