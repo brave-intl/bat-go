@@ -35,22 +35,25 @@ const (
 
 var skuMap = map[string]map[string]bool{
 	"production": {
-		prodUserWalletVote:    true,
-		prodAnonCardVote:      true,
-		prodBraveTogetherPaid: true,
-		prodBraveTalkPremium:  true,
+		prodUserWalletVote:              true,
+		prodAnonCardVote:                true,
+		prodBraveTogetherPaid:           true,
+		prodBraveTalkPremium:            true,
+		prodBraveTalkPremiumTimeLimited: false,
 	},
 	"staging": {
-		stagingUserWalletVote:   true,
-		stagingAnonCardVote:     true,
-		stagingWebtestPJSKUDemo: true,
-		stagingBraveTalkPremium: true,
+		stagingUserWalletVote:              true,
+		stagingAnonCardVote:                true,
+		stagingWebtestPJSKUDemo:            true,
+		stagingBraveTalkPremium:            true,
+		stagingBraveTalkPremiumTimeLimited: false,
 	},
 	"development": {
-		devUserWalletVote:   true,
-		devAnonCardVote:     true,
-		devSearchClosedBeta: true,
-		devBraveTalkPremium: true,
+		devUserWalletVote:              true,
+		devAnonCardVote:                true,
+		devSearchClosedBeta:            true,
+		devBraveTalkPremium:            true,
+		devBraveTalkPremiumTimeLimited: false,
 	},
 }
 
