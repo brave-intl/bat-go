@@ -25,7 +25,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stripe/stripe-go"
+	stripe "github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/webhook"
 )
 
@@ -769,7 +769,6 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		} else if req.Type == "time-limited" {
 			// Presentation includes a token and token metadata test test
 			type Presentation struct {
-				Issuer    string `json:"issuer"`
 				IssuedAt  string `json:"issuedAt"`
 				ExpiresAt string `json:"expiresAt"`
 				Token     string `json:"token"`
@@ -792,9 +791,6 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			if err != nil {
 				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 			}
-			if issuerID != presentation.Issuer {
-				return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
-			}
 
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
@@ -807,7 +803,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
-			verified, err := timeLimitedSecret.Verify([]byte(presentation.Issuer), issuedAt, expiresAt, presentation.Token)
+			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
 			if err != nil {
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
