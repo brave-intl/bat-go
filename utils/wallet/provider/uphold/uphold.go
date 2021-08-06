@@ -287,7 +287,7 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 		return nil, err
 	}
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
@@ -452,7 +452,7 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
 	}
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
@@ -541,13 +541,13 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	}
 
 	var req http.Request
-	sig, err := signedTx.extract(&req)
+	sigParams, err := signedTx.extract(&req)
 	if err != nil {
 		return nil, err
 	}
 
 	exists = false
-	for _, header := range sig.Headers {
+	for _, header := range sigParams.Headers {
 		if header == "digest" {
 			exists = true
 		}
@@ -556,7 +556,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, errors.New("a transaction signature must cover the request body via digest")
 	}
 
-	valid, err := sig.Verify(w.PubKey, crypto.Hash(0), &req)
+	valid, err := sigParams.Verify(w.PubKey, crypto.Hash(0), &req)
 	if err != nil {
 		return nil, err
 	}
