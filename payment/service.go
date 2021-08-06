@@ -616,10 +616,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
-	// only brave merchant
-	if !order.Location.Valid || order.Location.String != "brave.com" {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create time limited credentials")
-	}
+
 	// is the order paid?
 	if !order.IsPaid() || !order.LastPaidAt.Valid {
 		return nil, http.StatusBadRequest, fmt.Errorf("order is not paid, or invalid last paid at")
