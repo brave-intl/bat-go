@@ -303,7 +303,7 @@ func (suite *ControllersTestSuite) ClaimGrant(
 	req, err := http.NewRequest("POST", "/v1/promotion/{promotionId}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = w.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -468,7 +468,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	req, err = http.NewRequest("POST", "/promotion/{promotionId}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -1494,7 +1494,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -1675,7 +1675,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -1844,7 +1844,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainSkipCBRDupRedeem() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -2028,7 +2028,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -2327,7 +2327,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -2507,7 +2507,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -2675,7 +2675,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}
@@ -2900,7 +2900,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = info.ID
 	s.Headers = []string{"digest", "(request-target)"}

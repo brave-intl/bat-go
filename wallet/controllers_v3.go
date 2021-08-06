@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
@@ -96,8 +97,17 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 
 // CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
 func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	verifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		},
+		Keystore: &DecodeEd25519Keystore{},
+		Opts:     crypto.Hash(0),
+	}
+
 	// perform validation based on public key that the user submits
-	publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
+	keyID, err := verifier.VerifyRequest(r)
 	if err != nil {
 		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 	}
@@ -134,7 +144,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	var info = &walletutils.Info{
 		ID:          uuid.NewV4().String(),
 		Provider:    "brave",
-		PublicKey:   publicKey,
+		PublicKey:   keyID,
 		AltCurrency: &altCurrency,
 	}
 
