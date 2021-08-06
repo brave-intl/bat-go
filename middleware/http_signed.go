@@ -29,6 +29,11 @@ func GetKeyID(ctx context.Context) (string, error) {
 func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(r.Header.Get("Signature")) == 0 {
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				return
+			}
+
 			verifier := httpsignature.ParameterizedKeystoreVerifier{
 				SignatureParams: httpsignature.SignatureParams{
 					Algorithm: httpsignature.ED25519,
