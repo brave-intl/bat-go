@@ -1,5 +1,5 @@
 tokens:
-  - id: "brave-talk-premium-prod sku token v1"
+  - id: "brave-talk-premium-prod time limited sku token v1"
     version: 1
     location: "talk.brave.com"
     first_party_caveats:
@@ -7,7 +7,8 @@ tokens:
       - price: 7.00
       - currency: "USD"
       - description: "Premium access to Brave Talk"
-      - credential_type: "single-use"
+      - credential_type: "time-limited"
+      - credential_valid_duration: "P1M"
       - allowed_payment_methods: "stripe"
       - metadata: '
 {

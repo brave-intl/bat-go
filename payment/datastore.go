@@ -238,7 +238,10 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 // GetOrder queries the database and returns an order
 func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	statement := `
-		SELECT id, created_at, currency, updated_at, total_price, merchant_id, location, status, allowed_payment_methods, metadata
+		SELECT 
+			id, created_at, currency, updated_at, total_price, 
+			merchant_id, location, status, allowed_payment_methods, 
+			metadata, valid_for, last_paid_at, expires_at
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)
@@ -492,6 +495,25 @@ func recordOrderPayment(ctx context.Context, tx *sqlx.Tx, id uuid.UUID, t time.T
 	}
 
 	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// record on order as well
+	result, err = tx.ExecContext(ctx, `
+		update orders set last_paid_at = $1
+		where id = $2
+	`, t, id)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err = result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
 		return errors.New("no rows updated")
 	}

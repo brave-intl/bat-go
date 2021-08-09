@@ -11,12 +11,6 @@ import (
 
 type httpSignedKeyID struct{}
 
-// Keystore provides a way to lookup a public key based on the keyID a request was signed with
-type Keystore interface {
-	// LookupPublicKey based on the keyID
-	LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error)
-}
-
 //AddKeyID - Helpful for test cases
 func AddKeyID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, httpSignedKeyID{}, id)
@@ -32,43 +26,31 @@ func GetKeyID(ctx context.Context) (string, error) {
 }
 
 // HTTPSignedOnly is a middleware that requires an HTTP request to be signed
-func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
+func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var s httpsignature.Signature
-			err := s.UnmarshalText([]byte(r.Header.Get("Signature")))
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			if len(r.Header.Get("Signature")) == 0 {
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}
 
-			// Override algorithm and headers to those we want to enforce
-			s.Algorithm = httpsignature.ED25519
-			s.Headers = []string{"digest", "(request-target)"}
-
-			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, s.KeyID)
-			pubKey, err := ks.LookupPublicKey(ctx, s.KeyID)
-
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-				return
-			}
-			if pubKey == nil {
-				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-				return
+			verifier := httpsignature.ParameterizedKeystoreVerifier{
+				SignatureParams: httpsignature.SignatureParams{
+					Algorithm: httpsignature.ED25519,
+					Headers:   []string{"digest", "(request-target)"},
+				},
+				Keystore: ks,
+				Opts:     crypto.Hash(0),
 			}
 
-			valid, err := s.Verify(*pubKey, crypto.Hash(0), r)
+			keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-				return
-			}
-			if !valid {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 				return
 			}
 
+			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, keyID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

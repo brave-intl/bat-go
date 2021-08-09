@@ -41,9 +41,9 @@ func TestHTTPSignedOnly(t *testing.T) {
 	assert.NoError(t, err)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusBadRequest, rr.Code, "request without signature should fail")
+	assert.Equal(t, http.StatusUnauthorized, rr.Code, "request without signature should fail")
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest", "(request-target)"}
@@ -56,7 +56,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	assert.NoError(t, err)
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusNotFound, rr.Code, "request with signature from wrong keyID should fail")
+	assert.Equal(t, http.StatusForbidden, rr.Code, "request with signature from wrong keyID should fail")
 
 	s.KeyID = "primary"
 
