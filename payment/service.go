@@ -445,26 +445,34 @@ func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 // CreateTransactionFromRequest queries the endpoints and creates a transaciton
 func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
 
+	sublogger := logging.Logger(ctx, "payments").With().
+		Str("func", "CreateAnonCardTransaction").
+		Logger()
+
 	// get the information from the custodian
 	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
 		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
 	}
 
 	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
 	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")
 	}
 
 	isPaid, err := s.IsOrderPaid(transaction.OrderID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
+		sublogger.Error().Err(err).Msg("failed to validate the order is paid based on transactions")
+		return nil, errorutils.Wrap(err, "error validating order is paid")
 	}
 
 	// If the transaction that was satisifies the order then let's update the status
 	if isPaid {
 		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to set the status to paid")
 			return nil, errorutils.Wrap(err, "error updating order status")
 		}
 	}
