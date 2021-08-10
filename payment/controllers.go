@@ -866,7 +866,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		sublogger.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
 
 		// Handle invoice events
-		if event.Type == StripeInvoiceUpdated {
+		if event.Type == StripeInvoiceUpdated || event.Type == StripeInvoicePaid {
 			// Retrieve invoice from update events
 			var invoice stripe.Invoice
 			err := json.Unmarshal(event.Data.Raw, &invoice)
