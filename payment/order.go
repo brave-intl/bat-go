@@ -29,6 +29,7 @@ import (
 const (
 	StripePaymentMethod               = "stripe"
 	StripeInvoiceUpdated              = "invoice.updated"
+	StripeInvoicePaid                 = "invoice.paid"
 	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
 )
 
