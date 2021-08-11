@@ -3,7 +3,7 @@ tokens:
     version: 1
     location: "talk-beta.brave.com"
     first_party_caveats:
-      - sku: "brave-talk-premium-prod"
+      - sku: "brave-talk-premium"
       - price: 7.00
       - currency: "USD"
       - description: "Premium access to Brave Talk"
