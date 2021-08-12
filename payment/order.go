@@ -310,5 +310,13 @@ func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemPara
 
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
-	return order.Status == OrderStatusPaid
+	// if the order status is paid it is paid.
+	// if the order is cancelled, check to make sure that expires at is after now
+	if order.Status == OrderStatusPaid {
+		return true
+	} else if order.Status == OrderStatusCanceled && order.ExpiresAt != nil {
+		expires := *order.ExpiresAt
+		return expires.After(time.Now())
+	}
+	return false
 }
