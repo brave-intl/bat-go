@@ -85,9 +85,9 @@ type Order struct {
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
-	LastPaidAt            sql.NullTime         `json:"last_paid_at" db:"last_paid_at"`
-	ExpiresAt             sql.NullTime         `json:"expires_at" db:"expires_at"`
-	ValidFor              *time.Duration       `json:"valid_for" db:"valid_for"`
+	LastPaidAt            sql.NullTime         `json:"lastPaidAt" db:"last_paid_at"`
+	ExpiresAt             sql.NullTime         `json:"expiresAt" db:"expires_at"`
+	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
 }
 
 // OrderItem includes information about a particular order item
@@ -104,7 +104,7 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
-	ValidFor       *time.Duration       `json:"valid_for" db:"valid_for"`
+	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
