@@ -96,6 +96,8 @@ const (
 	StripeSecretCTXKey CTXKey = "stripe_secret"
 	// WhitelistSKUsCTXKey - context key for whitelisted skus
 	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
+	// TraceIDCTXKey - context key for trace id (service to service)
+	TraceIDCTXKey CTXKey = "trace_id"
 )
 
 var (
