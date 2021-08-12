@@ -22,7 +22,6 @@ import (
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -228,24 +227,10 @@ func (c *SimpleHTTPClient) do(
 	v interface{},
 ) (*http.Response, error) {
 
-	// get or setup an opentelemetry tracer
-	tracer, err := appctx.GetOTELTracerFromContext(ctx)
+	tracer, propagators, err := appctx.GetOTELTracerPropagatorsFromContext(ctx, "http-client-do")
 	if err != nil {
-		if err != appctx.ErrNotInContext && err != appctx.ErrValueWrongType {
-			// butsomething else is wrong
-			return nil, fmt.Errorf("unexpected err getting tracer from context: %w", err)
-		}
-		tracer = otel.Tracer("github.com/brave-intl/bat-go/utils/clients/client")
-	}
-
-	// get or setup propagator
-	propagators, err := appctx.GetOTELPropagatorsFromContext(ctx)
-	if err != nil {
-		if err != appctx.ErrNotInContext && err != appctx.ErrValueWrongType {
-			// something else is wrong
-			return nil, fmt.Errorf("unexpected err getting propagator from context: %w", err)
-		}
-		propagators = otel.GetTextMapPropagator()
+		// unexpected error
+		return nil, fmt.Errorf("unexpected error drawing tracer from context: %w", err)
 	}
 
 	// get the trace id from the context

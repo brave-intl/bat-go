@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -89,7 +90,17 @@ func GetLogger(ctx context.Context) (*zerolog.Logger, error) {
 		// this is a disabled logger, send appropriate error
 		return nil, fmt.Errorf("logger not found in context: %w", ErrNotInContext)
 	}
-	return l, nil
+
+	// lets make a sublogger with a trace id if it exists on the context
+	traceID, err := GetStringFromContext(ctx, TraceIDCTXKey)
+	if err != nil {
+		if err != ErrNotInContext && err != ErrValueWrongType {
+			l.Error().Err(err).Msg("issue getting trace id from context")
+		}
+	}
+	sublogger := l.With().Str("trace_id", traceID).Logger()
+
+	return &sublogger, nil
 }
 
 // GetOTELTracerFromContext - return the trace.Tracer value from the context if it exists
@@ -118,4 +129,28 @@ func GetOTELPropagatorsFromContext(ctx context.Context) (propagation.TextMapProp
 	}
 	// value not a string
 	return nil, ErrValueWrongType
+}
+
+// GetOTELTracerPropagatorsFromContext - return the trace.Propogators value from the context if it exists
+func GetOTELTracerPropagatorsFromContext(ctx context.Context, ns string) (trace.Tracer, propagation.TextMapPropagator, error) {
+	// get or setup an opentelemetry tracer
+	tracer, err := GetOTELTracerFromContext(ctx)
+	if err != nil {
+		if err != ErrNotInContext && err != ErrValueWrongType {
+			// butsomething else is wrong
+			return nil, nil, fmt.Errorf("unexpected err getting tracer from context: %w", err)
+		}
+		tracer = otel.Tracer(ns)
+	}
+
+	// get or setup propagator
+	propagators, err := GetOTELPropagatorsFromContext(ctx)
+	if err != nil {
+		if err != ErrNotInContext && err != ErrValueWrongType {
+			// something else is wrong
+			return nil, nil, fmt.Errorf("unexpected err getting propagator from context: %w", err)
+		}
+		propagators = otel.GetTextMapPropagator()
+	}
+	return tracer, propagators, nil
 }
