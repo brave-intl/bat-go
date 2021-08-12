@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 //GetByteSliceFromContext - given a CTXKey return the string value from the context if it exists
@@ -88,4 +90,32 @@ func GetLogger(ctx context.Context) (*zerolog.Logger, error) {
 		return nil, fmt.Errorf("logger not found in context: %w", ErrNotInContext)
 	}
 	return l, nil
+}
+
+// GetOTELTracerFromContext - return the trace.Tracer value from the context if it exists
+func GetOTELTracerFromContext(ctx context.Context) (trace.Tracer, error) {
+	v := ctx.Value(OpenTelemetryTracerCTXKey)
+	if v == nil {
+		// value not on context
+		return nil, ErrNotInContext
+	}
+	if s, ok := v.(trace.Tracer); ok {
+		return s, nil
+	}
+	// value not a string
+	return nil, ErrValueWrongType
+}
+
+// GetOTELPropagatorsFromContext - return the trace.Propogators value from the context if it exists
+func GetOTELPropagatorsFromContext(ctx context.Context) (propagation.TextMapPropagator, error) {
+	v := ctx.Value(OpenTelemetryPropagatorsCTXKey)
+	if v == nil {
+		// value not on context
+		return nil, ErrNotInContext
+	}
+	if s, ok := v.(propagation.TextMapPropagator); ok {
+		return s, nil
+	}
+	// value not a string
+	return nil, ErrValueWrongType
 }

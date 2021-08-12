@@ -12,14 +12,6 @@ import (
 	"regexp"
 	"time"
 
-	"go.opentelemetry.io/otel/api/kv"
-	"go.opentelemetry.io/otel/api/standard"
-	"go.opentelemetry.io/otel/api/trace"
-
-	"go.opentelemetry.io/otel/api/correlation"
-	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/instrumentation/httptrace"
-
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -29,6 +21,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // regular expression mapped to the replacement
@@ -113,8 +110,6 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 		proxy = nil
 	}
 
-	// setup otelhttp transport for our simple client
-	// with a 10 second timeout
 	client := &http.Client{
 		Timeout: time.Second * 10,
 		Transport: middleware.InstrumentRoundTripper(
@@ -233,6 +228,26 @@ func (c *SimpleHTTPClient) do(
 	v interface{},
 ) (*http.Response, error) {
 
+	// get or setup an opentelemetry tracer
+	tracer, err := appctx.GetOTELTracerFromContext(ctx)
+	if err != nil {
+		if err != appctx.ErrNotInContext && err != appctx.ErrValueWrongType {
+			// butsomething else is wrong
+			return nil, fmt.Errorf("unexpected err getting tracer from context: %w", err)
+		}
+		tracer = otel.Tracer("github.com/brave-intl/bat-go/utils/clients/client")
+	}
+
+	// get or setup propagator
+	propagators, err := appctx.GetOTELPropagatorsFromContext(ctx)
+	if err != nil {
+		if err != appctx.ErrNotInContext && err != appctx.ErrValueWrongType {
+			// something else is wrong
+			return nil, fmt.Errorf("unexpected err getting propagator from context: %w", err)
+		}
+		propagators = otel.GetTextMapPropagator()
+	}
+
 	// get the trace id from the context
 	traceID, err := appctx.GetStringFromContext(ctx, appctx.TraceIDCTXKey)
 	if err != nil {
@@ -246,63 +261,72 @@ func (c *SimpleHTTPClient) do(
 		}
 	}
 
+	// make some baggage with the trace id
+	traceIDMem, err := baggage.NewMember("traceID", traceID)
+	if err != nil {
+		// unexpected error
+		return nil, fmt.Errorf("unexpected error attempting to create traceid member: %w", err)
+	}
+	bag, err := baggage.New(traceIDMem)
+	if err != nil {
+		// unexpected error
+		return nil, fmt.Errorf("unexpected error creating otel baggage: %w", err)
+	}
+
+	ctx = baggage.ContextWithBaggage(ctx, bag)
+
+	// how to get the trace id in a handler
+	//ctx = propagators.Extract(ctx, propagation.HeaderCarrier(r.Header))
+
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, "perform client http call span")
+	defer span.End()
+
 	// results
 	var (
-		resp   http.Response
+		resp   *http.Response
 		status int
-		err    error
 	)
 
-	// create a correlation
-	ctx = correlation.NewContext(ctx, kv.String("traceID", traceID))
+	// concurrent client request instrumentation
+	concurrentClientRequests.With(
+		prometheus.Labels{
+			"host": req.URL.Host, "method": req.Method,
+		}).Inc()
 
-	// otel will now pass that correlation through to the called service after injection
-	// start a client/do span otel
+	defer func() {
+		concurrentClientRequests.With(
+			prometheus.Labels{
+				"host": req.URL.Host, "method": req.Method,
+			}).Dec()
+	}()
 
-	tr := global.Tracer("bat-go/utils/client/do")
-	err = tr.WithSpan(ctx, "performing client http call",
-		func(ctx context.Context) error {
+	logger := log.Ctx(ctx)
 
-			// concurrent client request instrumentation
-			concurrentClientRequests.With(
-				prometheus.Labels{
-					"host": req.URL.Host, "method": req.Method,
-				}).Inc()
+	// dump out the full request, right before we submit it
+	requestDump, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		panic(err)
+	}
+	logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
 
-			defer func() {
-				concurrentClientRequests.With(
-					prometheus.Labels{
-						"host": req.URL.Host, "method": req.Method,
-					}).Dec()
-			}()
+	// inject our headers from otel
+	req = req.WithContext(ctx)
+	// load up the request headers with otel information
+	propagators.Inject(ctx, propagation.HeaderCarrier(req.Header))
 
-			logger := log.Ctx(ctx)
+	resp, err = c.client.Do(req)
+	if err != nil {
+		return resp, err
+	}
+	status = resp.StatusCode
+	defer closers.Panic(resp.Body)
+	dump, err := httputil.DumpResponse(resp, true)
+	if err != nil {
+		panic(err)
+	}
 
-			// dump out the full request, right before we submit it
-			requestDump, err := httputil.DumpRequestOut(req, true)
-			if err != nil {
-				panic(err)
-			}
-			logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
-
-			ctx, req = httptrace.W3C(ctx, req)
-			// inject the traceID into the headers of the request for the next service
-			httptrace.Inject(ctx, req)
-
-			resp, err = c.client.Do(req)
-			if err != nil {
-				return err
-			}
-			status = resp.StatusCode
-			defer closers.Panic(resp.Body)
-			dump, err := httputil.DumpResponse(resp, true)
-			if err != nil {
-				panic(err)
-			}
-
-			logger.Debug().Str("type", "http.Response").Msg(string(dump))
-		},
-		trace.WithAttributes(standard.PeerServiceKey.String("bat-go")))
+	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
 	// // helpful if you want to read the body as it is
 	// bodyBytes, _ := requestutils.Read(resp.Body)

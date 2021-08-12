@@ -98,6 +98,10 @@ const (
 	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
 	// TraceIDCTXKey - context key for trace id (service to service)
 	TraceIDCTXKey CTXKey = "trace_id"
+	// OpenTelemetryTracerCTXKey - context key for otel tracer
+	OpenTelemetryTracerCTXKey
+	// OpenTelemetryPropagatorsCTXKey - context key for otel proagator
+	OpenTelemetryPropagatorsCTXKey
 )
 
 var (
