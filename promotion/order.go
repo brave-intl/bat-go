@@ -1,7 +1,6 @@
 package promotion
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/payment"
@@ -26,8 +25,8 @@ type Order struct {
 	Items                 []OrderItem          `json:"items"`
 	AllowedPaymentMethods payment.Methods      `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
-	LastPaidAt            sql.NullTime         `json:"lastPaidAt" db:"last_paid_at"`
-	ExpiresAt             sql.NullTime         `json:"expiresAt" db:"expires_at"`
+	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
+	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
 	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
 }
 
