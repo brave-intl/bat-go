@@ -162,6 +162,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// -> instrumentation -> handler
 	r.Use(chiware.RequestID)
 	r.Use(middleware.RequestIDTransfer)
+	// otel trace id to be put on context so all logs have it and all http clients have it
+	r.Use(middleware.TraceIDTransfer)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.
