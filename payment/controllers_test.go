@@ -1240,6 +1240,7 @@ func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 	ctx := context.Background()
 	valid := 1 * time.Second
 	lastPaid := time.Now().Add(1 * time.Minute)
+	expiresAt := lastPaid.Add(valid)
 
 	order := &Order{
 		Location: datastore.NullString{
@@ -1247,12 +1248,9 @@ func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 				Valid: true, String: "brave.com",
 			},
 		},
-		Status: OrderStatusPaid, LastPaidAt: sql.NullTime{
-			Valid: true, Time: lastPaid,
-		},
-		ExpiresAt: sql.NullTime{
-			Valid: true, Time: lastPaid.Add(valid),
-		}, ValidFor: &valid,
+		Status: OrderStatusPaid, LastPaidAt: &lastPaid,
+		ExpiresAt: &expiresAt,
+		ValidFor:  &valid,
 	}
 
 	creds, status, err := suite.service.GetTimeLimitedCreds(ctx, order)

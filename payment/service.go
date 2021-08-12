@@ -626,21 +626,21 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	// is the order paid?
-	if !order.IsPaid() || !order.LastPaidAt.Valid {
+	if !order.IsPaid() || order.LastPaidAt == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("order is not paid, or invalid last paid at")
 	}
 
-	issuedAt := order.LastPaidAt.Time
+	issuedAt := order.LastPaidAt
 	var expiresAt time.Time
 
 	// default expires as whatever valid for is from the order
 	if order.ValidFor != nil {
-		expiresAt = order.LastPaidAt.Time.Add(*order.ValidFor)
+		expiresAt = order.LastPaidAt.Add(*order.ValidFor)
 	}
 
 	// if the order has an expiry, use that
-	if order.ExpiresAt.Valid {
-		expiresAt = order.ExpiresAt.Time
+	if order.ExpiresAt != nil {
+		expiresAt = *order.ExpiresAt
 	}
 
 	// check if we are past expiration, if so issue nothing
