@@ -626,7 +626,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	// is the order paid?
-	if !order.IsPaid() || order.LastPaidAt != nil {
+	if !order.IsPaid() || order.LastPaidAt == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("order is not paid, or invalid last paid at")
 	}
 
