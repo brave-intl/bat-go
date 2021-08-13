@@ -65,8 +65,10 @@ type Datastore interface {
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
-	// GetKeys ret
-	GetKeys(merchant string, showExpired bool) (*[]Key, error)
+	// GetKeysByMerchant
+	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
+	// GetKey
+	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
 	// CreateKey
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
 	// DeleteKey
@@ -149,8 +151,8 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 	return &key, nil
 }
 
-// GetKeys returns a list of active API keys
-func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
+// GetKeysByMerchant returns a list of active API keys
+func (pg *Postgres) GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error) {
 	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
 	if showExpired {
 		expiredQuery = ""
@@ -171,6 +173,30 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 	}
 
 	return &keys, nil
+}
+
+// GetKey returns a list of active API keys
+func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
+	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
+	if showExpired {
+		expiredQuery = ""
+	}
+
+	var key Key
+	err := pg.RawDB().Get(&key, `
+			select
+				id, name, merchant_id, created_at, expiry,
+				encrypted_secret_key, nonce
+			from api_keys
+			where
+			id = $1`+expiredQuery,
+		id.String())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+
+	return &key, nil
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order

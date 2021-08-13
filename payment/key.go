@@ -1,14 +1,20 @@
 package payment
 
 import (
+	"context"
+	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
+	uuid "github.com/satori/go.uuid"
 )
 
 // EncryptionKey for encrypting secrets
@@ -76,4 +82,65 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
+}
+
+func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+	rootKeyIDStr, caveats, err := cryptography.DecodeKeyID(keyID)
+	if err != nil {
+		return nil, err
+	}
+
+	rootKeyID, err := uuid.FromString(rootKeyIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("root key id must be a uuid: %v", err)
+	}
+
+	key, err := service.Datastore.GetKey(rootKeyID, false)
+	if err != nil {
+		return nil, err
+	}
+	return nil, err
+
+	secretKeyStr := key.SecretKey
+
+	if caveats != nil {
+		_, secretKeyStr, err = cryptography.Attenuate(rootKeyID.String(), "secret-token:"+secretKeyStr, caveats)
+		if err != nil {
+			return nil, err
+		}
+
+		// FIXME Add the caveats into the context
+	}
+
+	// FIXME Add merchant info into the context
+
+	verifier := httpsignature.Verifier(httpsignature.HMACKey(secretKeyStr))
+	return &verifier, nil
+}
+
+func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handler {
+	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.HS2019,
+			Headers: []string{
+				"(request-target)", "host", "date", "digest",
+			},
+		},
+		Keystore: service,
+		Opts:     crypto.Hash(0),
+	}
+
+	// TODO replace with returning VerifyHTTPSignedOnly once we've migrated
+	// subscriptions server auth off simple token
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(r.Header.Get("Signature")) == 0 {
+				// Assume legacy simple token auth
+				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r)
+				return
+			}
+
+			middleware.VerifyHTTPSignedOnly(merchantVerifier)(next).ServeHTTP(w, r)
+		})
+	}
 }

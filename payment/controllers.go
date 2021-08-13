@@ -48,6 +48,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
 	if os.Getenv("ENV") == "local" {
 		r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
@@ -58,7 +59,8 @@ func Router(service *Service) chi.Router {
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
-	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(middleware.SimpleTokenAuthorizedOnly(CancelOrder(service)))))
+
+	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -69,8 +71,8 @@ func Router(service *Service) chi.Router {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-		// TODO authorization should be merchant specific, however currently this is only used internally
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", middleware.SimpleTokenAuthorizedOnly(DeleteOrderCreds(service))))
+
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 	})
@@ -81,7 +83,9 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", middleware.SimpleTokenAuthorizedOnly(VerifyCredential(service))))
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
+
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", merchantSignedMiddleware(VerifyCredential(service))))
 	return r
 }
 
@@ -188,12 +192,12 @@ func DeleteKey(service *Service) handlers.AppHandler {
 // GetKeys returns all keys for a specified merchant
 func GetKeys(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		reqID := chi.URLParam(r, "merchantID")
+		merchantID := chi.URLParam(r, "merchantID")
 		expired := r.URL.Query().Get("expired")
 		showExpired := expired == "true"
 
 		var keys *[]Key
-		keys, err := service.Datastore.GetKeys(reqID, showExpired)
+		keys, err := service.Datastore.GetKeysByMerchant(merchantID, showExpired)
 		if err != nil {
 			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
 		}
@@ -265,6 +269,8 @@ func CreateOrder(service *Service) handlers.AppHandler {
 // CancelOrder is the handler for cancelling an order
 func CancelOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// FIXME verify merchant and caveats from auth context
+
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -538,6 +544,8 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 // DeleteOrderCreds is the handler for deleting order credentials
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// FIXME verify merchant and caveats from auth context
+
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -726,6 +734,8 @@ type VerifyCredentialRequest struct {
 // VerifyCredential is the handler for verifying subscription credentials
 func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// FIXME verify merchant and caveats from auth context
+
 		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
