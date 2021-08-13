@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// DecodeKeyID into the root keyID and any caveats, which will be null otherwise
 func DecodeKeyID(keyID string) (rootKeyID string, caveats map[string]string, err error) {
 	s := strings.Split(keyID, ":")
 	if len(s) != 1 && len(s) != 2 {
@@ -47,6 +48,7 @@ func DecodeKeyID(keyID string) (rootKeyID string, caveats map[string]string, err
 	return
 }
 
+// Attenuate a root keyID and secretKey usign the provided caveats
 func Attenuate(rootKeyID string, secretKey string, caveats map[string]string) (aKeyID string, aSecretKey string, err error) {
 	_, c, err := DecodeKeyID(rootKeyID)
 	if err != nil {

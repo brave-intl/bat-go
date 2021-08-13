@@ -84,6 +84,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }
 
+// LookupPublicKey returns the merchant key corresponding to the keyID used for verifying requests
 func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
 	rootKeyIDStr, caveats, err := cryptography.DecodeKeyID(keyID)
 	if err != nil {
@@ -99,7 +100,6 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 	if err != nil {
 		return nil, err
 	}
-	return nil, err
 
 	secretKeyStr := key.SecretKey
 
@@ -118,6 +118,7 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 	return &verifier, nil
 }
 
+// MerchantSignedMiddleware requires that requests are signed by valid merchant keys
 func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handler {
 	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{

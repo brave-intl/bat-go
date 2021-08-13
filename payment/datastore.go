@@ -175,7 +175,7 @@ func (pg *Postgres) GetKeysByMerchant(merchant string, showExpired bool) (*[]Key
 	return &keys, nil
 }
 
-// GetKey returns a list of active API keys
+// GetKey returns the specified key, conditionally checking if it is expired
 func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
 	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
 	if showExpired {
