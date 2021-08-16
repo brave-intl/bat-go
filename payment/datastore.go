@@ -429,11 +429,11 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 	// how long should the order be valid for?
 	var orderTimeBounds = struct {
 		ValidFor *time.Duration `db:"valid_for"`
-		LastPaid sql.NullTime   `db:"last_paid"`
+		LastPaid sql.NullTime   `db:"last_paid_at"`
 	}{}
 
 	err = tx.GetContext(ctx, &orderTimeBounds, `
-		SELECT valid_for, last_paid
+		SELECT valid_for, last_paid_at
 		FROM orders
 		WHERE id = $1
 	`, orderID)
