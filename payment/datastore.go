@@ -36,6 +36,8 @@ type Datastore interface {
 	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
 	UpdateOrder(orderID uuid.UUID, status string) error
+	// UpdateOrderExpiresAt updates the order's expires_at field
+	UpdateOrderExpiresAt(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrderMetadata adds a key value pair to an order's metadata
 	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
@@ -416,9 +418,8 @@ func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 	return ok, "", err
 }
 
-// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+// UpdateOrderExpiresAt - set the expires_at attribute of the order, based on now (or last paid_at if exists) and valid_for from db
+func (pg *Postgres) UpdateOrderExpiresAt(ctx context.Context, orderID uuid.UUID) error {
 	// create tx
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
@@ -441,23 +442,30 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("unable to get order time bounds: %w", err)
 	}
 
-	// update last paid
+	// default to last paid now
 	lastPaid := time.Now()
+
+	// if there is a valid last paid, use that from the order
+	if orderTimeBounds.LastPaid.Valid {
+		lastPaid = orderTimeBounds.LastPaid.Time
+	}
+
 	var expiresAt time.Time
-	if orderTimeBounds.ValidFor != nil && orderTimeBounds.LastPaid.Valid {
+
+	if orderTimeBounds.ValidFor != nil {
+		// compute expiry based on valid for
 		expiresAt = lastPaid.Add(*orderTimeBounds.ValidFor)
 	}
 
+	// update the order with the right expires at
 	result, err := tx.ExecContext(ctx, `
 		UPDATE orders
 		SET
-			status = 'paid',
 			updated_at = CURRENT_TIMESTAMP,
-			last_paid_at = $1,
-			expires_at = $2
+			expires_at = $1
 		WHERE 
-			id = $3
-	`, lastPaid, expiresAt, orderID)
+			id = $2
+	`, expiresAt, orderID)
 
 	if err != nil {
 		return err
@@ -468,12 +476,27 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return errors.New("no rows updated")
 	}
 
-	if err := recordOrderPayment(ctx, tx, orderID, lastPaid); err != nil {
-		return fmt.Errorf("failed to record order payment: %w", err)
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction to renew order: %w", err)
+	}
+
+	return nil
+}
+
+// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+
+	// renew order is an update order with paid status
+	// and an update order expires at with the new expiry time of the order
+	err := pg.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
+	if err != nil {
+		return fmt.Errorf("failed to set order status to paid: %w", err)
+	}
+
+	err = pg.UpdateOrderExpiresAt(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to set order expires_at: %w", err)
 	}
 
 	return pg.DeleteOrderCreds(orderID, true)
