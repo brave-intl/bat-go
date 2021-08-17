@@ -124,11 +124,6 @@ func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey s
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key for merchant: %w", err)
 	}
-	err = key.SetSecretKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
-	}
-
 	return &key, nil
 }
 

@@ -127,6 +127,12 @@ type CreateKeyRequest struct {
 	Name string `json:"name" valid:"required"`
 }
 
+// CreateKeyResponse includes information about the created key
+type CreateKeyResponse struct {
+	*Key
+	SecretKey string `json:"secretKey"`
+}
+
 // CreateKey is the handler for creating keys for a merchant
 func CreateKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -148,7 +154,21 @@ func CreateKey(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
+		sk, err := key.GetSecretKey()
+		if err != nil {
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		if sk == nil {
+			err = errors.New("secret key was nil")
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		resp := CreateKeyResponse{
+			Key:       key,
+			SecretKey: *sk,
+		}
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }
 

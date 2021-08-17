@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -29,7 +30,6 @@ type Key struct {
 	ID                 string     `json:"id" db:"id"`
 	Name               string     `json:"name" db:"name"`
 	Merchant           string     `json:"merchant" db:"merchant_id"`
-	SecretKey          string     `json:"secretKey"`
 	EncryptedSecretKey string     `json:"-" db:"encrypted_secret_key"`
 	Nonce              string     `json:"-" db:"nonce"`
 	CreatedAt          time.Time  `json:"createdAt" db:"created_at"`
@@ -41,25 +41,24 @@ func InitEncryptionKeys() {
 	copy(byteEncryptionKey[:], []byte(EncryptionKey))
 }
 
-// SetSecretKey decrypts the secret key from the database
-func (key *Key) SetSecretKey() error {
+// GetSecretKey decrypts the secret key from the database
+func (key *Key) GetSecretKey() (*string, error) {
 	encrypted, err := hex.DecodeString(key.EncryptedSecretKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	nonce, err := hex.DecodeString(key.Nonce)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	key.SecretKey = secretKey
-	return nil
+	return &secretKey, nil
 }
 
 func randomString(n int) (string, error) {
@@ -101,7 +100,15 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		return nil, err
 	}
 
-	secretKeyStr := key.SecretKey
+	secretKey, err := key.GetSecretKey()
+	if err != nil {
+		return nil, err
+	}
+	if secretKey == nil {
+		return nil, errors.New("missing secret key")
+	}
+
+	secretKeyStr := *secretKey
 
 	if caveats != nil {
 		_, secretKeyStr, err = cryptography.Attenuate(rootKeyID.String(), "secret-token:"+secretKeyStr, caveats)

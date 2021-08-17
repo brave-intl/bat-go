@@ -75,7 +75,6 @@ func TestSecretKey(t *testing.T) {
 			ID:        "test-id",
 			Name:      "test-name",
 			Merchant:  "test-merchant",
-			SecretKey: sk,
 			CreatedAt: time.Now(),
 			Expiry:    &expiry,
 		}
@@ -84,7 +83,8 @@ func TestSecretKey(t *testing.T) {
 	if err != nil {
 		t.Error("failed to generate a secret key: ", err)
 	}
-	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(k.SecretKey))
+
+	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(sk))
 
 	k.EncryptedSecretKey = fmt.Sprintf("%x", encryptedBytes)
 	k.Nonce = fmt.Sprintf("%x", nonceBytes)
@@ -92,12 +92,13 @@ func TestSecretKey(t *testing.T) {
 		t.Error("failed to encrypt secret key: ", err)
 	}
 
-	if err := k.SetSecretKey(); err != nil {
-		t.Error("failed to set secret key: ", err)
+	skResult, err := k.GetSecretKey()
+	if err != nil {
+		t.Error("failed to get secret key: ", err)
 	}
 
 	// the Secret key should now be plaintext in key, check it out
-	if sk != k.SecretKey {
+	if skResult == nil || sk != *skResult {
 		t.Error("expecting initial plaintext secret key to match decrypted secret key")
 	}
 
