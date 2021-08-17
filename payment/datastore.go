@@ -471,10 +471,6 @@ func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, order
 		return errors.New("no rows updated")
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction to renew order: %w", err)
-	}
-
 	return nil
 }
 
