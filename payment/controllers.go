@@ -916,6 +916,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				}
 
 				// not a renewal, first time
+				// and update the order's expires at as it was just paid
 				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
 				if err != nil {
 					sublogger.Error().Err(err).Msg("failed to update order status")
@@ -927,11 +928,6 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
 				}
 
-				// update the order's expires at as it was just paid
-				err = service.Datastore.UpdateOrderExpiresAt(ctx, orderID)
-				if err != nil {
-					return handlers.WrapError(err, "failed to set order expires_at", http.StatusInternalServerError)
-				}
 				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
 				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
 			}

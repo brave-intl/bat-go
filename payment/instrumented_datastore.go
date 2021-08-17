@@ -470,20 +470,6 @@ func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) 
 	return _d.base.UpdateOrder(orderID, status)
 }
 
-// UpdateOrderExpiresAt implements Datastore
-func (_d DatastoreWithPrometheus) UpdateOrderExpiresAt(ctx context.Context, orderID uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateOrderExpiresAt", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.UpdateOrderExpiresAt(ctx, orderID)
-}
-
 // UpdateOrderMetadata implements Datastore
 func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) (err error) {
 	_since := time.Now()
