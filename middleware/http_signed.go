@@ -5,7 +5,9 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/brave-intl/bat-go/utils/contains"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 )
 
@@ -56,7 +58,24 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 				return
 			}
 
-			// FIXME verify known headers, e.g. host, date
+			if contains.Str(verifier.SignatureParams.Headers, "date") {
+				// Date: Wed, 21 Oct 2015 07:28:00 GMT
+				dateStr := r.Header.Get("date")
+				date, err := time.Parse(time.RFC1123, dateStr)
+				if err != nil {
+					http.Error(w, "Invalid date header", http.StatusBadRequest)
+					return
+				}
+
+				if time.Now().Add(10 * time.Minute).Before(date) {
+					http.Error(w, "Request date is invalid", http.StatusTooEarly)
+					return
+				}
+				if time.Now().Add(-10 * time.Minute).After(date) {
+					http.Error(w, "Request date is too old", http.StatusRequestTimeout)
+					return
+				}
+			}
 
 			ctx = context.WithValue(ctx, httpSignedKeyID{}, keyID)
 			next.ServeHTTP(w, r.WithContext(ctx))
