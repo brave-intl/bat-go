@@ -81,6 +81,8 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	unencryptedSecret = "secret-token:" + unencryptedSecret
+
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
@@ -114,7 +116,7 @@ func (service *Service) LookupVerifier(ctx context.Context, keyID string) (conte
 	secretKeyStr := *secretKey
 
 	if caveats != nil {
-		_, secretKeyStr, err = cryptography.Attenuate(rootKeyID.String(), "secret-token:"+secretKeyStr, caveats)
+		_, secretKeyStr, err = cryptography.Attenuate(rootKeyID.String(), secretKeyStr, caveats)
 		if err != nil {
 			return nil, nil, err
 		}
