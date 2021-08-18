@@ -159,3 +159,45 @@ func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handl
 		})
 	}
 }
+
+func GetCaveats(ctx context.Context) map[string]string {
+	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
+	if !ok {
+		return nil
+	}
+	return caveats
+}
+
+func GetMerchant(ctx context.Context) (string, error) {
+	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
+	if !ok {
+		return "", errors.New("merchant was missing from context")
+	}
+	return merchant, nil
+}
+
+func (service *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
+	merchant, err := GetMerchant(r.Context())
+	if err != nil {
+		return err
+	}
+	caveats := GetCaveats(r.Context())
+
+	order, err := service.Datastore.GetOrder(orderID)
+	if err != nil {
+		return err
+	}
+
+	if order.MerchantID != merchant {
+		return errors.New("Order merchant does not match authentication")
+	}
+
+	if caveats != nil {
+		if location, ok := caveats["location"]; ok {
+			if order.Location.Valid && order.Location.String != location {
+				return errors.New("Order location does not match authentication")
+			}
+		}
+	}
+	return nil
+}

@@ -289,8 +289,6 @@ func CreateOrder(service *Service) handlers.AppHandler {
 // CancelOrder is the handler for cancelling an order
 func CancelOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		// FIXME verify merchant and caveats from auth context
-
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -301,7 +299,12 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err := service.CancelOrder(*orderID.UUID())
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
+		err = service.CancelOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -564,8 +567,6 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 // DeleteOrderCreds is the handler for deleting order credentials
 func DeleteOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		// FIXME verify merchant and caveats from auth context
-
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -575,10 +576,16 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 				},
 			)
 		}
+
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
 		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
+		err = service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
@@ -754,8 +761,6 @@ type VerifyCredentialRequest struct {
 // VerifyCredential is the handler for verifying subscription credentials
 func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		// FIXME verify merchant and caveats from auth context
-
 		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
@@ -766,6 +771,24 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
+		}
+
+		merchant, err := GetMerchant(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
+		}
+		caveats := GetCaveats(r.Context())
+
+		if req.MerchantID != merchant {
+			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
+		}
+
+		if caveats != nil {
+			if sku, ok := caveats["sku"]; ok {
+				if req.SKU != sku {
+					return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
+				}
+			}
 		}
 
 		if req.Type == "single-use" {
