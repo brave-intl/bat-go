@@ -17,11 +17,11 @@ type mockKeystore struct {
 	httpsignature.Verifier
 }
 
-func (m *mockKeystore) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+func (m *mockKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	if keyID == "primary" {
-		return &m.Verifier, nil
+		return ctx, &m.Verifier, nil
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func TestHTTPSignedOnly(t *testing.T) {

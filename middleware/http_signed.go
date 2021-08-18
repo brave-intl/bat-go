@@ -49,7 +49,7 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 				return
 			}
 
-			keyID, err := verifier.VerifyRequest(r)
+			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
@@ -58,7 +58,7 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 
 			// FIXME verify known headers, e.g. host, date
 
-			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, keyID)
+			ctx = context.WithValue(ctx, httpSignedKeyID{}, keyID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

@@ -25,6 +25,9 @@ var byteEncryptionKey [32]byte
 // What the merchant key length should be
 var keyLength = 24
 
+type caveatsCtxKey struct{}
+type merchantCtxKey struct{}
+
 // Key represents a merchant's keys to validate skus
 type Key struct {
 	ID                 string     `json:"id" db:"id"`
@@ -83,29 +86,29 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	return fmt.Sprintf("%x", encryptedBytes), fmt.Sprintf("%x", nonceBytes), err
 }
 
-// LookupPublicKey returns the merchant key corresponding to the keyID used for verifying requests
-func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+// LookupVerifier returns the merchant key corresponding to the keyID used for verifying requests
+func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	rootKeyIDStr, caveats, err := cryptography.DecodeKeyID(keyID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	rootKeyID, err := uuid.FromString(rootKeyIDStr)
 	if err != nil {
-		return nil, fmt.Errorf("root key id must be a uuid: %v", err)
+		return nil, nil, fmt.Errorf("root key id must be a uuid: %v", err)
 	}
 
 	key, err := service.Datastore.GetKey(rootKeyID, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	secretKey, err := key.GetSecretKey()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if secretKey == nil {
-		return nil, errors.New("missing secret key")
+		return nil, nil, errors.New("missing secret key")
 	}
 
 	secretKeyStr := *secretKey
@@ -113,16 +116,16 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 	if caveats != nil {
 		_, secretKeyStr, err = cryptography.Attenuate(rootKeyID.String(), "secret-token:"+secretKeyStr, caveats)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		// FIXME Add the caveats into the context
+		ctx = context.WithValue(ctx, caveatsCtxKey{}, caveats)
 	}
 
-	// FIXME Add merchant info into the context
+	ctx = context.WithValue(ctx, merchantCtxKey{}, key.Merchant)
 
 	verifier := httpsignature.Verifier(httpsignature.HMACKey(secretKeyStr))
-	return &verifier, nil
+	return ctx, &verifier, nil
 }
 
 // MerchantSignedMiddleware requires that requests are signed by valid merchant keys
@@ -144,7 +147,9 @@ func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handl
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if len(r.Header.Get("Signature")) == 0 {
 				// Assume legacy simple token auth
-				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r)
+
+				ctx := context.WithValue(r.Context(), merchantCtxKey{}, "brave.com")
+				middleware.SimpleTokenAuthorizedOnly(next).ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
