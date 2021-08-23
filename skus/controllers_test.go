@@ -1,6 +1,6 @@
 // +build integration
 
-package payment
+package skus
 
 import (
 	"bytes"
