@@ -31,7 +31,7 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_read_only_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t ./.prom-gowrap.tmpl -o ./promotion/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./promotion/instrumented_read_only_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/payment -i Datastore -t ./.prom-gowrap.tmpl -o ./payment/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/skus -i Datastore -t ./.prom-gowrap.tmpl -o ./skus/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
 	# fix everything called datastore...
@@ -39,7 +39,7 @@ instrumented:
 	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
 	sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./promotion/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./promotion/instrumented_read_only_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/payment_datastore_duration_seconds/g' ./payment/instrumented_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./skus/instrumented_datastore.go
 	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
 	# http clients
@@ -89,9 +89,9 @@ docker-refresh-dev:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
 	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.dev-refresh.yml up -d dev-refresh
 
-docker-refresh-payment:
+docker-refresh-skus:
 	$(eval VAULT_TOKEN = $(shell docker logs grant-vault 2>&1 | grep "Root Token" | tail -1 | cut -d ' ' -f 3 ))
-	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.payment-refresh.yml up -d payment-refresh
+	VAULT_TOKEN=$(VAULT_TOKEN) docker-compose -f docker-compose.yml -f docker-compose.skus-refresh.yml up -d skus-refresh
 
 settlement-tools:
 	$(eval GOOS?=darwin)

@@ -3,7 +3,7 @@ package promotion
 import (
 	"time"
 
-	"github.com/brave-intl/bat-go/payment"
+	"github.com/brave-intl/bat-go/skus"
 	"github.com/brave-intl/bat-go/utils/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -23,7 +23,7 @@ type Order struct {
 	Location              datastore.NullString `json:"location" db:"location"`
 	Status                string               `json:"status" db:"status"`
 	Items                 []OrderItem          `json:"items"`
-	AllowedPaymentMethods payment.Methods      `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	AllowedPaymentMethods skus.Methods         `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
 	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
