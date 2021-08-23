@@ -61,7 +61,6 @@ message Transaction {
     repeated ContextItem metadata = 6;
 }
 
-
 // PrepareRequest - this is the protobuf definition
 // of the payments service prepare request type
 message PrepareRequest {
@@ -88,12 +87,21 @@ message MetaResponse {
     repeated ContextItem context = 3;
 }
 
+// Signature - presentation of signature
+message Signature {
+    bytes signature = 1;
+    uint32 digest_alg = 2;
+    bytes public_key = 3;
+}
+
 // PrepareResponse - this is the protobuf definition
 // of the payments service prepare response type
 message PrepareResponse {
     MetaResponse meta = 1;
     // document reference in qldb
     string document_id = 2;
+    // payments service signature of tx list
+    Signature signature = 3;
 }
 
 // AuthorizeRequest - this is the protobuf definition

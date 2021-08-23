@@ -1,0 +1,42 @@
+version: "3.4"
+
+networks:
+  payments:
+    driver: bridge
+
+services:
+  payments-dev-refresh:
+    container_name: payments-dev-refresh
+    image: golang:1.14
+    ports:
+      - "3343:3343"
+      - "6061:6061"
+    command: "go run main.go serve payments rest"
+    volumes:
+      - ../:/src
+      - ./migrations/payments:/src/migrations
+    working_dir: /src
+    networks:
+      - payments
+    environment:
+      - PPROF_ENABLED
+      - ENV=local
+      - ADDR=:3343
+      - DEBUG=1
+      - DATABASE_URL=postgres://payments:password@postgres/payments?sslmode=disable
+      - DATABASE_MIGRATIONS_URL=file:///src/migrations
+      - MIGRATE=true
+    depends_on:
+      - postgres
+
+  postgres:
+    container_name: payments-postgres
+    image: postgres:10.4
+    ports:
+      - "3402:5432"
+    environment:
+      - "POSTGRES_USER=payments"
+      - "POSTGRES_PASSWORD=password"
+    networks:
+      - payments
+    command: ["postgres", "-c", "log_statement=all"]

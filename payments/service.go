@@ -9,7 +9,9 @@ import (
 )
 
 // Service - Implementation of the PaymentsGRPCServerService from bat-go/payments/pb
-type Service struct{}
+type Service struct {
+	pb.UnimplementedPaymentsGRPCServiceServer
+}
 
 // Prepare - implement payments GRPC service
 func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.PrepareResponse, error) {
