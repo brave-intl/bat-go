@@ -8,7 +8,7 @@ ifdef TEST_RUN
 	TEST_FLAGS = --tags=$(TEST_TAGS) $(TEST_PKG) --run=$(TEST_RUN)
 endif
 
-.PHONY: all buildcmd docker test create-json-schema lint clean
+.PHONY: all buildcmd docker test create-json-schema lint clean protos
 all: test create-json-schema buildcmd
 
 .DEFAULT: buildcmd
@@ -148,3 +148,7 @@ format-lint:
 	make format && make lint
 lint:
 	golangci-lint run -E gofmt -E golint --exclude-use-default=false
+protos:
+	cd protos && \
+	protoc --go_out=../payments/pb --go_opt=paths=source_relative --go-grpc_out=../payments/pb --go-grpc_opt=paths=source_relative payments-api.proto && \
+	cd ..

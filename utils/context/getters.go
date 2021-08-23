@@ -5,8 +5,23 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go/service/qldbsession"
 	"github.com/rs/zerolog"
 )
+
+// GetQLDBSessionFromContext - get qldb session from the context
+func GetQLDBSessionFromContext(ctx context.Context) (*qldbsession.QLDBSession, error) {
+	session := ctx.Value(QLDBSessionCTXKey)
+	if session == nil {
+		// value not on context
+		return nil, ErrNotInContext
+	}
+	if s, ok := session.(*qldbsession.QLDBSession); ok {
+		return s, nil
+	}
+	// value not a string
+	return nil, ErrValueWrongType
+}
 
 //GetByteSliceFromContext - given a CTXKey return the string value from the context if it exists
 func GetByteSliceFromContext(ctx context.Context, key CTXKey) ([]byte, error) {

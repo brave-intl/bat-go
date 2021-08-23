@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+option go_package = "github.com/brave-intl/bat-go/payments/pb";
+
+import "google/protobuf/any.proto";
+
+// PaymentsGRPCService - the GRPC service defining payments
+service PaymentsGRPCService {
+    // prepare - kick off a prepare, cement these transactions
+    // in the qldb ledger as initialized
+    rpc Prepare (PrepareRequest) returns (PrepareResponse){}
+    // authorize - a human, or authorized entity, can say, yes
+    // we are okay to submit these transactions
+    rpc Authorize (AuthorizeRequest) returns (AuthorizeResponse){}
+    // submit - kick off the submission of the signing/submits
+    rpc Submit (SubmitRequest) returns (SubmitResponse){}
+}
+
+// State - the state of the "document"
+enum State {
+    PREPARED = 0;
+    INITIALIZED = 1;
+    WAITING_AUTH = 2;
+    IN_PROGRESS = 3;
+    COMPLETED = 4;
+}
+
+// Custodian - enumeration of custodians
+enum Custodian {
+    UPHOLD = 0;
+    GEMINI = 1;
+    BITFLYER = 2;
+    BRAVE = 3;
+}
+
+// ContextItem - a generic key value pair
+message ContextItem {
+    string Key = 1;
+    google.protobuf.Any Value = 2;
+}
+
+// BatchMeta - metadata about the batch in question,
+// for use in pagination for requests and responses
+// protobuf is not suited for batches which will be more
+// than a couple MB... Prepares should be chunked.
+message BatchMeta {
+    string batch_id = 1;
+    int32 total_size = 2;
+    int32 page_start_idx = 3;
+    int32 page_end_idx = 4;
+    int32 page_count = 5;
+}
+
+// Transactions - structure of a transaction
+message Transaction {
+    string transaction_id = 1;
+    string destination = 2;
+    string origin = 3;
+    string amount = 4;
+    string currency = 5;
+    repeated ContextItem metadata = 6;
+}
+
+
+// PrepareRequest - this is the protobuf definition
+// of the payments service prepare request type
+message PrepareRequest {
+    State state = 1;
+    Custodian custodian = 2;
+    // batch size, batch count, batch id
+    // all help figure out if this is a partial
+    // message or not
+    BatchMeta batch_meta = 3;
+    // paged transaction list
+    repeated Transaction batch_txs = 4;
+}
+
+// MetaResponse - this is the protobuf definition
+// of the payments service meta response type
+message MetaResponse {
+    // Status - enumeration of the request's success/failure
+    enum Status {
+        SUCCESS = 0;
+        FAILURE = 1;
+    }
+    Status status = 1;
+    string msg = 2;
+    repeated ContextItem context = 3;
+}
+
+// PrepareResponse - this is the protobuf definition
+// of the payments service prepare response type
+message PrepareResponse {
+    MetaResponse meta = 1;
+    // document reference in qldb
+    string document_id = 2;
+}
+
+// AuthorizeRequest - this is the protobuf definition
+// of the payments service submit request type
+message AuthorizeRequest {
+    string document_id = 1;
+}
+
+// AuthorizeResponse - this is the protobuf definition
+// of the payments service prepare response type
+message AuthorizeResponse {
+    MetaResponse meta = 1;
+}
+
+// SubmitRequest - this is the protobuf definition
+// of the payments service submit request type
+message SubmitRequest {
+    string document_id = 1;
+}
+
+// SubmitResponse - this is the protobuf definition
+// of the payments service prepare response type
+message SubmitResponse {
+    MetaResponse meta = 1;
+}

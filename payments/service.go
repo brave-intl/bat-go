@@ -87,6 +87,7 @@ func (s *Service) Submit(ctx context.Context, sm *pb.SubmitRequest) (*pb.SubmitR
 	}
 
 	// TODO: validate the authentications meet business requirements
+	fmt.Printf("auths: %+v\ntxs: %+v\n", auths, txs)
 
 	// record the state change
 	err = RecordStateChange(ctx, &documentID, pb.State_IN_PROGRESS)
