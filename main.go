@@ -8,6 +8,8 @@ import (
 	_ "github.com/brave-intl/bat-go/cmd/rewards"
 	// pull in payments module. setup code is in init
 	_ "github.com/brave-intl/bat-go/cmd/payments"
+	// pull in cli tooling module. setup code is in init
+	_ "github.com/brave-intl/bat-go/cmd/cli"
 	// pull in settlement module. setup code is in init
 	_ "github.com/brave-intl/bat-go/cmd/settlement"
 	// pull in vault module. setup code is in init

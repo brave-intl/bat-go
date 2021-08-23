@@ -1,4 +1,4 @@
-package rewards
+package payments
 
 import (
 	"net"
@@ -23,8 +23,10 @@ func GRPCRun(command *cobra.Command, args []string) {
 
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to setup logger for payments")
+		panic("failed to setup logger for payments")
 	}
+
+	logger.Debug().Msg("setting up payments service")
 
 	// setup pprof if enabled
 
@@ -33,12 +35,13 @@ func GRPCRun(command *cobra.Command, args []string) {
 		// pprof attaches routes to default serve mux
 		// host:6061/debug/pprof/
 		go func() {
+			logger.Info().Str("addr", ":6061").Msg("serving grpc service pprof port")
 			logger.Error().Err(http.ListenAndServe(":6061", http.DefaultServeMux))
 		}()
 	}
 
-	addr := viper.GetString("addr")
-	if addr == "" {
+	addr, ok := ctx.Value(appctx.SrvAddrCTXKey).(string)
+	if !ok || addr == "" {
 		logger.Fatal().Err(err).Msg("failed to get server address for payments")
 	}
 
@@ -56,7 +59,7 @@ func GRPCRun(command *cobra.Command, args []string) {
 
 	paymentsPB.RegisterPaymentsGRPCServiceServer(gSrv, pSrv)
 
-	logger.Debug().Str("addr", addr).Msg("serving grpc service")
+	logger.Info().Str("addr", addr).Msg("serving grpc service")
 	logger.Fatal().Err(gSrv.Serve(lis))
 
 	// TODO: implement gRPC service

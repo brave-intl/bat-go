@@ -71,7 +71,7 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	)
 
 	// use context to get debugging flag first, then fall back to env variable
-	if debug, ok = ctx.Value("debug_logging").(bool); !ok {
+	if debug, ok = ctx.Value(appctx.DebugLoggingCTXKey).(bool); !ok {
 		if os.Getenv("DEBUG") == "" {
 			// false, but ParseBool doesn't understand empty string
 			debug = false

@@ -101,8 +101,10 @@ const (
 
 	// QLDBSessionCTXKey - the key to grab the qldb session
 	QLDBSessionCTXKey CTXKey = "qldb_session"
-	// SrvAddr - address to listen on for services
-	SrvAddr CTXKey = "addr"
+	// SrvAddrCTXKey - address to listen on for services
+	SrvAddrCTXKey CTXKey = "addr"
+	// PaymentsServiceCTXKey - address to listen on for services
+	PaymentsServiceCTXKey CTXKey = "payments-service"
 )
 
 var (

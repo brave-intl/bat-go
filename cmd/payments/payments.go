@@ -1,4 +1,4 @@
-package rewards
+package payments
 
 import (
 
@@ -19,12 +19,6 @@ func init() {
 	cmd.ServeCmd.AddCommand(paymentsCmd)
 
 	// setup the flags
-
-	// payments service addr - defaults to :8080
-	paymentsCmd.PersistentFlags().String("addr", ":8080",
-		"the address for the server to listen on")
-	cmd.Must(viper.BindPFlag("addr", paymentsCmd.PersistentFlags().Lookup("addr")))
-	cmd.Must(viper.BindEnv("addr", "ADDR"))
 
 	// batch-sign-keypair - defaults to USD
 	paymentsCmd.PersistentFlags().String("batch-sign-keypair", "",

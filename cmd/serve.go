@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
@@ -29,10 +31,30 @@ func init() {
 	Must(viper.BindEnv("address", "ADDR"))
 }
 
+var serveCtxAdded = struct{}{}
+
 // ServeCmd the serve command
 var ServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "entrypoint to serve a micro-service",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+		// populate context if not set
+		if added, ok := ctx.Value(serveCtxAdded).(bool); !ok && !added {
+			ctx = context.WithValue(ctx, serveCtxAdded, true)
+			ctx = context.WithValue(ctx, appctx.SrvAddrCTXKey, viper.GetString("address"))
+			ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, viper.GetBool("debug"))
+
+			// setup logger for application
+			ctx, logger := logging.SetupLogger(ctx)
+			logger.Info().Msg("logger setup")
+
+			_, err := cmd.ExecuteContextC(ctx)
+			if err != nil {
+				panic(fmt.Sprintf("err: ", err))
+			}
+		}
+	},
 }
 
 // SetupRouter sets up a router
