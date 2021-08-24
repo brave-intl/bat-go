@@ -5,9 +5,23 @@ set -o nounset \
     -o verbose \
     -o xtrace
 
+
+
 # Generate CA key
 openssl req -new -x509 -keyout snakeoil-ca-1.key -out snakeoil-ca-1.crt -days 365 -subj '/CN=ca1.test.confluent.io/OU=TEST/O=CONFLUENT/L=PaloAlto/S=Ca/C=US' -passin pass:confluent -passout pass:confluent
 # openssl req -new -x509 -keyout snakeoil-ca-2.key -out snakeoil-ca-2.crt -days 365 -subj '/CN=ca2.test.confluent.io/OU=TEST/O=CONFLUENT/L=PaloAlto/S=Ca/C=US' -passin pass:confluent -passout pass:confluent
+
+
+# client/server certificates for payments grpc service
+openssl genrsa -out payments.client.key 1024
+openssl req -key payments.client.key -new -out payments.client.req -subj '/CN=payments.test/OU=TEST/O=Payments/L=PaloAlto/S=Ca/C=US'
+openssl x509 -req -CA snakeoil-ca-1.crt -CAkey snakeoil-ca-1.key -in payments.client.req -out payments-client-ca1-signed.pem -days 9999 -CAcreateserial -passin "pass:confluent"
+
+openssl genrsa -out payments.server.key 1024
+openssl req -key payments.server.key -new -out payments.server.req -subj '/CN=payments-server/OU=TEST/O=Payments/L=PaloAlto/S=Ca/C=US'
+openssl x509 -req -CA snakeoil-ca-1.crt -CAkey snakeoil-ca-1.key -in payments.server.req -out payments-server-ca1-signed.pem -days 9999 -CAcreateserial -passin "pass:confluent"
+
+
 
 # # Kafkacat
 # openssl genrsa -des3 -passout "pass:confluent" -out kafkacat.client.key 1024

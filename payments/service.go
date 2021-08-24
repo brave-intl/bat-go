@@ -5,7 +5,10 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/payments/pb"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Service - Implementation of the PaymentsGRPCServerService from bat-go/payments/pb
@@ -15,13 +18,24 @@ type Service struct {
 
 // Prepare - implement payments GRPC service
 func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.PrepareResponse, error) {
+	logger := logging.Logger(ctx, "payments.prepare")
+
+	for _, tx := range pr.GetBatchTxs() {
+		logger.Info().
+			Str("dest", tx.Destination).
+			Str("orig", tx.Origin).
+			Str("amnt", tx.Amount).
+			Msg("transaction recieved")
+	}
+
 	docID, err := InitializeBatchedTXs(ctx, pr.Custodian, pr.BatchTxs)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize batched txs")
 		return &pb.PrepareResponse{
 			Meta: &pb.MetaResponse{
 				Status: pb.MetaResponse_FAILURE,
 			},
-		}, fmt.Errorf("error initializing batched txs: %w", err)
+		}, status.Errorf(codes.Unimplemented, "error initializing batched txs: %s", err.Error())
 	}
 	return &pb.PrepareResponse{
 		Meta: &pb.MetaResponse{

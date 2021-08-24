@@ -20,11 +20,23 @@ func init() {
 
 	// setup the flags
 
-	// batch-sign-keypair - defaults to USD
+	// --batch-sign-keypair - keypair used for signing
 	paymentsCmd.PersistentFlags().String("batch-sign-keypair", "",
 		"the key pair used to sign batches")
 	cmd.Must(viper.BindPFlag("batch-sign-keypair", paymentsCmd.PersistentFlags().Lookup("batch-sign-keypair")))
 	cmd.Must(viper.BindEnv("batch-sign-keypair", "BATCH_SIGN_KEYPAIR"))
+
+	// --cert - file location of the certificate
+	paymentsCmd.PersistentFlags().String("cert", "",
+		"the file location of the cert")
+	cmd.Must(viper.BindPFlag("cert", paymentsCmd.PersistentFlags().Lookup("cert")))
+	cmd.Must(viper.BindEnv("cert", "CERT"))
+
+	// --cert-key - file location of the certificate key
+	paymentsCmd.PersistentFlags().String("cert-key", "",
+		"the file location of the cert key")
+	cmd.Must(viper.BindPFlag("cert-key", paymentsCmd.PersistentFlags().Lookup("cert-key")))
+	cmd.Must(viper.BindEnv("cert-key", "CERT_KEY"))
 
 }
 

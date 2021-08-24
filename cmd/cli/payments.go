@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/brave-intl/bat-go/payments/pb"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func prepareCmd(ctx context.Context) *cobra.Command {
@@ -45,9 +47,13 @@ func submitCmd(ctx context.Context) *cobra.Command {
 func grpcConnect(ctx context.Context) (grpc.ClientConnInterface, error) {
 	// get the server address
 	addr, ok := ctx.Value(appctx.PaymentsServiceCTXKey).(string)
+	// get the server address
+	caCert := ctx.Value(appctx.CACertCTXKey).(string)
 
 	logger := logging.Logger(ctx, "grpcConnect").With().
-		Str("payments-service", addr).Logger()
+		Str("payments-service", addr).
+		Str("ca-cert", caCert).
+		Logger()
 
 	if !ok || addr == "" {
 		logger.Error().Msg("failed to get the payments service address")
@@ -56,6 +62,18 @@ func grpcConnect(ctx context.Context) (grpc.ClientConnInterface, error) {
 
 	// dial
 	var opts []grpc.DialOption
+
+	if caCert != "" {
+		creds, err := credentials.NewClientTLSFromFile(caCert, addr)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create client tls")
+			return nil, fmt.Errorf("failed to create client tls: %w", err)
+		}
+		opts = append(opts, grpc.WithTransportCredentials(creds), grpc.WithBlock())
+	} else {
+		opts = append(opts, grpc.WithInsecure(), grpc.WithBlock())
+	}
+
 	conn, err := grpc.Dial(addr, opts...)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to dial payments service address")
@@ -66,11 +84,8 @@ func grpcConnect(ctx context.Context) (grpc.ClientConnInterface, error) {
 }
 
 func prepare(ctx context.Context, command *cobra.Command, args []string) {
-	// get the server address
-	addr := ctx.Value(appctx.PaymentsServiceCTXKey).(string)
 	// setup logger
-	logger := logging.Logger(ctx, "prepare").With().
-		Str("payments-service", addr).Logger()
+	logger := logging.Logger(ctx, "prepare")
 
 	// connect
 	logger.Info().Msg("connecting to payments service")
@@ -80,12 +95,33 @@ func prepare(ctx context.Context, command *cobra.Command, args []string) {
 		return
 	}
 
+	// get the custodian value from input
+	custodian, ok := ctx.Value(appctx.CustodianCTXKey).(string)
+	if !ok {
+		logger.Fatal().Msg("no custodian specified")
+	}
+
+	// get the payout file location
+	f, ok := ctx.Value(appctx.PayoutFileLocationCTXKey).(string)
+	if !ok {
+		logger.Fatal().Msg("no payout file location specified")
+	}
+
+	// parse the payout report structure
+	txs, err := parsePayoutFile(f)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("unable to parse the payout file")
+	}
+
 	// create the client
 	client := pb.NewPaymentsGRPCServiceClient(conn)
 
 	// perform api call
-	// TODO: fill this out from input
-	resp, err := client.Prepare(ctx, &pb.PrepareRequest{})
+	resp, err := client.Prepare(ctx, &pb.PrepareRequest{
+		State:     pb.State_PREPARED,
+		Custodian: pb.Custodian(pb.Custodian_value[strings.ToUpper(custodian)]),
+		BatchTxs:  txs,
+	})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to make connection to payments")
 		return

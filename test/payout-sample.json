@@ -1,0 +1,20 @@
+[
+    {
+        "destination":"2adebc1e-aa13-4850-85fe-6721a04eee30",
+        "origin":"6770fa6f-1c2a-4994-9ae5-d5474e20a4d9",
+        "amount":"1.0",
+        "currency":"BAT"
+    },
+    {
+        "destination":"2adebc1e-aa13-4850-85fe-6721a04eee31",
+        "origin":"6770fa6f-1c2a-4994-9ae5-d5474e20a4da",
+        "amount":"1.0",
+        "currency":"BAT"
+    },
+    {
+        "destination":"2adebc1e-aa13-4850-85fe-6721a04eee32",
+        "origin":"6770fa6f-1c2a-4994-9ae5-d5474e20a4db",
+        "amount":"1.0",
+        "currency":"BAT"
+    }
+]

@@ -104,7 +104,13 @@ const (
 	// SrvAddrCTXKey - address to listen on for services
 	SrvAddrCTXKey CTXKey = "addr"
 	// PaymentsServiceCTXKey - address to listen on for services
-	PaymentsServiceCTXKey CTXKey = "payments-service"
+	PaymentsServiceCTXKey CTXKey = "payments_service"
+	// CACertCTXKey - the file location of the ca cert
+	CACertCTXKey CTXKey = "ca_cert"
+	// PayoutFileLocationCTXKey - the file location of the ca cert
+	PayoutFileLocationCTXKey CTXKey = "payout_file_location"
+	// CustodianCTXKey - the custodian
+	CustodianCTXKey CTXKey = "custodian"
 )
 
 var (

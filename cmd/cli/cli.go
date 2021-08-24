@@ -12,11 +12,29 @@ import (
 
 func init() {
 
-	// pprof-enabled - defaults to ""
+	// --payments-service - the dial address of the payments grpc service
 	paymentsCliCmd.PersistentFlags().String("payments-service", "",
 		"the location of the payments service")
 	cmd.Must(viper.BindPFlag("payments-service", paymentsCliCmd.PersistentFlags().Lookup("payments-service")))
 	cmd.Must(viper.BindEnv("payments-service", "PAYMENTS_SERVICE"))
+
+	// --ca-cert - the ca certificate file location
+	paymentsCliCmd.PersistentFlags().String("ca-cert", "",
+		"the location of the ca certificate")
+	cmd.Must(viper.BindPFlag("ca-cert", paymentsCliCmd.PersistentFlags().Lookup("ca-cert")))
+	cmd.Must(viper.BindEnv("ca-cert", "CA_CERT"))
+
+	// --custodian - the payout custodian
+	paymentsCliCmd.PersistentFlags().String("custodian", "",
+		"the custodian provider")
+	cmd.Must(viper.BindPFlag("custodian", paymentsCliCmd.PersistentFlags().Lookup("custodian")))
+	cmd.Must(viper.BindEnv("custodian", "CUSTODIAN"))
+
+	// --payout-file - the payout transaction list file (json)
+	paymentsCliCmd.PersistentFlags().String("payout-file", "",
+		"the file of all of the transactions for the batch")
+	cmd.Must(viper.BindPFlag("payout-file", paymentsCliCmd.PersistentFlags().Lookup("payout-file")))
+	cmd.Must(viper.BindEnv("payout-file", "PAYOUT_FILE"))
 
 	// add this command as a serve subcommand
 	cmd.RootCmd.AddCommand(cliCmd)
@@ -35,17 +53,23 @@ var (
 			// build out cli context
 			// debug flag
 			ctx := context.WithValue(context.Background(), appctx.DebugLoggingCTXKey, viper.GetBool("debug"))
-			ctx = context.WithValue(context.Background(), appctx.PaymentsServiceCTXKey, viper.GetString("payments-service"))
+			ctx = context.WithValue(ctx, appctx.PaymentsServiceCTXKey, viper.GetString("payments-service"))
+			ctx = context.WithValue(ctx, appctx.CACertCTXKey, viper.GetString("ca-cert"))
+			ctx = context.WithValue(ctx, appctx.CustodianCTXKey, viper.GetString("custodian"))
+			ctx = context.WithValue(ctx, appctx.PayoutFileLocationCTXKey, viper.GetString("payout-file"))
+
 			// setup logger
 			ctx, logger := logging.SetupLogger(ctx)
 			logger.Info().
 				Str("debug", viper.GetString("debug")).
 				Str("payments_service", viper.GetString("payments-service")).
 				Msg("logger setup")
+
 			// add in subcommands (context enabled)
 			cmd.AddCommand(prepareCmd(ctx))
 			cmd.AddCommand(authorizeCmd(ctx))
 			cmd.AddCommand(submitCmd(ctx))
+
 			// validate args
 			found := false
 			if len(args) < 1 {

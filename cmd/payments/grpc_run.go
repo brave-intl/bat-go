@@ -55,13 +55,19 @@ func GRPCRun(command *cobra.Command, args []string) {
 
 	// setup grpc service
 	var opts []grpc.ServerOption
+	/*
+		creds, err := credentials.NewServerTLSFromFile(
+			viper.GetString("cert"), viper.GetString("cert-key"))
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to set credentials for server")
+		}
+		opts = []grpc.ServerOption{grpc.Creds(creds)}
+	*/
+
 	gSrv := grpc.NewServer(opts...)
 
 	paymentsPB.RegisterPaymentsGRPCServiceServer(gSrv, pSrv)
 
 	logger.Info().Str("addr", addr).Msg("serving grpc service")
 	logger.Fatal().Err(gSrv.Serve(lis))
-
-	// TODO: implement gRPC service
-	logger.Fatal().Msg("gRPC server is not implemented")
 }
