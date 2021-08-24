@@ -288,12 +288,10 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 
 		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
 			Body            interface{}
-			RequestHeaders  interface{}
 			ResponseHeaders interface{}
 		}{
 			// put response body/headers in the err state data
 			Body:            rb,
-			RequestHeaders:  req.Header,
 			ResponseHeaders: resp.Header,
 		})
 	}
