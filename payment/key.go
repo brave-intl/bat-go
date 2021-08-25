@@ -18,6 +18,9 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// SecretTokenPrefix all generated merchant secret keys will be contain
+const SecretTokenPrefix = "secret-token:"
+
 // EncryptionKey for encrypting secrets
 var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 var byteEncryptionKey [32]byte
@@ -81,7 +84,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	unencryptedSecret = "secret-token:" + unencryptedSecret
+	unencryptedSecret = SecretTokenPrefix + unencryptedSecret
 
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
@@ -160,6 +163,7 @@ func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handl
 	}
 }
 
+// GetCaveats returns any authorized caveats that have been stored in the context
 func GetCaveats(ctx context.Context) map[string]string {
 	caveats, ok := ctx.Value(caveatsCtxKey{}).(map[string]string)
 	if !ok {
@@ -168,6 +172,7 @@ func GetCaveats(ctx context.Context) map[string]string {
 	return caveats
 }
 
+// GetMerchant returns any authorized merchant that has been stored in the context
 func GetMerchant(ctx context.Context) (string, error) {
 	merchant, ok := ctx.Value(merchantCtxKey{}).(string)
 	if !ok {
@@ -176,6 +181,8 @@ func GetMerchant(ctx context.Context) (string, error) {
 	return merchant, nil
 }
 
+// ValidateOrderMerchantAndCaveats checks that the current authentication of the request has
+// permissions to this order by cross-checking the merchant and caveats in context
 func (service *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
 	merchant, err := GetMerchant(r.Context())
 	if err != nil {
@@ -197,6 +204,10 @@ func (service *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID
 			if order.Location.Valid && order.Location.String != location {
 				return errors.New("Order location does not match authentication")
 			}
+		}
+
+		if _, ok := caveats["sku"]; ok {
+			return errors.New("SKU caveat is not supported on order endpoints")
 		}
 	}
 	return nil

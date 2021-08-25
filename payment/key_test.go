@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,12 +46,13 @@ func TestGenerateSecret(t *testing.T) {
 	if err != nil {
 		t.Error("error in decrypt secret: ", err)
 	}
+	bareSecretKey := strings.TrimPrefix(secretKey, SecretTokenPrefix)
 	// secretKey is random, so i guess just make sure it is base64?
-	k, err := base64.URLEncoding.DecodeString(secretKey)
+	k, err := base64.URLEncoding.DecodeString(bareSecretKey)
 	if err != nil {
 		t.Error("error decoding generated secret: ", err)
 	}
-	if len(secretKey) != 32 {
+	if len(bareSecretKey) != 32 {
 		t.Error("Secret key does not have correct length", err)
 	}
 	if len(k) < 0 {
