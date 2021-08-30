@@ -14,7 +14,11 @@ func parsePayoutFile(f string) ([]*pb.Transaction, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open payout file: %w", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			panic(fmt.Sprintf("failed to close file: %s", err.Error()))
+		}
+	}()
 
 	var txs = []*pb.Transaction{}
 	err = json.NewDecoder(fd).Decode(&txs)

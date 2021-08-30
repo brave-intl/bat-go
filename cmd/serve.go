@@ -51,7 +51,7 @@ var ServeCmd = &cobra.Command{
 
 			_, err := cmd.ExecuteContextC(ctx)
 			if err != nil {
-				panic(fmt.Sprintf("err: ", err))
+				panic(fmt.Sprintf("err: %s", err.Error()))
 			}
 		}
 	},

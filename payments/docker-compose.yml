@@ -9,9 +9,9 @@ services:
     container_name: payments-dev-refresh
     image: golang:1.14
     ports:
-      - "3343:3343"
+      - "3344:3344"
       - "6061:6061"
-    command: "go run main.go serve payments rest"
+    command: "go run main.go serve payments grpc"
     volumes:
       - ../:/src
       - ./migrations/payments:/src/migrations
@@ -21,10 +21,10 @@ services:
     environment:
       - PPROF_ENABLED
       - ENV=local
-      - ADDR=:3343
+      - ADDR=:3344
       - DEBUG=1
       - DATABASE_URL=postgres://payments:password@postgres/payments?sslmode=disable
-      - DATABASE_MIGRATIONS_URL=file:///src/migrations
+      - DATABASE_MIGRATIONS_URL=file:///src/migrations/payments
       - MIGRATE=true
     depends_on:
       - postgres

@@ -2,9 +2,11 @@ package payments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/payments/pb"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -21,22 +23,30 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 	logger := logging.Logger(ctx, "payments.prepare")
 
 	for _, tx := range pr.GetBatchTxs() {
-		logger.Info().
+		logger.Debug().
 			Str("dest", tx.Destination).
 			Str("orig", tx.Origin).
 			Str("amnt", tx.Amount).
-			Msg("transaction recieved")
+			Msg("transaction being prepared")
 	}
 
-	docID, err := InitializeBatchedTXs(ctx, pr.Custodian, pr.BatchTxs)
+	docID, err := PrepareBatchedTXs(ctx, pr.Custodian, pr.BatchTxs)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize batched txs")
+		if errors.Is(err, errorutils.ErrNotImplemented) {
+			return &pb.PrepareResponse{
+				Meta: &pb.MetaResponse{
+					Status: pb.MetaResponse_FAILURE,
+				},
+			}, status.Errorf(codes.Unimplemented, "error initializing batched txs: %s", err.Error())
+		}
 		return &pb.PrepareResponse{
 			Meta: &pb.MetaResponse{
 				Status: pb.MetaResponse_FAILURE,
 			},
-		}, status.Errorf(codes.Unimplemented, "error initializing batched txs: %s", err.Error())
+		}, status.Errorf(codes.Unknown, "error initializing batched txs: %s", err.Error())
 	}
+
 	return &pb.PrepareResponse{
 		Meta: &pb.MetaResponse{
 			Status: pb.MetaResponse_SUCCESS,

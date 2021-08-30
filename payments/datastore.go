@@ -2,11 +2,45 @@ package payments
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/brave-intl/bat-go/payments/pb"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
+
+var (
+	// PreparedStatus - status for prepared state
+	PreparedStatus = "prepared"
+)
+
+func bulkInsert(query string, params [][]interface{}) (string, []interface{}, error) {
+	if query == "" {
+		return "", nil, fmt.Errorf("bulkInsert failed, needs a query to execute")
+	}
+	if len(params) < 1 {
+		return "", nil, fmt.Errorf("bulkInsert failed, needs more than one set of params")
+	}
+
+	p := []interface{}{}
+	for i := 0; i < len(params); i++ {
+		// put all our params together
+		p = append(p, params[i]...)
+
+		numFields := len(params[i]) // the number of fields you are inserting
+		n := i * numFields
+
+		query += `(`
+		for j := 0; j < numFields; j++ {
+			query += `$` + strconv.Itoa(n+j+1) + `,`
+		}
+		query = query[:len(query)-1] + `),`
+	}
+	query = query[:len(query)-1] // remove the trailing comma
+	return query, p, nil
+}
 
 // Authorization - representation of an authorization in QLDB
 type Authorization struct {
@@ -17,9 +51,54 @@ type Authorization struct {
 	Meta      map[string]string // extra context
 }
 
-// InitializeBatchedTXs - record new transactions in QLDB in initialized state.
+// transactionData - db repr for pb.Transaction
+/*
+type transactionData struct {
+	BatchID            uuid.UUID       `db:"batch_id"`
+	TransactionID      uuid.UUID       `db:"tx_id"`
+	Destination        *string         `db:"destination"`
+	Origin             *string         `db:"origin"`
+	Currency           *string         `db:"currency"`
+	ApproximateValue   decimal.Decimal `db:"approximate_value"`
+	CreatedAt          *time.Time      `db:"created_at"`
+	UpdatedAt          *time.Time      `db:"updated_at"`
+	Status             *string         `db:"status"`
+	SignedTXCiphertext []byte          `db:"signed_tx_ciphertext"`
+}
+*/
+
+// PrepareBatchedTXs - record new transactions in QLDB in initialized state.
 // Returns Document ID from QLDB
-func InitializeBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
+func PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
+	// insert all txs into postgres for this batch
+	batchID := uuid.New()
+
+	txData := [][]interface{}{}
+	for i, _ := range txs {
+		//convert amount to decimal
+		amount, err := decimal.NewFromString(txs[i].Amount)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert amount to decimal: %w", err)
+		}
+		// append transaction data
+		txData = append(txData, []interface{}{
+			batchID, &txs[i].Destination, &txs[i].Origin, &txs[i].Currency, amount, &PreparedStatus,
+		})
+	}
+
+	q := `
+		insert into transactions
+			(batch_id, destination, origin, approximate_value, status)
+		values `
+
+	query, values, err := bulkInsert(q, txData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create insert query: %w", err)
+	}
+
+	fmt.Println("q: ", query)
+	fmt.Printf("v: %+v\n", values)
+
 	// get the qldb session from context
 
 	// perform insert of all transactions provided
