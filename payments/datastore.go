@@ -74,7 +74,7 @@ func PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Tr
 	batchID := uuid.New()
 
 	txData := [][]interface{}{}
-	for i, _ := range txs {
+	for i := range txs {
 		//convert amount to decimal
 		amount, err := decimal.NewFromString(txs[i].Amount)
 		if err != nil {
