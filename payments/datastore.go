@@ -22,7 +22,11 @@ var (
 type Datastore interface {
 	grantserver.Datastore
 	// PrepareBatchedTXs - prepare a set of transactions
-	PrepareBatchedTXs(context.Context, pb.Custodian, []*pb.Transaction) (*uuid.UUID, error)
+	PrepareBatchedTXs(context.Context, pb.Custodian, []*pb.Transaction) (*string, error)
+	// RecordAuthorization - record authorization
+	RecordAuthorization(context.Context, *Authorization, string) error
+	// SubmitBatchedTXs - submit the batch
+	SubmitBatchedTXs(context.Context, string) error
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -35,7 +39,7 @@ func NewPostgres(databaseURL string, performMigration bool, migrationTrack strin
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
-			base: &Postgres{*pg}, instanceName: "skus_datastore",
+			base: &Postgres{*pg}, instanceName: "payments_datastore",
 		}, err
 	}
 	return nil, err
@@ -92,9 +96,19 @@ type transactionData struct {
 }
 */
 
+// SubmitBatchedTXs - Submit the batched transaction
+func (pg *Postgres) SubmitBatchedTXs(ctx context.Context, documentID string) error {
+	return errorutils.ErrNotImplemented
+}
+
+// RecordAuthorization - record a successful authorization on a prepared batch
+func (pg *Postgres) RecordAuthorization(ctx context.Context, auth *Authorization, docID string) error {
+	return errorutils.ErrNotImplemented
+}
+
 // PrepareBatchedTXs - record new transactions in QLDB in initialized state.
 // Returns Document ID from QLDB
-func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
+func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*string, error) {
 	// insert all txs into postgres for this batch
 	batchID := uuid.New()
 
@@ -142,7 +156,7 @@ func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodia
 
 	// get the qldb session from context
 	// TODO: get this from qldb
-	documentID := uuid.New()
+	documentID := uuid.New().String()
 
 	// commit transaction
 	if err := tx.Commit(); err != nil {
@@ -162,11 +176,11 @@ func RecordAuthorization(ctx context.Context, auth *Authorization, docID *uuid.U
 
 // RetrieveTransactionsByID - Record an authorization for a qldb document.  This will be used
 // in submission to pull the transactions and authorizations from the qldb document
-func RetrieveTransactionsByID(ctx context.Context, docID *uuid.UUID) ([]Authorization, []*pb.Transaction, error) {
+func RetrieveTransactionsByID(ctx context.Context, docID string) ([]Authorization, []*pb.Transaction, error) {
 	return nil, nil, errorutils.ErrNotImplemented
 }
 
 // RecordStateChange - Record the state change for this particular document in qldb
-func RecordStateChange(ctx context.Context, docID *uuid.UUID, state pb.State) error {
+func RecordStateChange(ctx context.Context, docID string, state pb.State) error {
 	return errorutils.ErrNotImplemented
 }

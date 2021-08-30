@@ -9,7 +9,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -60,12 +59,19 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 			},
 		}, status.Errorf(codes.Unknown, "error initializing batched txs: %s", err.Error())
 	}
+	if docID == nil {
+		return &pb.PrepareResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+			},
+		}, status.Errorf(codes.Unknown, "error initializing batched txs: %s", err.Error())
+	}
 
 	return &pb.PrepareResponse{
 		Meta: &pb.MetaResponse{
 			Status: pb.MetaResponse_SUCCESS,
 		},
-		DocumentId: docID.String(),
+		DocumentId: *docID,
 	}, nil
 }
 
@@ -74,26 +80,40 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 	// TODO: perform authorization validation here, create an authorization
 	auth := new(Authorization)
 
-	// after authorization validation:
-	documentID, err := uuid.Parse(ar.DocumentId)
-	if err != nil {
-		pbErr := fmt.Errorf("failed to parse document id: %w", err)
+	logger := logging.Logger(ctx, "payments.authorize")
+
+	// get database from context
+	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
+	if !ok {
+		logger.Error().Msg("failed to get the datastore from the context")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
 				Status: pb.MetaResponse_FAILURE,
-				Msg:    pbErr.Error(),
 			},
-		}, pbErr
+		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
 	}
 
-	err = RecordAuthorization(ctx, auth, &documentID)
-	if err != nil {
-		pbErr := fmt.Errorf("failed to record authorization: %w", err)
+	// after authorization validation:
+	if ar.DocumentId == "" {
+		err := fmt.Errorf("document id cannot be empty")
+		logger.Warn().Err(err).Msg("failed to parse document id")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
 				Status: pb.MetaResponse_FAILURE,
-				Msg:    pbErr.Error(),
-			}}, pbErr
+				Msg:    err.Error(),
+			},
+		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
+	}
+
+	err := db.RecordAuthorization(ctx, auth, ar.DocumentId)
+	if err != nil {
+		logger.Warn().Err(err).Msg("failed to record authorization")
+		return &pb.AuthorizeResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+				Msg:    fmt.Sprintf("failed to record authorization: %s", err.Error()),
+			},
+		}, status.Errorf(codes.Internal, "failed to record authorization: %s", err.Error())
 	}
 
 	return &pb.AuthorizeResponse{
@@ -105,40 +125,20 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 
 // Submit - implement payments GRPC service
 func (s *Service) Submit(ctx context.Context, sm *pb.SubmitRequest) (*pb.SubmitResponse, error) {
-	documentID, err := uuid.Parse(sm.DocumentId)
-	if err != nil {
-		pbErr := fmt.Errorf("failed to parse document id: %w", err)
+	logger := logging.Logger(ctx, "payments.submit")
+
+	if sm.DocumentId == "" {
+		err := fmt.Errorf("document id cannot be empty")
+		logger.Warn().Err(err).Msg("failed to parse document id")
 		return &pb.SubmitResponse{
 			Meta: &pb.MetaResponse{
 				Status: pb.MetaResponse_FAILURE,
-				Msg:    pbErr.Error(),
+				Msg:    err.Error(),
 			},
-		}, pbErr
+		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
 	}
 
-	auths, txs, err := RetrieveTransactionsByID(ctx, &documentID)
-	if err != nil {
-		pbErr := fmt.Errorf("failed to retrieve transactions by document id: %w", err)
-		return &pb.SubmitResponse{
-			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
-				Msg:    pbErr.Error(),
-			}}, pbErr
-	}
-
-	// TODO: validate the authentications meet business requirements
-	fmt.Printf("auths: %+v\ntxs: %+v\n", auths, txs)
-
-	// record the state change
-	err = RecordStateChange(ctx, &documentID, pb.State_IN_PROGRESS)
-	if err != nil {
-		pbErr := fmt.Errorf("failed to retrieve transactions by document id: %w", err)
-		return &pb.SubmitResponse{
-			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
-				Msg:    pbErr.Error(),
-			}}, pbErr
-	}
+	logger.Debug().Str("documentID", sm.DocumentId).Msg("setting state of txs to submitted")
 
 	// TODO: perform the calls to custodians?
 

@@ -12,7 +12,6 @@ import (
 
 	"github.com/brave-intl/bat-go/payments/pb"
 	migrate "github.com/golang-migrate/migrate/v4"
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -71,7 +70,7 @@ func (_d DatastoreWithPrometheus) NewMigrate() (mp1 *migrate.Migrate, err error)
 }
 
 // PrepareBatchedTXs implements Datastore
-func (_d DatastoreWithPrometheus) PrepareBatchedTXs(ctx context.Context, c2 pb.Custodian, tpa1 []*pb.Transaction) (up1 *uuid.UUID, err error) {
+func (_d DatastoreWithPrometheus) PrepareBatchedTXs(ctx context.Context, c2 pb.Custodian, tpa1 []*pb.Transaction) (sp1 *string, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -92,6 +91,20 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RawDB", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RawDB()
+}
+
+// RecordAuthorization implements Datastore
+func (_d DatastoreWithPrometheus) RecordAuthorization(ctx context.Context, ap1 *Authorization, s1 string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RecordAuthorization", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RecordAuthorization(ctx, ap1, s1)
 }
 
 // RollbackTx implements Datastore
@@ -117,4 +130,18 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// SubmitBatchedTXs implements Datastore
+func (_d DatastoreWithPrometheus) SubmitBatchedTXs(ctx context.Context, s1 string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SubmitBatchedTXs", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SubmitBatchedTXs(ctx, s1)
 }
