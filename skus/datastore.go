@@ -102,7 +102,7 @@ func NewPostgres(databaseURL string, performMigration bool, migrationTrack strin
 	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
-			base: &Postgres{*pg}, instanceName: "payment_datastore",
+			base: &Postgres{*pg}, instanceName: "skus_datastore",
 		}, err
 	}
 	return nil, err

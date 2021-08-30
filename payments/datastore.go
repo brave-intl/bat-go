@@ -2,9 +2,11 @@ package payments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/payments/pb"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/google/uuid"
@@ -15,6 +17,29 @@ var (
 	// PreparedStatus - status for prepared state
 	PreparedStatus = "prepared"
 )
+
+// Datastore - interface describing the datastore
+type Datastore interface {
+	grantserver.Datastore
+	// PrepareBatchedTXs - prepare a set of transactions
+	PrepareBatchedTXs(context.Context, pb.Custodian, []*pb.Transaction) (*uuid.UUID, error)
+}
+
+// Postgres is a Datastore wrapper around a postgres database
+type Postgres struct {
+	grantserver.Postgres
+}
+
+// NewPostgres creates a new Postgres Datastore
+func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if pg != nil {
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "skus_datastore",
+		}, err
+	}
+	return nil, err
+}
 
 func bulkInsert(query string, params [][]interface{}) (string, []interface{}, error) {
 	if query == "" {
@@ -69,7 +94,7 @@ type transactionData struct {
 
 // PrepareBatchedTXs - record new transactions in QLDB in initialized state.
 // Returns Document ID from QLDB
-func PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
+func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*uuid.UUID, error) {
 	// insert all txs into postgres for this batch
 	batchID := uuid.New()
 
@@ -88,7 +113,7 @@ func PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Tr
 
 	q := `
 		insert into transactions
-			(batch_id, destination, origin, approximate_value, status)
+			(batch_id, destination, origin, currency, approximate_value, status)
 		values `
 
 	query, values, err := bulkInsert(q, txData)
@@ -96,15 +121,36 @@ func PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Tr
 		return nil, fmt.Errorf("failed to create insert query: %w", err)
 	}
 
-	fmt.Println("q: ", query)
-	fmt.Printf("v: %+v\n", values)
-
-	// get the qldb session from context
-
 	// perform insert of all transactions provided
 
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start db tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	result, err := tx.ExecContext(ctx, query, values...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute insertion; %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return nil, errors.New("no rows inserted")
+	}
+
+	// get the qldb session from context
+	// TODO: get this from qldb
+	documentID := uuid.New()
+
+	// commit transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit db tx: %w", err)
+	}
+
 	// insert into qldb the set of transactions for the given custodian
-	return nil, errorutils.ErrNotImplemented
+	return &documentID, nil
 }
 
 // RecordAuthorization - Record an authorization for a qldb document, the submission will

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/payments/pb"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/uuid"
@@ -22,6 +23,19 @@ type Service struct {
 func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.PrepareResponse, error) {
 	logger := logging.Logger(ctx, "payments.prepare")
 
+	// get database from context
+	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
+	if !ok {
+		logger.Error().Msg("failed to get the datastore from the context")
+		return &pb.PrepareResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+			},
+		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
+	}
+	// TODO: get qldb from context
+	//qldb, ok := ctx.Value(appctx.QLDBSessionCTXKey).(Datastore)
+
 	for _, tx := range pr.GetBatchTxs() {
 		logger.Debug().
 			Str("dest", tx.Destination).
@@ -30,7 +44,7 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 			Msg("transaction being prepared")
 	}
 
-	docID, err := PrepareBatchedTXs(ctx, pr.Custodian, pr.BatchTxs)
+	docID, err := db.PrepareBatchedTXs(ctx, pr.Custodian, pr.BatchTxs)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize batched txs")
 		if errors.Is(err, errorutils.ErrNotImplemented) {

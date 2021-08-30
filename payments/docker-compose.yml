@@ -14,7 +14,7 @@ services:
     command: "go run main.go serve payments grpc"
     volumes:
       - ../:/src
-      - ./migrations/payments:/src/migrations
+      - ../migrations/payments:/src/migrations
     working_dir: /src
     networks:
       - payments
@@ -24,7 +24,7 @@ services:
       - ADDR=:3344
       - DEBUG=1
       - DATABASE_URL=postgres://payments:password@postgres/payments?sslmode=disable
-      - DATABASE_MIGRATIONS_URL=file:///src/migrations/payments
+      - DATABASE_MIGRATIONS_URL=file:///src/migrations
       - MIGRATE=true
     depends_on:
       - postgres

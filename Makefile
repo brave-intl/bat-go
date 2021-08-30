@@ -34,6 +34,7 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/skus -i Datastore -t ./.prom-gowrap.tmpl -o ./skus/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
 	gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/payments -i Datastore -t ./.prom-gowrap.tmpl -o ./payments/instrumented_datastore.go
 	# fix everything called datastore...
 	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
@@ -42,6 +43,7 @@ instrumented:
 	sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./skus/instrumented_datastore.go
 	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
 	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/payments_datastore_duration_seconds/g' ./payments/instrumented_datastore.go
 	# http clients
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/ratios -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/ratios/instrumented_client.go

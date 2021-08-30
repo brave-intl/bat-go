@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"context"
 	"net"
 	"net/http"
 
@@ -40,6 +41,17 @@ func GRPCRun(command *cobra.Command, args []string) {
 		}()
 	}
 
+	logger.Debug().
+		Str("datastore", viper.GetString("datastore")).
+		Msg("setting up payments datastore")
+
+	datastore, err := payments.NewPostgres(viper.GetString("datastore"), true, "payments", "payments")
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to setup datastore")
+	}
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+
 	addr, ok := ctx.Value(appctx.SrvAddrCTXKey).(string)
 	if !ok || addr == "" {
 		logger.Fatal().Err(err).Msg("failed to get server address for payments")
@@ -54,20 +66,27 @@ func GRPCRun(command *cobra.Command, args []string) {
 	pSrv := new(payments.Service)
 
 	// setup grpc service
-	var opts []grpc.ServerOption
 	/*
-		creds, err := credentials.NewServerTLSFromFile(
-			viper.GetString("cert"), viper.GetString("cert-key"))
-		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to set credentials for server")
-		}
-		opts = []grpc.ServerOption{grpc.Creds(creds)}
+		var opts []grpc.ServerOption
+			creds, err := credentials.NewServerTLSFromFile(
+				viper.GetString("cert"), viper.GetString("cert-key"))
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to set credentials for server")
+			}
+			opts = []grpc.ServerOption{grpc.Creds(creds)}
 	*/
 
-	gSrv := grpc.NewServer(opts...)
+	gSrv := grpc.NewServer(grpc.UnaryInterceptor(setContextInterceptor(ctx)))
 
 	paymentsPB.RegisterPaymentsGRPCServiceServer(gSrv, pSrv)
 
 	logger.Info().Str("addr", addr).Msg("serving grpc service")
 	logger.Fatal().Err(gSrv.Serve(lis))
+}
+
+func setContextInterceptor(c context.Context) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// merge ctx
+		return handler(appctx.Wrap(ctx, c), req)
+	}
 }
