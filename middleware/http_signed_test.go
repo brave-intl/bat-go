@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/stretchr/testify/assert"
@@ -103,4 +104,61 @@ func TestHTTPSignedOnly(t *testing.T) {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code, "request with signature from right key should succeed")
+
+	verifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)", "date"},
+		},
+		Keystore: &keystore,
+		Opts:     crypto.Hash(0),
+	}
+
+	handler = VerifyHTTPSignedOnly(verifier)(http.HandlerFunc(fn2))
+
+	req, err = http.NewRequest("GET", "/hello-world", nil)
+	assert.NoError(t, err)
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	assert.NoError(t, err)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code, "request without required date should fail")
+
+	s.Headers = []string{"digest", "(request-target)", "date"}
+
+	req, err = http.NewRequest("GET", "/hello-world", nil)
+	assert.NoError(t, err)
+	req.Header.Set("Date", "foo")
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	assert.NoError(t, err)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code, "request with invalid date should fail")
+
+	req, err = http.NewRequest("GET", "/hello-world", nil)
+	assert.NoError(t, err)
+	req.Header.Set("Date", time.Now().Add(time.Minute*60).Format(time.RFC1123))
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	assert.NoError(t, err)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusTooEarly, rr.Code, "request with early date should fail")
+
+	req, err = http.NewRequest("GET", "/hello-world", nil)
+	assert.NoError(t, err)
+	req.Header.Set("Date", time.Now().Add(time.Minute*-60).Format(time.RFC1123))
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	assert.NoError(t, err)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusRequestTimeout, rr.Code, "request with early date should fail")
+
+	req, err = http.NewRequest("GET", "/hello-world", nil)
+	assert.NoError(t, err)
+	req.Header.Set("Date", time.Now().Format(time.RFC1123))
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	assert.NoError(t, err)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code, "request with current date should succeed")
 }
