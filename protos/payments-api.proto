@@ -108,6 +108,8 @@ message PrepareResponse {
 // of the payments service submit request type
 message AuthorizeRequest {
     string document_id = 1;
+    string public_key = 2;
+    string signature = 3;
 }
 
 // AuthorizeResponse - this is the protobuf definition

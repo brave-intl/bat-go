@@ -94,7 +94,7 @@ func (_d DatastoreWithPrometheus) RawDB() (dp1 *sqlx.DB) {
 }
 
 // RecordAuthorization implements Datastore
-func (_d DatastoreWithPrometheus) RecordAuthorization(ctx context.Context, ap1 *Authorization, s1 string) (err error) {
+func (_d DatastoreWithPrometheus) RecordAuthorization(ctx context.Context, ap1 *Authorization) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -104,7 +104,7 @@ func (_d DatastoreWithPrometheus) RecordAuthorization(ctx context.Context, ap1 *
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RecordAuthorization", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.RecordAuthorization(ctx, ap1, s1)
+	return _d.base.RecordAuthorization(ctx, ap1)
 }
 
 // RollbackTx implements Datastore

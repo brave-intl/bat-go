@@ -5,6 +5,12 @@ set -o nounset \
     -o verbose \
     -o xtrace
 
+# key generation for payments authorization endpoint
+# each individual authorizer will have their own ed25519 keypair which they
+# will use to sign the authorize request, thereby signing off on the batch
+# openssl genpkey -algorithm ed25519 -outform PEM -out test/secrets/test-auth-key.pem
+# get public key for payments service
+# openssl pkey -outform DER -pubout -in test/secrets/test-auth-key.pem | tail -c +13 | xxd -p -c32
 
 
 # Generate CA key

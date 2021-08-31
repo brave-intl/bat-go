@@ -9,6 +9,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -77,10 +78,69 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 
 // Authorize - implement payments GRPC service
 func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.AuthorizeResponse, error) {
-	// TODO: perform authorization validation here, create an authorization
-	auth := new(Authorization)
-
 	logger := logging.Logger(ctx, "payments.authorize")
+
+	// is the document id valid from the request
+	if ar.DocumentId == "" {
+		err := fmt.Errorf("document id cannot be empty")
+		logger.Warn().Err(err).Msg("failed to parse document id")
+		return &pb.AuthorizeResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+				Msg:    err.Error(),
+			},
+		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
+	}
+
+	// get environment from context
+	env, ok := ctx.Value(appctx.EnvironmentCTXKey).(string)
+	if !ok {
+		logger.Error().Msg("failed to get environment from context")
+		return &pb.AuthorizeResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+			},
+		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
+	}
+	// is this public key in our list of authorized keys?
+	if keys, ok := authorizedKeys[env]; ok {
+		// is our key in here, and does the signature validate?
+		if !isKeyValid(ar.PublicKey, keys) {
+			logger.Error().
+				Str("environment", env).
+				Str("pub_key", ar.PublicKey).
+				Msg("invalid public key for payment authorizations")
+			return &pb.AuthorizeResponse{
+				Meta: &pb.MetaResponse{
+					Status: pb.MetaResponse_FAILURE,
+				},
+			}, status.Errorf(codes.InvalidArgument, "invalid public key for payments authorization")
+		}
+
+		// does the signature validate?
+		if !isSignatureValid(ar.DocumentId, ar.PublicKey, ar.Signature) {
+			logger.Error().
+				Str("environment", env).
+				Str("pub_key", ar.PublicKey).
+				Str("doc_id", ar.DocumentId).
+				Str("signature", ar.Signature).
+				Msg("invalid signature for authorization")
+			return &pb.AuthorizeResponse{
+				Meta: &pb.MetaResponse{
+					Status: pb.MetaResponse_FAILURE,
+				},
+			}, status.Errorf(codes.InvalidArgument, "invalid signature for authorization")
+		}
+	} else {
+		logger.Error().
+			Str("environment", env).
+			Msg("failed to get authorized keys for environment")
+		return &pb.AuthorizeResponse{
+			Meta: &pb.MetaResponse{
+				Status: pb.MetaResponse_FAILURE,
+			},
+		}, status.Errorf(codes.Internal, "failed to get authorized keys for environment")
+	}
 
 	// get database from context
 	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
@@ -93,19 +153,14 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
 	}
 
-	// after authorization validation:
-	if ar.DocumentId == "" {
-		err := fmt.Errorf("document id cannot be empty")
-		logger.Warn().Err(err).Msg("failed to parse document id")
-		return &pb.AuthorizeResponse{
-			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
-				Msg:    err.Error(),
-			},
-		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
-	}
+	authID := uuid.New()
 
-	err := db.RecordAuthorization(ctx, auth, ar.DocumentId)
+	err := db.RecordAuthorization(ctx, &Authorization{
+		ID:        &authID,
+		DocID:     ar.DocumentId,
+		PublicKey: ar.PublicKey,
+		Signature: ar.Signature,
+	})
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to record authorization")
 		return &pb.AuthorizeResponse{

@@ -24,7 +24,7 @@ type Datastore interface {
 	// PrepareBatchedTXs - prepare a set of transactions
 	PrepareBatchedTXs(context.Context, pb.Custodian, []*pb.Transaction) (*string, error)
 	// RecordAuthorization - record authorization
-	RecordAuthorization(context.Context, *Authorization, string) error
+	RecordAuthorization(context.Context, *Authorization) error
 	// SubmitBatchedTXs - submit the batch
 	SubmitBatchedTXs(context.Context, string) error
 }
@@ -73,11 +73,10 @@ func bulkInsert(query string, params [][]interface{}) (string, []interface{}, er
 
 // Authorization - representation of an authorization in QLDB
 type Authorization struct {
-	ID        *uuid.UUID        // id for the authorization
-	DocID     *uuid.UUID        // document id in QLDB
-	PublicKey string            // hex encoded public key
-	Signature string            // hex encoded signature (maybe over the document id?)
-	Meta      map[string]string // extra context
+	ID         *uuid.UUID // id for the authorization
+	DocumentID string     // document id in QLDB
+	PublicKey  string     // hex encoded public key
+	Signature  string     // hex encoded signature (maybe over the document id?)
 }
 
 // transactionData - db repr for pb.Transaction
@@ -102,7 +101,7 @@ func (pg *Postgres) SubmitBatchedTXs(ctx context.Context, documentID string) err
 }
 
 // RecordAuthorization - record a successful authorization on a prepared batch
-func (pg *Postgres) RecordAuthorization(ctx context.Context, auth *Authorization, docID string) error {
+func (pg *Postgres) RecordAuthorization(ctx context.Context, auth *Authorization) error {
 	return errorutils.ErrNotImplemented
 }
 
@@ -170,8 +169,39 @@ func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodia
 // RecordAuthorization - Record an authorization for a qldb document, the submission will
 // be in charge of implementing the logic to bound the authorizations, this merely applies
 // the rubber stamp to the document in qldb stating that this record was authorized
-func RecordAuthorization(ctx context.Context, auth *Authorization, docID *uuid.UUID) error {
-	return errorutils.ErrNotImplemented
+func RecordAuthorization(ctx context.Context, a *Authorization) error {
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start db tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	query := `
+		insert into authorizations
+			(created_at, updated_at, public_key, signature, doc_id)
+		values
+			(now(), now(), $1, $2, $3)`
+
+	result, err := tx.ExecContext(ctx, query, a.PublicKey, a.Signature, a.DocumentID)
+	if err != nil {
+		return fmt.Errorf("failed to execute insertion; %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows inserted")
+	}
+
+	// get the qldb session from context
+	// TODO: update qldb metadata with this authorization event / state change
+	// TODO: denote the signatue in QLDB of the transaction list
+
+	// commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit db tx: %w", err)
+	}
+	return nil
 }
 
 // RetrieveTransactionsByID - Record an authorization for a qldb document.  This will be used

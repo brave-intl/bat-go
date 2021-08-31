@@ -546,6 +546,70 @@ func (x *MetaResponse) GetContext() []*ContextItem {
 	return nil
 }
 
+// Signature - presentation of signature
+type Signature struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Signature []byte `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
+	DigestAlg uint32 `protobuf:"varint,2,opt,name=digest_alg,json=digestAlg,proto3" json:"digest_alg,omitempty"`
+	PublicKey []byte `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+}
+
+func (x *Signature) Reset() {
+	*x = Signature{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_payments_api_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Signature) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Signature) ProtoMessage() {}
+
+func (x *Signature) ProtoReflect() protoreflect.Message {
+	mi := &file_payments_api_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Signature.ProtoReflect.Descriptor instead.
+func (*Signature) Descriptor() ([]byte, []int) {
+	return file_payments_api_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Signature) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *Signature) GetDigestAlg() uint32 {
+	if x != nil {
+		return x.DigestAlg
+	}
+	return 0
+}
+
+func (x *Signature) GetPublicKey() []byte {
+	if x != nil {
+		return x.PublicKey
+	}
+	return nil
+}
+
 // PrepareResponse - this is the protobuf definition
 // of the payments service prepare response type
 type PrepareResponse struct {
@@ -556,12 +620,14 @@ type PrepareResponse struct {
 	Meta *MetaResponse `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	// document reference in qldb
 	DocumentId string `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	// payments service signature of tx list
+	Signature *Signature `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
 }
 
 func (x *PrepareResponse) Reset() {
 	*x = PrepareResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_payments_api_proto_msgTypes[5]
+		mi := &file_payments_api_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -574,7 +640,7 @@ func (x *PrepareResponse) String() string {
 func (*PrepareResponse) ProtoMessage() {}
 
 func (x *PrepareResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payments_api_proto_msgTypes[5]
+	mi := &file_payments_api_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +653,7 @@ func (x *PrepareResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareResponse.ProtoReflect.Descriptor instead.
 func (*PrepareResponse) Descriptor() ([]byte, []int) {
-	return file_payments_api_proto_rawDescGZIP(), []int{5}
+	return file_payments_api_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PrepareResponse) GetMeta() *MetaResponse {
@@ -604,6 +670,13 @@ func (x *PrepareResponse) GetDocumentId() string {
 	return ""
 }
 
+func (x *PrepareResponse) GetSignature() *Signature {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
 // AuthorizeRequest - this is the protobuf definition
 // of the payments service submit request type
 type AuthorizeRequest struct {
@@ -612,12 +685,14 @@ type AuthorizeRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	DocumentId string `protobuf:"bytes,1,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	PublicKey  string `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Signature  string `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
 }
 
 func (x *AuthorizeRequest) Reset() {
 	*x = AuthorizeRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_payments_api_proto_msgTypes[6]
+		mi := &file_payments_api_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -630,7 +705,7 @@ func (x *AuthorizeRequest) String() string {
 func (*AuthorizeRequest) ProtoMessage() {}
 
 func (x *AuthorizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payments_api_proto_msgTypes[6]
+	mi := &file_payments_api_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,12 +718,26 @@ func (x *AuthorizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizeRequest.ProtoReflect.Descriptor instead.
 func (*AuthorizeRequest) Descriptor() ([]byte, []int) {
-	return file_payments_api_proto_rawDescGZIP(), []int{6}
+	return file_payments_api_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AuthorizeRequest) GetDocumentId() string {
 	if x != nil {
 		return x.DocumentId
+	}
+	return ""
+}
+
+func (x *AuthorizeRequest) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *AuthorizeRequest) GetSignature() string {
+	if x != nil {
+		return x.Signature
 	}
 	return ""
 }
@@ -666,7 +755,7 @@ type AuthorizeResponse struct {
 func (x *AuthorizeResponse) Reset() {
 	*x = AuthorizeResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_payments_api_proto_msgTypes[7]
+		mi := &file_payments_api_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -679,7 +768,7 @@ func (x *AuthorizeResponse) String() string {
 func (*AuthorizeResponse) ProtoMessage() {}
 
 func (x *AuthorizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payments_api_proto_msgTypes[7]
+	mi := &file_payments_api_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +781,7 @@ func (x *AuthorizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizeResponse.ProtoReflect.Descriptor instead.
 func (*AuthorizeResponse) Descriptor() ([]byte, []int) {
-	return file_payments_api_proto_rawDescGZIP(), []int{7}
+	return file_payments_api_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AuthorizeResponse) GetMeta() *MetaResponse {
@@ -715,7 +804,7 @@ type SubmitRequest struct {
 func (x *SubmitRequest) Reset() {
 	*x = SubmitRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_payments_api_proto_msgTypes[8]
+		mi := &file_payments_api_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -728,7 +817,7 @@ func (x *SubmitRequest) String() string {
 func (*SubmitRequest) ProtoMessage() {}
 
 func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_payments_api_proto_msgTypes[8]
+	mi := &file_payments_api_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +830,7 @@ func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRequest) Descriptor() ([]byte, []int) {
-	return file_payments_api_proto_rawDescGZIP(), []int{8}
+	return file_payments_api_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SubmitRequest) GetDocumentId() string {
@@ -764,7 +853,7 @@ type SubmitResponse struct {
 func (x *SubmitResponse) Reset() {
 	*x = SubmitResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_payments_api_proto_msgTypes[9]
+		mi := &file_payments_api_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -777,7 +866,7 @@ func (x *SubmitResponse) String() string {
 func (*SubmitResponse) ProtoMessage() {}
 
 func (x *SubmitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_payments_api_proto_msgTypes[9]
+	mi := &file_payments_api_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -790,7 +879,7 @@ func (x *SubmitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitResponse.ProtoReflect.Descriptor instead.
 func (*SubmitResponse) Descriptor() ([]byte, []int) {
-	return file_payments_api_proto_rawDescGZIP(), []int{9}
+	return file_payments_api_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SubmitResponse) GetMeta() *MetaResponse {
@@ -855,16 +944,29 @@ var file_payments_api_proto_rawDesc = []byte{
 	0x43, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x49, 0x74, 0x65, 0x6d, 0x52, 0x07, 0x63, 0x6f, 0x6e,
 	0x74, 0x65, 0x78, 0x74, 0x22, 0x22, 0x0a, 0x06, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x0b,
 	0x0a, 0x07, 0x53, 0x55, 0x43, 0x43, 0x45, 0x53, 0x53, 0x10, 0x00, 0x12, 0x0b, 0x0a, 0x07, 0x46,
-	0x41, 0x49, 0x4c, 0x55, 0x52, 0x45, 0x10, 0x01, 0x22, 0x55, 0x0a, 0x0f, 0x50, 0x72, 0x65, 0x70,
-	0x61, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x21, 0x0a, 0x04, 0x6d,
-	0x65, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x4d, 0x65, 0x74, 0x61,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x04, 0x6d, 0x65, 0x74, 0x61, 0x12, 0x1f,
-	0x0a, 0x0b, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22,
-	0x33, 0x0a, 0x10, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x7a, 0x65, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x5f,
-	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65,
-	0x6e, 0x74, 0x49, 0x64, 0x22, 0x36, 0x0a, 0x11, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x7a,
+	0x41, 0x49, 0x4c, 0x55, 0x52, 0x45, 0x10, 0x01, 0x22, 0x67, 0x0a, 0x09, 0x53, 0x69, 0x67, 0x6e,
+	0x61, 0x74, 0x75, 0x72, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75,
+	0x72, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74,
+	0x75, 0x72, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x5f, 0x61, 0x6c,
+	0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x09, 0x64, 0x69, 0x67, 0x65, 0x73, 0x74, 0x41,
+	0x6c, 0x67, 0x12, 0x1d, 0x0a, 0x0a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65,
+	0x79, 0x22, 0x7f, 0x0a, 0x0f, 0x50, 0x72, 0x65, 0x70, 0x61, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x21, 0x0a, 0x04, 0x6d, 0x65, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x52, 0x04, 0x6d, 0x65, 0x74, 0x61, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x6f, 0x63, 0x75, 0x6d,
+	0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x6f,
+	0x63, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x28, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e,
+	0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0a, 0x2e, 0x53, 0x69,
+	0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75,
+	0x72, 0x65, 0x22, 0x70, 0x0a, 0x10, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x7a, 0x65, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65,
+	0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0a, 0x64, 0x6f, 0x63,
+	0x75, 0x6d, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x70, 0x75, 0x62, 0x6c, 0x69,
+	0x63, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x70, 0x75, 0x62,
+	0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74,
+	0x75, 0x72, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61,
+	0x74, 0x75, 0x72, 0x65, 0x22, 0x36, 0x0a, 0x11, 0x41, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x69, 0x7a,
 	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x21, 0x0a, 0x04, 0x6d, 0x65, 0x74,
 	0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x4d, 0x65, 0x74, 0x61, 0x52, 0x65,
 	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x52, 0x04, 0x6d, 0x65, 0x74, 0x61, 0x22, 0x30, 0x0a, 0x0d,
@@ -913,7 +1015,7 @@ func file_payments_api_proto_rawDescGZIP() []byte {
 }
 
 var file_payments_api_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_payments_api_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_payments_api_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_payments_api_proto_goTypes = []interface{}{
 	(State)(0),                // 0: State
 	(Custodian)(0),            // 1: Custodian
@@ -923,15 +1025,16 @@ var file_payments_api_proto_goTypes = []interface{}{
 	(*Transaction)(nil),       // 5: Transaction
 	(*PrepareRequest)(nil),    // 6: PrepareRequest
 	(*MetaResponse)(nil),      // 7: MetaResponse
-	(*PrepareResponse)(nil),   // 8: PrepareResponse
-	(*AuthorizeRequest)(nil),  // 9: AuthorizeRequest
-	(*AuthorizeResponse)(nil), // 10: AuthorizeResponse
-	(*SubmitRequest)(nil),     // 11: SubmitRequest
-	(*SubmitResponse)(nil),    // 12: SubmitResponse
-	(*anypb.Any)(nil),         // 13: google.protobuf.Any
+	(*Signature)(nil),         // 8: Signature
+	(*PrepareResponse)(nil),   // 9: PrepareResponse
+	(*AuthorizeRequest)(nil),  // 10: AuthorizeRequest
+	(*AuthorizeResponse)(nil), // 11: AuthorizeResponse
+	(*SubmitRequest)(nil),     // 12: SubmitRequest
+	(*SubmitResponse)(nil),    // 13: SubmitResponse
+	(*anypb.Any)(nil),         // 14: google.protobuf.Any
 }
 var file_payments_api_proto_depIdxs = []int32{
-	13, // 0: ContextItem.Value:type_name -> google.protobuf.Any
+	14, // 0: ContextItem.Value:type_name -> google.protobuf.Any
 	3,  // 1: Transaction.metadata:type_name -> ContextItem
 	0,  // 2: PrepareRequest.state:type_name -> State
 	1,  // 3: PrepareRequest.custodian:type_name -> Custodian
@@ -940,19 +1043,20 @@ var file_payments_api_proto_depIdxs = []int32{
 	2,  // 6: MetaResponse.status:type_name -> MetaResponse.Status
 	3,  // 7: MetaResponse.context:type_name -> ContextItem
 	7,  // 8: PrepareResponse.meta:type_name -> MetaResponse
-	7,  // 9: AuthorizeResponse.meta:type_name -> MetaResponse
-	7,  // 10: SubmitResponse.meta:type_name -> MetaResponse
-	6,  // 11: PaymentsGRPCService.Prepare:input_type -> PrepareRequest
-	9,  // 12: PaymentsGRPCService.Authorize:input_type -> AuthorizeRequest
-	11, // 13: PaymentsGRPCService.Submit:input_type -> SubmitRequest
-	8,  // 14: PaymentsGRPCService.Prepare:output_type -> PrepareResponse
-	10, // 15: PaymentsGRPCService.Authorize:output_type -> AuthorizeResponse
-	12, // 16: PaymentsGRPCService.Submit:output_type -> SubmitResponse
-	14, // [14:17] is the sub-list for method output_type
-	11, // [11:14] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	8,  // 9: PrepareResponse.signature:type_name -> Signature
+	7,  // 10: AuthorizeResponse.meta:type_name -> MetaResponse
+	7,  // 11: SubmitResponse.meta:type_name -> MetaResponse
+	6,  // 12: PaymentsGRPCService.Prepare:input_type -> PrepareRequest
+	10, // 13: PaymentsGRPCService.Authorize:input_type -> AuthorizeRequest
+	12, // 14: PaymentsGRPCService.Submit:input_type -> SubmitRequest
+	9,  // 15: PaymentsGRPCService.Prepare:output_type -> PrepareResponse
+	11, // 16: PaymentsGRPCService.Authorize:output_type -> AuthorizeResponse
+	13, // 17: PaymentsGRPCService.Submit:output_type -> SubmitResponse
+	15, // [15:18] is the sub-list for method output_type
+	12, // [12:15] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_payments_api_proto_init() }
@@ -1022,7 +1126,7 @@ func file_payments_api_proto_init() {
 			}
 		}
 		file_payments_api_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PrepareResponse); i {
+			switch v := v.(*Signature); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1034,7 +1138,7 @@ func file_payments_api_proto_init() {
 			}
 		}
 		file_payments_api_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AuthorizeRequest); i {
+			switch v := v.(*PrepareResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1046,7 +1150,7 @@ func file_payments_api_proto_init() {
 			}
 		}
 		file_payments_api_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AuthorizeResponse); i {
+			switch v := v.(*AuthorizeRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1058,7 +1162,7 @@ func file_payments_api_proto_init() {
 			}
 		}
 		file_payments_api_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*SubmitRequest); i {
+			switch v := v.(*AuthorizeResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1070,6 +1174,18 @@ func file_payments_api_proto_init() {
 			}
 		}
 		file_payments_api_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SubmitRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_payments_api_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SubmitResponse); i {
 			case 0:
 				return &v.state
@@ -1088,7 +1204,7 @@ func file_payments_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_payments_api_proto_rawDesc,
 			NumEnums:      3,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
