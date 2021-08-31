@@ -3,9 +3,10 @@ package cli
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/x509"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -163,23 +164,29 @@ func authorize(ctx context.Context, command *cobra.Command, args []string) {
 	}
 
 	// read der bytes from file
-	der, err := ioutil.ReadFile(f)
+	b, err := ioutil.ReadFile(f)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("unable to read key-pair file")
 	}
 
-	// parse the file, get the private key and public key
-	pk, err := x509.ParsePKCS8PrivateKey(der)
+	type ed25519PrivKey struct {
+		Version          int
+		ObjectIdentifier struct {
+			ObjectIdentifier asn1.ObjectIdentifier
+		}
+		PrivateKey []byte
+	}
+
+	var block *pem.Block
+	block, _ = pem.Decode(b)
+
+	var asn1PrivKey ed25519PrivKey
+	_, err = asn1.Unmarshal(block.Bytes, &asn1PrivKey)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("unable to parse private key from key-pair file")
+		logger.Fatal().Err(err).Msg("unable to unmarshal private key")
 	}
 
-	// validate the privKey is ed25519
-	privKey, ok := pk.(ed25519.PrivateKey)
-	if !ok {
-		logger.Fatal().Msg("private key is not ed25519")
-	}
-
+	privKey := ed25519.NewKeyFromSeed(asn1PrivKey.PrivateKey[2:])
 	pubKey, ok := privKey.Public().(ed25519.PublicKey)
 	if !ok {
 		logger.Fatal().Msg("unable to get public key for specified private key")
