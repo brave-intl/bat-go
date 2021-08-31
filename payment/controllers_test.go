@@ -988,15 +988,20 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 		lastExpired time.Time
 	)
 
+	var first = true
 	for _, cred := range ordercreds {
 		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
 		suite.Require().NoError(err, "error attempting to parse issued at")
 		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
 		suite.Require().NoError(err, "error attempting to parse expires at")
 
-		// validate each cred is for a different day
-		suite.Require().True(issued.Day() != lastIssued.Day())
-		suite.Require().True(expires.Day() != lastExpired.Day())
+		if !first {
+			// sometimes the first day of empty time is 1
+			// validate each cred is for a different day
+			suite.Require().True(issued.Day() != lastIssued.Day())
+			suite.Require().True(expires.Day() != lastExpired.Day())
+		}
+		first = false
 
 		lastIssued = issued
 		lastExpired = expires
