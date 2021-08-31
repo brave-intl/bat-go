@@ -522,6 +522,11 @@ func redeemAndTransferGeminiFunds(
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
 	}
 
+	if resp == nil || len(*resp) < 1 {
+		// failed to get a response from the server
+		return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	}
+	// for all the submitted, check they are all okay
 	for _, v := range *resp {
 		if strings.ToLower(v.Result) != "ok" {
 			if v.Reason != nil {
