@@ -497,12 +497,13 @@ func redeemAndTransferGeminiFunds(
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
 	// gemini client will base64 encode the payload prior to sending
-	_, err = service.geminiClient.UploadBulkPayout(
+	resp, err := service.geminiClient.UploadBulkPayout(
 		ctx,
 		service.geminiConf.APIKey,
 		signer,
 		string(serializedPayload),
 	)
+
 	if err != nil {
 		logger.Error().Err(err).Msg("failed request to gemini")
 		var eb *errorutils.ErrorBundle
@@ -519,6 +520,20 @@ func redeemAndTransferGeminiFunds(
 			}
 		}
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if resp == nil || len(*resp) < 1 {
+		// failed to get a response from the server
+		return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	}
+	// for all the submitted, check they are all okay
+	for _, v := range *resp {
+		if strings.ToLower(v.Result) != "ok" {
+			if v.Reason != nil {
+				return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s", *v.Reason)
+			}
+			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+		}
 	}
 
 	// check if we have a drainChannel defined on our service
