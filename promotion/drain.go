@@ -463,7 +463,6 @@ func redeemAndTransferGeminiFunds(
 
 	tx := new(walletutils.TransactionInfo)
 
-	tx.ID = transferID
 	tx.Destination = wallet.UserDepositDestination
 	tx.DestAmount = total
 
@@ -474,9 +473,12 @@ func redeemAndTransferGeminiFunds(
 		Destination:  wallet.UserDepositDestination,
 		Channel:      channel,
 	}
+
+	tx.ID = gemini.GenerateTxRef(&settlementTx)
+
 	payouts := []gemini.PayoutPayload{
 		{
-			TxRef:       gemini.GenerateTxRef(&settlementTx),
+			TxRef:       tx.ID,
 			Amount:      total,
 			Currency:    "BAT",
 			Destination: wallet.UserDepositDestination,
