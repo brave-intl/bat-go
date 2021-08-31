@@ -100,11 +100,6 @@ func (pg *Postgres) SubmitBatchedTXs(ctx context.Context, documentID string) err
 	return errorutils.ErrNotImplemented
 }
 
-// RecordAuthorization - record a successful authorization on a prepared batch
-func (pg *Postgres) RecordAuthorization(ctx context.Context, auth *Authorization) error {
-	return errorutils.ErrNotImplemented
-}
-
 // PrepareBatchedTXs - record new transactions in QLDB in initialized state.
 // Returns Document ID from QLDB
 func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb.Transaction) (*string, error) {
@@ -169,7 +164,7 @@ func (pg *Postgres) PrepareBatchedTXs(ctx context.Context, custodian pb.Custodia
 // RecordAuthorization - Record an authorization for a qldb document, the submission will
 // be in charge of implementing the logic to bound the authorizations, this merely applies
 // the rubber stamp to the document in qldb stating that this record was authorized
-func RecordAuthorization(ctx context.Context, a *Authorization) error {
+func (pg *Postgres) RecordAuthorization(ctx context.Context, a *Authorization) error {
 	// create tx
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {

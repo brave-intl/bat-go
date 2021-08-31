@@ -36,6 +36,18 @@ func init() {
 	cmd.Must(viper.BindPFlag("payout-file", paymentsCliCmd.PersistentFlags().Lookup("payout-file")))
 	cmd.Must(viper.BindEnv("payout-file", "PAYOUT_FILE"))
 
+	// --key-pair - the pem encoded keypair file for payments authorization
+	paymentsCliCmd.PersistentFlags().String("key-pair", "",
+		"the pem encoded key-pair file for payments authorization")
+	cmd.Must(viper.BindPFlag("key-pair", paymentsCliCmd.PersistentFlags().Lookup("key-pair")))
+	cmd.Must(viper.BindEnv("key-pair", "KEY_PAIR"))
+
+	// --document-id - the qldb document id associated with the batch for authorize/submit
+	paymentsCliCmd.PersistentFlags().String("document-id", "",
+		"the qldb document id associated with the batch for payments authorization/submit")
+	cmd.Must(viper.BindPFlag("document-id", paymentsCliCmd.PersistentFlags().Lookup("document-id")))
+	cmd.Must(viper.BindEnv("document-id", "DOCUMENT_ID"))
+
 	// add this command as a serve subcommand
 	cmd.RootCmd.AddCommand(cliCmd)
 	cliCmd.AddCommand(paymentsCliCmd)
@@ -57,6 +69,8 @@ var (
 			ctx = context.WithValue(ctx, appctx.CACertCTXKey, viper.GetString("ca-cert"))
 			ctx = context.WithValue(ctx, appctx.CustodianCTXKey, viper.GetString("custodian"))
 			ctx = context.WithValue(ctx, appctx.PayoutFileLocationCTXKey, viper.GetString("payout-file"))
+			ctx = context.WithValue(ctx, appctx.KeyPairFileLocationCTXKey, viper.GetString("key-pair"))
+			ctx = context.WithValue(ctx, appctx.PaymentsDocumentIDCTXKey, viper.GetString("document-id"))
 
 			// setup logger
 			ctx, logger := logging.SetupLogger(ctx)

@@ -118,8 +118,8 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		}
 
 		// does the signature validate?
-		if !isSignatureValid(ar.DocumentId, ar.PublicKey, ar.Signature) {
-			logger.Error().
+		if ok, err := isSignatureValid(ar.DocumentId, ar.PublicKey, ar.Signature); !ok {
+			logger.Error().Err(err).
 				Str("environment", env).
 				Str("pub_key", ar.PublicKey).
 				Str("doc_id", ar.DocumentId).
@@ -156,10 +156,10 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 	authID := uuid.New()
 
 	err := db.RecordAuthorization(ctx, &Authorization{
-		ID:        &authID,
-		DocID:     ar.DocumentId,
-		PublicKey: ar.PublicKey,
-		Signature: ar.Signature,
+		ID:         &authID,
+		DocumentID: ar.DocumentId,
+		PublicKey:  ar.PublicKey,
+		Signature:  ar.Signature,
 	})
 	if err != nil {
 		logger.Warn().Err(err).Msg("failed to record authorization")

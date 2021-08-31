@@ -11,7 +11,7 @@ var (
 	// authorizedKeys - this is a mapping of environment to a list of authorized public keys
 	// allowed to perform payments related authorizations.
 	authorizedKeys = map[string][]string{
-		"local": []string{
+		"local": {
 			"33a7b54be5cf3487ef92c41580b2e315fce8ed97866ae2ce66807b76b6951cd1",
 		},
 	}

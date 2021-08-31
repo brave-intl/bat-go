@@ -2,8 +2,13 @@ package cli
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"strings"
 
 	"github.com/brave-intl/bat-go/payments/pb"
@@ -47,7 +52,7 @@ func submitCmd(ctx context.Context) *cobra.Command {
 func grpcConnect(ctx context.Context) (grpc.ClientConnInterface, error) {
 	// get the server address
 	addr, ok := ctx.Value(appctx.PaymentsServiceCTXKey).(string)
-	// get the server address
+	// get the CA Cert for tls
 	caCert := ctx.Value(appctx.CACertCTXKey).(string)
 
 	logger := logging.Logger(ctx, "grpcConnect").With().
@@ -151,9 +156,48 @@ func authorize(ctx context.Context, command *cobra.Command, args []string) {
 	// create the client
 	client := pb.NewPaymentsGRPCServiceClient(conn)
 
+	// get the key-pair file location
+	f, ok := ctx.Value(appctx.KeyPairFileLocationCTXKey).(string)
+	if !ok {
+		logger.Fatal().Msg("no keypair file location specified for authorize")
+	}
+
+	// read der bytes from file
+	der, err := ioutil.ReadFile(f)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("unable to read key-pair file")
+	}
+
+	// parse the file, get the private key and public key
+	pk, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("unable to parse private key from key-pair file")
+	}
+
+	// validate the privKey is ed25519
+	privKey, ok := pk.(ed25519.PrivateKey)
+	if !ok {
+		logger.Fatal().Msg("private key is not ed25519")
+	}
+
+	pubKey, ok := privKey.Public().(ed25519.PublicKey)
+	if !ok {
+		logger.Fatal().Msg("unable to get public key for specified private key")
+	}
+
+	// get the document id associated with batch
+	docID, ok := ctx.Value(appctx.PaymentsDocumentIDCTXKey).(string)
+	if !ok {
+		logger.Fatal().Msg("no document id specified for authorize")
+	}
+
 	// perform api call
-	// TODO: fill this out from input
-	resp, err := client.Authorize(ctx, &pb.AuthorizeRequest{})
+	resp, err := client.Authorize(ctx, &pb.AuthorizeRequest{
+		DocumentId: docID,
+		PublicKey:  hex.EncodeToString([]byte(pubKey)),
+		Signature: base64.StdEncoding.EncodeToString(
+			ed25519.Sign(privKey, []byte(docID))),
+	})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to make connection to payments")
 		return

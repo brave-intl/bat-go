@@ -111,6 +111,10 @@ const (
 	PayoutFileLocationCTXKey CTXKey = "payout_file_location"
 	// CustodianCTXKey - the custodian
 	CustodianCTXKey CTXKey = "custodian"
+	// KeyPairFileLocationCTXKey - the file location of the signing keypair for payments auth
+	KeyPairFileLocationCTXKey CTXKey = "key_pair_file_location"
+	// PaymentsDocumentIDCTXKey - the qldb document id for payments authorize/submit flows
+	PaymentsDocumentIDCTXKey CTXKey = "payments_document_id"
 )
 
 var (
