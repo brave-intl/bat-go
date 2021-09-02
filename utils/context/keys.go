@@ -96,6 +96,9 @@ const (
 	StripeSecretCTXKey CTXKey = "stripe_secret"
 	// WhitelistSKUsCTXKey - context key for whitelisted skus
 	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
+
+	// RateLimiterBurstCTXKey - context key for allowing a bursting rate limiter
+	RateLimiterBurstCTXKey CTXKey = "rate_limit_burst"
 )
 
 var (
