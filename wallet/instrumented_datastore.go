@@ -273,6 +273,20 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
+// UnlinkWallet implements Datastore
+func (_d DatastoreWithPrometheus) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UnlinkWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UnlinkWallet(ctx, walletID, custodian)
+}
+
 // UpsertWallet implements Datastore
 func (_d DatastoreWithPrometheus) UpsertWallet(ctx context.Context, wallet *walletutils.Info) (err error) {
 	_since := time.Now()
