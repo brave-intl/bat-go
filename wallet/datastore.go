@@ -339,9 +339,10 @@ func getEnvMaxCards() int {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID        *uuid.UUID `json:"-"`
-	WalletsLinked    int        `json:"walletsLinked"`
-	OpenLinkingSlots int        `json:"openLinkingSlots"`
+	LinkingID          *uuid.UUID   `json:"-"`
+	WalletsLinked      int          `json:"walletsLinked"`
+	OpenLinkingSlots   int          `json:"openLinkingSlots"`
+	OtherWalletsLinked []*uuid.UUID `json:"otherWalletsLinked"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -380,11 +381,28 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 			return nil, fmt.Errorf("failed to parse linking id: %w", err)
 		}
 
+		// lookup other linked wallets
+		w, err := pg.GetByProviderLinkingID(ctx, lID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
+		}
+
+		wIDs := []*uuid.UUID{}
+
+		for _, v := range *w {
+			u, err := uuid.FromString(v.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse wallet id from datastore: %w", err)
+			}
+			wIDs = append(wIDs, &u)
+		}
+
 		// add to result
 		infos[custodian] = LinkingInfo{
-			LinkingID:        &lID,
-			WalletsLinked:    usedLinkings,
-			OpenLinkingSlots: maxLinkings - usedLinkings,
+			LinkingID:          &lID,
+			WalletsLinked:      usedLinkings,
+			OpenLinkingSlots:   maxLinkings - usedLinkings,
+			OtherWalletsLinked: wIDs,
 		}
 	}
 
