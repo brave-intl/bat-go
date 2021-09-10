@@ -113,6 +113,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -471,6 +472,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
