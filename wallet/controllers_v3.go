@@ -588,6 +588,35 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 	}
 }
 
+// UnlinkWalletV3 - unlink a particular wallet from a custodian.
+func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx       = r.Context()
+			walletID  = chi.URLParam(r, "payment_id")
+			custodian = chi.URLParam(r, "custodian")
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		logger.Debug().
+			Str("walletID", walletID).
+			Str("custodian", custodian).
+			Msg("unlinking wallet from custodian")
+		err = s.UnlinkWallet(ctx, walletID, custodian)
+		if err != nil {
+			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
 // IncreaseLinkingLimitV3 - increase the allowable linking limit for the specified paymentId by one
 func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {

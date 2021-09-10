@@ -46,6 +46,7 @@ type Datastore interface {
 	grantserver.Datastore
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
+	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
@@ -412,6 +413,16 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	}
 
 	return infos, nil
+}
+
+// UnlinkWallet - unlink the wallet from the custodian completely
+func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
+	statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
+	_, err := pg.RawDB().ExecContext(ctx, statement, walletID, custodian)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // IncreaseLinkingLimit - increase the linking limit for the given walletID by one
