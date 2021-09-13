@@ -1,6 +1,7 @@
 package wallets
 
 import (
+	"bufio"
 	"context"
 	"crypto"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/passphrase"
 	"github.com/brave-intl/bat-go/utils/prompt"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -121,13 +123,49 @@ func pullRequisiteSecrets(from string, usevault bool) (string, crypto.Signer, er
 	if usevault {
 		return pullRequisiteSecretsFromVault(from)
 	}
-	return pullRequisiteSecretsFromEnv(from)
+	providerID, privateKey, err := pullRequisiteSecretsFromEnv(from)
+	if privateKey == nil {
+		// Fallback to prompting for a seed phrase
+		return pullRequisiteSecretsFromPrompt(from)
+	}
+	return providerID, privateKey, err
+}
+
+func pullRequisiteSecretsFromPrompt(from string) (string, crypto.Signer, error) {
+	log.Println("Enter your recovery phrase:")
+	reader := bufio.NewReader(os.Stdin)
+	recoveryPhrase, err := reader.ReadString('\n')
+	if err != nil {
+		return "", nil, err
+	}
+
+	seed, err := passphrase.ToBytes32(recoveryPhrase)
+	if err != nil {
+		return "", nil, err
+	}
+
+	key, err := passphrase.DeriveSigningKeysFromSeed(seed, passphrase.LedgerHKDFSalt)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return from, key, nil
 }
 
 func pullRequisiteSecretsFromEnv(from string) (string, crypto.Signer, error) {
-	providerID := os.Getenv("UPHOLD_PROVIDER_ID")
-	privateKey := os.Getenv("ED25519_PRIVATE_KEY")
-	return providerID, ed25519.NewKeyFromSeed([]byte(privateKey)), nil
+	privateKeyHex := os.Getenv("ED25519_PRIVATE_KEY")
+
+	if len(privateKeyHex) == 0 {
+		return "", nil, nil
+	}
+
+	var privKey ed25519.PrivateKey
+	privKey, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		return "", nil, errors.New("Key material must be passed as hex")
+	}
+
+	return from, privKey, nil
 }
 
 func pullRequisiteSecretsFromVault(from string) (string, *vaultsigner.Ed25519Signer, error) {
