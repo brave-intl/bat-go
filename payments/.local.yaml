@@ -1,0 +1,7 @@
+---
+pprof_enabled: true
+addr: ":3344"
+debug: true
+datastore: "postgres://payments:password@postgres/payments?sslmode=disable"
+database_migrations_url: "file:///src/migrations"
+migrate: true

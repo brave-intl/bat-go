@@ -10,6 +10,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	// variables that will be build time configurations
+	// configURL - the url location of the configuration for the service, currently supports (file:// and s3://)
+	configURL string
+	// keyARN - the aws arn of the decryption key to decrypt the configuration file
+	keyARN string
+	// environment - the environment this service is running in
+	environment string
+)
+
 func init() {
 	// add grpc and rest commands
 	paymentsCmd.AddCommand(grpcCmd)
@@ -19,6 +29,24 @@ func init() {
 	cmd.ServeCmd.AddCommand(paymentsCmd)
 
 	// setup the flags
+
+	// configURL will be compiled into the application, if absent we are to use the flags
+	if configURL == "" {
+		// --config-url - location of configuration
+		paymentsCmd.PersistentFlags().StringVar(&configURL, "config-url", "",
+			"the full location url of the configuration")
+		cmd.Must(viper.BindPFlag("config-url", paymentsCmd.PersistentFlags().Lookup("config-url")))
+		cmd.Must(viper.BindEnv("config-url", "CONFIG_URL"))
+	}
+
+	// keyARN will be compiled into the application, if absent we are to use the flags
+	if keyARN == "" {
+		// --key-arn - arn of the encryption key used
+		paymentsCmd.PersistentFlags().StringVar(&keyARN, "key-arn", "",
+			"the aws key arn used to decrypt configuration file")
+		cmd.Must(viper.BindPFlag("key-arn", paymentsCmd.PersistentFlags().Lookup("key-arn")))
+		cmd.Must(viper.BindEnv("key-arn", "KEY_ARN"))
+	}
 
 	// --batch-sign-keypair - keypair used for signing
 	paymentsCmd.PersistentFlags().String("batch-sign-keypair", "",

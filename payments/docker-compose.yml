@@ -19,13 +19,8 @@ services:
     networks:
       - payments
     environment:
-      - PPROF_ENABLED
-      - ENV=local
-      - ADDR=:3344
-      - DEBUG=1
-      - DATABASE_URL=postgres://payments:password@postgres/payments?sslmode=disable
-      - DATABASE_MIGRATIONS_URL=file:///src/migrations
-      - MIGRATE=true
+      - CONFIG_URL="file:///src/payments/.local.yaml"
+      - KEY_ARN=""
     depends_on:
       - postgres
 

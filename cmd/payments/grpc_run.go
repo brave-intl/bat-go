@@ -29,6 +29,17 @@ func GRPCRun(command *cobra.Command, args []string) {
 
 	logger.Debug().Msg("setting up payments service")
 
+	conf, err := payments.GetConfig(ctx, configURL, keyARN)
+	if err != nil {
+		logger.Panic().Err(err).Msg("failed to get configuration: ")
+	}
+
+	viper.SetConfigType("yml")
+	// read in decrypted payments configuration, making it available in viper
+	if err := viper.ReadConfig(conf); err != nil {
+		logger.Panic().Err(err).Msg("failed to read configuration: ")
+	}
+
 	// setup pprof if enabled
 
 	// add profiling flag to enable profiling routes
