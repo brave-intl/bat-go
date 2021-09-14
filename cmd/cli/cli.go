@@ -48,6 +48,18 @@ func init() {
 	cmd.Must(viper.BindPFlag("document-id", paymentsCliCmd.PersistentFlags().Lookup("document-id")))
 	cmd.Must(viper.BindEnv("document-id", "DOCUMENT_ID"))
 
+	// --config-url - location of configuration (for secrets cmd)
+	paymentsCliCmd.PersistentFlags().String("config-url", "",
+		"the full location url of the configuration")
+	cmd.Must(viper.BindPFlag("config-url", paymentsCliCmd.PersistentFlags().Lookup("config-url")))
+	cmd.Must(viper.BindEnv("config-url", "CONFIG_URL"))
+
+	// --key-arn - location of encryption key (for secrets cmd)
+	paymentsCliCmd.PersistentFlags().String("key-arn", "",
+		"the full location key")
+	cmd.Must(viper.BindPFlag("key-arn", paymentsCliCmd.PersistentFlags().Lookup("key-arn")))
+	cmd.Must(viper.BindEnv("key-arn", "KEY_ARN"))
+
 	// add this command as a serve subcommand
 	cmd.RootCmd.AddCommand(cliCmd)
 	cliCmd.AddCommand(paymentsCliCmd)
@@ -71,6 +83,9 @@ var (
 			ctx = context.WithValue(ctx, appctx.PayoutFileLocationCTXKey, viper.GetString("payout-file"))
 			ctx = context.WithValue(ctx, appctx.KeyPairFileLocationCTXKey, viper.GetString("key-pair"))
 			ctx = context.WithValue(ctx, appctx.PaymentsDocumentIDCTXKey, viper.GetString("document-id"))
+			// secrets
+			ctx = context.WithValue(ctx, appctx.ConfigFileURLCTXKey, viper.GetString("config-url"))
+			ctx = context.WithValue(ctx, appctx.KeyARNCTXKey, viper.GetString("key-arn"))
 
 			// setup logger
 			ctx, logger := logging.SetupLogger(ctx)
@@ -83,15 +98,16 @@ var (
 			cmd.AddCommand(prepareCmd(ctx))
 			cmd.AddCommand(authorizeCmd(ctx))
 			cmd.AddCommand(submitCmd(ctx))
+			cmd.AddCommand(secretsCmd(ctx))
 
 			// validate args
 			found := false
 			if len(args) < 1 {
-				logger.Error().Msg("subcommand required: prepare, authorize, submit")
+				logger.Error().Msg("subcommand required: prepare, authorize, submit, secrets")
 				return
 			}
 			for _, v := range []string{
-				"prepare", "authorize", "submit",
+				"prepare", "authorize", "submit", "secrets",
 			} {
 				if args[0] == v {
 					found = true

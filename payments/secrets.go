@@ -30,7 +30,7 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 	}
 	logger.Debug().Str("config-url", location).Str("key-arn", keyARN).Msg("attempting to get configuration")
 
-	var f io.Reader
+	var c = []byte{}
 
 	// config ciphertext supported protos: s3, file
 	switch strings.ToLower(u.Scheme) {
@@ -38,13 +38,15 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 		logger.Debug().
 			Str("config-url", location).
 			Str("key-arn", keyARN).Msg("configuration is file based")
+		fmt.Println("!!! u.Path: ", u.Path)
 		// read the configuration file
-		f, err = os.Open(u.Path)
+		c, err = os.ReadFile(u.Path)
 		if err != nil {
 			logger.Fatal().Err(err).
 				Str("config-url", location).
 				Str("key-arn", keyARN).Msg("unable to read configuration file")
 		}
+		fmt.Println("!!! c: ", hex.EncodeToString(c))
 	case "s3":
 		logger.Debug().
 			Str("config-url", location).
@@ -69,7 +71,6 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 				Str("config-url", location).
 				Str("key-arn", keyARN).Msg("file downloaded has no length, empty")
 		}
-		f = bytes.NewBuffer(buf.Bytes())
 
 	default:
 		logger.Error().Msg("unsupported file location scheme")
@@ -78,7 +79,7 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 
 	// if key-arn is not supplied, return the downloaded/read bytes
 	if keyARN == "" {
-		return f, nil
+		return bytes.NewBuffer(c), nil
 	}
 
 	// is the key specified as a local file?
@@ -90,28 +91,37 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 			return nil, fmt.Errorf("failed to parse key location")
 		}
 		// parse the key
-		b, err := os.ReadFile(u.Path)
+		kf, err := os.Open(u.Path)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to open key file")
+			return nil, fmt.Errorf("failed to open key file")
+		}
+
+		var (
+			decryptNonce [24]byte
+			key          [32]byte
+			b            = make([]byte, 32)
+		)
+
+		_, err = kf.Read(b)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read key")
 			return nil, fmt.Errorf("failed to read key")
 		}
+
 		// get the key
-		k, err := hex.DecodeString(string(b))
+		_, err = hex.Decode(key[:], b)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to parse key")
 			return nil, fmt.Errorf("failed to parse key")
 		}
-		var (
-			decryptNonce [24]byte
-			key          [32]byte
-		)
+
 		// nonce is first 24 bytes of ciphertext
-		copy(decryptNonce[:], b[:24])
-		// nonce is first 24 bytes of ciphertext
-		copy(key[:], k[:32])
+		copy(decryptNonce[:], c[:24])
+		fmt.Println("!!! nonce: ", hex.EncodeToString(decryptNonce[:]))
 
 		// key is on local filesystem
-		p, err := cryptography.DecryptMessage(key, b[24:], decryptNonce[:])
+		p, err := cryptography.DecryptMessage(key, c[24:], decryptNonce[:])
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to decrypt config")
 			return nil, fmt.Errorf("failed to decrypt config")
@@ -122,15 +132,8 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 		// use kms to decrypt
 		svc := kms.New(session.New())
 
-		// read all of f
-		b, err := io.ReadAll(f)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to read configuration ciphertext")
-			return nil, fmt.Errorf("failed to read configuration ciphertext")
-		}
-
 		input := &kms.DecryptInput{
-			CiphertextBlob: b,
+			CiphertextBlob: c,
 			KeyId:          aws.String(keyARN),
 		}
 

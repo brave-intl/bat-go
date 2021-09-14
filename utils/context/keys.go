@@ -115,6 +115,11 @@ const (
 	KeyPairFileLocationCTXKey CTXKey = "key_pair_file_location"
 	// PaymentsDocumentIDCTXKey - the qldb document id for payments authorize/submit flows
 	PaymentsDocumentIDCTXKey CTXKey = "payments_document_id"
+
+	// ConfigFileURLCTXKey - the config file url for payments
+	ConfigFileURLCTXKey CTXKey = "config_file_url"
+	// KeyARNCTXKey - the key used to decrypt the config file for payments
+	KeyARNCTXKey CTXKey = "key_arn"
 )
 
 var (
