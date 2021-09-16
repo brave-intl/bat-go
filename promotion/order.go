@@ -45,6 +45,7 @@ type OrderItem struct {
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
 	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO    *string              `json:"validForIso" db:"valid_for_iso"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
