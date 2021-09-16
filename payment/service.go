@@ -20,6 +20,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/getsentry/sentry-go"
@@ -631,27 +632,35 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	issuedAt := order.LastPaidAt
-	var expiresAt time.Time
-
-	// default expires as whatever valid for is from the order
-	if order.ValidFor != nil {
-		expiresAt = order.LastPaidAt.Add(*order.ValidFor)
-	}
 
 	// if the order has an expiry, use that
 	if order.ExpiresAt != nil {
-		expiresAt = *order.ExpiresAt
-	}
-
-	// check if we are past expiration, if so issue nothing
-	if time.Now().After(expiresAt) {
-		return nil, http.StatusBadRequest, fmt.Errorf("order has expired")
+		// check if we are past expiration, if so issue nothing
+		if time.Now().After(*order.ExpiresAt) {
+			return nil, http.StatusBadRequest, fmt.Errorf("order has expired")
+		}
 	}
 
 	var credentials []TimeLimitedCreds
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 	for _, item := range order.Items {
+		numCreds := 0
+
+		if item.ValidForISO != nil {
+			// Use the sku's duration on the item
+			validFor, err := timeutils.ParseDuration(*item.ValidForISO)
+			if err != nil {
+				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid duration: %w", err)
+			}
+
+			// check if we are past valid for, if so issue nothing and return
+			if time.Now().After(issuedAt.Add(validFor)) {
+				return nil, http.StatusBadRequest, fmt.Errorf("order item has expired")
+			}
+			// number of day passes +5 to account for stripe lag on subscription webhook renewal
+			numCreds = int((validFor).Hours()/24) + 5
+		}
 
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 		if err != nil {
@@ -662,9 +671,8 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		dEnd := issuedAt.Add(oneDay).Truncate(oneDay)
 
 		// for the number of days order is valid for, create per day creds
-		// the extra day (+1) of credential is due to the truncation of the last day
-		for i := 0; i < int((*order.ValidFor).Hours()/24)+1; i++ {
 
+		for i := 0; i < numCreds; i++ {
 			// iterate through order items, derive the time limited creds
 			timeBasedToken, err := timeLimitedSecret.Derive(
 				[]byte(issuerID),

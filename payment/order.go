@@ -105,6 +105,7 @@ type OrderItem struct {
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
 	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO    *string              `json:"validForIso" db:"valid_for_iso"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
@@ -209,6 +210,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
+			orderItem.ValidForISO = &value
 		case "allowed_payment_methods":
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
