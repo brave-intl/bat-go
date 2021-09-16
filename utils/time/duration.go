@@ -82,15 +82,24 @@ func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, e
 		}
 
 		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			n := time.Now()
 			switch name {
 			case "years":
-				d += duration("%fh", f*HoursPerYear)
+				// get actual duration (relative to now)
+				d += n.AddDate(1, 0, 0).Sub(n)
+				// d += duration("%fh", f*HoursPerYear)
 			case "months":
-				d += duration("%fh", f*HoursPerMonth)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, 1, 0).Sub(n)
+				//d += duration("%fh", f*HoursPerMonth)
 			case "weeks":
-				d += duration("%fh", f*HoursPerWeek)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, 0, 7).Sub(n)
+				//d += duration("%fh", f*HoursPerWeek)
 			case "days":
-				d += duration("%fh", f*HoursPerDay)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, 0, 1).Sub(n)
+				//d += duration("%fh", f*HoursPerDay)
 			case "hours":
 				d += duration("%fh", f)
 			case "minutes":

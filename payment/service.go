@@ -662,7 +662,8 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		dEnd := issuedAt.Add(oneDay).Truncate(oneDay)
 
 		// for the number of days order is valid for, create per day creds
-		for i := 0; i < int((*order.ValidFor).Hours()/24); i++ {
+		// the extra day (+1) of credential is due to the truncation of the last day
+		for i := 0; i < int((*order.ValidFor).Hours()/24)+1; i++ {
 
 			// iterate through order items, derive the time limited creds
 			timeBasedToken, err := timeLimitedSecret.Derive(
