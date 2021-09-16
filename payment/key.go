@@ -18,9 +18,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// SecretTokenPrefix all generated merchant secret keys will be contain
-const SecretTokenPrefix = "secret-token:"
-
 // EncryptionKey for encrypting secrets
 var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 var byteEncryptionKey [32]byte
@@ -75,7 +72,7 @@ func randomString(n int) (string, error) {
 		return "", err
 	}
 
-	return base64.URLEncoding.EncodeToString(b), nil
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // GenerateSecret creates a random key for merchants
@@ -84,7 +81,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	unencryptedSecret = SecretTokenPrefix + unencryptedSecret
+	unencryptedSecret = cryptography.SecretTokenPrefix + unencryptedSecret
 
 	encryptedBytes, nonceBytes, err := cryptography.EncryptMessage(byteEncryptionKey, []byte(unencryptedSecret))
 
@@ -139,7 +136,7 @@ func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handl
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.HS2019,
 			Headers: []string{
-				"(request-target)", "host", "date", "digest",
+				"(request-target)", "host", "date", "digest", "content-length", "content-type",
 			},
 		},
 		Keystore: service,

@@ -58,13 +58,13 @@ func TestGenerateSecret(t *testing.T) {
 		t.Error("error in decrypt secret: ", err)
 	}
 
-	if !strings.Contains(secretKey, SecretTokenPrefix) {
+	if !strings.Contains(secretKey, cryptography.SecretTokenPrefix) {
 		t.Error("secret key is missing prefix")
 	}
 
-	bareSecretKey := strings.TrimPrefix(secretKey, SecretTokenPrefix)
+	bareSecretKey := strings.TrimPrefix(secretKey, cryptography.SecretTokenPrefix)
 	// secretKey is random, so i guess just make sure it is base64?
-	k, err := base64.URLEncoding.DecodeString(bareSecretKey)
+	k, err := base64.RawURLEncoding.DecodeString(bareSecretKey)
 	if err != nil {
 		t.Error("error decoding generated secret: ", err)
 	}
@@ -205,7 +205,7 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.HS2019
 	sp.KeyID = kID
-	sp.Headers = []string{"(request-target)", "host", "date", "digest"}
+	sp.Headers = []string{"(request-target)", "host", "date", "digest", "content-length", "content-type"}
 
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: sp,

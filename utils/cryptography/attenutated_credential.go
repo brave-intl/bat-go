@@ -11,6 +11,9 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// SecretTokenPrefix all secret keys will be contain
+const SecretTokenPrefix = "secret-token:"
+
 // DecodeKeyID into the root keyID and any caveats, which will be null otherwise
 func DecodeKeyID(keyID string) (rootKeyID string, caveats map[string]string, err error) {
 	s := strings.Split(keyID, ":")
@@ -50,6 +53,10 @@ func DecodeKeyID(keyID string) (rootKeyID string, caveats map[string]string, err
 
 // Attenuate a root keyID and secretKey usign the provided caveats
 func Attenuate(rootKeyID string, secretKey string, caveats map[string]string) (aKeyID string, aSecretKey string, err error) {
+	if len(caveats) == 0 {
+		err = errors.New("caveats cannot be nil or empty")
+		return
+	}
 	_, c, err := DecodeKeyID(rootKeyID)
 	if err != nil {
 		return
@@ -59,7 +66,7 @@ func Attenuate(rootKeyID string, secretKey string, caveats map[string]string) (a
 		return
 	}
 
-	if !strings.Contains(secretKey, "secret-token") {
+	if !strings.HasPrefix(secretKey, SecretTokenPrefix) {
 		err = errors.New("invalid secretKey")
 		return
 	}
@@ -81,6 +88,6 @@ func Attenuate(rootKeyID string, secretKey string, caveats map[string]string) (a
 		return
 	}
 	aKeyID = rootKeyID + ":" + base64.URLEncoding.EncodeToString(caveatBytes)
-	aSecretKey = "secret-token:" + base64.URLEncoding.EncodeToString(key)
+	aSecretKey = SecretTokenPrefix + base64.RawURLEncoding.EncodeToString(key)
 	return
 }
