@@ -62,7 +62,7 @@ func ParseDuration(s string) (time.Duration, error) {
 
 func durationFunc(prefix string) func(string, float64) time.Duration {
 	return func(format string, f float64) time.Duration {
-		if d, err := time.ParseDuration(fmt.Sprintf(prefix+format, f)); err == nil {
+		if d, err := time.ParseDuration(fmt.Sprintf(format, f)); err == nil {
 			return d
 		}
 
@@ -81,25 +81,37 @@ func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, e
 			continue
 		}
 
-		if f, err := strconv.ParseFloat(value, 64); err == nil {
+		if f, err := strconv.ParseFloat(prefix+value, 64); err == nil {
 			n := time.Now()
+			rem := f - float64(int(f))
 			switch name {
 			case "years":
 				// get actual duration (relative to now)
-				d += n.AddDate(1, 0, 0).Sub(n)
-				// d += duration("%fh", f*HoursPerYear)
+				d += n.AddDate(int(f), 0, 0).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerYear)
+				}
 			case "months":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, 1, 0).Sub(n)
+				d += n.AddDate(0, int(f), 0).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerMonth)
+				}
 				//d += duration("%fh", f*HoursPerMonth)
 			case "weeks":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, 0, 7).Sub(n)
+				d += n.AddDate(0, 0, int(f)*7).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerWeek)
+				}
 				//d += duration("%fh", f*HoursPerWeek)
 			case "days":
 				// get actual duration (relative to now)
-				d += n.AddDate(0, 0, 1).Sub(n)
+				d += n.AddDate(0, 0, int(f)).Sub(n)
 				//d += duration("%fh", f*HoursPerDay)
+				if rem > 0 {
+					d += duration("%fh", (f-float64(int(f)))*HoursPerDay)
+				}
 			case "hours":
 				d += duration("%fh", f)
 			case "minutes":

@@ -634,7 +634,7 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
 	suite.Require().NoError(err)
 
-	validFor, err = timeutils.ParseDuration("P1M") // 1 month from the sku
+	validFor, err := timeutils.ParseDuration("P1M") // 1 month from the sku
 	suite.Require().NoError(err)
 
 	// validate we get the right number of creds back, 1 per day
