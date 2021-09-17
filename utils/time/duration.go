@@ -10,6 +10,48 @@ import (
 	"time"
 )
 
+// oneMonth := ISODuration("P1M")
+// t, err := oneMonth.InFuture()
+
+// ISODuration - iso representation of
+type ISODuration string
+
+// String - implement stringer
+func (i *ISODuration) String() string {
+	return string(*i)
+}
+
+// ParseDuration a RFC3339 duration string into time.Duration
+func ParseDuration(s string) (*ISODuration, error) {
+	if contains(invalidStrings, s) || strings.HasSuffix(s, "T") {
+		return nil, ErrInvalidString
+	}
+	if !pattern.MatchString(s) {
+		return nil, ErrUnsupportedFormat
+	}
+	d := ISODuration(s)
+	return &d, nil
+}
+
+// FromNow - add this isoduration to time.Now, resulting in a new time
+func (i *ISODuration) FromNow() (*time.Time, error) {
+	t, err := i.From(time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to add duration to now: %w", err)
+	}
+	return t, nil
+}
+
+// From - return a time relative to a given time based on the ISODuration
+func (i *ISODuration) From(t time.Time) (*time.Time, error) {
+	d, err := i.Base(t)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add duration to now: %w", err)
+	}
+	tt := t.Add(d)
+	return &tt, nil
+}
+
 const (
 	// HoursPerDay is the number of hours per day according to Google
 	HoursPerDay = 24.0
@@ -36,11 +78,12 @@ var (
 	invalidStrings = []string{"", "P", "PT"}
 )
 
-// ParseDuration a RFC3339 duration string into time.Duration
-func ParseDuration(s string) (time.Duration, error) {
-	if contains(invalidStrings, s) || strings.HasSuffix(s, "T") {
-		return 0, ErrInvalidString
+// Base - given a base, produce a time.Duration from base for the ISODuration
+func (i *ISODuration) Base(t time.Time) (time.Duration, error) {
+	if i == nil {
+		return 0, nil
 	}
+	s := i.String()
 
 	var (
 		match  []string

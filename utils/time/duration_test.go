@@ -72,10 +72,13 @@ func TestParse(t *testing.T) {
 		// Invalid since ending with T
 		{"P1Y2M3DT", timeutils.ErrInvalidString, 0},
 	} {
-		d, err := timeutils.ParseDuration(tt.dur)
+
+		id, err := timeutils.ParseDuration(tt.dur)
 		if err != tt.err {
 			t.Fatalf("[%d] unexpected error: %s", i, err)
 		}
+
+		d, _ := id.Base(time.Now())
 
 		if got := d.Seconds(); got != tt.out {
 			t.Errorf("[%d] Parse(%q) -> d.Seconds() = %f, want %f", i, tt.dur, got, tt.out)
@@ -95,7 +98,15 @@ func TestCompareWithTimeParseDuration(t *testing.T) {
 		{"169h", "P1WT1H"},
 	} {
 		td, _ := time.ParseDuration(tt.timeStr)
-		dd, _ := timeutils.ParseDuration(tt.durationStr)
+
+		id, err := timeutils.ParseDuration(tt.durationStr)
+		if err != nil {
+			t.Fatalf("[%d] unexpected error: %s", i, err)
+		}
+		dd, err := id.Base(time.Now())
+		if err != nil {
+			t.Fatalf("[%d] unexpected error: %s", i, err)
+		}
 
 		if td != dd {
 			t.Errorf(`[%d] not equal: %q->%v != %q->%v`, i, tt.timeStr, td, tt.durationStr, dd)

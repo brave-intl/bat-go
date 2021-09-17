@@ -205,7 +205,12 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			orderItem.CredentialType = value
 		case "credential_valid_duration":
 			orderItem.ValidFor = new(time.Duration)
-			*orderItem.ValidFor, err = timeutils.ParseDuration(value)
+			id, err := timeutils.ParseDuration(value)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			*orderItem.ValidFor, err = id.Base(time.Now())
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
