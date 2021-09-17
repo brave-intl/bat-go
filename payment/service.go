@@ -683,6 +683,10 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		// for the number of days order is valid for, create per day creds
 
 		for i := 0; i < numCreds; i++ {
+			// no need to send credentials from the past
+			if dEnd.Before(time.Now()) {
+				continue
+			}
 			// iterate through order items, derive the time limited creds
 			timeBasedToken, err := timeLimitedSecret.Derive(
 				[]byte(issuerID),
