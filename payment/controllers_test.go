@@ -636,7 +636,7 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 
 	isoD, err := timeutils.ParseDuration("P1M") // 1 month from the sku
 	suite.Require().NoError(err)
-	validFor, err := isoD.FromNow()
+	validFor, err := isoD.Base(time.Now())
 	suite.Require().NoError(err)
 
 	// validate we get the right number of creds back, 1 per day
