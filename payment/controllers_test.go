@@ -30,6 +30,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -633,8 +634,11 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
 	suite.Require().NoError(err)
 
+	validFor, err := timeutils.ParseDuration("P1M") // 1 month from the sku
+	suite.Require().NoError(err)
+
 	// validate we get the right number of creds back, 1 per day
-	numTokens := int((*order.ValidFor).Hours() / 24)
+	numTokens := int(validFor.Hours()/24) + 5
 	suite.Require().Equal(numTokens, len(ordercreds))
 
 	return
