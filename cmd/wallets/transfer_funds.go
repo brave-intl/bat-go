@@ -208,6 +208,7 @@ func TransferFunds(
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
+	logger.Debug().Msg("debug enabled")
 	valueDec, err := decimal.NewFromString(value)
 	if value != "all" && (err != nil || valueDec.LessThanOrEqual(decimal.Zero)) {
 		return errors.New("must pass --value greater than 0 or --value=all")
@@ -234,7 +235,10 @@ func TransferFunds(
 		return err
 	}
 
-	w := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: pubKey}
+	w, err := uphold.New(ctx, info, signer, pubKey)
+	if err != nil {
+		return err
+	}
 
 	altc, err := altcurrency.FromString(currency)
 	if err != nil {
