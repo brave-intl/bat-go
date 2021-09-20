@@ -78,7 +78,14 @@ func TestParse(t *testing.T) {
 			t.Fatalf("[%d] unexpected error: %s", i, err)
 		}
 
-		d, _ := id.Base(time.Now())
+		n := time.Now()
+
+		ft, err := id.From(n)
+		if err != nil {
+			t.Fatalf("[%d] unexpected error: %s", i, err)
+		}
+
+		d := (*ft).Sub(n)
 
 		if got := d.Seconds(); got != tt.out {
 			t.Errorf("[%d] Parse(%q) -> d.Seconds() = %f, want %f", i, tt.dur, got, tt.out)
@@ -103,10 +110,15 @@ func TestCompareWithTimeParseDuration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("[%d] unexpected error: %s", i, err)
 		}
-		dd, err := id.Base(time.Now())
+
+		n := time.Now()
+
+		ft, err := id.From(n)
 		if err != nil {
 			t.Fatalf("[%d] unexpected error: %s", i, err)
 		}
+
+		dd := (*ft).Sub(n)
 
 		if td != dd {
 			t.Errorf(`[%d] not equal: %q->%v != %q->%v`, i, tt.timeStr, td, tt.durationStr, dd)

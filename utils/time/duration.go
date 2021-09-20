@@ -44,7 +44,7 @@ func (i *ISODuration) FromNow() (*time.Time, error) {
 
 // From - return a time relative to a given time based on the ISODuration
 func (i *ISODuration) From(t time.Time) (*time.Time, error) {
-	d, err := i.Base(t)
+	d, err := i.base(t)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add duration to now: %w", err)
 	}
@@ -78,8 +78,8 @@ var (
 	invalidStrings = []string{"", "P", "PT"}
 )
 
-// Base - given a base, produce a time.Duration from base for the ISODuration
-func (i *ISODuration) Base(t time.Time) (time.Duration, error) {
+// base - given a base, produce a time.Duration from base for the ISODuration
+func (i *ISODuration) base(t time.Time) (time.Duration, error) {
 	if i == nil {
 		return 0, nil
 	}

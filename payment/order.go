@@ -210,11 +210,12 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
-			*orderItem.ValidFor, err = id.Base(time.Now())
+			t, err := id.FromNow()
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
+			*orderItem.ValidFor = time.Until(*t)
 			orderItem.ValidForISO = &value
 		case "allowed_payment_methods":
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
