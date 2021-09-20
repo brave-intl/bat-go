@@ -663,7 +663,6 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 				return nil, http.StatusBadRequest, fmt.Errorf("order item has expired")
 			}
 
-
 			validFor := time.Until(*expiry)
 			// number of day passes +5 to account for stripe lag on subscription webhook renewal
 			numCreds = int((validFor).Hours()/24) + 5
@@ -674,16 +673,13 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 		}
 
-		dStart := issuedAt.Truncate(oneDay)
-		dEnd := issuedAt.Add(oneDay).Truncate(oneDay)
+		now := time.Now()
+		dStart := now.Truncate(oneDay)
+		dEnd := now.Add(oneDay).Truncate(oneDay)
 
 		// for the number of days order is valid for, create per day creds
 
 		for i := 0; i < numCreds; i++ {
-			// no need to send credentials from the past
-			if dEnd.Before(time.Now()) {
-				continue
-			}
 			// iterate through order items, derive the time limited creds
 			timeBasedToken, err := timeLimitedSecret.Derive(
 				[]byte(issuerID),
