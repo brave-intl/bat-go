@@ -663,13 +663,8 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 				return nil, http.StatusBadRequest, fmt.Errorf("order item has expired")
 			}
 
-			t, err := isoD.From(*issuedAt)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("calculating validatity duration: %w", err)
-			}
 
-			validFor := time.Until(*t)
-
+			validFor := time.Until(*expiry)
 			// number of day passes +5 to account for stripe lag on subscription webhook renewal
 			numCreds = int((validFor).Hours()/24) + 5
 		}
