@@ -107,13 +107,12 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	}
 
 	// perform validation based on public key that the user submits
-	keyID, err := verifier.VerifyRequest(r)
+	ctx, keyID, err := verifier.VerifyRequest(r)
 	if err != nil {
 		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 	}
 
 	var (
-		ctx = r.Context()
 		bcr = new(BraveCreationRequest)
 	)
 

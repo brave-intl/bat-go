@@ -48,6 +48,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
 	if os.Getenv("ENV") == "local" {
 		r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
@@ -58,7 +59,8 @@ func Router(service *Service) chi.Router {
 
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
-	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(middleware.SimpleTokenAuthorizedOnly(CancelOrder(service)))))
+
+	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -69,8 +71,8 @@ func Router(service *Service) chi.Router {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-		// TODO authorization should be merchant specific, however currently this is only used internally
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", middleware.SimpleTokenAuthorizedOnly(DeleteOrderCreds(service))))
+
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 	})
@@ -81,7 +83,9 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", middleware.SimpleTokenAuthorizedOnly(VerifyCredential(service))))
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
+
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", merchantSignedMiddleware(VerifyCredential(service))))
 	return r
 }
 
@@ -123,6 +127,12 @@ type CreateKeyRequest struct {
 	Name string `json:"name" valid:"required"`
 }
 
+// CreateKeyResponse includes information about the created key
+type CreateKeyResponse struct {
+	*Key
+	SecretKey string `json:"secretKey"`
+}
+
 // CreateKey is the handler for creating keys for a merchant
 func CreateKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -144,7 +154,21 @@ func CreateKey(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
+		sk, err := key.GetSecretKey()
+		if err != nil {
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		if sk == nil {
+			err = errors.New("secret key was nil")
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		resp := CreateKeyResponse{
+			Key:       key,
+			SecretKey: *sk,
+		}
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }
 
@@ -188,12 +212,12 @@ func DeleteKey(service *Service) handlers.AppHandler {
 // GetKeys returns all keys for a specified merchant
 func GetKeys(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		reqID := chi.URLParam(r, "merchantID")
+		merchantID := chi.URLParam(r, "merchantID")
 		expired := r.URL.Query().Get("expired")
 		showExpired := expired == "true"
 
 		var keys *[]Key
-		keys, err := service.Datastore.GetKeys(reqID, showExpired)
+		keys, err := service.Datastore.GetKeysByMerchant(merchantID, showExpired)
 		if err != nil {
 			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
 		}
@@ -275,7 +299,12 @@ func CancelOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err := service.CancelOrder(*orderID.UUID())
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
+		err = service.CancelOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -547,10 +576,16 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 				},
 			)
 		}
+
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
 		// is signed param
 		isSigned := r.URL.Query().Get("isSigned") == "true"
 
-		err := service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
+		err = service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
@@ -736,6 +771,24 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
+		}
+
+		merchant, err := GetMerchant(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
+		}
+		caveats := GetCaveats(r.Context())
+
+		if req.MerchantID != merchant {
+			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
+		}
+
+		if caveats != nil {
+			if sku, ok := caveats["sku"]; ok {
+				if req.SKU != sku {
+					return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
+				}
+			}
 		}
 
 		if req.Type == "single-use" {

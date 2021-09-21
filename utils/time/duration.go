@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/contains"
 )
 
 // oneMonth := ISODuration("P1M")
@@ -23,7 +25,7 @@ func (i *ISODuration) String() string {
 
 // ParseDuration a RFC3339 duration string into time.Duration
 func ParseDuration(s string) (*ISODuration, error) {
-	if contains(invalidStrings, s) || strings.HasSuffix(s, "T") {
+	if contains.Str(invalidStrings, s) || strings.HasSuffix(s, "T") {
 		return nil, ErrInvalidString
 	}
 	if !pattern.MatchString(s) {
@@ -166,14 +168,4 @@ func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, e
 	}
 
 	return d, nil
-}
-
-func contains(slice []string, item string) bool {
-	set := make(map[string]struct{}, len(slice))
-	for _, s := range slice {
-		set[s] = struct{}{}
-	}
-
-	_, ok := set[item]
-	return ok
 }
