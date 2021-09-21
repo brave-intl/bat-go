@@ -30,6 +30,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -633,8 +634,18 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
 	suite.Require().NoError(err)
 
+	isoD, err := timeutils.ParseDuration("P1M") // 1 month from the sku
+	suite.Require().NoError(err)
+
+	ft, err := isoD.FromNow()
+	suite.Require().NoError(err)
+
+	validFor := time.Until(*ft)
+
+	suite.Require().NoError(err)
+
 	// validate we get the right number of creds back, 1 per day
-	numTokens := int((*order.ValidFor).Hours() / 24)
+	numTokens := int(validFor.Hours()/24) + 5
 	suite.Require().Equal(numTokens, len(ordercreds))
 
 	return
@@ -947,25 +958,9 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 }
 
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {
-	ctx, cancel := context.WithCancel(context.Background())
-	var err error
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				_, err = suite.service.RunNextOrderJob(ctx)
-				suite.Require().NoError(err, "Failed to drain order queue")
-				<-time.After(50 * time.Millisecond)
-			}
-		}
-	}()
-	defer cancel()
-
 	order := suite.setupCreateOrder(FreeTLTestSkuToken, 1)
 
-	ordercreds := suite.fetchTimeLimitedCredentials(ctx, suite.service, order)
+	ordercreds := suite.fetchTimeLimitedCredentials(context.Background(), suite.service, order)
 
 	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free")
 	suite.Require().NoError(err, "error attempting to encode issuer id")
@@ -1037,7 +1032,8 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	// Need to add faux auth details to context
+	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -1086,6 +1082,9 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
+	// Need to add faux auth details to context
+	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
+
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	// Verification should fail when outer sku does not match inner presentation
@@ -1100,6 +1099,9 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	handler = VerifyCredential(suite.service)
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
+
+	// Need to add faux auth details to context
+	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
 
 	// mocked redeem creds
 	suite.mockCB.EXPECT().RedeemCredential(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(preimage), gomock.Eq(sig), gomock.Eq(issuerName))

@@ -65,8 +65,10 @@ type Datastore interface {
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
-	// GetKeys ret
-	GetKeys(merchant string, showExpired bool) (*[]Key, error)
+	// GetKeysByMerchant
+	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
+	// GetKey
+	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
 	// CreateKey
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
 	// DeleteKey
@@ -122,11 +124,6 @@ func (pg *Postgres) CreateKey(merchant string, name string, encryptedSecretKey s
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key for merchant: %w", err)
 	}
-	err = key.SetSecretKey()
-	if err != nil {
-		return nil, fmt.Errorf("failed to set secret key for merchant: %w", err)
-	}
-
 	return &key, nil
 }
 
@@ -149,8 +146,8 @@ func (pg *Postgres) DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error) {
 	return &key, nil
 }
 
-// GetKeys returns a list of active API keys
-func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
+// GetKeysByMerchant returns a list of active API keys
+func (pg *Postgres) GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error) {
 	expiredQuery := "AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
 	if showExpired {
 		expiredQuery = ""
@@ -171,6 +168,30 @@ func (pg *Postgres) GetKeys(merchant string, showExpired bool) (*[]Key, error) {
 	}
 
 	return &keys, nil
+}
+
+// GetKey returns the specified key, conditionally checking if it is expired
+func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
+	expiredQuery := " AND (expiry IS NULL or expiry > CURRENT_TIMESTAMP)"
+	if showExpired {
+		expiredQuery = ""
+	}
+
+	var key Key
+	err := pg.RawDB().Get(&key, `
+			select
+				id, name, merchant_id, created_at, expiry,
+				encrypted_secret_key, nonce
+			from api_keys
+			where
+			id = $1`+expiredQuery,
+		id.String())
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key: %w", err)
+	}
+
+	return &key, nil
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
@@ -199,7 +220,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -208,8 +229,10 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor)
-		numFields := 11 // the number of fields you are inserting
+			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor,
+			orderItems[i].ValidForISO,
+		)
+		numFields := 12 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -253,7 +276,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
