@@ -448,10 +448,12 @@ func redeemAndTransferGeminiFunds(
 	wallet *walletutils.Info,
 	total decimal.Decimal,
 ) (*walletutils.TransactionInfo, error) {
+	logger := logging.Logger(ctx, "redeemAndTransferGeminiFunds")
 
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
 	if service.geminiConf == nil || service.geminiClient == nil {
+		logger.Error().Msg("gemini is misconfigured, missing gemini client and configuration")
 		return nil, errGeminiMisconfigured
 	}
 
@@ -491,17 +493,47 @@ func redeemAndTransferGeminiFunds(
 	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
 	serializedPayload, err := json.Marshal(payload)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to serialize payload")
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
 	// gemini client will base64 encode the payload prior to sending
-	_, err = service.geminiClient.UploadBulkPayout(
+	resp, err := service.geminiClient.UploadBulkPayout(
 		ctx,
 		service.geminiConf.APIKey,
 		signer,
 		string(serializedPayload),
 	)
+
 	if err != nil {
+		logger.Error().Err(err).Msg("failed request to gemini")
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, &eb) {
+			// okay, there was an errorbundle, unwrap and log the error
+			// convert err.Data() to json and report out
+			b, err := json.Marshal(eb.Data())
+			if err != nil {
+				logger.Error().Err(err).Msg("failed serialize error bundle data")
+			} else {
+				logger.Error().Err(err).
+					Str("data", string(b)).
+					Msg("gemini client error details")
+			}
+		}
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if resp == nil || len(*resp) < 1 {
+		// failed to get a response from the server
+		return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	}
+	// for all the submitted, check they are all okay
+	for _, v := range *resp {
+		if strings.ToLower(v.Result) != "ok" {
+			if v.Reason != nil {
+				return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s", *v.Reason)
+			}
+			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+		}
 	}
 
 	// check if we have a drainChannel defined on our service

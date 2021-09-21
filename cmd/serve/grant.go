@@ -181,7 +181,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
 	if os.Getenv("ENV") == "production" {
-		r.Use(middleware.RateLimiter(ctx, 180))
+		// allow a burst of 4
+		ctx = context.WithValue(ctx, appctx.RateLimiterBurstCTXKey, 4)
+		// one request (or burst) every 500 ms
+		r.Use(middleware.RateLimiter(ctx, 120))
 	}
 
 	var walletService *wallet.Service

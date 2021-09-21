@@ -30,6 +30,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
@@ -633,8 +634,18 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
 	suite.Require().NoError(err)
 
+	isoD, err := timeutils.ParseDuration("P1M") // 1 month from the sku
+	suite.Require().NoError(err)
+
+	ft, err := isoD.FromNow()
+	suite.Require().NoError(err)
+
+	validFor := time.Until(*ft)
+
+	suite.Require().NoError(err)
+
 	// validate we get the right number of creds back, 1 per day
-	numTokens := int((*order.ValidFor).Hours() / 24)
+	numTokens := int(validFor.Hours()/24) + 5
 	suite.Require().Equal(numTokens, len(ordercreds))
 
 	return
@@ -972,15 +983,20 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 		lastExpired time.Time
 	)
 
+	var first = true
 	for _, cred := range ordercreds {
 		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
 		suite.Require().NoError(err, "error attempting to parse issued at")
 		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
 		suite.Require().NoError(err, "error attempting to parse expires at")
 
-		// validate each cred is for a different day
-		suite.Require().True(issued.Day() != lastIssued.Day())
-		suite.Require().True(expires.Day() != lastExpired.Day())
+		if !first {
+			// sometimes the first day of empty time is 1
+			// validate each cred is for a different day
+			suite.Require().True(issued.Day() != lastIssued.Day())
+			suite.Require().True(expires.Day() != lastExpired.Day())
+		}
+		first = false
 
 		lastIssued = issued
 		lastExpired = expires

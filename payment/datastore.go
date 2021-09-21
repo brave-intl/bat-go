@@ -220,7 +220,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -229,8 +229,10 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			order.ID, orderItems[i].SKU, orderItems[i].Quantity,
 			orderItems[i].Price, orderItems[i].Currency, orderItems[i].Subtotal,
 			orderItems[i].Location, orderItems[i].Description,
-			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor)
-		numFields := 11 // the number of fields you are inserting
+			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor,
+			orderItems[i].ValidForISO,
+		)
+		numFields := 12 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -274,7 +276,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
@@ -437,24 +439,20 @@ func (pg *Postgres) IsStripeSub(orderID uuid.UUID) (bool, string, error) {
 	return ok, "", err
 }
 
-// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
-// 	Status should either be one of pending, paid, fulfilled, or canceled.
-func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
-	// create tx
-	tx, err := pg.RawDB().BeginTxx(ctx, nil)
-	if err != nil {
-		return err
+// UpdateOrderExpiresAt - set the expires_at attribute of the order, based on now (or last paid_at if exists) and valid_for from db
+func (pg *Postgres) updateOrderExpiresAt(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID) error {
+	if tx == nil {
+		return fmt.Errorf("need to pass in tx to update order expiry")
 	}
-	defer pg.RollbackTx(tx)
 
 	// how long should the order be valid for?
 	var orderTimeBounds = struct {
 		ValidFor *time.Duration `db:"valid_for"`
-		LastPaid sql.NullTime   `db:"last_paid"`
+		LastPaid sql.NullTime   `db:"last_paid_at"`
 	}{}
 
-	err = tx.GetContext(ctx, &orderTimeBounds, `
-		SELECT valid_for, last_paid
+	err := tx.GetContext(ctx, &orderTimeBounds, `
+		SELECT valid_for, last_paid_at
 		FROM orders
 		WHERE id = $1
 	`, orderID)
@@ -462,23 +460,30 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return fmt.Errorf("unable to get order time bounds: %w", err)
 	}
 
-	// update last paid
+	// default to last paid now
 	lastPaid := time.Now()
+
+	// if there is a valid last paid, use that from the order
+	if orderTimeBounds.LastPaid.Valid {
+		lastPaid = orderTimeBounds.LastPaid.Time
+	}
+
 	var expiresAt time.Time
-	if orderTimeBounds.ValidFor != nil && orderTimeBounds.LastPaid.Valid {
+
+	if orderTimeBounds.ValidFor != nil {
+		// compute expiry based on valid for
 		expiresAt = lastPaid.Add(*orderTimeBounds.ValidFor)
 	}
 
+	// update the order with the right expires at
 	result, err := tx.ExecContext(ctx, `
 		UPDATE orders
 		SET
-			status = 'paid',
 			updated_at = CURRENT_TIMESTAMP,
-			last_paid_at = $1,
-			expires_at = $2
+			expires_at = $1
 		WHERE 
-			id = $3
-	`, lastPaid, expiresAt, orderID)
+			id = $2
+	`, expiresAt, orderID)
 
 	if err != nil {
 		return err
@@ -489,12 +494,18 @@ func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
 		return errors.New("no rows updated")
 	}
 
-	if err := recordOrderPayment(ctx, tx, orderID, lastPaid); err != nil {
-		return fmt.Errorf("failed to record order payment: %w", err)
-	}
+	return nil
+}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction to renew order: %w", err)
+// RenewOrder updates the orders status to paid and paid at time, inserts record of this order
+// 	Status should either be one of pending, paid, fulfilled, or canceled.
+func (pg *Postgres) RenewOrder(ctx context.Context, orderID uuid.UUID) error {
+
+	// renew order is an update order with paid status
+	// and an update order expires at with the new expiry time of the order
+	err := pg.UpdateOrder(orderID, OrderStatusPaid) // this performs a record order payment
+	if err != nil {
+		return fmt.Errorf("failed to set order status to paid: %w", err)
 	}
 
 	return pg.DeleteOrderCreds(orderID, true)
@@ -571,6 +582,12 @@ func (pg *Postgres) UpdateOrder(orderID uuid.UUID, status string) error {
 		// record the order payment
 		if err := recordOrderPayment(ctx, tx, orderID, time.Now()); err != nil {
 			return fmt.Errorf("failed to record order payment: %w", err)
+		}
+
+		// set the expires at value
+		err = pg.updateOrderExpiresAt(ctx, tx, orderID)
+		if err != nil {
+			return fmt.Errorf("failed to set order expires_at: %w", err)
 		}
 	}
 

@@ -12,6 +12,48 @@ import (
 	"github.com/brave-intl/bat-go/utils/contains"
 )
 
+// oneMonth := ISODuration("P1M")
+// t, err := oneMonth.InFuture()
+
+// ISODuration - iso representation of
+type ISODuration string
+
+// String - implement stringer
+func (i *ISODuration) String() string {
+	return string(*i)
+}
+
+// ParseDuration a RFC3339 duration string into time.Duration
+func ParseDuration(s string) (*ISODuration, error) {
+	if contains.Str(invalidStrings, s) || strings.HasSuffix(s, "T") {
+		return nil, ErrInvalidString
+	}
+	if !pattern.MatchString(s) {
+		return nil, ErrUnsupportedFormat
+	}
+	d := ISODuration(s)
+	return &d, nil
+}
+
+// FromNow - add this isoduration to time.Now, resulting in a new time
+func (i *ISODuration) FromNow() (*time.Time, error) {
+	t, err := i.From(time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to add duration to now: %w", err)
+	}
+	return t, nil
+}
+
+// From - return a time relative to a given time based on the ISODuration
+func (i *ISODuration) From(t time.Time) (*time.Time, error) {
+	d, err := i.base(t)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add duration to now: %w", err)
+	}
+	tt := t.Add(d)
+	return &tt, nil
+}
+
 const (
 	// HoursPerDay is the number of hours per day according to Google
 	HoursPerDay = 24.0
@@ -38,11 +80,12 @@ var (
 	invalidStrings = []string{"", "P", "PT"}
 )
 
-// ParseDuration a RFC3339 duration string into time.Duration
-func ParseDuration(s string) (time.Duration, error) {
-	if contains.Str(invalidStrings, s) || strings.HasSuffix(s, "T") {
-		return 0, ErrInvalidString
+// base - given a base, produce a time.Duration from base for the ISODuration
+func (i *ISODuration) base(t time.Time) (time.Duration, error) {
+	if i == nil {
+		return 0, nil
 	}
+	s := i.String()
 
 	var (
 		match  []string
@@ -64,7 +107,7 @@ func ParseDuration(s string) (time.Duration, error) {
 
 func durationFunc(prefix string) func(string, float64) time.Duration {
 	return func(format string, f float64) time.Duration {
-		if d, err := time.ParseDuration(fmt.Sprintf(prefix+format, f)); err == nil {
+		if d, err := time.ParseDuration(fmt.Sprintf(format, f)); err == nil {
 			return d
 		}
 
@@ -83,16 +126,37 @@ func durationFromMatchAndPrefix(match []string, prefix string) (time.Duration, e
 			continue
 		}
 
-		if f, err := strconv.ParseFloat(value, 64); err == nil {
+		if f, err := strconv.ParseFloat(prefix+value, 64); err == nil {
+			n := time.Now()
+			rem := f - float64(int(f))
 			switch name {
 			case "years":
-				d += duration("%fh", f*HoursPerYear)
+				// get actual duration (relative to now)
+				d += n.AddDate(int(f), 0, 0).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerYear)
+				}
 			case "months":
-				d += duration("%fh", f*HoursPerMonth)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, int(f), 0).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerMonth)
+				}
+				//d += duration("%fh", f*HoursPerMonth)
 			case "weeks":
-				d += duration("%fh", f*HoursPerWeek)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, 0, int(f)*7).Sub(n)
+				if rem > 0 {
+					d += duration("%fh", rem*HoursPerWeek)
+				}
+				//d += duration("%fh", f*HoursPerWeek)
 			case "days":
-				d += duration("%fh", f*HoursPerDay)
+				// get actual duration (relative to now)
+				d += n.AddDate(0, 0, int(f)).Sub(n)
+				//d += duration("%fh", f*HoursPerDay)
+				if rem > 0 {
+					d += duration("%fh", (f-float64(int(f)))*HoursPerDay)
+				}
 			case "hours":
 				d += duration("%fh", f)
 			case "minutes":
