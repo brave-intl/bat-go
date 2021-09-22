@@ -268,7 +268,7 @@ func txGetCustodianLinkingIDs(ctx context.Context, tx *sqlx.Tx, providerLinkingI
 	)
 	statement := `
 		select wc1.custodian, wc1.linking_id from wallet_custodian wc1 join wallet_custodian wc2 on
-		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1
+		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1 and wc1.unlinked_at is null and wc2.unlinked_at is null
 	`
 	err := tx.Select(&custodianLinkingIDs, statement, providerLinkingID)
 	if err != nil {
@@ -300,7 +300,7 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 	// we need to exclude `this` wallet from the used computation in the event we are attempting
 	// to re-link the 4th slot
 	statement := `
-		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
+		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1 and unlinked_at is null
 	`
 	err := tx.Get(&used, statement, providerLinkingID)
 	return used, err
@@ -417,7 +417,8 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 
 // UnlinkWallet - unlink the wallet from the custodian completely
 func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
-	statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
+	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
+	//statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
 	_, err := pg.RawDB().ExecContext(ctx, statement, walletID, custodian)
 	if err != nil {
 		return err
@@ -618,7 +619,8 @@ func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID
 			wallet_custodian wc
 		where
 			wc.wallet_id = $1 and
-			wc.disconnected_at is null
+			wc.disconnected_at is null and
+			wc.unlinked_at is null
 	`
 	err = tx.Get(cl, stmt, ID)
 	if err != nil {
@@ -678,7 +680,9 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		set
 			disconnected_at=now()
 		where
-			wallet_id=$1 and disconnected_at is null
+			wallet_id=$1 and
+			disconnected_at is null and
+			unlinked_at is null
 	`
 	// perform query
 	if _, err := tx.ExecContext(
@@ -724,13 +728,14 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	// get the custodial provider's linking id from db
 	stmt := `
 		select linking_id from wallet_custodian
-		where wallet_id=$1 and custodian=$2
+		where wallet_id=$1 and custodian=$2 and
+		unlinked_at is null
 	`
 	err = tx.Get(&existingLinkingID, stmt, cl.WalletID, cl.Custodian)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sublogger.Error().Err(err).
-			Msg("failed to insert wallet_custodian")
-		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
+			Msg("failed to get linking id from wallet_custodian")
+		return fmt.Errorf("failed to get linking id from custodian record: %w", err)
 	}
 
 	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {

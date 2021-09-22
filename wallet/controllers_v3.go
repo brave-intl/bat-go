@@ -588,6 +588,8 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 	}
 }
 
+var errPrematureUnlinkAttempt = errors.New("attempted to unlink prematurely")
+
 // UnlinkWalletV3 - unlink a particular wallet from a custodian.
 func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -609,6 +611,10 @@ func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			Msg("unlinking wallet from custodian")
 		err = s.UnlinkWallet(ctx, walletID, custodian)
 		if err != nil {
+			if errors.Is(err, errPrematureUnlinkAttempt) {
+				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+				return handlers.WrapError(err, "error unlinking wallet", http.StatusForbidden)
+			}
 			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
 			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
 		}
