@@ -417,11 +417,35 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 
 // UnlinkWallet - unlink the wallet from the custodian completely
 func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
+	// get tx
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	// validate that no other linkages were unlinked in the duration specified
+	stmt := `
+		select
+			count(wc2.*)
+		from
+			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
+		where
+			wc1.wallet_id=$1 and wc2.unlinked_at>$2
+	``
+
 	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
 	//statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
-	_, err := pg.RawDB().ExecContext(ctx, statement, walletID, custodian)
+	_, err := tx.ExecContext(ctx, statement, walletID, custodian)
 	if err != nil {
 		return err
+	}
+
+	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
+
+	if err := commit(); err != nil {
+		return fmt.Errorf("failed to commit tx: %w", err)
 	}
 	return nil
 }
