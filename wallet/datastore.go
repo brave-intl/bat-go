@@ -425,6 +425,22 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 	// will rollback if tx created at this scope
 	defer rollback()
 
+	// lower bound based
+	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey)
+	if !ok {
+		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
+	}
+
+	d, err := timeutils.ParseDuration(lbDur)
+	if err != nil {
+		return fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
+	}
+
+	notBefore, err := d.FromNow()
+	if err != nil {
+		return fmt.Errorf("unable to get not before time from duration: %w", err)
+	}
+
 	// validate that no other linkages were unlinked in the duration specified
 	stmt := `
 		select
@@ -432,8 +448,13 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 		from
 			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
 		where
-			wc1.wallet_id=$1 and wc2.unlinked_at>$2
-	``
+			wc1.wallet_id=$1 wc1.custodian=$2 and wc2.unlinked_at>$3
+	`
+	var count int
+	err := tx.Get(&count, stmt, walletID, custodian, notBefore)
+	if err != nil {
+		return err
+	}
 
 	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
 	//statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
