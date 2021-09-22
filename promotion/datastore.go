@@ -1181,10 +1181,10 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	var claimDrain = DrainJob{}
 
 	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id)
-	values ($1, $2, $3, $4, $5)
+	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination)
+	values ($1, $2, $3, $4, $5, $6)
 	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID)
+	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
 	if err != nil {
 		return err
 	}
@@ -1258,19 +1258,20 @@ func errToDrainCode(err error) (string, string, bool) {
 
 // DrainJob - definition of a drain job
 type DrainJob struct {
-	ID            uuid.UUID       `db:"id"`
-	ClaimID       *uuid.UUID      `db:"claim_id"`
-	Credentials   string          `db:"credentials"`
-	WalletID      uuid.UUID       `db:"wallet_id"`
-	Total         decimal.Decimal `db:"total"`
-	TransactionID *string         `db:"transaction_id"`
-	Erred         bool            `db:"erred"`
-	ErrCode       *string         `db:"errcode"`
-	Status        *string         `db:"status"`
-	BatchID       *uuid.UUID      `db:"batch_id"`
-	Completed     bool            `db:"completed"`
-	CompletedAt   pq.NullTime     `db:"completed_at"`
-	UpdatedAt     pq.NullTime     `db:"updated_at"`
+	ID                 uuid.UUID       `db:"id"`
+	ClaimID            *uuid.UUID      `db:"claim_id"`
+	Credentials        string          `db:"credentials"`
+	WalletID           uuid.UUID       `db:"wallet_id"`
+	Total              decimal.Decimal `db:"total"`
+	TransactionID      *string         `db:"transaction_id"`
+	Erred              bool            `db:"erred"`
+	ErrCode            *string         `db:"errcode"`
+	Status             *string         `db:"status"`
+	BatchID            *uuid.UUID      `db:"batch_id"`
+	Completed          bool            `db:"completed"`
+	CompletedAt        pq.NullTime     `db:"completed_at"`
+	UpdatedAt          pq.NullTime     `db:"updated_at"`
+	DepositDestination *string         `db:"deposit_destination"`
 }
 
 // RunNextDrainJob to process deposits if there is one waiting
