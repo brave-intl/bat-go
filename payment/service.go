@@ -236,18 +236,12 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
-	var freeTrialDays int64
-	// TODO: make this part of the sku
-	if location == "talk.brave.com" {
-		freeTrialDays = 30
-	}
-
 	if !order.IsPaid() && order.IsStripePayable() {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
 			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-			freeTrialDays,
+			freeTrialDays(order),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -260,6 +254,20 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	}
 
 	return order, err
+}
+
+func freeTrialDays(order *Order) int64 {
+	var (
+		env      = os.Getenv("ENV")
+		location = order.Location.String
+	)
+	// TODO: make this part of the sku
+	if (env == "production" && location == "talk.brave.com") ||
+		(env == "staging" && location == "talk.bravesoftware.com") ||
+		(env == "development" && location == "talk.brave.software") {
+		return 30
+	}
+	return 0
 }
 
 // GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
@@ -282,16 +290,10 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
 			}
 
-			var freeTrialDays int64
-			// TODO: make this part of the sku
-			if order.Location.String == "talk.brave.com" {
-				freeTrialDays = 30
-			}
-
 			checkoutSession, err := order.CreateStripeCheckoutSession(
 				stripeSession.CustomerEmail,
 				stripeSession.SuccessURL, stripeSession.CancelURL,
-				freeTrialDays,
+				freeTrialDays(order),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
