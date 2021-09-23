@@ -669,6 +669,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 	body, err := json.Marshal(&credsReq)
 	suite.Require().NoError(err)
 
+	<-time.After(3 * time.Second)
+
 	handler := CreateOrderCreds(service)
 	req, err := http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
@@ -712,7 +714,7 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 			case <-ctx.Done():
 				break
 			default:
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				rr = httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 			}
