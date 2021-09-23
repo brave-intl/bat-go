@@ -234,11 +234,19 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
+	var freeTrialDays int64
+	// TODO: make this part of the sku
+	if location == "talk.brave.com" {
+		freeTrialDays = 30
+	}
+
 	if !order.IsPaid() && order.IsStripePayable() {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
-			parseURLAddOrderIDParam(stripeCancelURI, order.ID))
+			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
+			freeTrialDays,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
@@ -272,9 +280,17 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
 			}
 
+			var freeTrialDays int64
+			// TODO: make this part of the sku
+			if order.Location.String == "talk.brave.com" {
+				freeTrialDays = 30
+			}
+
 			checkoutSession, err := order.CreateStripeCheckoutSession(
 				stripeSession.CustomerEmail,
-				stripeSession.SuccessURL, stripeSession.CancelURL)
+				stripeSession.SuccessURL, stripeSession.CancelURL,
+				freeTrialDays,
+			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
