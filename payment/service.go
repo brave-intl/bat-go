@@ -21,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/getsentry/sentry-go"
@@ -32,6 +33,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -498,6 +500,11 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 		return nil, errorutils.Wrap(err, "error submitting anon card transaction")
 	}
 
+	txInfo, err = s.waitForUpholdTxStatus(ctx, walletID, txInfo.ID, "completed")
+	if err != nil {
+		return nil, errorutils.Wrap(err, "error waiting for completed status for transaction")
+	}
+
 	txn, err := s.Datastore.CreateTransaction(orderID, txInfo.ID, txInfo.Status, txInfo.DestCurrency, "anonymous-card", txInfo.DestAmount)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error recording anon card transaction")
@@ -510,6 +517,43 @@ func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.U
 	}
 
 	return txn, err
+}
+
+func (s *Service) waitForUpholdTxStatus(ctx context.Context, walletID uuid.UUID, txnID, status string) (*walletutils.TransactionInfo, error) {
+	info, err := s.wallet.GetWallet(ctx, walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	providerWallet, err := provider.GetWallet(ctx, *info)
+	if err != nil {
+		return nil, err
+	}
+
+	upholdWallet, ok := providerWallet.(*uphold.Wallet)
+	if !ok {
+		return nil, errors.New("only uphold wallets are supported")
+	}
+
+	var txInfo = &walletutils.TransactionInfo{
+		ID: txnID,
+	}
+	// check status until it matches
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("timeout waiting for correct status")
+		default:
+			txInfo, err = upholdWallet.GetTransaction(txInfo.ID)
+			if err != nil {
+				return nil, errorutils.Wrap(err, "error getting transaction")
+			}
+			if strings.ToLower(txInfo.Status) == status {
+				return txInfo, nil
+			}
+			<-time.After(1 * time.Second)
+		}
+	}
 }
 
 // IsOrderPaid determines if the order has been paid
