@@ -54,7 +54,7 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				http.Error(w, err, http.StatusForbidden)
 				return
 			}
 
