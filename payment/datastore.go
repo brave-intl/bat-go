@@ -224,6 +224,17 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 		return nil, fmt.Errorf("failed to execute tx: %w", err)
 	}
 
+	foundOrderItems := []OrderItem{}
+	statement := `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
+		FROM order_items WHERE order_id = $1`
+	err = tx.Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
 	return &order, tx.Commit()
 }
 
