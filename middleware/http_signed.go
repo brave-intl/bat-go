@@ -58,8 +58,10 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
+
 				logger.Error().Err(err).Msg("failed to verify request")
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
 				return
 			}
 
