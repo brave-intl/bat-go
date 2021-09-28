@@ -815,6 +815,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		logger := logging.Logger(r.Context(), "VerifyCredential")
+		logger.Debug().Msg("starting VerifyCredential controller")
 
 		var req VerifyCredentialRequest
 
@@ -823,6 +824,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			logger.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+		logger.Debug().Msg("read verify credential post body")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
@@ -830,11 +832,16 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
+		logger.Debug().Msg("validated verify credential post body")
+
 		merchant, err := GetMerchant(r.Context())
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get the merchant from the context")
 			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
 		}
+
+		logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
+
 		caveats := GetCaveats(r.Context())
 
 		if req.MerchantID != merchant {
@@ -844,6 +851,8 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				Msg("merchant does not match the key's merchant")
 			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
 		}
+
+		logger.Debug().Str("merchant", merchant).Msg("merchant matches the key's merchant")
 
 		if caveats != nil {
 			if sku, ok := caveats["sku"]; ok {
@@ -856,6 +865,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				}
 			}
 		}
+		logger.Debug().Msg("caveats validated")
 
 		if req.Type == "single-use" {
 			var bytes []byte
@@ -900,6 +910,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 					Msg("failed to decode the request token presentation")
 				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
 			}
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
 
 			var presentation Presentation
 			err = json.Unmarshal(bytes, &presentation)
@@ -909,6 +920,8 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
 
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
+
 			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
 			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
 			if err != nil {
@@ -916,6 +929,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 					Msg("failed to encode the issuer id")
 				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 			}
+			logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
 
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
@@ -946,6 +960,7 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 						Msg("credentials are not valid")
 					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
 				}
+				logger.Debug().Msg("credentials verified")
 				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 			}
 			logger.Error().
