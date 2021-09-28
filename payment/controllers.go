@@ -61,6 +61,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
 	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
+	r.Method("POST", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"POST"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -283,6 +284,47 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
+	})
+}
+
+// SetOrderTrialDaysInput - SetOrderTrialDays handler input
+type SetOrderTrialDaysInput struct {
+	TrialDays int64 `json:"trialDays" valid:"int"`
+}
+
+// SetOrderTrialDays is the handler for cancelling an order
+func SetOrderTrialDays(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx     = r.Context()
+			orderID = new(inputs.ID)
+		)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		var input SetOrderTrialDaysInput
+		err := requestutils.ReadJSON(r.Body, &input)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(input)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.SetOrderTrialDays(ctx, orderID.UUID(), input.TrialDays)
+		if err != nil {
+			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 

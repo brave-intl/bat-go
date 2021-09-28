@@ -158,6 +158,18 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	return service, nil
 }
 
+var defaultTrialLocations = map[string]map[string]int64{
+	"production": {
+		"talk.brave.com": 30,
+	},
+	"staging": {
+		"talk.bravesoftware.com": 30,
+	},
+	"development": {
+		"talk.brave.software": 30,
+	},
+}
+
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
@@ -236,12 +248,21 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
+	// TODO: typically the order item trial days is set via the POST /v1/orders/<id>/set-trial endpoint
+	// from the merchant directly.  For brave talk we are temporarily hardcoding
+	if days, ok := defaultTrialLocations[os.Getenv("ENV")][location]; ok {
+		err := s.SetOrderTrialDays(ctx, &order.ID, days)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set up free trial period: %w", err)
+		}
+	}
+
 	if !order.IsPaid() && order.IsStripePayable() {
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
 			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
-			freeTrialDays(order),
+			order.getTrialDays(),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -254,20 +275,6 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	}
 
 	return order, err
-}
-
-func freeTrialDays(order *Order) int64 {
-	var (
-		env      = os.Getenv("ENV")
-		location = order.Location.String
-	)
-	// TODO: make this part of the sku
-	if (env == "production" && location == "talk.brave.com") ||
-		(env == "staging" && location == "talk.bravesoftware.com") ||
-		(env == "development" && location == "talk.brave.software") {
-		return 30
-	}
-	return 0
 }
 
 // GetOrder - business logic for getting an order, needs to validate the checkout session is not expired
@@ -293,7 +300,7 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 			checkoutSession, err := order.CreateStripeCheckoutSession(
 				stripeSession.CustomerEmail,
 				stripeSession.SuccessURL, stripeSession.CancelURL,
-				freeTrialDays(order),
+				order.getTrialDays(),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
@@ -328,6 +335,17 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 		}
 	}
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+}
+
+// SetOrderTrialDays set the order's free trial days
+func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
+	// get the order
+	err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+	if err != nil {
+		return fmt.Errorf("failed to set the order's trial days: %w", err)
+	}
+
+	return nil
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so

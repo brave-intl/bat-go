@@ -88,6 +88,14 @@ type Order struct {
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
 	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
+	TrialDays             *int64               `json:"-" db:"trial_days"`
+}
+
+func (order *Order) getTrialDays() int64 {
+	if order.TrialDays == nil {
+		return 0
+	}
+	return *order.TrialDays
 }
 
 // OrderItem includes information about a particular order item
@@ -176,6 +184,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	allowedPaymentMethods := new(Methods)
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
