@@ -211,7 +211,7 @@ func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, d
 		UPDATE orders
 		SET
 			trial_days = $1,
-			updated_at = now(),
+			updated_at = now()
 		WHERE 
 			id = $2
 		RETURNING
