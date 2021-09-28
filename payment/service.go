@@ -158,18 +158,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	return service, nil
 }
 
-var defaultTrialLocations = map[string]map[string]int64{
-	"production": {
-		"talk.brave.com": 30,
-	},
-	"staging": {
-		"talk.bravesoftware.com": 30,
-	},
-	"development": {
-		"talk.brave.software": 30,
-	},
-}
-
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
@@ -246,15 +234,6 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
-	}
-
-	// TODO: typically the order item trial days is set via the POST /v1/orders/<id>/set-trial endpoint
-	// from the merchant directly.  For brave talk we are temporarily hardcoding
-	if days, ok := defaultTrialLocations[os.Getenv("ENV")][location]; ok {
-		err := s.SetOrderTrialDays(ctx, &order.ID, days)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set up free trial period: %w", err)
-		}
 	}
 
 	if !order.IsPaid() && order.IsStripePayable() {
@@ -343,6 +322,36 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 	err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
 	if err != nil {
 		return fmt.Errorf("failed to set the order's trial days: %w", err)
+	}
+
+	// get the order
+	order, err := s.Datastore.GetOrder(*orderID)
+	if err != nil {
+		return fmt.Errorf("failed to get order: %w", err)
+	}
+
+	// recreate the stripe checkout session now that we have set the trial days on this order
+	if !order.IsPaid() && order.IsStripePayable() {
+		// get existing checkout session (has the original email in stripe)
+		stripeSession, err := session.Get(order.Metadata["stripeCheckoutSessionId"], nil)
+		if err != nil {
+			return fmt.Errorf("failed to get stripe checkout session: %w", err)
+		}
+
+		checkoutSession, err := order.CreateStripeCheckoutSession(
+			stripeSession.CustomerEmail,
+			stripeSession.SuccessURL, stripeSession.CancelURL,
+			order.getTrialDays(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		// overwrite the old checkout session
+		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to update order metadata: %w", err)
+		}
 	}
 
 	return nil
