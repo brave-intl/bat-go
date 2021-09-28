@@ -813,31 +813,45 @@ type VerifyCredentialRequest struct {
 // VerifyCredential is the handler for verifying subscription credentials
 func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		logger := logging.Logger(r.Context(), "VerifyCredential")
+
 		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
 		merchant, err := GetMerchant(r.Context())
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to get the merchant from the context")
 			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
 		}
 		caveats := GetCaveats(r.Context())
 
 		if req.MerchantID != merchant {
+			logger.Warn().
+				Str("req.MerchantID", req.MerchantID).
+				Str("merchant", merchant).
+				Msg("merchant does not match the key's merchant")
 			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
 		}
 
 		if caveats != nil {
 			if sku, ok := caveats["sku"]; ok {
 				if req.SKU != sku {
+					logger.Warn().
+						Str("req.SKU", req.SKU).
+						Str("sku", sku).
+						Msg("sku caveat does not match")
 					return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
 				}
 			}
@@ -882,18 +896,24 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			var bytes []byte
 			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to decode the request token presentation")
 				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
 			}
 
 			var presentation Presentation
 			err = json.Unmarshal(bytes, &presentation)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to unmarshal the request token presentation")
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
 
 			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
 			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to encode the issuer id")
 				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 			}
 
@@ -901,25 +921,35 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 
 			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse issued at time of credential")
 				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
 			}
 			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse expires at time of credential")
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
 			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to verify time limited credential")
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
 
 			if verified {
 				// check against expiration time, issued time
 				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					logger.Error().
+						Msg("credentials are not valid")
 					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
 				}
 				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 			}
+			logger.Error().
+				Msg("credentials could not be verified")
 
 			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
 
