@@ -1,1 +1,1 @@
-alter table order drop column trial_days;
+alter table orders drop column trial_days;

@@ -1,1 +1,1 @@
-alter table order add column trial_days integer default null;
+alter table orders add column trial_days integer default null;
