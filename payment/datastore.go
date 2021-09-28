@@ -31,7 +31,7 @@ type Datastore interface {
 	// CreateOrder is used to create an order for payments
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
-	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error
+	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// RenewOrder - renew the order with this id
@@ -197,33 +197,34 @@ func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
 }
 
 // SetOrderTrialDays - set the number of days of free trial for this order
-func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
+func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error) {
 	tx, err := pg.RawDB().BeginTxx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create db tx: %w", err)
+		return nil, fmt.Errorf("failed to create db tx: %w", err)
 	}
 	defer pg.RollbackTx(tx)
 
+	order := Order{}
+
 	// update the order with the right expires at
-	result, err := tx.ExecContext(ctx, `
+	err = tx.Get(&order, `
 		UPDATE orders
 		SET
 			trial_days = $1,
 			updated_at = now(),
 		WHERE 
 			id = $2
+		RETURNING
+			id, created_at, currency, updated_at, total_price,
+			merchant_id, location, status, allowed_payment_methods,
+			metadata, valid_for, last_paid_at, expires_at, trial_days
 	`, days, orderID)
 
 	if err != nil {
-		return fmt.Errorf("failed to execute tx: %w", err)
+		return nil, fmt.Errorf("failed to execute tx: %w", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if rowsAffected == 0 || err != nil {
-		return errors.New("no rows updated")
-	}
-
-	return tx.Commit()
+	return &order, tx.Commit()
 }
 
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order

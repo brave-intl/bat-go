@@ -471,7 +471,7 @@ func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker Or
 }
 
 // SetOrderTrialDays implements Datastore
-func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (err error) {
+func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (op1 *Order, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

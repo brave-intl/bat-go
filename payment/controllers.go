@@ -308,6 +308,16 @@ func SetOrderTrialDays(service *Service) handlers.AppHandler {
 			)
 		}
 
+		// validate order merchant and caveats (to make sure this is the right merch)
+		if err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID()); err != nil {
+			return handlers.ValidationError(
+				"Error validating request merchant and caveats",
+				map[string]interface{}{
+					"orderMerchantAndCaveats": err.Error(),
+				},
+			)
+		}
+
 		var input SetOrderTrialDaysInput
 		err := requestutils.ReadJSON(r.Body, &input)
 		if err != nil {

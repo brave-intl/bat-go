@@ -319,15 +319,9 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 // SetOrderTrialDays set the order's free trial days
 func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
 	// get the order
-	err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+	order, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
 	if err != nil {
 		return fmt.Errorf("failed to set the order's trial days: %w", err)
-	}
-
-	// get the order
-	order, err := s.Datastore.GetOrder(*orderID)
-	if err != nil {
-		return fmt.Errorf("failed to get order: %w", err)
 	}
 
 	// recreate the stripe checkout session now that we have set the trial days on this order
