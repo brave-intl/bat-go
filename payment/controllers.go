@@ -61,7 +61,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
 	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
-	r.Method("POST", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"POST"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
+	r.Method("PATCH", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
