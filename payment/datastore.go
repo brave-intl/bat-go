@@ -30,6 +30,8 @@ type Datastore interface {
 	grantserver.Datastore
 	// CreateOrder is used to create an order for payments
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
+	// SetOrderTrialDays - set the number of days of free trial for this order
+	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// RenewOrder - renew the order with this id
@@ -194,6 +196,48 @@ func (pg *Postgres) GetKey(id uuid.UUID, showExpired bool) (*Key, error) {
 	return &key, nil
 }
 
+// SetOrderTrialDays - set the number of days of free trial for this order
+func (pg *Postgres) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error) {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create db tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	order := Order{}
+
+	// update the order with the right expires at
+	err = tx.Get(&order, `
+		UPDATE orders
+		SET
+			trial_days = $1,
+			updated_at = now()
+		WHERE 
+			id = $2
+		RETURNING
+			id, created_at, currency, updated_at, total_price,
+			merchant_id, location, status, allowed_payment_methods,
+			metadata, valid_for, last_paid_at, expires_at, trial_days
+	`, days, orderID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute tx: %w", err)
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement := `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
+		FROM order_items WHERE order_id = $1`
+	err = tx.Select(&foundOrderItems, statement, orderID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
+
+	return &order, tx.Commit()
+}
+
 // CreateOrder creates orders given the total price, merchant ID, status and items of the order
 func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, currency, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error) {
 	tx := pg.RawDB().MustBegin()
@@ -264,7 +308,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 		SELECT 
 			id, created_at, currency, updated_at, total_price, 
 			merchant_id, location, status, allowed_payment_methods, 
-			metadata, valid_for, last_paid_at, expires_at
+			metadata, valid_for, last_paid_at, expires_at, trial_days
 		FROM orders WHERE id = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, orderID)

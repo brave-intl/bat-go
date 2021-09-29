@@ -470,6 +470,20 @@ func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker Or
 	return _d.base.RunNextOrderJob(ctx, worker)
 }
 
+// SetOrderTrialDays implements Datastore
+func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (op1 *Order, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetOrderTrialDays", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetOrderTrialDays(ctx, orderID, days)
+}
+
 // UpdateOrder implements Datastore
 func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) (err error) {
 	_since := time.Now()

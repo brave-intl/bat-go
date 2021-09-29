@@ -240,7 +240,9 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
-			parseURLAddOrderIDParam(stripeCancelURI, order.ID))
+			parseURLAddOrderIDParam(stripeCancelURI, order.ID),
+			order.getTrialDays(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create checkout session: %w", err)
 		}
@@ -276,7 +278,9 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 			checkoutSession, err := order.CreateStripeCheckoutSession(
 				stripeSession.CustomerEmail,
-				stripeSession.SuccessURL, stripeSession.CancelURL)
+				stripeSession.SuccessURL, stripeSession.CancelURL,
+				order.getTrialDays(),
+			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create checkout session: %w", err)
 			}
@@ -310,6 +314,41 @@ func (s *Service) CancelOrder(orderID uuid.UUID) error {
 		}
 	}
 	return s.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+}
+
+// SetOrderTrialDays set the order's free trial days
+func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) error {
+	// get the order
+	order, err := s.Datastore.SetOrderTrialDays(ctx, orderID, days)
+	if err != nil {
+		return fmt.Errorf("failed to set the order's trial days: %w", err)
+	}
+
+	// recreate the stripe checkout session now that we have set the trial days on this order
+	if !order.IsPaid() && order.IsStripePayable() {
+		// get existing checkout session (has the original email in stripe)
+		stripeSession, err := session.Get(order.Metadata["stripeCheckoutSessionId"], nil)
+		if err != nil {
+			return fmt.Errorf("failed to get stripe checkout session: %w", err)
+		}
+
+		checkoutSession, err := order.CreateStripeCheckoutSession(
+			stripeSession.CustomerEmail,
+			stripeSession.SuccessURL, stripeSession.CancelURL,
+			order.getTrialDays(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		// overwrite the old checkout session
+		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to update order metadata: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // UpdateOrderStatus checks to see if an order has been paid and updates it if so
