@@ -76,10 +76,6 @@ const (
 	DigestHeader = "digest"
 	// RequestTargetHeader is a pseudo header consisting of the HTTP method and request uri
 	RequestTargetHeader = "(request-target)"
-	// HostHeader is the header defining the host target
-	HostHeader = "host"
-	// XForwardedHostHeader is the header defining the forwarded host
-	XForwardedHostHeader = "x-forwarded-host"
 )
 
 var (
@@ -147,15 +143,6 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 			}
 			req.Header.Add("Digest", d.String())
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
-		} else if header == HostHeader {
-			// check if host header is set
-			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
-			if val == "" {
-				// proxy support if X-Forwarded-Host
-				// if not set it with X-Forwarded-Host
-				val = strings.Join(req.Header[http.CanonicalHeaderKey(XForwardedHostHeader)], ", ")
-			}
-			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
