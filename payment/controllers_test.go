@@ -712,7 +712,7 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 			case <-ctx.Done():
 				break
 			default:
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				rr = httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 			}

@@ -2720,6 +2720,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	tx := <-ch
 	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 
+	<-time.After(1 * time.Second)
+
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
@@ -2938,6 +2940,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	tx := <-ch
 	suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
 
+	<-time.After(1 * time.Second)
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
 	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)

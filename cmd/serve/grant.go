@@ -162,6 +162,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// -> instrumentation -> handler
 	r.Use(chiware.RequestID)
 	r.Use(middleware.RequestIDTransfer)
+	r.Use(middleware.HostTransfer)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.

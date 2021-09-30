@@ -88,6 +88,14 @@ type Order struct {
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
 	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
+	TrialDays             *int64               `json:"-" db:"trial_days"`
+}
+
+func (order *Order) getTrialDays() int64 {
+	if order.TrialDays == nil {
+		return 0
+	}
+	return *order.TrialDays
 }
 
 // OrderItem includes information about a particular order item
@@ -176,6 +184,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	allowedPaymentMethods := new(Methods)
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
@@ -252,7 +261,7 @@ type CreateCheckoutSessionResponse struct {
 }
 
 // CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
-func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string) (CreateCheckoutSessionResponse, error) {
+func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
 	// Create customer if not already created
 	i := customer.List(&stripe.CustomerListParams{
 		Email: stripe.String(email),
@@ -275,6 +284,12 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 		}
 		customerID = customer.ID
 	}
+	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
+
+	// if a free trial is set, apply it
+	if freeTrialDays > 0 {
+		sd.TrialPeriodDays = &freeTrialDays
+	}
 
 	params := &stripe.CheckoutSessionParams{
 		Customer: stripe.String(customerID),
@@ -285,7 +300,7 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 		SuccessURL:        stripe.String(successURI),
 		CancelURL:         stripe.String(cancelURI),
 		ClientReferenceID: stripe.String(order.ID.String()),
-		SubscriptionData:  &stripe.CheckoutSessionSubscriptionDataParams{},
+		SubscriptionData:  sd,
 		LineItems:         order.CreateStripeLineItems(),
 	}
 
