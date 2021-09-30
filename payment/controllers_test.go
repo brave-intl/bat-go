@@ -829,6 +829,8 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 
 	balanceBefore, err := userWallet.GetBalance(true)
 	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	// uphold might take a bit of time to actually fund the wallet even though it says the balance increased
+	<-time.After(500 * time.Millisecond)
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
