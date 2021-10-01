@@ -535,13 +535,14 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 // CustodianLink - representation of wallet_custodian record
 type CustodianLink struct {
-	WalletID           *uuid.UUID   `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
-	Custodian          string       `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
-	CreatedAt          time.Time    `json:"created_at" db:"created_at" valid:"-"`
-	LinkedAt           time.Time    `json:"linked_at" db:"linked_at" valid:"-"`
-	DisconnectedAt     sql.NullTime `json:"disconnected_at" db:"disconnected_at" valid:"-"`
-	DepositDestination string       `json:"deposit_destination" db:"deposit_destination" valid:"-"`
-	LinkingID          *uuid.UUID   `json:"linking_id" db:"linking_id" valid:"uuid"`
+	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+	UnlinkedAt         *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
 }
 
 // GetWalletIDString - get string version of the WalletID
