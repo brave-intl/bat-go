@@ -8,6 +8,15 @@
 
 # Project specific ignores
 .env
+.prod_env
+.gemini_prod_env
+.gemini_sandbox_env
+.bitflyer_prod_env
+pub.asc
+settlement/vault
+settlement/vault-data/
+settlement/vaultsigning
+*.json
 vendor
 target
 grantTokens.json

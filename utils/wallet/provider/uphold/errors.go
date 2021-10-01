@@ -104,6 +104,10 @@ func (uhErr upholdError) InsufficientBalance() bool {
 	return false
 }
 
+func (uhErr upholdError) ForbiddenError() bool {
+	return uhErr.Code == "forbidden"
+}
+
 func (uhErr upholdError) InvalidSignature() bool {
 	return uhErr.ValidationError() && len(uhErr.ValidationErrors.SignatureError) > 0
 }

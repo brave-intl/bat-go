@@ -59,21 +59,12 @@ func CategorizeResponse(
 ) (settlement.Transaction, string) {
 	currentTx := limitedSettlements[payout.TransferID]
 	key := payout.CategorizeStatus()
-	if payout.Status == "OTHER_ERROR" && !currentTx.Amount.Equal(payout.Amount) {
-		key = "complete"
-		payout.Status = "EXECUTED"
-		// use payed out amount
-		amount := payout.Amount
-		currentTx.Amount = amount
-		currentTx.Probi = altcurrency.BAT.ToProbi(amount)
-		if currentTx.Type == "contribution" {
-			currentTx.BATPlatformFee = currentTx.Probi.Div(decimal.NewFromFloat(19)).Truncate(0)
-		}
-	}
 	currentTx.Status = key
-	note := payout.Status
+	note := ""
 	if payout.Message != "" {
-		note = fmt.Sprintf("%s: %s", payout.Status, payout.Message)
+		note = fmt.Sprintf("%s: %s. transferID: %s", payout.Status, payout.Message, payout.TransferID)
+	} else {
+		note = fmt.Sprintf("%s transferID: %s", payout.Status, payout.TransferID)
 	}
 	// overwrite the amount
 	currentTx.Note = note
@@ -259,7 +250,6 @@ func setupSettlementTransactions(
 				limitedTx.Amount = partialAmount
 				limitedTx.BATPlatformFee = partialFee
 				limitedTx.Probi = partialProbi
-				settlements = append(settlements, limitedTx)
 				limitedTxs = append(limitedTxs, limitedTx)
 			}
 		}
@@ -350,6 +340,7 @@ func IterateRequest(
 			logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 			return submittedTransactions, err
 		}
+
 		for i, tx := range txs {
 			tx.ProviderID = tx.TransferID()
 			txs[i] = tx

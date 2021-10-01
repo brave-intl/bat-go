@@ -3,8 +3,8 @@ package vault
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,10 +34,10 @@ var (
 	// the combination of provider + transaction type gives you the key
 	// under which the vault secrets are located by default
 	providerTransactionTypes = map[string][]string{
-		"uphold":   {"contribution", "referral"},
+		"uphold":   {"contribution", "referral", "adsDirectDeposit"},
 		"paypal":   {"default"},
-		"gemini":   {"contribution", "referral"},
-		"bitflyer": {"default"},
+		"gemini":   {"contribution", "referral", "adsDirectDeposit"},
+		"bitflyer": {"contribution", "referral", "adsDirectDeposit"},
 	}
 	artifactGenerators = map[string]func(
 		context.Context,
@@ -158,7 +158,6 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 
 	for _, antifraudTx := range antifraudTxs {
 		tx := antifraudTx.ToTransaction()
-
 		provider := tx.WalletProvider
 		wallet := tx.Type
 		if len(providerTransactionTypes[provider]) == 1 {
@@ -186,16 +185,6 @@ func createUpholdArtifact(
 	walletKey string,
 	upholdOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return err
-	}
-
-	providerID, ok := response.Data["providerId"]
-	if !ok {
-		return errors.New("invalid wallet name")
-	}
-
 	signer, err := wrappedClient.GenerateEd25519Signer(walletKey)
 	if err != nil {
 		return err
@@ -204,7 +193,7 @@ func createUpholdArtifact(
 	var info wallet.Info
 	info.PublicKey = signer.String()
 	info.Provider = "uphold"
-	info.ProviderID = providerID.(string)
+	info.ProviderID = os.Getenv("UPHOLD_PROVIDER_ID")
 	{
 		tmp := altcurrency.BAT
 		info.AltCurrency = &tmp
@@ -255,11 +244,7 @@ func createGeminiArtifact(
 	walletKey string,
 	geminiOnlySettlements []settlement.Transaction,
 ) error {
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
-	if err != nil {
-		return err
-	}
-	oauthClientID := response.Data["clientid"].(string)
+	oauthClientID := os.Getenv("GEMINI_CLIENT_ID")
 	// group transactions (500 at a time)
 	privatePayloads, err := geminisettlement.TransformTransactions(ctx, oauthClientID, geminiOnlySettlements)
 	if err != nil {
@@ -292,6 +277,7 @@ func signGeminiRequests(
 	walletKey string,
 	privateRequests *[][]gemini.PayoutPayload,
 ) (*[]gemini.PrivateRequestSequence, error) {
+	walletKey = os.Getenv("VAULT_WALLET_NAME")
 	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return nil, err

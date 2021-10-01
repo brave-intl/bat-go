@@ -98,9 +98,7 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	token := viper.GetViper().GetString("bitflyer-client-token")
-	if out == "" {
-		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
-	}
+	out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	sourceFrom, err := cmd.Flags().GetString("bitflyer-source-from")
 	if err != nil {
 		return err
