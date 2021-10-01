@@ -61,6 +61,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
 	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
+	r.Method("PATCH", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
 
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
@@ -283,6 +284,57 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
+	})
+}
+
+// SetOrderTrialDaysInput - SetOrderTrialDays handler input
+type SetOrderTrialDaysInput struct {
+	TrialDays int64 `json:"trialDays" valid:"int"`
+}
+
+// SetOrderTrialDays is the handler for cancelling an order
+func SetOrderTrialDays(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx     = r.Context()
+			orderID = new(inputs.ID)
+		)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		// validate order merchant and caveats (to make sure this is the right merch)
+		if err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID()); err != nil {
+			return handlers.ValidationError(
+				"Error validating request merchant and caveats",
+				map[string]interface{}{
+					"orderMerchantAndCaveats": err.Error(),
+				},
+			)
+		}
+
+		var input SetOrderTrialDaysInput
+		err := requestutils.ReadJSON(r.Body, &input)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(input)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.SetOrderTrialDays(ctx, orderID.UUID(), input.TrialDays)
+		if err != nil {
+			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 
@@ -761,35 +813,59 @@ type VerifyCredentialRequest struct {
 // VerifyCredential is the handler for verifying subscription credentials
 func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		logger := logging.Logger(r.Context(), "VerifyCredential")
+		logger.Debug().Msg("starting VerifyCredential controller")
+
 		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+		logger.Debug().Msg("read verify credential post body")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
 
+		logger.Debug().Msg("validated verify credential post body")
+
 		merchant, err := GetMerchant(r.Context())
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to get the merchant from the context")
 			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
 		}
+
+		logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
+
 		caveats := GetCaveats(r.Context())
 
 		if req.MerchantID != merchant {
+			logger.Warn().
+				Str("req.MerchantID", req.MerchantID).
+				Str("merchant", merchant).
+				Msg("merchant does not match the key's merchant")
 			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
 		}
+
+		logger.Debug().Str("merchant", merchant).Msg("merchant matches the key's merchant")
 
 		if caveats != nil {
 			if sku, ok := caveats["sku"]; ok {
 				if req.SKU != sku {
+					logger.Warn().
+						Str("req.SKU", req.SKU).
+						Str("sku", sku).
+						Msg("sku caveat does not match")
 					return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
 				}
 			}
 		}
+		logger.Debug().Msg("caveats validated")
 
 		if req.Type == "single-use" {
 			var bytes []byte
@@ -830,44 +906,65 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			var bytes []byte
 			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to decode the request token presentation")
 				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
 			}
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
 
 			var presentation Presentation
 			err = json.Unmarshal(bytes, &presentation)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to unmarshal the request token presentation")
 				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
 			}
+
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
 
 			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
 			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to encode the issuer id")
 				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
 			}
+			logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
 
 			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
 
 			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse issued at time of credential")
 				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
 			}
 			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse expires at time of credential")
 				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 			}
 
 			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
 			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to verify time limited credential")
 				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
 
 			if verified {
 				// check against expiration time, issued time
 				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					logger.Error().
+						Msg("credentials are not valid")
 					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
 				}
+				logger.Debug().Msg("credentials verified")
 				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
 			}
+			logger.Error().
+				Msg("credentials could not be verified")
 
 			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
 

@@ -415,6 +415,8 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	return infos, nil
 }
 
+var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
+
 // UnlinkWallet - unlink the wallet from the custodian completely
 func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
 	// get tx
@@ -426,7 +428,7 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 	defer rollback()
 
 	// lower bound based
-	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey)
+	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
 	if !ok {
 		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
 	}
@@ -451,19 +453,27 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 			wc1.wallet_id=$1 wc1.custodian=$2 and wc2.unlinked_at>$3
 	`
 	var count int
-	err := tx.Get(&count, stmt, walletID, custodian, notBefore)
+	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
 	if err != nil {
 		return err
 	}
 
+	if count > 0 {
+		return ErrUnlinkingsExceeded
+	}
+
 	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
-	//statement := `delete from wallet_custodian where wallet_id = $1 and custodian = $2`
-	_, err := tx.ExecContext(ctx, statement, walletID, custodian)
+	_, err = tx.ExecContext(ctx, statement, walletID, custodian)
 	if err != nil {
 		return err
 	}
 
 	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
+	statement = `update wallets set user_deposit_destination='',user_account_deposit_provider=null where wallet_id = $1`
+	_, err = tx.ExecContext(ctx, statement, walletID)
+	if err != nil {
+		return err
+	}
 
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit tx: %w", err)

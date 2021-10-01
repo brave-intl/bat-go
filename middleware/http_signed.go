@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/contains"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 type httpSignedKeyID struct{}
@@ -46,7 +47,10 @@ func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
 func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger := logging.Logger(r.Context(), "VerifyHTTPSignedOnly")
+
 			if len(r.Header.Get("Signature")) == 0 {
+				logger.Warn().Msg("signature must be present for signed middleware")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}
@@ -54,7 +58,10 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
+
+				logger.Error().Err(err).Msg("failed to verify request")
 				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
 				return
 			}
 
@@ -63,15 +70,18 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 				dateStr := r.Header.Get("date")
 				date, err := time.Parse(time.RFC1123, dateStr)
 				if err != nil {
+					logger.Error().Err(err).Msg("failed to parse the date header")
 					http.Error(w, "Invalid date header", http.StatusBadRequest)
 					return
 				}
 
 				if time.Now().Add(10 * time.Minute).Before(date) {
+					logger.Error().Err(err).Msg("date is invalid")
 					http.Error(w, "Request date is invalid", http.StatusTooEarly)
 					return
 				}
 				if time.Now().Add(-10 * time.Minute).After(date) {
+					logger.Error().Err(err).Msg("date is invalid")
 					http.Error(w, "Request date is too old", http.StatusRequestTimeout)
 					return
 				}

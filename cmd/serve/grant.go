@@ -142,6 +142,11 @@ func init() {
 		"the bitflyer domain to interact with").
 		Bind("bitflyer-server").
 		Env("BITFLYER_SERVER")
+
+	flagBuilder.Flag().String("unlinking-cooldown", "",
+		"the cooldown period for custodial wallet unlinking").
+		Bind("unlinking-cooldown").
+		Env("UNLINKING_COOLDOWN")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -162,6 +167,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// -> instrumentation -> handler
 	r.Use(chiware.RequestID)
 	r.Use(middleware.RequestIDTransfer)
+	r.Use(middleware.HostTransfer)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.
@@ -414,6 +420,9 @@ func GrantServer(
 
 	// whitelisted skus
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
+
+	// custodian unlinking cooldown
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 
