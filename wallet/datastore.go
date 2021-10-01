@@ -16,6 +16,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -415,6 +416,7 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	return infos, nil
 }
 
+// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
 var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
 
 // UnlinkWallet - unlink the wallet from the custodian completely
