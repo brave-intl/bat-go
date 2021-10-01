@@ -93,12 +93,8 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	out, err := cmd.Flags().GetString("out")
-	if err != nil {
-		return err
-	}
 	token := viper.GetViper().GetString("bitflyer-client-token")
-	out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
+	output_file := strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	sourceFrom, err := cmd.Flags().GetString("bitflyer-source-from")
 	if err != nil {
 		return err
@@ -115,7 +111,7 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		cmd.Context(),
 		"upload",
 		input,
-		out,
+		output_file,
 		token,
 		sourceFrom,
 		excludeLimited,

@@ -174,7 +174,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	if err != nil {
 		panic(err)
 	}
-	// dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
+	dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: B <token>\n"))
 
 	if logger != nil {
 		logger.Debug().
