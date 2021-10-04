@@ -262,28 +262,17 @@ type CreateCheckoutSessionResponse struct {
 
 // CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
 func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
+
+	var custID string
 	// Create customer if not already created
 	i := customer.List(&stripe.CustomerListParams{
 		Email: stripe.String(email),
 	})
 
-	matchingCustomers := 0
 	for i.Next() {
-		matchingCustomers++
+		custID = i.Customer().ID
 	}
 
-	var customerID string
-	if matchingCustomers > 0 {
-		customerID = i.Customer().ID
-	} else {
-		customer, err := customer.New(&stripe.CustomerParams{
-			Email: stripe.String(email),
-		})
-		if err != nil {
-			return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe customer: %w", err)
-		}
-		customerID = customer.ID
-	}
 	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
 
 	// if a free trial is set, apply it
@@ -292,7 +281,6 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		Customer: stripe.String(customerID),
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
@@ -302,6 +290,14 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 		ClientReferenceID: stripe.String(order.ID.String()),
 		SubscriptionData:  sd,
 		LineItems:         order.CreateStripeLineItems(),
+	}
+
+	if custID != "" {
+		// try to use existing
+		params.Customer = stripe.String(custID)
+	} else {
+		// will create
+		params.CustomerEmail = stripe.String(email)
 	}
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
