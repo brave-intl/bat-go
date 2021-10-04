@@ -21,6 +21,7 @@ import (
 	"github.com/shopspring/decimal"
 	stripe "github.com/stripe/stripe-go/v71"
 	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
@@ -261,6 +262,17 @@ type CreateCheckoutSessionResponse struct {
 
 // CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
 func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
+
+	var custID string
+	// Create customer if not already created
+	i := customer.List(&stripe.CustomerListParams{
+		Email: stripe.String(email),
+	})
+
+	for i.Next() {
+		custID = i.Customer().ID
+	}
+
 	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
 
 	// if a free trial is set, apply it
@@ -269,7 +281,6 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		CustomerEmail: stripe.String(email),
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
@@ -279,6 +290,14 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 		ClientReferenceID: stripe.String(order.ID.String()),
 		SubscriptionData:  sd,
 		LineItems:         order.CreateStripeLineItems(),
+	}
+
+	if custID != "" {
+		// try to use existing
+		params.Customer = stripe.String(custID)
+	} else {
+		// will create
+		params.CustomerEmail = stripe.String(email)
 	}
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
