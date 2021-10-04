@@ -277,7 +277,7 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 			}
 
 			checkoutSession, err := order.CreateStripeCheckoutSession(
-				stripeSession.CustomerEmail,
+				stripeSession.Customer.Email,
 				stripeSession.SuccessURL, stripeSession.CancelURL,
 				order.getTrialDays(),
 			)
@@ -333,7 +333,7 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 		}
 
 		checkoutSession, err := order.CreateStripeCheckoutSession(
-			stripeSession.CustomerEmail,
+			stripeSession.Customer.Email,
 			stripeSession.SuccessURL, stripeSession.CancelURL,
 			order.getTrialDays(),
 		)
