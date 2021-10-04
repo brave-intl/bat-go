@@ -657,3 +657,136 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
 	}
 }
+
+func TestUnlinkWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/uphold/%s/unlink", idFrom), nil)
+
+		handler = wallet.UnlinkWalletV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// create transaction
+	mock.ExpectBegin()
+
+	// check the cooldown period
+	var cooldownResult = sqlmock.NewRows([]string{"count"}).AddRow(0)
+	// linking limit checks
+	mock.ExpectQuery("^select count(.+) from wallet_custodian wc1 join wallet_custodian wc2 (.+)").
+		WithArgs(idFrom, "uphold", sqlmock.AnyArg()).WillReturnRows(cooldownResult)
+
+	// updates the unlinked wallet custodian record, and returns no error and one changed row
+	mock.ExpectExec("^update wallet_custodian set unlinked_at=now(.+)").WithArgs(idFrom, "uphold").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// removes the link to the user_deposit_destination record in wallets
+	mock.ExpectExec("^update wallets set user_deposit_destination='',user_account_deposit_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction because we are done disconnecting
+	mock.ExpectCommit()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	// set cooldown to - 1 week (can not have been unlinked in the past week)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1W")
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{payment_id}/unlink", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestUnlinkFailCooldownWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/uphold/%s/unlink", idFrom), nil)
+
+		handler = wallet.UnlinkWalletV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// create transaction
+	mock.ExpectBegin()
+
+	// check the cooldown period
+	var cooldownResult = sqlmock.NewRows([]string{"count"}).AddRow(1)
+	// linking limit checks
+	mock.ExpectQuery("^select count(.+) from wallet_custodian wc1 join wallet_custodian wc2 (.+)").
+		WithArgs(idFrom, "uphold", sqlmock.AnyArg()).WillReturnRows(cooldownResult)
+
+	// commit transaction because we are done disconnecting
+	mock.ExpectRollback()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	// set cooldown to - 1 week (can not have been unlinked in the past week)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1W")
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{payment_id}/unlink", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	// forbidden when we do not pass the cooldown check
+	if resp := w.Result(); resp.StatusCode != http.StatusForbidden {
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusForbidden, resp.StatusCode))
+	}
+}
