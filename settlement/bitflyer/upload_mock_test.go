@@ -303,7 +303,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
+		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: " + transferID),
 	})
 	suite.Require().JSONEq(
 		string(expectedBytes),
