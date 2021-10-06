@@ -260,17 +260,39 @@ type CreateCheckoutSessionResponse struct {
 	SessionID string `json:"checkoutSessionId"`
 }
 
+func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
+	// has an existing checkout session
+	var email string
+	if stripeSession == nil {
+		// stripe session does not exist
+		return email
+	}
+	if stripeSession.CustomerEmail != "" {
+		// if the email was stored on the stripe session customer email, use it
+		email = stripeSession.CustomerEmail
+	} else if stripeSession.Customer != nil && stripeSession.Customer.Email != "" {
+		// if the stripe session has a customer record, with an email, use it
+		email = stripeSession.Customer.Email
+	}
+	// if there is no record of an email, stripe will ask for it and make a new customer
+	return email
+}
+
 // CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
 func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
 
 	var custID string
-	// Create customer if not already created
-	i := customer.List(&stripe.CustomerListParams{
-		Email: stripe.String(email),
-	})
 
-	for i.Next() {
-		custID = i.Customer().ID
+	if email != "" {
+		// find the existing customer by email
+		// so we can use the customer id instead of a customer email
+		i := customer.List(&stripe.CustomerListParams{
+			Email: stripe.String(email),
+		})
+
+		for i.Next() {
+			custID = i.Customer().ID
+		}
 	}
 
 	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
@@ -293,12 +315,14 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 	}
 
 	if custID != "" {
-		// try to use existing
+		// try to use existing customer we found by email
 		params.Customer = stripe.String(custID)
-	} else {
-		// will create
+	} else if email != "" {
+		// if we dont have an existing customer, this CustomerEmail param will create a new one
 		params.CustomerEmail = stripe.String(email)
 	}
+	// else we have no record of this email for this checkout session
+	// the user will be asked for the email, we cannot send an empty customer email as a param
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
 	params.AddExtra("allow_promotion_codes", "true")
