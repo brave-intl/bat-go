@@ -10,7 +10,8 @@
 
 ## Creating new local vault instance
 
-Vault is an on-device secure key-value store. 
+Vault is an on-device secure key-value store. This was designed in mind of two separate, air-gapped machines.
+Anywhere you read turning off the vault or unsealing you may skip.
 
 If you have trouble installing from the README, you can also 
 (1) Download from https://www.vaultproject.io/downloads
@@ -51,7 +52,7 @@ The `config.example.yaml` should be copied wherever it is easiest to point to. J
 
 The values name should be unique, as we use the label online (e.g. creating a wallet with the label name).
 
-As of May 2021, the following keys are accepted:
+As of May 2021, the following keys are preferred and accepted. Do note that you SHOULD NOT make a new wallet each month.:
 
 ```bash
 wallets:
@@ -73,6 +74,54 @@ GEMINI_CLIENT_KEY= \
 GEMINI_CLIENT_SECRET= \
 ./bat-go vault import-key --config=./config.yaml
 # pass a known key to only import one: --wallet-refs=gemini-referral
+```
+
+## Creating a new offline wallet
+
+On the offline machine, first bring up vault as described above.
+
+Run vault-create-wallet, this will sign the registration and store it into
+a local file:
+```
+./bat-go vault create-wallet NAME_OF_NEW_WALLET
+```
+
+Copy the created `name-of-new-wallet-registration.json` file to the online
+machine.
+
+Re-run vault-create-wallet, this will submit the pre-signed registration:
+### Uphold
+```
+export UPHOLD_ENVIRONMENT=
+export UPHOLD_HTTP_PROXY=
+export UPHOLD_ACCESS_TOKEN=
+export VAULT_ADDR=
+./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
+```
+
+### Gemini
+```
+export GEMINI_CLIENT_ID
+export GEMINI_CLIENT_KEY
+export GEMINI_CLIENT_SECRET
+export GEMINI_SERVER
+export GEMINI_SUBMIT_TYPE
+export VAULT_ADDR
+```
+
+### Bitflyer
+export BITFLYER_SOURCE_FROM=tipping # This should either be 'tipping' or 'adsrewards'
+export BITFLYER_DRYRUN=1
+export BITFLYER_CLIENT_ID=
+export BITFLYER_CLIENT_SECRET=
+export BITFLYER_EXTRA_CLIENT_SECRET=
+export BITFLYER_SERVER=https://bitflyer.com
+export BITFLYER_TOKEN= # This is obtained by running ./bat-go settlement bitflyer token
+
+Finally copy `name-of-new-wallet-registration.json` back to the offline
+machine and run vault-create-wallet to record the provider ID in vault:
+```
+./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
 ```
 
 ## Running settlement
@@ -108,44 +157,6 @@ allow restoring from errors and to avoid duplicate payouts.
 Finally upload the "-finished" output file to eyeshade to account for payout
 transactions that were made.
 
-## Creating a new offline wallet
-
-On the offline machine, first bring up vault as described above.
-
-Run vault-create-wallet, this will sign the registration and store it into
-a local file:
-```
-./bat-go vault create-wallet NAME_OF_NEW_WALLET
-```
-
-Copy the created `name-of-new-wallet-registration.json` file to the online
-machine.
-
-Re-run vault-create-wallet, this will submit the pre-signed registration:
-### Uphold
-```
-export UPHOLD_ENVIRONMENT=
-export UPHOLD_HTTP_PROXY=
-export UPHOLD_ACCESS_TOKEN=
-export VAULT_ADDR=
-./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
-```
-
-### Gemini
-```
-export GEMINI_CLIENT_ID
-export GEMINI_CLIENT_KEY
-export GEMINI_CLIENT_SECRET
-export GEMINI_SERVER
-export GEMINI_SUBMIT_TYPE
-export VAULT_ADDR
-```
-
-Finally copy `name-of-new-wallet-registration.json` back to the offline
-machine and run vault-create-wallet to record the provider ID in vault:
-```
-./bat-go vault create-wallet -offline NAME_OF_NEW_WALLET
-```
 
 ## Signing Files
 Signing the settlement file will split the input files into many output files depending on the contents of the file
@@ -158,6 +169,11 @@ Signing the settlement file will split the input files into many output files de
 ### Gemini
 ```bash
 ./bat-go vault sign-settlement --config=publishers-gemini.yaml --in=publishers-payout-report-gemini-referrals.json --providers=gemini
+```
+
+### Bitflyer
+```bash
+./bat-go vault sign-settlement --config=publishers-bitflyer.yaml --in=
 ```
 
 ## Uploading files
@@ -179,4 +195,9 @@ gemini has a command available to it for uploading transactions and sending
 and to check the status of each transaction a `checkstatus` command has been added
 ```bash
 ./bat-go settlement gemini checkstatus --input=bulk-signed-transactions.json --all-txs-input=from-antifraud.json
+```
+
+### Bitflyer
+```bash
+go run ./main.go settlement bitflyer upload --input=
 ```
