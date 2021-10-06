@@ -263,6 +263,10 @@ type CreateCheckoutSessionResponse struct {
 func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	// has an existing checkout session
 	var email string
+	if stripeSession == nil {
+		// stripe session does not exist
+		return email
+	}
 	if stripeSession.CustomerEmail != "" {
 		// if the email was stored on the stripe session customer email, use it
 		email = stripeSession.CustomerEmail
