@@ -281,7 +281,6 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("signing registration")
 
 	req, err := newRequest("POST", "/v0/me/cards", bytes.NewBuffer(payload))
 	if err != nil {
@@ -331,7 +330,6 @@ func (w *Wallet) SubmitRegistration(registrationB64 string) error {
 		return err
 	}
 
-	fmt.Print("submitting registration")
 	req, err := newRequest("POST", "/v0/me/cards", nil)
 	if err != nil {
 		return err
@@ -344,7 +342,6 @@ func (w *Wallet) SubmitRegistration(registrationB64 string) error {
 
 	body, _, err := submit(w.logger, req)
 	if err != nil {
-		fmt.Print("Got an error with submit")
 		return err
 	}
 
@@ -393,7 +390,6 @@ type CardDetails struct {
 
 // GetCardDetails returns the details associated with the wallet's backing Uphold card
 func (w *Wallet) GetCardDetails() (*CardDetails, error) {
-	fmt.Print("getting card details")
 	req, err := newRequest("GET", "/v0/me/cards/"+w.ProviderID, nil)
 	if err != nil {
 		return nil, err
@@ -451,7 +447,6 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())
 	}
 
-	fmt.Println("signing transfer")
 	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderID+"/transactions?commit=true", bytes.NewBuffer(unsignedTransaction))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
@@ -749,7 +744,6 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		url = url + "?commit=true"
 	}
 
-	fmt.Println("submitting transaction")
 	req, err := newRequest("POST", url, nil)
 	if err != nil {
 		return nil, err

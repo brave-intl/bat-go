@@ -277,14 +277,20 @@ func signGeminiRequests(
 	walletKey string,
 	privateRequests *[][]gemini.PayoutPayload,
 ) (*[]gemini.PrivateRequestSequence, error) {
-	walletKey = os.Getenv("VAULT_WALLET_NAME")
-	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	existingWalletName, isPresent := os.LookupEnv("VAULT_WALLET_NAME")
+	var preferredWalletKey string
+	if isPresent {
+	 preferredWalletKey = existingWalletName
+	} else {
+	 preferredWalletKey = walletKey
+ }
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + preferredWalletKey)
 	if err != nil {
 		return nil, err
 	}
 	clientID := response.Data["clientid"].(string)
 	clientKey := response.Data["clientkey"].(string)
-	hmacSecret, err := wrappedClient.GetHmacSecret(walletKey)
+	hmacSecret, err := wrappedClient.GetHmacSecret(preferredWalletKey)
 	if err != nil {
 		return nil, err
 	}
