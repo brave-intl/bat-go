@@ -237,6 +237,7 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 	}
 
 	if !order.IsPaid() && order.IsStripePayable() {
+		// brand new order, contains an email in the request
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
@@ -277,7 +278,7 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 			}
 
 			checkoutSession, err := order.CreateStripeCheckoutSession(
-				stripeSession.CustomerEmail,
+				getEmailFromCheckoutSession(stripeSession),
 				stripeSession.SuccessURL, stripeSession.CancelURL,
 				order.getTrialDays(),
 			)
@@ -326,14 +327,14 @@ func (s *Service) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, day
 
 	// recreate the stripe checkout session now that we have set the trial days on this order
 	if !order.IsPaid() && order.IsStripePayable() {
-		// get existing checkout session (has the original email in stripe)
+		// get old checkout session from stripe by id
 		stripeSession, err := session.Get(order.Metadata["stripeCheckoutSessionId"], nil)
 		if err != nil {
 			return fmt.Errorf("failed to get stripe checkout session: %w", err)
 		}
 
 		checkoutSession, err := order.CreateStripeCheckoutSession(
-			stripeSession.CustomerEmail,
+			getEmailFromCheckoutSession(stripeSession),
 			stripeSession.SuccessURL, stripeSession.CancelURL,
 			order.getTrialDays(),
 		)
