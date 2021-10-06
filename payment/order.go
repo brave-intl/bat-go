@@ -270,7 +270,7 @@ func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
 	if stripeSession.CustomerEmail != "" {
 		// if the email was stored on the stripe session customer email, use it
 		email = stripeSession.CustomerEmail
-	} else if stripeSession.Customer.Email != "" {
+	} else if stripeSession.Customer != nil && stripeSession.Customer.Email != "" {
 		// if the stripe session has a customer record, with an email, use it
 		email = stripeSession.Customer.Email
 	}
