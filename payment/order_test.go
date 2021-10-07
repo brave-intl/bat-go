@@ -10,6 +10,7 @@ import (
 	macarooncmd "github.com/brave-intl/bat-go/cmd/macaroon"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	skuutils "github.com/brave-intl/bat-go/utils/skus"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -98,7 +99,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	suite.Require().NoError(err)
 
 	// hacky add to skuMap
-	skuMap["development"][sku] = true
+	skuutils.AddToEnv("development", sku)
 
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, "development")
 

@@ -10,7 +10,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
-	"github.com/brave-intl/bat-go/utils/sku"
+	skuutils "github.com/brave-intl/bat-go/utils/skus"
 )
 
 // NewService - create a new rewards service structure
@@ -137,6 +137,6 @@ func (s *Service) GetParametersV2(ctx context.Context, currency *BaseCurrency) (
 			DefaultTipChoices:     getTipChoices(ctx),
 			DefaultMonthlyChoices: getMonthlyChoices(ctx),
 		},
-		SKUTokens: sku.ByEnv(os.Getenv("env")),
+		SKUTokens: skuutils.ByEnv(os.Getenv("env")),
 	}, nil
 }

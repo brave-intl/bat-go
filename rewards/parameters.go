@@ -2,7 +2,6 @@ package rewards
 
 import (
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
-	"github.com/brave-intl/bat-go/utils/sku"
 )
 
 // AutoContribute - reward parameters about ac (votes)
@@ -29,5 +28,5 @@ type ParametersV2 struct {
 	Rate           ratios.RateResponse `json:"rate,omitempty"`
 	AutoContribute AutoContribute      `json:"autocontribute,omitempty"`
 	Tips           Tips                `json:"tips,omitempty"`
-	SKUTokens      sku.Set             `json:"skuTokens,omitempty"`
+	SKUTokens      []string            `json:"skuTokens,omitempty"`
 }

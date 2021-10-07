@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/logging"
+	skuutils "github.com/brave-intl/bat-go/utils/skus"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -117,24 +118,6 @@ type OrderItem struct {
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
-// IsValidSKU checks to see if the token provided is one that we've previously created
-func IsValidSKU(skuInput string) bool {
-	env := os.Getenv("ENV")
-	if env == "production" {
-		set := sku.ByEnv(env)
-		switch skuInput {
-		case set.UserWalletVote, set.AnonCardVote, set.FreeTrial:
-			return true
-		}
-	} else {
-		devSet := sku.ByEnv("dev")
-		stagingSet := sku.ByEnv("staging")
-		switch skuInput {
-		case devSet.UserWalletVote, devSet.AnonCardVote, devSet.FreeTrial,
-			stagingSet.UserWalletVote, stagingSet.AnonCardVote, stagingSet.FreeTrial:
-			return true
-		}
-
 func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	macBytes, err := macaroon.Base64Decode([]byte(sku))
 	if err != nil {
@@ -153,7 +136,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
 	// validation prior to decoding/unmarshaling
-	valid, err := validateHardcodedSku(ctx, sku)
+	valid, err := skuutils.ValidateHardcodedSku(ctx, sku)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to validate sku")
 		return nil, nil, fmt.Errorf("failed to validate sku: %w", err)

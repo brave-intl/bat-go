@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 )
@@ -31,31 +32,52 @@ const (
 	devBraveFirewallVPNPremiumTimeLimited = "MDAyMGxvY2F0aW9uIHZwbi5icmF2ZS5zb2Z0d2FyZQowMDM3aWRlbnRpZmllciBicmF2ZS1maXJld2FsbC12cG4tcHJlbWl1bSBza3UgdG9rZW4gdjEKMDAyN2NpZCBza3U9YnJhdmUtZmlyZXdhbGwtdnBuLXByZW1pdW0KMDAxM2NpZCBwcmljZT05Ljk5CjAwMTVjaWQgY3VycmVuY3k9VVNECjAwMjljaWQgZGVzY3JpcHRpb249QnJhdmUgRmlyZXdhbGwgKyBWUE4KMDAyNWNpZCBjcmVkZW50aWFsX3R5cGU9dGltZS1saW1pdGVkCjAwMjZjaWQgY3JlZGVudGlhbF92YWxpZF9kdXJhdGlvbj1QMU0KMDAyN2NpZCBhbGxvd2VkX3BheW1lbnRfbWV0aG9kcz1zdHJpcGUKMDExNWNpZCBtZXRhZGF0YT0geyAic3RyaXBlX3Byb2R1Y3RfaWQiOiAicHJvZF9LMWM4VzNvTTRtVXNHdyIsICJzdHJpcGVfaXRlbV9pZCI6ICJwcmljZV8xSk5ZdU5Ib2YyMGJwaEc2QnZnZVlFbnQiLCAic3RyaXBlX3N1Y2Nlc3NfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9hY2NvdW50Lz9pbnRlbnQ9cHJvdmlzaW9uIiwgInN0cmlwZV9jYW5jZWxfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9wbGFucy8/aW50ZW50PWNoZWNrb3V0IiB9CjAwMmZzaWduYXR1cmUgZoDg2iXb36IocwS9/MZnvP5Hk2NfAdJ6qMs0kBSyinUK"
 )
 
-var skuMap = map[string]map[string]bool{
-	"production": {
-		prodUserWalletVote:              true,
-		prodAnonCardVote:                true,
-		prodBraveTogetherPaid:           true,
-		prodBraveTalkPremiumTimeLimited: true,
-	},
-	"staging": {
-		stagingUserWalletVote:              true,
-		stagingAnonCardVote:                true,
-		stagingWebtestPJSKUDemo:            true,
-		stagingBraveTalkPremiumTimeLimited: true,
-	},
-	"development": {
-		devUserWalletVote:                     true,
-		devAnonCardVote:                       true,
-		devSearchClosedBeta:                   true,
-		devBraveTalkPremiumTimeLimited:        true,
-		devBraveSearchPremiumTimeLimited:      true,
-		devBraveFirewallVPNPremiumTimeLimited: true,
-	},
+// ByEnv gets a set of generated sku's by environment
+func ByEnv(env string) []string {
+	var v = []string{}
+	skuMapMu.RLock()
+	defer skuMapMu.RUnlock()
+	for k := range skuMap[env] {
+		v = append(v, k)
+	}
+	return v
 }
 
-// temporary, until we can validate macaroon signatures
-func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
+// AddToEnv add a sku to an env
+func AddToEnv(env, sku string) {
+	skuMapMu.Lock()
+	defer skuMapMu.Unlock()
+	skuMap[env][sku] = true
+}
+
+var (
+	skuMapMu sync.RWMutex
+	skuMap   = map[string]map[string]bool{
+		"production": {
+			prodUserWalletVote:              true,
+			prodAnonCardVote:                true,
+			prodBraveTogetherPaid:           true,
+			prodBraveTalkPremiumTimeLimited: true,
+		},
+		"staging": {
+			stagingUserWalletVote:              true,
+			stagingAnonCardVote:                true,
+			stagingWebtestPJSKUDemo:            true,
+			stagingBraveTalkPremiumTimeLimited: true,
+		},
+		"development": {
+			devUserWalletVote:                     true,
+			devAnonCardVote:                       true,
+			devSearchClosedBeta:                   true,
+			devBraveTalkPremiumTimeLimited:        true,
+			devBraveSearchPremiumTimeLimited:      true,
+			devBraveFirewallVPNPremiumTimeLimited: true,
+		},
+	}
+)
+
+// ValidateHardcodedSku - validate a sku
+func ValidateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	// check sku white list from environment
 	whitelistSKUs, ok := ctx.Value(appctx.WhitelistSKUsCTXKey).([]string)
 	if ok {
@@ -71,6 +93,8 @@ func validateHardcodedSku(ctx context.Context, sku string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to get environment: %w", err)
 	}
+	skuMapMu.RLock()
+	defer skuMapMu.RUnlock()
 	valid, ok := skuMap[env][sku]
 	return valid && ok, nil
 }
