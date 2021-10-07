@@ -30,6 +30,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	skuutils "github.com/brave-intl/bat-go/utils/skus"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -125,25 +126,25 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
-	skuMap["development"][UserWalletVoteTestSkuToken] = true
+	skuutils.AddToEnv("development", UserWalletVoteTestSkuToken)
 
 	AnonCardVoteTestSkuToken, err = AnonCardToken.Generate("testing123")
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
-	skuMap["development"][AnonCardVoteTestSkuToken] = true
+	skuutils.AddToEnv("development", AnonCardVoteTestSkuToken)
 
 	FreeTestSkuToken, err = FreeTestToken.Generate("testing123")
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
-	skuMap["development"][FreeTestSkuToken] = true
+	skuutils.AddToEnv("development", FreeTestSkuToken)
 
 	FreeTLTestSkuToken, err = FreeTLTestToken.Generate("testing123")
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
-	skuMap["development"][FreeTLTestSkuToken] = true
+	skuutils.AddToEnv("development", FreeTLTestSkuToken)
 
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
