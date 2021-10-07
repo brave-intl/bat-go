@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/brave-intl/bat-go/middleware"
@@ -15,10 +18,22 @@ import (
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
-	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
+
+// regular expression mapped to the replacement
+var redactHeaders = map[*regexp.Regexp][]byte{
+	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
+	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
+}
+
+func redactSensitiveHeaders(corpus []byte) []byte {
+	for k, v := range redactHeaders {
+		corpus = k.ReplaceAll(corpus, v)
+	}
+	return corpus
+}
 
 var concurrentClientRequests = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
@@ -33,6 +48,12 @@ var concurrentClientRequests = prometheus.NewGaugeVec(
 
 func init() {
 	prometheus.MustRegister(concurrentClientRequests)
+}
+
+// QueryStringBody - a type to generate the query string from a request "body" for the client
+type QueryStringBody interface {
+	// GenerateQueryString - function to generate the query string
+	GenerateQueryString() (url.Values, error)
 }
 
 // SimpleHTTPClient wraps http.Client for making simple token authorized requests
@@ -117,16 +138,20 @@ func (c *SimpleHTTPClient) newRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, int, error) {
 	var buf io.ReadWriter
 	qs := ""
-	if method == "GET" && body != nil {
-		v, err := query.Values(body)
+
+	if qsb != nil {
+		v, err := qsb.GenerateQueryString()
 		if err != nil {
-			return nil, 0, err
+			// problem generating the query string from the type
+			return nil, 0, fmt.Errorf("failed to generate query string: %w", err)
 		}
 		qs = v.Encode()
 	}
+
 	resolvedURL := c.BaseURL.ResolveReference(&url.URL{
 		Path:     path,
 		RawQuery: qs,
@@ -173,12 +198,12 @@ func (c *SimpleHTTPClient) NewRequest(
 	method,
 	path string,
 	body interface{},
+	qsb QueryStringBody,
 ) (*http.Request, error) {
-	req, status, err := c.newRequest(ctx, method, path, body)
+	req, status, err := c.newRequest(ctx, method, path, body, qsb)
 	if err != nil {
 		return nil, NewHTTPError(err, (*req.URL).String(), "request", status, body)
 	}
-	logOut(ctx, "request", *req.URL, 0, req.Header, body)
 	return req, err
 }
 
@@ -202,17 +227,26 @@ func (c *SimpleHTTPClient) do(
 			}).Dec()
 	}()
 
+	logger := log.Ctx(ctx)
+
+	// dump out the full request, right before we submit it
+	requestDump, err := httputil.DumpRequestOut(req, true)
+	if err != nil {
+		panic(err)
+	}
+	logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
-	logger := log.Ctx(ctx)
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		panic(err)
 	}
+
 	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
 	// // helpful if you want to read the body as it is
@@ -246,12 +280,19 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
+		// if there was an error, read the response body
+		// and inject into error for later
+		b, err := ioutil.ReadAll(resp.Body)
+		rb := string(b)
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+
 		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
-			Body    interface{}
-			Headers interface{}
+			Body            interface{}
+			ResponseHeaders interface{}
 		}{
-			Body:    v,
-			Headers: req.Header,
+			// put response body/headers in the err state data
+			Body:            rb,
+			ResponseHeaders: resp.Header,
 		})
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)
@@ -266,6 +307,7 @@ func logOut(
 	headers http.Header,
 	body interface{},
 ) {
+
 	logger := log.Ctx(ctx)
 	hash := map[string]interface{}{
 		"url":     url.String(),
@@ -281,7 +323,7 @@ func logOut(
 	} else {
 		logger.Debug().
 			Str("type", "http."+outType).
-			RawJSON(outType, input).
+			RawJSON(outType, redactSensitiveHeaders(input)).
 			Msg(outType + " dump")
 	}
 }

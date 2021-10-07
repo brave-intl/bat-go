@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -32,6 +33,33 @@ func init() {
 	prometheus.MustRegister(inFlightGauge, ConcurrentGoRoutines)
 }
 
+func must(v interface{}, err error) interface{} {
+	if err != nil {
+		panic(err.Error())
+	}
+	return v
+}
+
+func registerIgnoreExisting(c prometheus.Collector) (interface{}, error) {
+	if err := prometheus.Register(c); err != nil {
+		var are *prometheus.AlreadyRegisteredError
+		if errors.As(err, &are) {
+			// already registered.
+			switch (c).(type) {
+			case *prometheus.CounterVec:
+				return are.ExistingCollector.(*prometheus.CounterVec), nil
+			case *prometheus.HistogramVec:
+				return are.ExistingCollector.(*prometheus.HistogramVec), nil
+			case prometheus.Gauge:
+				return are.ExistingCollector.(prometheus.Gauge), nil
+			default:
+				return nil, errors.New("unknown type")
+			}
+		}
+	}
+	return c, nil
+}
+
 // InstrumentRoundTripper instruments an http.RoundTripper to capture metrics like the number
 // of active requests, the total number of requests made and latency information
 func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http.RoundTripper {
@@ -40,6 +68,8 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 		Help:        "A gauge of in-flight requests for the wrapped client.",
 		ConstLabels: prometheus.Labels{"service": service},
 	})
+	// attempt to register, if already registered use the registered one
+	inFlightGauge = must(registerIgnoreExisting(inFlightGauge)).(prometheus.Gauge)
 
 	counter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -49,6 +79,9 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 		},
 		[]string{"code", "method"},
 	)
+	// attempt to register, if already registered use the registered one
+	// attempt to register, if already registered use the registered one
+	counter = must(registerIgnoreExisting(counter)).(*prometheus.CounterVec)
 
 	// dnsLatencyVec uses custom buckets based on expected dns durations.
 	// It has an instance label "event", which is set in the
@@ -63,6 +96,8 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 		},
 		[]string{"event"},
 	)
+	// attempt to register, if already registered use the registered one
+	dnsLatencyVec = must(registerIgnoreExisting(dnsLatencyVec)).(*prometheus.HistogramVec)
 
 	// tlsLatencyVec uses custom buckets based on expected tls durations.
 	// It has an instance label "event", which is set in the
@@ -77,6 +112,8 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 		},
 		[]string{"event"},
 	)
+	// attempt to register, if already registered use the registered one
+	tlsLatencyVec = must(registerIgnoreExisting(tlsLatencyVec)).(*prometheus.HistogramVec)
 
 	// histVec has no labels, making it a zero-dimensional ObserverVec.
 	histVec := prometheus.NewHistogramVec(
@@ -88,9 +125,8 @@ func InstrumentRoundTripper(roundTripper http.RoundTripper, service string) http
 		},
 		[]string{},
 	)
-
-	// Register all of the metrics in the standard registry.
-	prometheus.MustRegister(counter, tlsLatencyVec, dnsLatencyVec, histVec, inFlightGauge)
+	// attempt to register, if already registered use the registered one
+	histVec = must(registerIgnoreExisting(histVec)).(*prometheus.HistogramVec)
 
 	// Define functions for the available httptrace.ClientTrace hook
 	// functions that we want to instrument.

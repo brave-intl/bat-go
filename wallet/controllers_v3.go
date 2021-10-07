@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
@@ -96,14 +97,22 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 
 // CreateBraveWalletV3 - produces an http handler for the service s which handles creation of brave wallets
 func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	verifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		},
+		Keystore: &DecodeEd25519Keystore{},
+		Opts:     crypto.Hash(0),
+	}
+
 	// perform validation based on public key that the user submits
-	publicKey, err := validateHTTPSignature(r.Context(), r, r.Header.Get("Signature"))
+	ctx, keyID, err := verifier.VerifyRequest(r)
 	if err != nil {
 		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 	}
 
 	var (
-		ctx = r.Context()
 		bcr = new(BraveCreationRequest)
 	)
 
@@ -134,7 +143,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	var info = &walletutils.Info{
 		ID:          uuid.NewV4().String(),
 		Provider:    "brave",
-		PublicKey:   publicKey,
+		PublicKey:   keyID,
 		AltCurrency: &altCurrency,
 	}
 
@@ -199,16 +208,68 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			return blr.HandleErrors(err)
 		}
 
-		// get the wallet
-		wallet, err := s.GetWallet(ctx, *id.UUID())
+		err = s.LinkBitFlyerWallet(ctx, *id.UUID(), blr.DepositID, blr.AccountHash)
 		if err != nil {
-			if strings.Contains(err.Error(), "looking up wallet") {
-				return handlers.WrapError(err, "unable to find wallet", http.StatusNotFound)
-			}
-			return handlers.WrapError(err, "unable to get or create wallets", http.StatusServiceUnavailable)
+			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
-		err = s.LinkBitFlyerWallet(ctx, wallet, blr.DepositID, blr.AccountHash)
+		// render the wallet
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+// LinkGeminiDepositAccountV3 - produces an http handler for the service s which handles deposit account linking of uphold wallets
+func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx = r.Context()
+			id  = new(inputs.ID)
+			glr = new(GeminiLinkingRequest)
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		// get payment id
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// validate payment id matches what was in the http signature
+		signatureID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		if id.String() != signatureID {
+			return handlers.ValidationError(
+				"paymentId from URL does not match paymentId in http signature",
+				map[string]interface{}{
+					"paymentID": "does not match http signature id",
+				},
+			)
+		}
+
+		// read post body
+		if err := inputs.DecodeAndValidateReader(ctx, glr, r.Body); err != nil {
+			return glr.HandleErrors(err)
+		}
+
+		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
@@ -526,6 +587,39 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 	}
 }
 
+// UnlinkWalletV3 - unlink a particular wallet from a custodian.
+func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx       = r.Context()
+			walletID  = chi.URLParam(r, "payment_id")
+			custodian = chi.URLParam(r, "custodian")
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		logger.Debug().
+			Str("walletID", walletID).
+			Str("custodian", custodian).
+			Msg("unlinking wallet from custodian")
+		err = s.UnlinkWallet(ctx, walletID, custodian)
+		if err != nil {
+			if errors.Is(err, ErrUnlinkingsExceeded) {
+				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+				return handlers.WrapError(err, "error unlinking wallet", http.StatusForbidden)
+			}
+			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
 // IncreaseLinkingLimitV3 - increase the allowable linking limit for the specified paymentId by one
 func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -599,5 +693,77 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 		}
 
 		return handlers.RenderContent(ctx, info, w, http.StatusOK)
+	}
+}
+
+// DisconnectCustodianLinkV3 - produces an http handler for the service s which handles disconnect
+// state for a deposit account linking
+func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx       = r.Context()
+			id        = new(inputs.ID)
+			custodian = new(CustodianName)
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		// get payment id
+		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
+			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
+			return handlers.ValidationError(
+				"error validating paymentID url parameter",
+				map[string]interface{}{
+					"paymentID": err.Error(),
+				},
+			)
+		}
+
+		// get custodian name
+		if err := inputs.DecodeAndValidateString(ctx, custodian, chi.URLParam(r, "custodian")); err != nil {
+			logger.Warn().Str("custodian", err.Error()).Msg("failed to decode and validate custodian from url")
+			return handlers.ValidationError(
+				"error validating custodian url parameter",
+				map[string]interface{}{
+					"custodian": err.Error(),
+				},
+			)
+		}
+
+		sublogger := logger.With().
+			Str("custodian", custodian.String()).
+			Str("paymentID", id.String()).Logger()
+
+		// validate payment id matches what was in the http signature
+		signatureID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.ValidationError(
+				"error validating http signature, does not match paymentID url parameter",
+				map[string]interface{}{
+					"signature": err.Error(),
+				},
+			)
+		}
+
+		if id.String() != signatureID {
+			return handlers.ValidationError(
+				"paymentId from URL does not match paymentId in http signature",
+				map[string]interface{}{
+					"paymentID": "does not match http signature id",
+				},
+			)
+		}
+
+		err = s.DisconnectCustodianLink(ctx, custodian.String(), *id.UUID())
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to disconnect custodian link")
+			return handlers.WrapError(err, "failed to disconnect custodian link", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }

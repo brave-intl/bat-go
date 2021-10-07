@@ -3,17 +3,22 @@ package gemini
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/google/go-querystring/query"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
@@ -35,6 +40,12 @@ type PayoutPayload struct {
 	Currency    string          `json:"currency"`
 	Destination string          `json:"destination"`
 	Account     *string         `json:"account,omitempty"`
+}
+
+// CheckTxPayload get the tx status payload structure
+type CheckTxPayload struct {
+	Request string `json:"request"`
+	Nonce   int64  `json:"nonce"`
 }
 
 // AccountListPayload retrieves all accounts associated with a gemini key
@@ -105,6 +116,14 @@ func NewBulkPayoutPayload(account *string, oauthClientID string, payouts *[]Payo
 	}
 }
 
+// NewCheckTxPayload generate a new payload for the check tx api
+func NewCheckTxPayload(url string) CheckTxPayload {
+	return CheckTxPayload{
+		Request: url,
+		Nonce:   nonce(),
+	}
+}
+
 // NewAccountListPayload generate a new account list payload
 func NewAccountListPayload() AccountListPayload {
 	return AccountListPayload{
@@ -161,6 +180,8 @@ func (pr PayoutResult) GenerateLog() string {
 
 // Client abstracts over the underlying client
 type Client interface {
+	// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
+	ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error)
 	// FetchAccountList requests account information to scope future requests
 	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
@@ -174,6 +195,13 @@ type Client interface {
 // HTTPClient wraps http.Client for interacting with the cbr server
 type HTTPClient struct {
 	client *clients.SimpleHTTPClient
+}
+
+// Conf some common gemini configuration values
+type Conf struct {
+	ClientID string
+	APIKey   string
+	Secret   string
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
@@ -202,7 +230,8 @@ func setHeaders(
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("Cache-Control", "no-cache")
 	if payload != "" {
-		req.Header.Set("X-GEMINI-PAYLOAD", payload)
+		// base64 encode the payload
+		req.Header.Set("X-GEMINI-PAYLOAD", base64.StdEncoding.EncodeToString([]byte(payload)))
 	}
 	if submitType != "oauth" {
 		// do not send when oauth
@@ -230,7 +259,7 @@ func setPrivateRequestHeaders(
 		}
 		signs := *signer
 		// only set if sending an hmac salt
-		signature, err := signs.HMACSha384([]byte(payload))
+		signature, err := signs.HMACSha384([]byte(base64.StdEncoding.EncodeToString([]byte(payload))))
 		if err != nil {
 			return err
 		}
@@ -247,12 +276,26 @@ func (c *HTTPClient) CheckTxStatus(
 	txRef string,
 ) (*PayoutResult, error) {
 	urlPath := fmt.Sprintf("/v1/payment/%s/%s", clientID, txRef)
-	req, err := c.client.NewRequest(ctx, "POST", urlPath, nil)
+	req, err := c.client.NewRequest(ctx, "GET", urlPath, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	err = setHeaders(req, APIKey, nil, "", "api")
+	// create the gemini payload
+	payload, err := json.Marshal(NewCheckTxPayload(urlPath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gemini payload for api: %w", err)
+	}
+
+	// get api secret from context
+	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
+	}
+	//create a new hmac hasher
+	signer := cryptography.NewHMACHasher([]byte(apiSecret))
+
+	err = setHeaders(req, APIKey, &signer, string(payload), "hmac")
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +315,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]PayoutResult, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -289,6 +332,46 @@ func (c *HTTPClient) UploadBulkPayout(
 	return &body, err
 }
 
+// ValidateAccountReq - request structure for inputs to validate account client call
+type ValidateAccountReq struct {
+	Token       string `url:"token"`
+	RecipientID string `url:"recipient_id"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
+	return query.Values(v)
+}
+
+// ValidateAccountRes - request structure for inputs to validate account client call
+type ValidateAccountRes struct {
+	ID string `json:"id"`
+}
+
+// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
+func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
+	// create the query string parameters
+	var (
+		res = new(ValidateAccountRes)
+	)
+
+	// create the request
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/validate", nil, &ValidateAccountReq{
+		Token:       verificationToken,
+		RecipientID: recipientID,
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	_, err = c.client.Do(ctx, req, res)
+	if err != nil {
+		return "", err
+	}
+	return res.ID, nil
+}
+
 // FetchAccountList fetches the list of accounts associated with the given api key
 func (c *HTTPClient) FetchAccountList(
 	ctx context.Context,
@@ -296,7 +379,7 @@ func (c *HTTPClient) FetchAccountList(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]Account, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/list", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/account/list", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +403,7 @@ func (c *HTTPClient) FetchBalances(
 	signer cryptography.HMACKey,
 	payload string,
 ) (*[]Balance, error) {
-	req, err := c.client.NewRequest(ctx, "POST", "/v1/balances", nil)
+	req, err := c.client.NewRequest(ctx, "POST", "/v1/balances", nil, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -29,7 +29,6 @@ import (
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
-	"github.com/go-chi/cors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -61,10 +60,67 @@ func init() {
 		Bind("brave-transfer-promotion-ids").
 		Env("BRAVE_TRANSFER_PROMOTION_IDS")
 
+	flagBuilder.Flag().StringSlice("skus-whitelist", []string{""},
+		"the whitelist of skus").
+		Bind("skus-whitelist").
+		Env("SKUS_WHITELIST")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
 		Env("WALLET_ON_PLATFORM_PRIOR_TO")
+
+	flagBuilder.Flag().Bool("reputation-on-drain", false,
+		"check wallet reputation on drain").
+		Bind("reputation-on-drain").
+		Env("REPUTATION_ON_DRAIN")
+
+	// stripe configurations
+	flagBuilder.Flag().Bool("stripe-enabled", false,
+		"is stripe enabled for payments").
+		Bind("stripe-enabled").
+		Env("STRIPE_ENABLED")
+
+	flagBuilder.Flag().String("stripe-webhook-secret", "",
+		"the stripe webhook secret").
+		Bind("stripe-webhook-secret").
+		Env("STRIPE_WEBHOOK_SECRET")
+
+	flagBuilder.Flag().String("stripe-secret", "",
+		"the stripe secret").
+		Bind("stripe-secret").
+		Env("STRIPE_SECRET")
+
+	// gemini credentials
+	flagBuilder.Flag().String("gemini-settlement-address", "",
+		"the settlement address for gemini").
+		Bind("gemini-settlement-address").
+		Env("GEMINI_SETTLEMENT_ADDRESS")
+
+	flagBuilder.Flag().String("gemini-api-key", "",
+		"the api key for gemini").
+		Bind("gemini-api-key").
+		Env("GEMINI_API_KEY")
+
+	flagBuilder.Flag().String("gemini-api-secret", "",
+		"the api secret for gemini").
+		Bind("gemini-api-secret").
+		Env("GEMINI_API_SECRET")
+
+	flagBuilder.Flag().String("gemini-browser-client-id", "",
+		"the browser client id for gemini, which is the oauth client id the browser uses, required to validate transactions for AC flow").
+		Bind("gemini-browser-client-id").
+		Env("GEMINI_BROWSER_CLIENT_ID")
+
+	flagBuilder.Flag().String("gemini-client-id", "",
+		"the client id for gemini").
+		Bind("gemini-client-id").
+		Env("GEMINI_CLIENT_ID")
+
+	flagBuilder.Flag().String("gemini-client-secret", "",
+		"the client secret for gemini").
+		Bind("gemini-client-secret").
+		Env("GEMINI_CLIENT_SECRET")
 
 	// bitflyer credentials
 	flagBuilder.Flag().String("bitflyer-client-id", "",
@@ -86,6 +142,11 @@ func init() {
 		"the bitflyer domain to interact with").
 		Bind("bitflyer-server").
 		Env("BITFLYER_SERVER")
+
+	flagBuilder.Flag().String("unlinking-cooldown", "",
+		"the cooldown period for custodial wallet unlinking").
+		Bind("unlinking-cooldown").
+		Env("UNLINKING_COOLDOWN")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -101,23 +162,12 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r := chi.NewRouter()
 
-	if os.Getenv("ENV") != "production" {
-		r.Use(cors.Handler(cors.Options{
-			Debug:            true,
-			AllowedOrigins:   []string{"https://confab.bsg.brave.software", "https://together.bsg.brave.software"},
-			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Digest", "Signature"},
-			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: false,
-			MaxAge:           300,
-		}))
-	}
-
 	// chain should be:
 	// id / transfer -> ip -> heartbeat -> request logger / recovery -> token check -> rate limit
 	// -> instrumentation -> handler
 	r.Use(chiware.RequestID)
 	r.Use(middleware.RequestIDTransfer)
+	r.Use(middleware.HostTransfer)
 
 	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
 	// provided to us. In particular it uses the first element.
@@ -137,7 +187,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(middleware.BearerToken)
 	if os.Getenv("ENV") == "production" {
-		r.Use(middleware.RateLimiter(ctx, 180))
+		// allow a burst of 4
+		ctx = context.WithValue(ctx, appctx.RateLimiterBurstCTXKey, 4)
+		// one request (or burst) every 500 ms
+		r.Use(middleware.RateLimiter(ctx, 120))
 	}
 
 	var walletService *wallet.Service
@@ -210,6 +263,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
+
 	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
@@ -221,6 +275,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
+	// for payment webhook integrations
+	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
@@ -237,8 +293,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		}
 		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
 	}
-
-	r.Get("/metrics", middleware.Metrics())
 
 	// add profiling flag to enable profiling routes
 	if os.Getenv("PPROF_ENABLED") != "" {
@@ -268,6 +322,8 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		r.Mount("/v1/devicecheck", proxyRouter)
 		r.Mount("/v1/captchas", proxyRouter)
 		r.Mount("/v2/attestations/safetynet", proxyRouter)
+		// v3/captcha
+		r.Mount("/v3/captcha", proxyRouter)
 	}
 
 	return ctx, r, promotionService, jobs
@@ -342,11 +398,31 @@ func GrantServer(
 	// add flags to context
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
 	ctx = context.WithValue(ctx, appctx.BitflyerClientSecretCTXKey, viper.GetString("bitflyer-client-secret"))
 	ctx = context.WithValue(ctx, appctx.BitflyerClientIDCTXKey, viper.GetString("bitflyer-client-id"))
+
+	// gemini variables
+	ctx = context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("gemini-settlement-address"))
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, viper.GetString("gemini-api-key"))
+	ctx = context.WithValue(ctx, appctx.GeminiAPISecretCTXKey, viper.GetString("gemini-api-secret"))
+	ctx = context.WithValue(ctx, appctx.GeminiBrowserClientIDCTXKey, viper.GetString("gemini-browser-client-id"))
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
+	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
+
+	// stripe variables
+	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
+	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
+	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
+
+	// whitelisted skus
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
+
+	// custodian unlinking cooldown
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

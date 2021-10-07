@@ -150,3 +150,14 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 	}()
 	return progChan
 }
+
+// Logger - get a logger a little easier for payments
+func Logger(ctx context.Context, prefix string) *zerolog.Logger {
+	l, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// create a new logger
+		_, l = SetupLogger(ctx)
+	}
+	sl := l.With().Str("module", prefix).Logger()
+	return &sl
+}

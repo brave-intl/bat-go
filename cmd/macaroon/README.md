@@ -5,8 +5,9 @@ provided there is a yaml file defining all of the tokens one wishes to generate,
 well as the HMAC secret key.
 
 ```bash
-go build -o macaroon-cli-gen ./...
-./macaroon-cli-gen -config example.yaml -secret secret
+cd bat-go/ # go to root of bat-go repository
+go build ./... # build the bat-go exec
+./bat-go macaroon create --config cmd/macaroon/brave-talk/brave_talk_free_dev.yaml --secret secret
 ```
 
 The above command will read "example.yaml" parse it into a token config and then create

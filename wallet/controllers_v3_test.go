@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +18,7 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/middleware"
+	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -27,7 +29,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"gopkg.in/square/go-jose.v2"
+	jose "gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -38,7 +40,7 @@ func must(t *testing.T, msg string, err error) {
 }
 
 func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = hex.EncodeToString(publicKey)
 	s.Headers = []string{"digest", "(request-target)"}
@@ -84,9 +86,6 @@ func TestLinkBraveWalletV3(t *testing.T) {
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
-
-		rows = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
-			AddRow(idFrom, "brave", "", "12345", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), idTo)
 	)
 
 	mockReputation.EXPECT().IsWalletOnPlatform(
@@ -97,20 +96,35 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		true,
 		nil,
 	)
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
 
+	// begin linking tx
 	mock.ExpectBegin()
+
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	// not before linked
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "brave").WillReturnError(sql.ErrNoRows)
+
 	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
 	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
 
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), 4).WillReturnRows(max)
-	mock.ExpectQuery("^select (.+)").WithArgs(uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(open)
+	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("brave", linkingID.String())
 
-	// txHasDestination
-	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
+	// linking limit checks
+	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
 
-	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, uuid.NewV5(wallet.WalletClaimNamespace, idTo.String()), "brave").WillReturnResult(sqlmock.NewResult(1, 1))
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
+
+	// insert into wallet custodian
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
+
+	// updates the user_deposit_destination
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "brave", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -336,23 +350,30 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
-
-		providerLinkingID = uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
-		rows              = sqlmock.NewRows([]string{"id", "provider", "provider_id", "public_key", "provider_linking_id", "anonymous_address"}).
-					AddRow(idFrom, "bitflyer", "", "12345", providerLinkingID, idTo)
 	)
 	mock.ExpectExec("^insert (.+)").WithArgs("1").WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(rows)
-
+	// begin linking tx
 	mock.ExpectBegin()
-	mock.ExpectQuery("^select (.+)").WithArgs(providerLinkingID).WillReturnRows(rows)
 
-	// txHasDestination
-	var hasDestRows = sqlmock.NewRows([]string{"bool"}).AddRow(true)
-	mock.ExpectQuery("^select (.+)").WithArgs(idFrom).WillReturnRows(hasDestRows)
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
 
-	mock.ExpectExec("^UPDATE (.+)").WithArgs(idFrom, providerLinkingID, "bitflyer").WillReturnResult(sqlmock.NewResult(1, 1))
+	// this wallet has been linked prior, with the same linking id that the request is with
+	// SHOULD SKIP THE linking limit checks
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "bitflyer").WillReturnRows(linkingIDRows)
+
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
+
+	// insert into wallet custodian
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(clRows)
+
+	// updates the link to the wallet_custodian record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction
 	mock.ExpectCommit()
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -370,5 +391,402 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		body, err := ioutil.ReadAll(resp.Body)
 		t.Logf("%s, %+v\n", body, err)
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom    = uuid.NewV4()
+		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
+		accountID = uuid.NewV4()
+		idTo      = accountID
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		linkingInfo = "this is the fake jwt for linking_info"
+
+		// setup mock clients
+		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
+		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"POST",
+			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
+			bytes.NewBufferString(fmt.Sprintf(`
+				{
+					"linking_info": "%s",
+					"recipient_id": "%s"
+				}`, linkingInfo, idTo)),
+		)
+		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
+	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+
+	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		accountID.String(),
+		nil,
+	)
+
+	// begin linking tx
+	mock.ExpectBegin()
+
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	// not before linked
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
+
+	var max = sqlmock.NewRows([]string{"max"}).AddRow(4)
+	var open = sqlmock.NewRows([]string{"used"}).AddRow(0)
+
+	var custLinks = sqlmock.NewRows([]string{"custodian", "linking_id"}).AddRow("gemini", linkingID.String())
+
+	// linking limit checks
+	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
+
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
+
+	// insert into wallet custodian
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+
+	// updates the link to the wallet_custodian record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction
+	mock.ExpectCommit()
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestLinkGeminiWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom    = uuid.NewV4()
+		ctx       = middleware.AddKeyID(context.Background(), idFrom.String())
+		accountID = uuid.NewV4()
+		idTo      = accountID
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		linkingInfo = "this is the fake jwt for linking_info"
+
+		// setup mock clients
+		mockReputationClient = mockreputation.NewMockClient(mockCtrl)
+		mockGeminiClient     = mockgemini.NewMockClient(mockCtrl)
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"POST",
+			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom),
+			bytes.NewBufferString(fmt.Sprintf(`
+				{
+					"linking_info": "%s",
+					"recipient_id": "%s"
+				}`, linkingInfo, idTo)),
+		)
+		handler = wallet.LinkGeminiDepositAccountV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
+	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+
+	mockGeminiClient.EXPECT().ValidateAccount(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		accountID.String(),
+		nil,
+	)
+
+	// begin linking tx
+	mock.ExpectBegin()
+
+	// make sure old linking id matches new one for same custodian
+	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
+
+	// this wallet has been linked prior, with the same linking id that the request is with
+	// SHOULD SKIP THE linking limit checks
+	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
+		AddRow(time.Now(), time.Now())
+
+	// insert into wallet custodian
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+
+	// updates the link to the wallet_custodian record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction
+	mock.ExpectCommit()
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Post("/v3/wallet/gemini/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		t.Logf("%+v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		t.Logf("%s, %+v\n", body, err)
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestDisconnectCustodianLinkV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/gemini/%s/claim", idFrom), nil)
+
+		handler = wallet.DisconnectCustodianLinkV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// create transaction
+	mock.ExpectBegin()
+
+	// removes the link to the user_deposit_destination record in wallets
+	mock.ExpectExec("^update wallets (.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// updates the disconnected date on the record, and returns no error and one changed row
+	mock.ExpectExec("^update wallet_custodian(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction because we are done disconnecting
+	mock.ExpectCommit()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{paymentID}/claim", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestUnlinkWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/uphold/%s/unlink", idFrom), nil)
+
+		handler = wallet.UnlinkWalletV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// create transaction
+	mock.ExpectBegin()
+
+	// check the cooldown period
+	var cooldownResult = sqlmock.NewRows([]string{"count"}).AddRow(0)
+	// linking limit checks
+	mock.ExpectQuery("^select count(.+) from wallet_custodian wc1 join wallet_custodian wc2 (.+)").
+		WithArgs(idFrom, "uphold", sqlmock.AnyArg()).WillReturnRows(cooldownResult)
+
+	// updates the unlinked wallet custodian record, and returns no error and one changed row
+	mock.ExpectExec("^update wallet_custodian set unlinked_at=now(.+)").WithArgs(idFrom, "uphold").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// removes the link to the user_deposit_destination record in wallets
+	mock.ExpectExec("^update wallets set user_deposit_destination='',user_account_deposit_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// commit transaction because we are done disconnecting
+	mock.ExpectCommit()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	// set cooldown to - 1 week (can not have been unlinked in the past week)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1W")
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{payment_id}/unlink", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	if resp := w.Result(); resp.StatusCode != http.StatusOK {
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusOK, resp.StatusCode))
+	}
+}
+
+func TestUnlinkFailCooldownWalletV3(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	var (
+		// setup test variables
+		idFrom = uuid.NewV4()
+		ctx    = middleware.AddKeyID(context.Background(), idFrom.String())
+
+		// setup db mocks
+		db, mock, _ = sqlmock.New()
+		datastore   = wallet.Datastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+		roDatastore = wallet.ReadOnlyDatastore(
+			&wallet.Postgres{
+				grantserver.Postgres{
+					DB: sqlx.NewDb(db, "postgres"),
+				},
+			})
+
+		// this is our main request
+		r = httptest.NewRequest(
+			"DELETE",
+			fmt.Sprintf("/v3/wallet/uphold/%s/unlink", idFrom), nil)
+
+		handler = wallet.UnlinkWalletV3(&wallet.Service{
+			Datastore: datastore,
+		})
+		w = httptest.NewRecorder()
+	)
+
+	// create transaction
+	mock.ExpectBegin()
+
+	// check the cooldown period
+	var cooldownResult = sqlmock.NewRows([]string{"count"}).AddRow(1)
+	// linking limit checks
+	mock.ExpectQuery("^select count(.+) from wallet_custodian wc1 join wallet_custodian wc2 (.+)").
+		WithArgs(idFrom, "uphold", sqlmock.AnyArg()).WillReturnRows(cooldownResult)
+
+	// commit transaction because we are done disconnecting
+	mock.ExpectRollback()
+
+	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
+	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	// set cooldown to - 1 week (can not have been unlinked in the past week)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1W")
+
+	r = r.WithContext(ctx)
+
+	router := chi.NewRouter()
+	router.Delete("/v3/wallet/{custodian}/{payment_id}/unlink", handlers.AppHandler(handler).ServeHTTP)
+	router.ServeHTTP(w, r)
+
+	// forbidden when we do not pass the cooldown check
+	if resp := w.Result(); resp.StatusCode != http.StatusForbidden {
+		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusForbidden, resp.StatusCode))
 	}
 }

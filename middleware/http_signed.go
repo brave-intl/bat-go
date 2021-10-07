@@ -5,17 +5,14 @@ import (
 	"crypto"
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/brave-intl/bat-go/utils/contains"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 type httpSignedKeyID struct{}
-
-// Keystore provides a way to lookup a public key based on the keyID a request was signed with
-type Keystore interface {
-	// LookupPublicKey based on the keyID
-	LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error)
-}
 
 //AddKeyID - Helpful for test cases
 func AddKeyID(ctx context.Context, id string) context.Context {
@@ -32,43 +29,65 @@ func GetKeyID(ctx context.Context) (string, error) {
 }
 
 // HTTPSignedOnly is a middleware that requires an HTTP request to be signed
-func HTTPSignedOnly(ks Keystore) func(http.Handler) http.Handler {
+func HTTPSignedOnly(ks httpsignature.Keystore) func(http.Handler) http.Handler {
+	verifier := httpsignature.ParameterizedKeystoreVerifier{
+		SignatureParams: httpsignature.SignatureParams{
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		},
+		Keystore: ks,
+		Opts:     crypto.Hash(0),
+	}
+
+	return VerifyHTTPSignedOnly(verifier)
+}
+
+// VerifyHTTPSignedOnly is a middleware that requires an HTTP request to be signed
+// which takes a parameterized http signature verifier
+func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var s httpsignature.Signature
-			err := s.UnmarshalText([]byte(r.Header.Get("Signature")))
-			if err != nil {
-				http.Error(w, http.StatusText(400), 400)
+			logger := logging.Logger(r.Context(), "VerifyHTTPSignedOnly")
+
+			if len(r.Header.Get("Signature")) == 0 {
+				logger.Warn().Msg("signature must be present for signed middleware")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				return
 			}
 
-			// Override algorithm and headers to those we want to enforce
-			s.Algorithm = httpsignature.ED25519
-			s.Headers = []string{"digest", "(request-target)"}
-
-			ctx := context.WithValue(r.Context(), httpSignedKeyID{}, s.KeyID)
-			pubKey, err := ks.LookupPublicKey(ctx, s.KeyID)
+			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
-				http.Error(w, http.StatusText(500), 500)
-				return
-			}
-			if pubKey == nil {
-				http.Error(w, http.StatusText(404), 404)
+
+				logger.Error().Err(err).Msg("failed to verify request")
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
 				return
 			}
 
-			valid, err := s.Verify(*pubKey, crypto.Hash(0), r)
+			if contains.Str(verifier.SignatureParams.Headers, "date") {
+				// Date: Wed, 21 Oct 2015 07:28:00 GMT
+				dateStr := r.Header.Get("date")
+				date, err := time.Parse(time.RFC1123, dateStr)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to parse the date header")
+					http.Error(w, "Invalid date header", http.StatusBadRequest)
+					return
+				}
 
-			if err != nil {
-				http.Error(w, http.StatusText(500), 500)
-				return
-			}
-			if !valid {
-				http.Error(w, http.StatusText(403), 403)
-				return
+				if time.Now().Add(10 * time.Minute).Before(date) {
+					logger.Error().Err(err).Msg("date is invalid")
+					http.Error(w, "Request date is invalid", http.StatusTooEarly)
+					return
+				}
+				if time.Now().Add(-10 * time.Minute).After(date) {
+					logger.Error().Err(err).Msg("date is invalid")
+					http.Error(w, "Request date is too old", http.StatusRequestTimeout)
+					return
+				}
 			}
 
+			ctx = context.WithValue(ctx, httpSignedKeyID{}, keyID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

@@ -44,11 +44,17 @@ To bring up a dev environment, run `make docker-dev`.
 This brings up an additional vault service, used for integration testing of
 some auxiliary binaries.
 
-You can run the unit and integration tests via `make docker-test`
+### Testing
 
-Once you are in the Docker container you can run the web server via `go run bin/grant-server/main.go`.
+## Default Testing Behavior
+You can run the unit and integration tests via `make docker-test`. (Accurate?)
 
-If you want to run tests you can do so via the command `go test --tags=integration -v`
+## In Docker Container
+`make docker-dev` 
+
+Services are split up for testing:
+`cd /src/grant-server/payment ; > go test --tags=integration -v`
+
 For example in `promotion` you can run specific tests by running a command similar to `go test --tags=integration -run TestControllersTestSuite/TestCreateOrder`.
 
 ### Rapid Iteration dev Environment

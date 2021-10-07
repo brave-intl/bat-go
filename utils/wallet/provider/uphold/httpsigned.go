@@ -22,15 +22,9 @@ type HTTPSignedRequest struct {
 // extract from the encapsulated signed request
 // into the provided HTTP request
 // NOTE it intentionally does not set the URL
-func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.Signature, error) {
+func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.SignatureParams, error) {
 	if r == nil {
 		return nil, errors.New("r was nil")
-	}
-
-	var s httpsignature.Signature
-	err := s.UnmarshalText([]byte(sr.Headers["signature"]))
-	if err != nil {
-		return nil, err
 	}
 
 	r.Body = ioutil.NopCloser(bytes.NewBufferString(sr.Body))
@@ -52,13 +46,13 @@ func (sr *HTTPSignedRequest) extract(r *http.Request) (*httpsignature.Signature,
 
 		r.Header.Set(k, v)
 	}
-	return &s, nil
+
+	return httpsignature.SignatureParamsFromRequest(r)
 }
 
 // encapsulate a signed HTTP request
 func encapsulate(req *http.Request) (*HTTPSignedRequest, error) {
-	var s httpsignature.Signature
-	err := s.UnmarshalText([]byte(req.Header.Get("signature")))
+	s, err := httpsignature.SignatureParamsFromRequest(req)
 	if err != nil {
 		return nil, err
 	}

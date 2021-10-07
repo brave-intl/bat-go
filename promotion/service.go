@@ -13,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -84,6 +85,8 @@ type Service struct {
 	cbClient                cbr.Client
 	reputationClient        reputation.Client
 	bfClient                bitflyer.Client
+	geminiClient            gemini.Client
+	geminiConf              *gemini.Conf
 	codecs                  map[string]*goavro.Codec
 	kafkaWriter             *kafka.Writer
 	kafkaDialer             *kafka.Dialer
@@ -215,6 +218,25 @@ func InitService(
 		}
 	}
 
+	var (
+		geminiClient gemini.Client
+		geminiConf   *gemini.Conf
+	)
+	if os.Getenv("GEMINI_ENABLED") == "true" {
+		// get the correct env variables for bulk pay API call
+		geminiConf = &gemini.Conf{
+			ClientID: os.Getenv("GEMINI_CLIENT_ID"),
+			APIKey:   os.Getenv("GEMINI_API_KEY"),
+			Secret:   os.Getenv("GEMINI_API_SECRET"),
+		}
+
+		gc, err := gemini.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gemini client: %w", err)
+		}
+		geminiClient = gc
+	}
+
 	reputationClient, err := reputation.New()
 	// okay to fail to make a reputation client if the environment is local
 	if err != nil && os.Getenv("ENV") != localEnv {
@@ -226,6 +248,8 @@ func InitService(
 		RoDatastore:             promotionRODB,
 		cbClient:                cbClient,
 		bfClient:                bfClient,
+		geminiClient:            geminiClient,
+		geminiConf:              geminiConf,
 		reputationClient:        reputationClient,
 		wallet:                  walletService,
 		pauseSuggestionsUntilMu: sync.RWMutex{},

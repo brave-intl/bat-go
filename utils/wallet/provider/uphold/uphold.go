@@ -32,7 +32,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
-	"github.com/brave-intl/bat-go/utils/wallet"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
@@ -132,17 +131,17 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 	}
 
 	if info.Provider != "uphold" {
-		return nil, errors.New("The wallet provider or deposit account must be uphold")
+		return nil, errors.New("the wallet provider or deposit account must be uphold")
 	}
 	if len(info.ProviderID) > 0 {
 		if !validators.IsUUID(info.ProviderID) {
-			return nil, errors.New("An uphold cardId (the providerId) must be a UUIDv4")
+			return nil, errors.New("an uphold cardId (the providerId) must be a UUIDv4")
 		}
 	} else {
-		return nil, errors.New("Generation of new uphold wallet is not yet implemented")
+		return nil, errors.New("generation of new uphold wallet is not yet implemented")
 	}
 	if !info.AltCurrency.IsValid() {
-		return nil, errors.New("A wallet must have a valid altcurrency")
+		return nil, errors.New("a wallet must have a valid altcurrency")
 	}
 	return &Wallet{logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
 }
@@ -288,7 +287,7 @@ func (w *Wallet) signRegistration(label string) (*http.Request, error) {
 		return nil, err
 	}
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
@@ -453,7 +452,7 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
 	}
 
-	var s httpsignature.Signature
+	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = "primary"
 	s.Headers = []string{"digest"}
@@ -493,7 +492,11 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 
 	respBody, _, err := submit(w.logger, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to submit the transfer: %w", err)
+		// we need this to be draincoded wrapped error so we get the reason for failure in drains
+		if codedErr, ok := err.(Coded); ok {
+			return nil, errorutils.New(err, "failed to submit the transfer", NewDrainData(codedErr))
+		}
+		return nil, errorutils.New(err, "failed to submit the transfer", nil)
 	}
 
 	var uhResp upholdTransactionResponse
@@ -524,7 +527,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 
 	digestHeader, exists := signedTx.Headers["digest"]
 	if !exists {
-		return nil, errors.New("A transaction signature must cover the request body via digest")
+		return nil, errors.New("a transaction signature must cover the request body via digest")
 	}
 
 	var digestInst digest.Instance
@@ -534,31 +537,31 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 	}
 
 	if !digestInst.Verify([]byte(signedTx.Body)) {
-		return nil, errors.New("The digest header does not match the included body")
+		return nil, errors.New("the digest header does not match the included body")
 	}
 
 	var req http.Request
-	sig, err := signedTx.extract(&req)
+	sigParams, err := signedTx.extract(&req)
 	if err != nil {
 		return nil, err
 	}
 
 	exists = false
-	for _, header := range sig.Headers {
+	for _, header := range sigParams.Headers {
 		if header == "digest" {
 			exists = true
 		}
 	}
 	if !exists {
-		return nil, errors.New("A transaction signature must cover the request body via digest")
+		return nil, errors.New("a transaction signature must cover the request body via digest")
 	}
 
-	valid, err := sig.Verify(w.PubKey, crypto.Hash(0), &req)
+	valid, err := sigParams.Verify(w.PubKey, crypto.Hash(0), &req)
 	if err != nil {
 		return nil, err
 	}
 	if !valid {
-		return nil, errors.New("The signature is invalid")
+		return nil, errors.New("the signature is invalid")
 	}
 
 	var transactionRecode transactionRequestRecode
@@ -589,7 +592,7 @@ func (w *Wallet) decodeTransaction(transactionB64 string) (*transactionRequest, 
 		return nil, err
 	}
 	if string(remarshalledBody) != signedTx.Body {
-		return nil, errors.New("The remarshalled body must be identical")
+		return nil, errors.New("the remarshalled body must be identical")
 	}
 
 	var transaction transactionRequest
@@ -855,7 +858,7 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils
 		contentRange := resp.Header.Get("Content-Range")
 		parts := strings.Split(contentRange, "/")
 		if len(parts) != 2 {
-			return nil, errors.New("Invalid Content-Range header returned")
+			return nil, errors.New("invalid Content-Range header returned")
 		}
 		tmp, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
@@ -889,12 +892,12 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils
 }
 
 // GetBalance returns the last known balance, if refresh is true then the current balance is fetched
-func (w *Wallet) GetBalance(refresh bool) (*wallet.Balance, error) {
+func (w *Wallet) GetBalance(refresh bool) (*walletutils.Balance, error) {
 	if !refresh {
 		return w.LastBalance, nil
 	}
 
-	var balance wallet.Balance
+	var balance walletutils.Balance
 
 	details, err := w.GetCardDetails()
 	if err != nil {
@@ -902,7 +905,7 @@ func (w *Wallet) GetBalance(refresh bool) (*wallet.Balance, error) {
 	}
 
 	if details.Currency != *w.AltCurrency {
-		return nil, errors.New("Returned currency did not match wallet altcurrency")
+		return nil, errors.New("returned currency did not match wallet altcurrency")
 	}
 
 	balance.TotalProbi = details.Currency.ToProbi(details.Balance)

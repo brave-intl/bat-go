@@ -42,11 +42,6 @@ func init() {
 	}
 }
 
-// publicKeyFilter - filter function for dropping promotions with no public key
-func publicKeyFilter(p Promotion) bool {
-	return len(p.PublicKeys) > 0
-}
-
 // Promotion includes information about a particular promotion
 type Promotion struct {
 	ID                  uuid.UUID                 `json:"id" db:"id"`
@@ -61,7 +56,8 @@ type Promotion struct {
 	Available           bool                      `json:"available" db:"available"`
 	Platform            string                    `json:"platform" db:"platform"`
 	PublicKeys          jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
-	LegacyClaimed       bool                      `json:"legacyClaimed" db:"legacy_claimed"`
+	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
+	LegacyClaimed bool `json:"legacyClaimed" db:"legacy_claimed"`
 	//ClaimableUntil      time.Time
 }
 
@@ -82,7 +78,7 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 }
 
 // Claimable checks whether the promotion can be claimed
-func (promotion *Promotion) Claimable() bool {
+func (promotion *Promotion) Claimable(overrideAutoExpiry bool) bool {
 	// manually disallow claims
 	if !promotion.Active {
 		return false
@@ -91,8 +87,8 @@ func (promotion *Promotion) Claimable() bool {
 	if promotion.Expired() {
 		return false
 	}
-	// otherwise allow previously claimed grants to go through
-	if promotion.LegacyClaimed {
+	// override auto expiry (in legacy claimed case as example)
+	if overrideAutoExpiry {
 		return true
 	}
 	// expire grants created 3 months ago
@@ -139,11 +135,8 @@ func (service *Service) GetAvailablePromotions(
 			promos = Filter(promos, func(p Promotion) bool { return !p.LegacyClaimed })
 		}
 
-		promos = Filter(promos, publicKeyFilter)
-
 		return &promos, nil
 	}
 	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform)
-	promos = Filter(promos, publicKeyFilter)
 	return &promos, err
 }

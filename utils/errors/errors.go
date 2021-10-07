@@ -30,6 +30,8 @@ var (
 	ErrMissingWallet = errors.New("missing wallet")
 	// ErrNoDepositProviderDestination - no linked wallet
 	ErrNoDepositProviderDestination = errors.New("no deposit provider destination for wallet for transfer")
+	// ErrNotImplemented - this function is not yet implemented
+	ErrNotImplemented = errors.New("this function is not yet implemented")
 )
 
 // ErrorBundle creates a new response error
@@ -106,4 +108,21 @@ func (me *MultiError) Error() string {
 		}
 	}
 	return errText
+}
+
+// DrainCodified - Job runner drain codified errors have DrainCode()
+type DrainCodified interface {
+	// DrainCode - get the drain code from the interface implementation
+	DrainCode() (string, bool)
+}
+
+// Codified - implementation of DrainCodified
+type Codified struct {
+	ErrCode string
+	Retry   bool
+}
+
+// DrainCode - implementation of DrainCodified.DrainCode
+func (c Codified) DrainCode() (string, bool) {
+	return c.ErrCode, c.Retry
 }

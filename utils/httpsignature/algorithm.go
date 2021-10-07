@@ -9,16 +9,20 @@ type Algorithm int
 
 const (
 	invalid Algorithm = iota
-	// ED25519 EdDSA
+	// ED25519 EdDSA - deprecated, all algorithm strings should be replaced with HS2019
 	ED25519
+	// HS2019 is a catch-all value for all algorithms
+	HS2019
 )
 
 var algorithmName = map[Algorithm]string{
 	ED25519: "ed25519",
+	HS2019:  "hs2019",
 }
 
 var algorithmID = map[string]Algorithm{
 	"ed25519": ED25519,
+	"hs2019":  HS2019,
 }
 
 func (a Algorithm) String() string {
@@ -28,7 +32,7 @@ func (a Algorithm) String() string {
 // MarshalText marshalls the algorithm into text.
 func (a *Algorithm) MarshalText() (text []byte, err error) {
 	if *a == invalid {
-		return nil, errors.New("Not a supported algorithm")
+		return nil, errors.New("not a supported algorithm")
 	}
 	text = []byte(a.String())
 	return
@@ -39,7 +43,7 @@ func (a *Algorithm) UnmarshalText(text []byte) (err error) {
 	var exists bool
 	*a, exists = algorithmID[string(text)]
 	if !exists {
-		return errors.New("Not a supported algorithm")
+		return errors.New("not a supported algorithm")
 	}
 	return nil
 }

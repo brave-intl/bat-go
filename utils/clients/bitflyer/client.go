@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/google/go-querystring/query"
 	"github.com/shopspring/decimal"
 	"github.com/square/go-jose/jwt"
 )
@@ -40,6 +42,11 @@ type Quote struct {
 // QuoteQuery holds the query params for the quote
 type QuoteQuery struct {
 	ProductCode string `url:"product_code,omitempty"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (qq *QuoteQuery) GenerateQueryString() (url.Values, error) {
+	return query.Values(qq)
 }
 
 // WithdrawToDepositIDPayload holds a single withdrawal request
@@ -257,12 +264,16 @@ func (c *HTTPClient) FetchQuote(
 			return &read.Body, nil
 		}
 	}
-	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", QuoteQuery{
+	req, err := c.client.NewRequest(ctx, "GET", "/api/link/v1/getprice", nil, &QuoteQuery{
 		ProductCode: productCode,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// use the client auth token, token is required for bf api call
+	c.setupRequestHeaders(req)
+
 	var body Quote
 	resp, err := c.client.Do(ctx, req, &body)
 	if err == nil {
@@ -341,7 +352,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	ctx context.Context,
 	payload WithdrawToDepositIDBulkPayload,
 ) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +372,7 @@ func (c *HTTPClient) CheckPayoutStatus(
 		http.MethodPost,
 		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
 		payload,
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -386,7 +398,7 @@ func (c *HTTPClient) RefreshToken(
 		Str("extra_client_secret", payload.ExtraClientSecret).
 		Str("grant_type", payload.GrantType).
 		Msg("payload values")
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload)
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -413,9 +425,9 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if err != nil {
 		return err
 	}
-	var bfError clients.BitflyerError
+	var bfError = new(clients.BitflyerError)
 	if len(b) != 0 {
-		err = json.Unmarshal(b, &bfError)
+		err = json.Unmarshal(b, bfError)
 		if err != nil {
 			return err
 		}
@@ -423,6 +435,10 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if len(bfError.Label) == 0 {
 		return e
 	}
+
+	// put the protocol status code on the error too
+	bfError.HTTPStatusCode = resp.StatusCode
+
 	return bfError
 }
 

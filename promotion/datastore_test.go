@@ -280,6 +280,14 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
+	suite.Assert().Equal(0, len(promotions))
+
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
+
+	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
+	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(1, len(promotions))
 	suite.Assert().True(promotions[0].Active)
 	suite.Assert().True(promotions[0].Available)
@@ -287,6 +295,10 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(35.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	issuer = &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
@@ -311,6 +323,10 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWallet() {
 	promotion, err = pg.CreatePromotion("ads", 2, decimal.NewFromFloat(35.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	issuer = &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
 
 	// test when claim is for less than the value of one vote
 	adClaimValue = decimal.NewFromFloat(0.05)
@@ -491,6 +507,10 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	promotion, err := pg.CreatePromotion("ugp", 1, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
+
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
 	suite.Assert().Equal(0, len(promotions), "Legacy listing should not show inactive promotions")
@@ -524,6 +544,10 @@ func (suite *PostgresTestSuite) TestGetAvailablePromotionsForWalletLegacy() {
 	promotion, err = pg.CreatePromotion("ads", 1, decimal.NewFromFloat(25.0), "")
 	suite.Require().NoError(err, "Create promotion should succeed")
 	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	issuer = &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
 
 	promotions, err = pg.GetAvailablePromotionsForWallet(w, "")
 	suite.Require().NoError(err, "Get promotions should succeed")
@@ -815,4 +839,18 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
+}
+
+func getClaimDrainEntry(pg *Postgres) *DrainJob {
+	var dj = new(DrainJob)
+	statement := `select * from claim_drain limit 1`
+	_ = pg.Get(dj, statement)
+	return dj
+}
+
+func getSuggestionDrainEntry(pg *Postgres) *SuggestionJob {
+	var sj = new(SuggestionJob)
+	statement := `select * from suggestion_drain limit 1`
+	_ = pg.Get(sj, statement)
+	return sj
 }

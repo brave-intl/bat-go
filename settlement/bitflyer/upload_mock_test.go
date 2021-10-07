@@ -5,6 +5,7 @@ package bitflyersettlement
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -163,7 +164,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 			ctx,
 			*withdrawToDepositIDBulkPayload,
 		).
-		Return(nil, clients.BitflyerError{
+		Return(nil, &clients.BitflyerError{
 			Message:  uuid.NewV4().String(),
 			ErrorIDs: []string{"1234"},
 			Label:    "JsonError.TOKEN_ERROR",
@@ -183,7 +184,8 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	suite.client.SetAuthToken(suite.token)
 	suite.Require().Error(err)
 
-	bfErr, ok := err.(clients.BitflyerError)
+	var bfErr *clients.BitflyerError
+	ok := errors.As(err, &bfErr)
 	suite.Require().True(ok)
 	errSerialized, err := json.Marshal(bfErr)
 	suite.Require().JSONEq(

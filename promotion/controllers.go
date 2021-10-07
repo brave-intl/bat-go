@@ -13,6 +13,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -20,6 +21,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/brave-intl/bat-go/utils/useragent"
 	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/go-chi/chi"
@@ -60,6 +62,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
+	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
 	return r
 }
 
@@ -114,20 +117,20 @@ func WalletEventRouter(service *Service) chi.Router {
 	return r
 }
 
-// LookupPublicKey based on the HTTP signing keyID, which in our case is the walletID
-func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+// LookupVerifier based on the HTTP signing keyID, which in our case is the walletID
+func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "KeyID format is invalid")
+		return nil, nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
 	wallet, err := service.wallet.GetWallet(ctx, walletID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "error getting wallet")
+		return nil, nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	if wallet == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var publicKey httpsignature.Ed25519PubKey
@@ -135,11 +138,11 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		var err error
 		publicKey, err = hex.DecodeString(wallet.PublicKey)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	tmp := httpsignature.Verifier(publicKey)
-	return &tmp, nil
+	return ctx, &tmp, nil
 }
 
 // PromotionsResponse is a list of known promotions to be consumed by the browser
@@ -495,36 +498,58 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 			req  DrainSuggestionV2Request
 			resp = DrainSuggestionV2Response{}
 		)
-		err := requestutils.ReadJSON(r.Body, &req)
+
+		ctx := r.Context()
+		// no logger, setup
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+			r = r.WithContext(ctx)
+		}
+
+		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		sublogger := logger.With().
+			Str("wallet_id", req.WalletID.String()).
+			Logger()
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapValidationError(err)
 		}
 
 		logging.AddWalletIDToContext(r.Context(), req.WalletID)
 
 		keyID, err := middleware.GetKeyID(r.Context())
+		sublogger = sublogger.With().Str("key_id", keyID).Logger()
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to get http signature key id")
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
+			sublogger.Error().Err(err).Msg("httpsignature key id != wallet id")
 			return handlers.ValidationError("request",
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
-		resp.DrainID, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
+		resp.DrainID, err = service.Drain(ctx, req.Credentials, req.WalletID)
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
+				sublogger.Error().Err(err).Msg("validation error")
 				return handlers.WrapValidationError(err)
 			case govalidator.Errors:
+				sublogger.Error().Err(err).Msg("validation error")
 				return handlers.WrapValidationError(err)
 			default:
 				// FIXME not all remaining errors should be mapped to 400
+				sublogger.Error().Err(err).Msg("error draining")
 				return handlers.WrapError(err, "Error draining", http.StatusBadRequest)
 			}
 		}
@@ -547,13 +572,27 @@ type DrainSuggestionRequest struct {
 func DrainSuggestion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req DrainSuggestionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+
+		ctx := r.Context()
+		// no logger, setup
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+			r = r.WithContext(ctx)
+		}
+
+		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
+		sublogger := logger.With().Str("wallet_id", req.WalletID.String()).Logger()
+
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("validating request body")
 			return handlers.WrapValidationError(err)
 		}
 
@@ -561,15 +600,18 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
+			sublogger.Error().Err(err).Msg("error getting keyid from http signature")
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 		if req.WalletID.String() != keyID {
+			sublogger.Error().Err(err).Msg("keyid doesnt match wallet in url")
 			return handlers.ValidationError("request",
 				map[string]string{"paymentId": "paymentId must match signature"})
 		}
 
 		_, err = service.Drain(r.Context(), req.Credentials, req.WalletID)
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to drain")
 			switch err.(type) {
 			case govalidator.Error:
 				return handlers.WrapValidationError(err)
@@ -776,5 +818,47 @@ func PostReportBAPEvent(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error inserting bap report", http.StatusInternalServerError)
 		}
 		return handlers.RenderContent(r.Context(), BapReportResp{ReportBapID: bapReportID}, w, http.StatusOK)
+	})
+}
+
+// CustodianDrainInfoResponse - the response to a custodian drain info request
+type CustodianDrainInfoResponse struct {
+	responses.Meta
+	Drains []CustodianDrain `json:"drains,omitempty"`
+}
+
+// GetCustodianDrainInfo is the handler which provides information about a particular paymentId's drains
+func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var paymentID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), paymentID, chi.URLParam(r, "paymentId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"paymentId": err.Error(),
+				},
+			)
+		}
+
+		var resp = &CustodianDrainInfoResponse{}
+
+		drainInfo, err := service.Datastore.GetCustodianDrainInfo(paymentID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting custodian drain info payment id", http.StatusBadRequest)
+		}
+
+		if drainInfo == nil {
+			return &handlers.AppError{
+				Message: "Drain Info does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		resp.Drains = drainInfo
+		resp.Status = "success"
+
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }

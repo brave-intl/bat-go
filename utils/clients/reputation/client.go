@@ -4,16 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -54,6 +57,48 @@ type IsReputableOpts struct {
 	Platform string `url:"platform"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (iro *IsReputableOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iro)
+}
+
+// IsWalletAdsReputable makes the request to the reputation server
+// and reutrns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsWalletAdsReputable(
+	ctx context.Context,
+	paymentID uuid.UUID,
+	platform string,
+) (bool, error) {
+
+	var body IsReputableOpts
+	if platform != "" {
+		// pass in query string "platform" into our request
+		body = IsReputableOpts{
+			Platform: platform,
+		}
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v1/reputation/"+paymentID.String()+"/ads",
+		nil,
+		&body,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	var resp IsWalletReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, err
+	}
+
+	return resp.IsReputable, nil
+}
+
 // IsWalletReputable makes the request to the reputation server
 // and reutrns whether a paymentId has enough reputation
 // to claim a grant
@@ -75,7 +120,8 @@ func (c *HTTPClient) IsWalletReputable(
 		ctx,
 		"GET",
 		"v1/reputation/"+paymentID.String(),
-		body,
+		nil,
+		&body,
 	)
 	if err != nil {
 		return false, err
@@ -100,6 +146,11 @@ type IsWalletOnPlatformOpts struct {
 	PriorTo string `url:"priorTo"`
 }
 
+// GenerateQueryString - implement the QueryStringBody interface
+func (iwopo *IsWalletOnPlatformOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iwopo)
+}
+
 // IsWalletOnPlatform makes the request to the reputation server
 // and returns whether a paymentId is on a given platform
 func (c *HTTPClient) IsWalletOnPlatform(
@@ -116,7 +167,8 @@ func (c *HTTPClient) IsWalletOnPlatform(
 		ctx,
 		"GET",
 		fmt.Sprintf("v1/on-platform/%s/%s", platform, paymentID.String()),
-		IsWalletOnPlatformOpts{
+		nil,
+		&IsWalletOnPlatformOpts{
 			PriorTo: ctx.Value(appctx.WalletOnPlatformPriorToCTXKey).(string),
 		},
 	)
