@@ -107,13 +107,12 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	}
 
 	// perform validation based on public key that the user submits
-	keyID, err := verifier.VerifyRequest(r)
+	ctx, keyID, err := verifier.VerifyRequest(r)
 	if err != nil {
 		return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
 	}
 
 	var (
-		ctx = r.Context()
 		bcr = new(BraveCreationRequest)
 	)
 
@@ -584,6 +583,39 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 		}
 
 		// render the wallet
+		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+// UnlinkWalletV3 - unlink a particular wallet from a custodian.
+func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx       = r.Context()
+			walletID  = chi.URLParam(r, "payment_id")
+			custodian = chi.URLParam(r, "custodian")
+		)
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			// no logger, setup
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		logger.Debug().
+			Str("walletID", walletID).
+			Str("custodian", custodian).
+			Msg("unlinking wallet from custodian")
+		err = s.UnlinkWallet(ctx, walletID, custodian)
+		if err != nil {
+			if errors.Is(err, ErrUnlinkingsExceeded) {
+				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+				return handlers.WrapError(err, "error unlinking wallet", http.StatusForbidden)
+			}
+			logger.Error().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
+			return handlers.WrapError(err, "error unlinking wallet", http.StatusBadRequest)
+		}
+
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
 	}
 }

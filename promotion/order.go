@@ -28,6 +28,7 @@ type Order struct {
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
 	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
+	TrialDays             *int64               `json:"-" db:"trial_days"`
 }
 
 // OrderItem includes information about a particular order item
@@ -45,6 +46,7 @@ type OrderItem struct {
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
 	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO    *string              `json:"validForIso" db:"valid_for_iso"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 

@@ -10,7 +10,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 var (
@@ -48,7 +48,7 @@ func Unseal(command *cobra.Command, args []string) error {
 
 	if (fi.Mode() & os.ModeNamedPipe) == 0 {
 		fmt.Print("Please enter your unseal key: ")
-		b, err = terminal.ReadPassword(int(os.Stdin.Fd()))
+		b, err = term.ReadPassword(int(os.Stdin.Fd()))
 	} else {
 		reader := bufio.NewReader(os.Stdin)
 		b, err = ioutil.ReadAll(reader)

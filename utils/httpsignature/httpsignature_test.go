@@ -260,7 +260,7 @@ func TestVerifyRequest(t *testing.T) {
 	r.Header.Set("Foo", "bar")
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
 
-	keyID, err := pkv.VerifyRequest(r)
+	_, keyID, err := pkv.VerifyRequest(r)
 	if err != nil {
 		t.Error("Unexpected error, signature should be valid:", err)
 	}
@@ -271,7 +271,7 @@ func TestVerifyRequest(t *testing.T) {
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	r.Header.Set("Signature", `keyId="primary",algorithm="ed25519",headers="digest",signature="`+sig+`"`)
 
-	keyID, err = pkv.VerifyRequest(r)
+	_, keyID, err = pkv.VerifyRequest(r)
 	if err == nil {
 		t.Error("Missing expected error, signature should be invalid:", err)
 	}
@@ -301,7 +301,7 @@ func TestVerifyRequest(t *testing.T) {
 	req.Header.Set("Foo", "bar")
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	keyID, err = pkv2.VerifyRequest(req)
+	_, keyID, err = pkv2.VerifyRequest(req)
 	if err != nil {
 		t.Error("Unexpected error, signature should be valid:", err)
 	}
@@ -312,7 +312,7 @@ func TestVerifyRequest(t *testing.T) {
 	sig = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
-	keyID, err = pkv2.VerifyRequest(req)
+	_, keyID, err = pkv2.VerifyRequest(req)
 	if err == nil {
 		t.Error("Missing expected error, signature should be invalid:", err)
 	}
