@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -141,6 +142,20 @@ func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, c
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaim", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total)
+}
+
+// DrainClaimErred implements Datastore
+func (_d DatastoreWithPrometheus) DrainClaimErred(d1 errorutils.DrainCodified, up1 *uuid.UUID, cp1 *Claim, ca1 []cbr.CredentialRedemption, ip1 *walletutils.Info, d2 decimal.Decimal) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaimErred", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DrainClaimErred(d1, up1, cp1, ca1, ip1, d2)
 }
 
 // EnqueueMintDrainJob implements Datastore

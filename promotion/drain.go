@@ -131,19 +131,22 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
-			return nil, fmt.Errorf("error finding claim for wallet: %w", err)
+			// the case where there this wallet never got this promotion
+			return nil, service.Datastore.DrainClaimErred(errMismatchedWallet, &batchID, claim, v.Credentials, wallet, v.Amount)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
-			return nil, fmt.Errorf("error calculating expected number of suggestions: %w", err)
+			// the case where there is an invalid number of suggestions
+			return nil, service.Datastore.DrainClaimErred(errInvalidSuggestionCount, &batchID, claim, v.Credentials, wallet, v.Amount)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
 			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
-			return nil, errors.New("cannot claim more funds than were earned")
+			// the case where there the amount is higher than expected
+			return nil, service.Datastore.DrainClaimErred(errInvalidSuggestionAmount, &batchID, claim, v.Credentials, wallet, v.Amount)
 		}
 
 		// Skip already drained promotions for idempotency
@@ -220,6 +223,32 @@ type DrainWorker interface {
 type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
+
+// drainClaimErred - a codified err type for draind
+type drainClaimErred struct {
+	error
+	Code string
+}
+
+// DrainCode - implement claim drain erred code
+func (dce *drainClaimErred) DrainCode() (string, bool) {
+	return dce.Code, false
+}
+
+var (
+	errMismatchedWallet = &drainClaimErred{
+		errors.New("claim does not exist for wallet"),
+		"mismatched_wallet",
+	}
+	errInvalidSuggestionCount = &drainClaimErred{
+		errors.New("invalid number of suggestions"),
+		"invalid_suggestion_count",
+	}
+	errInvalidSuggestionAmount = &drainClaimErred{
+		errors.New("attempting to claim more funds than earned"),
+		"invalid_suggestion_amount",
+	}
+)
 
 // bitflyerOverTransferLimit - a error bundle "codified" implemented "data" field for error bundle
 // providing the specific drain code for the drain job error codification
