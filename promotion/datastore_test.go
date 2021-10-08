@@ -836,7 +836,7 @@ func (suite *PostgresTestSuite) TestDrainClaimErred() {
 	mockDrainWorker := NewMockDrainWorker(mockCtrl)
 
 	// After err no further job should run
-	attempted, err = pg.RunNextDrainJob(context.Background(), mockDrainWorker)
+	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
 	suite.Assert().Equal(false, attempted)
 	suite.Require().NoError(err)
 
