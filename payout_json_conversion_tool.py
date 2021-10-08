@@ -89,19 +89,19 @@ def convert_ads_file(filename, provider):
 
         provider_exclusive_data.append(transaction)
 
-        # There is some odd limitation with > 250 transaction in a bulk, as the API call also hangs quite a bit
-        if provider == 'bitflyer' and len(provider_exclusive_data) > 250:
+        # There is some odd limitation with > 100 transaction in a bulk, as the API call also hangs quite a bit
+        if provider in ['bitflyer', 'gemini'] and len(provider_exclusive_data) > 100:
             output_filename = provider + "_" + filename.split('.json')[0] + suffix_name + str(suffix) + ".json"
             with open(output_filename, 'w') as outfile:
                 json.dump(provider_exclusive_data, outfile, indent=4)
             suffix += 1
             provider_exclusive_data = []
 
-    if provider == 'bitflyer':
+    if provider in ['bitflyer', 'gemini']:
         output_filename = provider + "_" + filename.split('.json')[0] + suffix_name + str(suffix) + ".json"
         with open(output_filename, 'w') as outfile:
             json.dump(provider_exclusive_data, outfile, indent=4)
-    elif provider in ['uphold', 'gemini'] :
+    elif provider in ['uphold'] :
         output_filename = provider + "_" + filename.split('.json')[0] + "_converted.json"
         with open(output_filename, 'w') as outfile:
             json.dump(provider_exclusive_data, outfile, indent=4)
