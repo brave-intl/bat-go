@@ -3,7 +3,6 @@ package gemini
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -231,7 +230,7 @@ func setHeaders(
 	req.Header.Set("Cache-Control", "no-cache")
 	if payload != "" {
 		// base64 encode the payload
-		req.Header.Set("X-GEMINI-PAYLOAD", base64.StdEncoding.EncodeToString([]byte(payload)))
+		req.Header.Set("X-GEMINI-PAYLOAD", payload)
 	}
 	if submitType != "oauth" {
 		// do not send when oauth
@@ -259,7 +258,7 @@ func setPrivateRequestHeaders(
 		}
 		signs := *signer
 		// only set if sending an hmac salt
-		signature, err := signs.HMACSha384([]byte(base64.StdEncoding.EncodeToString([]byte(payload))))
+		signature, err := signs.HMACSha384([]byte(payload))
 		if err != nil {
 			return err
 		}
