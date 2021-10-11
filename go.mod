@@ -8,6 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.14.5
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
+	github.com/containerd/containerd v1.4.11 // indirect
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.0
