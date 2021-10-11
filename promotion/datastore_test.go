@@ -896,7 +896,7 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 
 	drainID := uuid.NewV4()
 
-	err = pg.DrainClaim(&drainID, claim, credentials, wallet, total)
+	err = pg.DrainClaim(&drainID, claim, credentials, wallet, total, nil)
 	suite.Require().NoError(err, "Drain claim should succeed")
 
 	claim, err = pg.GetClaimByWalletAndPromotion(wallet, promotion)
