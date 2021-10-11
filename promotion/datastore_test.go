@@ -823,7 +823,7 @@ func (suite *PostgresTestSuite) TestDrainClaimErred() {
 
 	drainID := uuid.NewV4()
 
-	err = pg.DrainClaimErred(errMismatchedWallet, &drainID, claim, credentials, wallet2, total)
+	err = pg.DrainClaim(&drainID, claim, credentials, wallet2, total, errMismatchedWallet)
 	suite.Require().NoError(err, "Drain claim errored call should succeed")
 
 	// should show as drained

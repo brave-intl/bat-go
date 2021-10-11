@@ -94,7 +94,7 @@ type Datastore interface {
 	// InsertBAPReportEvent inserts a BAP report
 	InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
-	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
+	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
@@ -121,9 +121,6 @@ type Datastore interface {
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
-
-	// DrainClaimErred insert a drain job, but codified in an erred state
-	DrainClaimErred(errorutils.DrainCodified, *uuid.UUID, *Claim, []cbr.CredentialRedemption, *walletutils.Info, decimal.Decimal) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -1163,18 +1160,18 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 	return nil
 }
 
-// DrainClaimErred by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaimErred(errCode errorutils.DrainCodified, drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
+// DrainClaim by marking the claim as drained and inserting a new drain entry
+func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
 	credentialsJSON, err := json.Marshal(credentials)
 	if err != nil {
-		return fmt.Errorf("unable to marshal credentials: %w", err)
+		return err
 	}
 
 	code, _ := errCode.DrainCode()
 
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
-		return fmt.Errorf("failed to begin db transaction: %w", err)
+		return err
 	}
 	defer pg.RollbackTx(tx)
 
@@ -1186,58 +1183,36 @@ func (pg *Postgres) DrainClaimErred(errCode errorutils.DrainCodified, drainID *u
 		if err != nil {
 			return fmt.Errorf("failed to set claim as drained: %w", err)
 		}
-		claimID = nil
-	} else {
 		claimID = &claim.ID
+	} else {
+		claimID = nil
 	}
 
-	var claimDrain = DrainJob{}
+	var (
+		claimDrain = DrainJob{}
+		statement  string
+	)
 
-	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode)
-	values ($1, $2, $3, $4, $5, $6, true, $7)
-	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
-		drainID, claimID, &wallet.UserDepositDestination, code)
-	if err != nil {
-		return fmt.Errorf("failed to insert erred drain job: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("failed to commit db transaction: %w", err)
-	}
-
-	return nil
-}
-
-// DrainClaim by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
-	credentialsJSON, err := json.Marshal(credentials)
-	if err != nil {
-		return err
-	}
-
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
-	}
-	defer pg.RollbackTx(tx)
-
-	_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
-	if err != nil {
-		return err
-	}
-
-	var claimDrain = DrainJob{}
-
-	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination)
-	values ($1, $2, $3, $4, $5, $6)
-	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
-	if err != nil {
-		return err
+	if codedErr == nil {
+		statement := `
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination)
+		values ($1, $2, $3, $4, $5, $6)
+		returning *`
+		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
+		if err != nil {
+			return err
+		}
+	} else {
+		// insert errored claim drain item
+		statement := `
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode)
+		values ($1, $2, $3, $4, $5, $6, true, $7)
+		returning *`
+		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
+			drainID, claimID, &wallet.UserDepositDestination, code)
+		if err != nil {
+			return fmt.Errorf("failed to insert erred drain job: %w", err)
+		}
 	}
 
 	err = tx.Commit()

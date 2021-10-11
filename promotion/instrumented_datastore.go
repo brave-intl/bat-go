@@ -131,7 +131,7 @@ func (_d DatastoreWithPrometheus) DeactivatePromotion(promotion *Promotion) (err
 }
 
 // DrainClaim implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) (err error) {
+func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -141,21 +141,7 @@ func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, c
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaim", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total)
-}
-
-// DrainClaimErred implements Datastore
-func (_d DatastoreWithPrometheus) DrainClaimErred(d1 errorutils.DrainCodified, up1 *uuid.UUID, cp1 *Claim, ca1 []cbr.CredentialRedemption, ip1 *walletutils.Info, d2 decimal.Decimal) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaimErred", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.DrainClaimErred(d1, up1, cp1, ca1, ip1, d2)
+	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total, codedErr)
 }
 
 // EnqueueMintDrainJob implements Datastore
