@@ -1167,8 +1167,6 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 		return err
 	}
 
-	code, _ := errCode.DrainCode()
-
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
@@ -1188,10 +1186,7 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 		claimID = nil
 	}
 
-	var (
-		claimDrain = DrainJob{}
-		statement  string
-	)
+	var claimDrain = DrainJob{}
 
 	if codedErr == nil {
 		statement := `
@@ -1203,13 +1198,15 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 			return err
 		}
 	} else {
+		code, _ := codedErr.DrainCode()
+
 		// insert errored claim drain item
 		statement := `
 		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode)
 		values ($1, $2, $3, $4, $5, $6, true, $7)
 		returning *`
 		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
-			drainID, claimID, &wallet.UserDepositDestination, code)
+			drainPollID, claimID, &wallet.UserDepositDestination, code)
 		if err != nil {
 			return fmt.Errorf("failed to insert erred drain job: %w", err)
 		}
