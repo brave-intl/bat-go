@@ -121,6 +121,11 @@ type Datastore interface {
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
+
+	// MarkBatchTransferSubmitted mark this batch of transfers submitted
+	MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) error
+	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
+	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -686,6 +691,23 @@ func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 	return err
 }
 
+// MarkBatchTransferSubmitted mark this batch of transfers submitted
+func (pg *Postgres) MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) error {
+	tx, err := pg.RawDB().BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	stmt := "update claim_drain set status = 'submitted' where batch_id = $1"
+	// if there is no error we want to commit this transaction
+	// otherwise we pass the error back to the caller.
+	if _, err := tx.Exec(stmt, batchID); err == nil {
+		return tx.Commit()
+	}
+	return nil
+}
+
 // GetCustodianDrainInfo Get the status of the custodian drain info
 func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error) {
 	resp := []CustodianDrain{}
@@ -906,6 +928,78 @@ ORDER BY created_at DESC
 	}
 
 	return nil, nil
+}
+
+// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
+func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error) {
+
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// create a tx
+	tx, err := pg.RawDB().Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+	defer pg.RollbackTx(tx)
+
+	statement := `
+		select
+			batch_id
+		from
+			claim_drain
+		where
+			erred = false and
+			status='prepared'
+		group by
+			batch_id
+		having
+			bool_and(transaction_id is not null)=true
+		for update skip locked
+		limit 1;
+`
+	var batchID *uuid.UUID
+
+	err = tx.Select(&batchID, statement)
+	if err != nil {
+		return attempted, err
+	}
+
+	if batchID == nil {
+		return attempted, nil
+	}
+
+	attempted = true
+
+	// perform submit against payments API
+	err = worker.SubmitBatchTransfer(ctx, batchID)
+	if err != nil {
+		// log the error from redeem and transfer
+		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
+		// inform sentry about this error
+		sentry.CaptureException(err)
+		return attempted, err
+	}
+
+	_, err = tx.Exec(`
+		update claim_drain set
+			status = 'submitted'
+		where batch_id = $2`, batchID)
+	if err != nil {
+		return attempted, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, err
+	}
+
+	return attempted, nil
 }
 
 // RunNextClaimJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted

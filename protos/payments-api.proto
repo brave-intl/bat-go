@@ -121,7 +121,8 @@ message AuthorizeResponse {
 // SubmitRequest - this is the protobuf definition
 // of the payments service submit request type
 message SubmitRequest {
-    string document_id = 1;
+    BatchMeta batch_meta = 1;
+    string document_id = 2;
 }
 
 // SubmitResponse - this is the protobuf definition

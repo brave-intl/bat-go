@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/payments/pb"
+	paymentspb "github.com/brave-intl/bat-go/payments/pb"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -28,6 +30,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const localEnv = "local"
@@ -95,11 +99,69 @@ type Service struct {
 	jobs                    []srv.Job
 	pauseSuggestionsUntil   time.Time
 	pauseSuggestionsUntilMu sync.RWMutex
+	paymentsClient          pb.PaymentsGRPCServiceClient
 }
 
 // Jobs - Implement srv.JobService interface
 func (s *Service) Jobs() []srv.Job {
 	return s.jobs
+}
+
+// connect to grpc service using configurations in context
+func grpcConnect(ctx context.Context) (grpc.ClientConnInterface, error) {
+	// get the server address
+	addr, ok := ctx.Value(appctx.PaymentsServiceCTXKey).(string)
+	// get the CA Cert for tls
+	caCert := ctx.Value(appctx.CACertCTXKey).(string)
+
+	logger := logging.Logger(ctx, "grpcConnect").With().
+		Str("payments-service", addr).
+		Str("ca-cert", caCert).
+		Logger()
+
+	if !ok || addr == "" {
+		logger.Error().Msg("failed to get the payments service address")
+		return nil, errors.New("failed to get the payments service address")
+	}
+
+	// dial
+	var opts []grpc.DialOption
+
+	if caCert != "" {
+		creds, err := credentials.NewClientTLSFromFile(caCert, addr)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create client tls")
+			return nil, fmt.Errorf("failed to create client tls: %w", err)
+		}
+		opts = append(opts, grpc.WithTransportCredentials(creds), grpc.WithBlock())
+	} else {
+		opts = append(opts, grpc.WithInsecure(), grpc.WithBlock())
+	}
+
+	conn, err := grpc.Dial(addr, opts...)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to dial payments service address")
+		return nil, fmt.Errorf("failed to dial payments service address: %w", err)
+	}
+
+	return conn, nil
+}
+
+// InitPaymentsClient - create a new payments service client for transfers
+func (s *Service) InitPaymentsClient(ctx context.Context) error {
+	// setup logger
+	logger := logging.Logger(ctx, "InitPaymentsClient")
+
+	// connect
+	logger.Info().Msg("creating connection to payments api")
+	conn, err := grpcConnect(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to make connection to payments")
+		return fmt.Errorf("error connecting to payments service: %w", err)
+	}
+	// create the client
+	s.paymentsClient = paymentspb.NewPaymentsGRPCServiceClient(conn)
+	return nil
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
@@ -277,6 +339,11 @@ func InitService(
 			Cadence: time.Second,
 			Workers: 6,
 		},
+		{
+			Func:    service.RunNextBatchPaymentsJob,
+			Cadence: time.Second,
+			Workers: 1,
+		},
 	}
 
 	var enableLinkingDraining bool
@@ -321,6 +388,11 @@ func (s *Service) ReadableDatastore() ReadOnlyDatastore {
 // RunNextMintDrainJob takes the next mint job and completes it
 func (s *Service) RunNextMintDrainJob(ctx context.Context) (bool, error) {
 	return s.Datastore.RunNextMintDrainJob(ctx, s)
+}
+
+// RunNextBatchPaymentsJob takes the next claim job and completes it
+func (s *Service) RunNextBatchPaymentsJob(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextBatchPaymentsJob(ctx, s)
 }
 
 // RunNextClaimJob takes the next claim job and completes it
