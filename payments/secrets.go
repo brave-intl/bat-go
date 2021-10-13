@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -40,7 +41,7 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 			Str("key-arn", keyARN).Msg("configuration is file based")
 		fmt.Println("!!! u.Path: ", u.Path)
 		// read the configuration file
-		c, err = os.ReadFile(u.Path)
+		c, err = ioutil.ReadFile(u.Path)
 		if err != nil {
 			logger.Fatal().Err(err).
 				Str("config-url", location).
