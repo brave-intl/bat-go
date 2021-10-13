@@ -5,18 +5,23 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
 
@@ -40,10 +45,10 @@ func init() {
 // Datastore holds the interface for the wallet datastore
 type Datastore interface {
 	grantserver.Datastore
-	TxLinkWalletInfo(ctx context.Context, tx *sqlx.Tx, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, pda string) error
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
-	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error)
+	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
+	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -56,6 +61,14 @@ type Datastore interface {
 	InsertBitFlyerRequestID(ctx context.Context, requestID string) error
 	// UpsertWallets inserts a wallet if it does not already exist
 	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
+	// ConnectCustodialWallet - connect the wallet's custodial verified wallet.
+	ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error
+	// DisconnectCustodialWallet - disconnect the wallet's custodial id
+	DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error
+	// GetCustodianLinkByWalletID - get the custodian link by ID
+	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -67,6 +80,10 @@ type ReadOnlyDatastore interface {
 	GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.Info, error)
 	// GetWalletByPublicKey
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
+	// GetCustodianLinkByWalletID - get the current custodian link by wallet id
+	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
+	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -177,29 +194,6 @@ func (pg *Postgres) GetWallet(ctx context.Context, ID uuid.UUID) (*walletutils.I
 	return nil, nil
 }
 
-// txGetWallet by ID
-func (pg *Postgres) txHasDestination(ctx context.Context, tx *sqlx.Tx, ID uuid.UUID) (bool, error) {
-	statement := `
-	select
-		true
-	from
-		wallets
-	where
-		user_deposit_destination is not null and
-		user_deposit_destination != '' and
-		id = $1`
-	var result bool
-	err := tx.GetContext(ctx, &result, statement, ID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return result, nil
-}
-
 // GetWalletByPublicKey gets a wallet by a public key
 func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walletutils.Info, error) {
 	statement := `
@@ -263,73 +257,30 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 	return nil
 }
 
-// TxLinkWalletInfo pass a tx to set the anonymous address
-func (pg *Postgres) TxLinkWalletInfo(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	ID string,
-	userDepositDestination string,
-	providerLinkingID uuid.UUID,
-	anonymousAddress *uuid.UUID,
-	userDepositAccountProvider string) error {
+type custodianLinkingID struct {
+	Custodian string     `db:"custodian"`
+	LinkingID *uuid.UUID `db:"linking_id"`
+}
 
+func txGetCustodianLinkingIDs(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (map[string]string, error) {
 	var (
-		statement string
-		sqlErr    error
-		r         sql.Result
+		custodianLinkingIDs = []custodianLinkingID{}
+		resp                = map[string]string{}
 	)
-
-	id, err := uuid.FromString(ID)
+	statement := `
+		select wc1.custodian, wc1.linking_id from wallet_custodian wc1 join wallet_custodian wc2 on
+		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1 and wc1.unlinked_at is null and wc2.unlinked_at is null
+	`
+	err := tx.Select(&custodianLinkingIDs, statement, providerLinkingID)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to associate linking id to custodians: %w", err)
 	}
 
-	if ok, err := pg.txHasDestination(ctx, tx, id); err != nil {
-		return fmt.Errorf("error trying to lookup anonymous address: %w", err)
-	} else if ok {
-		statement = `
-			UPDATE wallets
-			SET
-				provider_linking_id = $2,
-				user_deposit_account_provider = $3
-			WHERE id = $1;`
-		r, sqlErr = tx.ExecContext(
-			ctx,
-			statement,
-			ID,
-			providerLinkingID,
-			userDepositAccountProvider,
-		)
-	} else {
-		statement = `
-			UPDATE wallets
-			SET
-					provider_linking_id = $2,
-					anonymous_address = $3,
-					user_deposit_account_provider = $4,
-					user_deposit_destination = $5
-			WHERE id = $1;`
-		r, sqlErr = tx.ExecContext(
-			ctx,
-			statement,
-			ID,
-			providerLinkingID,
-			anonymousAddress,
-			userDepositAccountProvider,
-			userDepositDestination,
-		)
+	for _, v := range custodianLinkingIDs {
+		resp[v.Custodian] = v.LinkingID.String()
 	}
 
-	if sqlErr != nil {
-		return sqlErr
-	}
-	if r != nil {
-		count, _ := r.RowsAffected()
-		if count < 1 {
-			return errors.New("should have updated at least one wallet")
-		}
-	}
-	return nil
+	return resp, nil
 }
 
 func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (int, error) {
@@ -347,8 +298,10 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 	var (
 		used int
 	)
+	// we need to exclude `this` wallet from the used computation in the event we are attempting
+	// to re-link the 4th slot
 	statement := `
-		select count(1) as used from wallets where provider_linking_id = $1
+		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1 and unlinked_at is null
 	`
 	err := tx.Get(&used, statement, providerLinkingID)
 	return used, err
@@ -388,35 +341,146 @@ func getEnvMaxCards() int {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	WalletsLinked    int `json:"walletsLinked"`
-	OpenLinkingSlots int `json:"openLinkingSlots"`
+	LinkingID          *uuid.UUID   `json:"-"`
+	WalletsLinked      int          `json:"walletsLinked"`
+	OpenLinkingSlots   int          `json:"openLinkingSlots"`
+	OtherWalletsLinked []*uuid.UUID `json:"otherWalletsLinked"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
-func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (LinkingInfo, error) {
-	var info = LinkingInfo{}
+func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error) {
+	var infos = map[string]LinkingInfo{}
 
-	tx, err := pg.RawDB().Beginx()
+	// get tx
+	_, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		return info, err
+		return nil, fmt.Errorf("failed to create db transaction GetLinkingLimitInfo: %w", err)
 	}
-	defer pg.RollbackTx(tx)
+	// will rollback if tx created at this scope
+	defer rollback()
 
-	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID)
+	// find all custodians that have been linked to this wallet based on providerLinkingID
+	custodianLinkingIDs, err := txGetCustodianLinkingIDs(ctx, tx, providerLinkingID)
 	if err != nil {
-		return info, errorutils.Wrap(err, "error looking up max linkings for wallet")
-	}
-
-	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID)
-	if err != nil {
-		return info, errorutils.Wrap(err, "error looking up used linkings for wallet")
+		return nil, fmt.Errorf("failed to get custodian linking ids: %w", err)
 	}
 
-	info.WalletsLinked = usedLinkings
-	info.OpenLinkingSlots = maxLinkings - usedLinkings
+	// for each custodian linking id found, get the max/used
+	for custodian, linkingID := range custodianLinkingIDs {
+		maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, linkingID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error looking up max linkings for wallet")
+		}
 
-	return info, nil
+		usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, linkingID)
+		if err != nil {
+			return nil, errorutils.Wrap(err, "error looking up used linkings for wallet")
+		}
 
+		// convert linking id to uuid
+		lID, err := uuid.FromString(linkingID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse linking id: %w", err)
+		}
+
+		// lookup other linked wallets
+		w, err := pg.GetByProviderLinkingID(ctx, lID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
+		}
+
+		wIDs := []*uuid.UUID{}
+
+		for _, v := range *w {
+			u, err := uuid.FromString(v.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse wallet id from datastore: %w", err)
+			}
+			wIDs = append(wIDs, &u)
+		}
+
+		// add to result
+		infos[custodian] = LinkingInfo{
+			LinkingID:          &lID,
+			WalletsLinked:      usedLinkings,
+			OpenLinkingSlots:   maxLinkings - usedLinkings,
+			OtherWalletsLinked: wIDs,
+		}
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit GetLinkingLimitInfo transaction: %w", err)
+	}
+
+	return infos, nil
+}
+
+// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
+var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
+
+// UnlinkWallet - unlink the wallet from the custodian completely
+func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
+	// get tx
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	// lower bound based
+	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
+	if !ok {
+		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
+	}
+
+	d, err := timeutils.ParseDuration(lbDur)
+	if err != nil {
+		return fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
+	}
+
+	notBefore, err := d.FromNow()
+	if err != nil {
+		return fmt.Errorf("unable to get not before time from duration: %w", err)
+	}
+
+	// validate that no other linkages were unlinked in the duration specified
+	stmt := `
+		select
+			count(wc2.*)
+		from
+			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
+		where
+			wc1.wallet_id=$1 wc1.custodian=$2 and wc2.unlinked_at>$3
+	`
+	var count int
+	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
+	if err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return ErrUnlinkingsExceeded
+	}
+
+	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
+	_, err = tx.ExecContext(ctx, statement, walletID, custodian)
+	if err != nil {
+		return err
+	}
+
+	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
+	statement = `update wallets set user_deposit_destination='',user_account_deposit_provider=null where wallet_id = $1`
+	_, err = tx.ExecContext(ctx, statement, walletID)
+	if err != nil {
+		return err
+	}
+
+	if err := commit(); err != nil {
+		return fmt.Errorf("failed to commit tx: %w", err)
+	}
+	return nil
 }
 
 // IncreaseLinkingLimit - increase the linking limit for the given walletID by one
@@ -431,42 +495,35 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
-	tx, err := pg.RawDB().Beginx()
-	if err != nil {
-		return err
+	sublogger := logger(ctx).With().
+		Str("wallet_id", ID).
+		Logger()
+
+	// create tx
+	tx, err := createTx(ctx, pg)
+	if err != nil || tx == nil {
+		sublogger.Error().Err(err).
+			Msg("error creating tx for wallet linking")
+		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
 	}
+	// add tx to ctx for future
+	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
 	defer pg.RollbackTx(tx)
 
-	maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, providerLinkingID.String())
+	id, err := uuid.FromString(ID)
 	if err != nil {
-		return errorutils.Wrap(err, "error looking up max linkings for wallet")
+		return errorutils.Wrap(err, "invalid id")
 	}
 
-	usedLinkings, err := txGetUsedLinkingSlots(ctx, tx, providerLinkingID.String())
-	if err != nil {
-		return errorutils.Wrap(err, "error looking up used linkings for wallet")
-	}
-
-	if usedLinkings >= maxLinkings {
-		sentry.WithScope(func(scope *sentry.Scope) {
-			anonAddr := ""
-			if anonymousAddress != nil {
-				anonAddr = anonymousAddress.String()
-			}
-			scope.SetTags(map[string]string{
-				"walletId":               ID,
-				"providerLinkingId":      providerLinkingID.String(),
-				"anonymousAddress":       anonAddr,
-				"userDepositDestination": userDepositDestination,
-			})
-			tooManyCardsCounter.Inc()
-		})
-		return ErrTooManyCardsLinked
-	}
-
-	err = pg.TxLinkWalletInfo(ctx, tx, ID, userDepositDestination, providerLinkingID, anonymousAddress, depositProvider)
-	if err != nil {
-		return errorutils.Wrap(err, "unable to set an anonymous address")
+	// connect custodian link (does the link limit checking in insert)
+	if err = pg.ConnectCustodialWallet(ctx, &CustodianLink{
+		WalletID:  &id,
+		Custodian: depositProvider,
+		LinkingID: &providerLinkingID,
+	}, userDepositDestination); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert new custodian link")
+		return fmt.Errorf("failed to insert new custodian link: %w", err)
 	}
 
 	err = tx.Commit()
@@ -474,4 +531,377 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		return err
 	}
 	return nil
+}
+
+// CustodianLink - representation of wallet_custodian record
+type CustodianLink struct {
+	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+	UnlinkedAt         *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
+}
+
+// GetWalletIDString - get string version of the WalletID
+func (cl *CustodianLink) GetWalletIDString() string {
+	if cl.WalletID != nil {
+		return cl.WalletID.String()
+	}
+	return ""
+}
+
+// GetLinkingIDString - get string version of the LinkingID
+func (cl *CustodianLink) GetLinkingIDString() string {
+	if cl.LinkingID != nil {
+		return cl.LinkingID.String()
+	}
+	return ""
+}
+
+// GetCustodianLinkCount - get the wallet custodian link count across all wallets
+func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error) {
+	// the count of linked wallets
+	var err error
+
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("linking_id", linkingID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting GetCustodianLinkCount")
+
+	// get tx
+	ctx, _, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to create db transaction GetCustodianLinkByWalletID: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	li, err := pg.GetLinkingLimitInfo(ctx, linkingID.String())
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLinkCount from DB")
+		return 0, 0, fmt.Errorf("failed to get CustodianLinkCount from DB: %w", err)
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return 0, 0, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
+	}
+
+	for _, linkingInfo := range li {
+		// find the right linking id
+		if linkingInfo.LinkingID.String() == linkingID.String() {
+			// max is wallets linked + open slots
+			return linkingInfo.WalletsLinked, linkingInfo.WalletsLinked + linkingInfo.OpenLinkingSlots, nil
+		}
+	}
+	// wallets linked/ open linking slots not found
+	// this is the case where there is no prior linkages
+	// 0 linked, get max from environment
+	return 0, getEnvMaxCards(), nil
+
+}
+
+func rollbackFn(ctx context.Context, pg *Postgres, tx *sqlx.Tx) func() {
+	return func() {
+		logger(ctx).Debug().Msg("rolling back transaction")
+		pg.RollbackTx(tx)
+	}
+}
+
+func commitFn(ctx context.Context, tx *sqlx.Tx) func() error {
+	return func() error {
+		logger(ctx).Debug().Msg("committing transaction")
+		if err := tx.Commit(); err != nil {
+			logger(ctx).Error().Err(err).Msg("failed to commit transaction")
+			return err
+		}
+		return nil
+	}
+}
+
+// getTx will get or create a tx on the context, if created hands back rollback and commit functions
+func getTx(ctx context.Context, pg *Postgres) (context.Context, *sqlx.Tx, func(), func() error, error) {
+	// create a sublogger
+	sublogger := logger(ctx)
+	sublogger.Debug().Msg("getting tx from context")
+	// get tx
+	tx, noContextTx := ctx.Value(appctx.DatabaseTransactionCTXKey).(*sqlx.Tx)
+	if !noContextTx {
+		sublogger.Debug().Msg("no tx in context")
+		tx, err := createTx(ctx, pg)
+		if err != nil || tx == nil {
+			sublogger.Error().Err(err).Msg("error creating tx")
+			return ctx, nil, func() {}, func() error { return nil }, fmt.Errorf("failed to create tx: %w", err)
+		}
+		ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
+		return ctx, tx, rollbackFn(ctx, pg, tx), commitFn(ctx, tx), nil
+	}
+	return ctx, tx, func() {}, func() error { return nil }, nil
+}
+
+// GetCustodianLinkByWalletID - get the wallet custodian record by id
+func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error) {
+	var (
+		cl  = new(CustodianLink)
+		err error
+	)
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", ID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("starting GetCustodianLinkByWalletID")
+
+	// get tx
+	_, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create db transaction GetCustodianLinkByWalletID: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	// query
+	stmt := `
+		select
+			wc.wallet_id, wc.custodian, wc.linking_id,
+			wc.created_at, wc.disconnected_at, wc.linked_at
+		from
+			wallet_custodian wc
+		where
+			wc.wallet_id = $1 and
+			wc.disconnected_at is null and
+			wc.unlinked_at is null
+	`
+	err = tx.Get(cl, stmt, ID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to get CustodianLink from DB")
+		return nil, fmt.Errorf("failed to get CustodianLink from DB: %w", err)
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit GetCustodianByWalletID transaction: %w", err)
+	}
+	return cl, nil
+}
+
+// DisconnectCustodialWallet - disconnect the wallet's custodial id
+func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid.UUID) error {
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", walletID.String()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("disconnecting custodial wallet")
+
+	// get tx
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return fmt.Errorf("failed to create db transaction DisconnectCustodialWallet: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	// sql query to perform unlinking
+	stmt := `
+		update
+			wallets
+		set
+			user_deposit_destination=''
+		where
+			id=$1
+	`
+	// perform query
+	if _, err := tx.ExecContext(
+		ctx,
+		stmt,
+		walletID,
+	); err != nil {
+		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
+		return err
+	}
+
+	// set disconnected on the custodian link
+	stmt = `
+		update
+			wallet_custodian
+		set
+			disconnected_at=now()
+		where
+			wallet_id=$1 and
+			disconnected_at is null and
+			unlinked_at is null
+	`
+	// perform query
+	if _, err := tx.ExecContext(
+		ctx,
+		stmt,
+		walletID,
+	); err != nil {
+		sublogger.Error().Err(err).Msg("failed to update wallet_custodian_id for wallet")
+		return err
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return fmt.Errorf("failed to commit DisconnectCustodialWallet transaction: %w", err)
+	}
+
+	// done
+	return nil
+}
+
+// ConnectCustodialWallet - create a record of a custodian wallet
+func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error {
+	var err error
+	// create a sublogger
+	sublogger := logger(ctx).With().
+		Str("wallet_id", cl.GetWalletIDString()).
+		Str("custodian", cl.Custodian).
+		Str("linking_id", cl.GetLinkingIDString()).
+		Logger()
+
+	sublogger.Debug().
+		Msg("creating linking of wallet custodian")
+
+	// get tx
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return fmt.Errorf("failed to create db transaction ConnectCustodialWallet: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	var existingLinkingID uuid.UUID
+	// get the custodial provider's linking id from db
+	stmt := `
+		select linking_id from wallet_custodian
+		where wallet_id=$1 and custodian=$2 and
+		unlinked_at is null
+	`
+	err = tx.Get(&existingLinkingID, stmt, cl.WalletID, cl.Custodian)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		sublogger.Error().Err(err).
+			Msg("failed to get linking id from wallet_custodian")
+		return fmt.Errorf("failed to get linking id from custodian record: %w", err)
+	}
+
+	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
+		// check if the member matches the associated member
+		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
+			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+		}
+	} else {
+		// if the existingLinkingID is null then we need to check the linking limits
+
+		// get the count
+		used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
+		if err != nil {
+			sublogger.Error().Err(err).
+				Msg("failed to insert wallet_custodian due to db err checking linking limits")
+			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		}
+
+		// check for linking limit
+		if used >= max {
+			sentry.WithScope(func(scope *sentry.Scope) {
+				scope.SetTags(map[string]string{
+					"wallet_id":  cl.WalletID.String(),
+					"linking_id": cl.LinkingID.String(),
+				})
+				tooManyCardsCounter.Inc()
+			})
+			return ErrTooManyCardsLinked
+		}
+
+		// check the linking limit does not exceed what is appropriate
+		if err != nil {
+			sublogger.Error().Err(err).
+				Msg("failed to insert wallet_custodian due to db err checking linking limits")
+			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		}
+	}
+
+	stmt = `
+		insert into wallet_custodian (
+			wallet_id, custodian, linking_id
+		) values (
+			$1, $2, $3
+		)
+		on conflict (wallet_id, custodian, linking_id) 
+		do update set disconnected_at=null, linked_at=now()
+		returning *
+	`
+
+	err = tx.Get(cl, stmt, cl.WalletID, cl.Custodian, cl.LinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to insert wallet_custodian")
+		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
+	}
+	// update wallets with new deposit destination
+	stmt = `
+		update wallets set
+			user_deposit_destination=$1,provider_linking_id=$2,user_deposit_account_provider=$3
+		where id=$4
+	`
+	// perform query
+	if r, err := tx.ExecContext(
+		ctx,
+		stmt,
+		depositDest,
+		cl.LinkingID,
+		cl.Custodian,
+		cl.WalletID,
+	); err != nil {
+		sublogger.Error().Err(err).
+			Msg("failed to update wallets with new deposit destination")
+		return fmt.Errorf("error updating wallets with new deposit desintation: %w", err)
+	} else if r != nil {
+		count, _ := r.RowsAffected()
+		if count < 1 {
+			sublogger.Error().Msg("at least one record should be updated for connecting a verified wallet")
+			return errors.New("should have updated at least one wallet for connecting a verified wallet")
+		}
+	}
+
+	// if the tx was created in this scope we will commit here
+	if err := commit(); err != nil {
+		return fmt.Errorf("failed to commit ConnectCustodialWallet transaction: %w", err)
+	}
+	return nil
+}
+
+// helper to make logger easier
+func logger(ctx context.Context) *zerolog.Logger {
+	// get logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		_, logger = logging.SetupLogger(ctx)
+	}
+	return logger
+}
+
+// helper to create a tx
+func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
+	logger(ctx).Debug().
+		Msg("creating transaction")
+	tx, err = pg.RawDB().Beginx()
+	if err != nil {
+		logger(ctx).Error().Err(err).
+			Msg("error creating transaction")
+		return tx, fmt.Errorf("failed to create transaction: %w", err)
+	}
+	return tx, nil
 }

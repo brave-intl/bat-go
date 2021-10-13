@@ -41,7 +41,7 @@ var (
 	}
 	dbs = map[string]*sqlx.DB{}
 	// CurrentMigrationVersion holds the default migration version
-	CurrentMigrationVersion = uint(32)
+	CurrentMigrationVersion = uint(40)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
@@ -187,7 +187,7 @@ func NewPostgres(
 
 	// set max open connections to default to 80 (will get overwritten later by calculation
 	// depending of if we have environment variables set
-	db.SetMaxOpenConns(80)
+	maxOpenConns := 80
 
 	// using desired/max tasks to calculate the right number of max open connections
 	desiredTasks, dterr := strconv.Atoi(os.Getenv("DESIRED_TASKS"))
@@ -200,9 +200,13 @@ func NewPostgres(
 			// if we are able to get desired tasks, max tasks and instance class from environment
 			// also taking into account that payments/grants/promotions are all using the same database instance to
 			// calculate the max open connections:
-			db.SetMaxOpenConns(maxConns / (maxTasks / desiredTasks) / 3)
+			maxOpenConns = maxConns / (maxTasks / desiredTasks) / 3
 		}
 	}
+
+	db.SetMaxOpenConns(maxOpenConns)
+	// 50% of max open
+	db.SetMaxIdleConns(maxOpenConns / 2)
 
 	pg := &Postgres{db}
 

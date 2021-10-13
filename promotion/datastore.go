@@ -18,7 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -94,7 +94,7 @@ type Datastore interface {
 	// InsertBAPReportEvent inserts a BAP report
 	InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
-	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error
+	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 
@@ -119,6 +119,8 @@ type Datastore interface {
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
+	// GetCustodianDrainInfo gets the information about a drain poll job
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -148,6 +150,8 @@ type ReadOnlyDatastore interface {
 
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
+	// GetCustodianDrainInfo gets the information about a drain poll job
+	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -574,13 +578,15 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 			true as available
 		from
 			(
-				select
-					promotions.*,
-					array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
-				from
-				promotions left join issuers on promotions.id = issuers.promotion_id
-				where ( promotions.platform = '' or promotions.platform = $2)
-				group by promotions.id
+				select * from 
+					(
+						select
+						promotion_id,
+						array_to_json(array_remove(array_agg(public_key), null)) as public_keys
+						from issuers
+						group by promotion_id
+					) issuer_keys join promotions on promotions.id = issuer_keys.promotion_id
+						where ( promotions.platform = '' or promotions.platform = $2)
 			) promos left join (
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
@@ -678,6 +684,93 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
 	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
+}
+
+// GetCustodianDrainInfo Get the status of the custodian drain info
+func (pg *Postgres) GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error) {
+	resp := []CustodianDrain{}
+	// get the linked wallet info
+	stmt := `
+select
+	user_deposit_account_provider, user_deposit_destination
+from
+	wallets
+where
+	id = $1
+`
+	var custodian Custodian
+	if err := pg.RawDB().Get(&custodian, stmt, paymentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// get all of the drain jobs for this payment id
+	stmt = `
+select
+	batch_id,
+	split_part(credentials->0->>'issuer',':',1) as promotion_id,
+	completed_at,
+	json_array_length(credentials)*0.25 as value,
+	case when erred then 'errored' else 'succeeded' end as state,
+	errcode,
+	transaction_id
+from
+	claim_drain
+where
+	wallet_id = $1
+`
+	type batchedPromotionsDrained struct {
+		DrainInfo
+		BatchID uuid.UUID `db:"batch_id"`
+	}
+
+	var promosDrained = []batchedPromotionsDrained{}
+	if err := pg.RawDB().Select(&promosDrained, stmt, paymentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	batches := map[uuid.UUID][]DrainInfo{}
+	batchValue := map[uuid.UUID]decimal.Decimal{}
+
+	// chunk all these into related batches
+	for i := 0; i < len(promosDrained); i++ {
+		if _, ok := batches[promosDrained[i].BatchID]; !ok {
+			batches[promosDrained[i].BatchID] = []DrainInfo{}
+		}
+		if _, ok := batchValue[promosDrained[i].BatchID]; !ok {
+			batchValue[promosDrained[i].BatchID] = decimal.Zero
+		}
+		batches[promosDrained[i].BatchID] = append(
+			batches[promosDrained[i].BatchID],
+			DrainInfo{
+				PromotionID:   promosDrained[i].PromotionID,
+				TransactionID: promosDrained[i].TransactionID,
+				CompletedAt:   promosDrained[i].CompletedAt,
+				State:         promosDrained[i].State,
+				ErrCode:       promosDrained[i].ErrCode,
+				Value:         promosDrained[i].Value,
+			},
+		)
+		batchValue[promosDrained[i].BatchID] = batchValue[promosDrained[i].BatchID].Add(promosDrained[i].Value)
+	}
+
+	// for each batch go through and create a custodian drain and add to resp drain
+	// add values along the way
+	for k := range batches {
+		resp = append(resp, CustodianDrain{
+			BatchID:           k,
+			Custodian:         custodian,
+			PromotionsDrained: batches[k],
+			Value:             batchValue[k],
+		})
+	}
+
+	return resp, nil
 }
 
 // GetDrainPoll Get the status of the drain poll job
@@ -1068,7 +1161,7 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 }
 
 // DrainClaim by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal) error {
+func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
 	credentialsJSON, err := json.Marshal(credentials)
 	if err != nil {
 		return err
@@ -1080,20 +1173,43 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 	}
 	defer pg.RollbackTx(tx)
 
-	_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
-	if err != nil {
-		return err
+	var claimID *uuid.UUID
+	// if the claim is not nil, we should set it to drained, as we are in drained state
+	// this often happens when the wallet is mismatched
+	if claim != nil {
+		_, err = tx.Exec(`update claims set drained = true, drained_at = now() where id = $1 and not drained`, claim.ID)
+		if err != nil {
+			return fmt.Errorf("failed to set claim as drained: %w", err)
+		}
+		claimID = &claim.ID
+	} else {
+		claimID = nil
 	}
 
 	var claimDrain = DrainJob{}
 
-	statement := `
-	insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id)
-	values ($1, $2, $3, $4, $5)
-	returning *`
-	err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID)
-	if err != nil {
-		return err
+	if codedErr == nil {
+		statement := `
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination)
+		values ($1, $2, $3, $4, $5, $6)
+		returning *`
+		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
+		if err != nil {
+			return err
+		}
+	} else {
+		code, _ := codedErr.DrainCode()
+
+		// insert errored claim drain item
+		statement := `
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode)
+		values ($1, $2, $3, $4, $5, $6, true, $7)
+		returning *`
+		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
+			drainPollID, claimID, &wallet.UserDepositDestination, code)
+		if err != nil {
+			return fmt.Errorf("failed to insert erred drain job: %w", err)
+		}
 	}
 
 	err = tx.Commit()
@@ -1165,19 +1281,20 @@ func errToDrainCode(err error) (string, string, bool) {
 
 // DrainJob - definition of a drain job
 type DrainJob struct {
-	ID            uuid.UUID       `db:"id"`
-	ClaimID       *uuid.UUID      `db:"claim_id"`
-	Credentials   string          `db:"credentials"`
-	WalletID      uuid.UUID       `db:"wallet_id"`
-	Total         decimal.Decimal `db:"total"`
-	TransactionID *string         `db:"transaction_id"`
-	Erred         bool            `db:"erred"`
-	ErrCode       *string         `db:"errcode"`
-	Status        *string         `db:"status"`
-	BatchID       *uuid.UUID      `db:"batch_id"`
-	Completed     bool            `db:"completed"`
-	CompletedAt   pq.NullTime     `db:"completed_at"`
-	UpdatedAt     pq.NullTime     `db:"updated_at"`
+	ID                 uuid.UUID       `db:"id"`
+	ClaimID            *uuid.UUID      `db:"claim_id"`
+	Credentials        string          `db:"credentials"`
+	WalletID           uuid.UUID       `db:"wallet_id"`
+	Total              decimal.Decimal `db:"total"`
+	TransactionID      *string         `db:"transaction_id"`
+	Erred              bool            `db:"erred"`
+	ErrCode            *string         `db:"errcode"`
+	Status             *string         `db:"status"`
+	BatchID            *uuid.UUID      `db:"batch_id"`
+	Completed          bool            `db:"completed"`
+	CompletedAt        pq.NullTime     `db:"completed_at"`
+	UpdatedAt          pq.NullTime     `db:"updated_at"`
+	DepositDestination *string         `db:"deposit_destination"`
 }
 
 // RunNextDrainJob to process deposits if there is one waiting
@@ -1385,16 +1502,19 @@ where
 	}
 
 	attempted = true
+
 	// mint the grant to the wallet's deposit destination
 	statement = `
 select
-	user_deposit_destination
+	w.user_deposit_destination
 from
-	wallets
+	wallets w
 where
-	id = $1
+	w.id = $1
 `
-	var depositDestination string
+	var (
+		depositDestination string
+	)
 	err = tx.Get(&depositDestination, statement, job.WalletID)
 	if err != nil {
 		return attempted, err

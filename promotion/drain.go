@@ -2,7 +2,6 @@ package promotion
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -132,25 +131,28 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
-			return nil, fmt.Errorf("error finding claim for wallet: %w", err)
+			// the case where there this wallet never got this promotion
+			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errMismatchedWallet)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
-			return nil, fmt.Errorf("error calculating expected number of suggestions: %w", err)
+			// the case where there is an invalid number of suggestions
+			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionCount)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
 			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
-			return nil, errors.New("cannot claim more funds than were earned")
+			// the case where there the amount is higher than expected
+			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionAmount)
 		}
 
 		// Skip already drained promotions for idempotency
 		if !claim.Drained {
 			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount)
+			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, nil)
 			if err != nil {
 				sublogger.Error().Msg("failed to drain the claim")
 				return nil, fmt.Errorf("error draining claim: %w", err)
@@ -221,6 +223,32 @@ type DrainWorker interface {
 type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
+
+// drainClaimErred - a codified err type for draind
+type drainClaimErred struct {
+	error
+	Code string
+}
+
+// DrainCode - implement claim drain erred code
+func (dce *drainClaimErred) DrainCode() (string, bool) {
+	return dce.Code, false
+}
+
+var (
+	errMismatchedWallet = &drainClaimErred{
+		errors.New("claim does not exist for wallet"),
+		"mismatched_wallet",
+	}
+	errInvalidSuggestionCount = &drainClaimErred{
+		errors.New("invalid number of suggestions"),
+		"invalid_suggestion_count",
+	}
+	errInvalidSuggestionAmount = &drainClaimErred{
+		errors.New("attempting to claim more funds than earned"),
+		"invalid_suggestion_amount",
+	}
+)
 
 // bitflyerOverTransferLimit - a error bundle "codified" implemented "data" field for error bundle
 // providing the specific drain code for the drain job error codification
@@ -449,20 +477,18 @@ func redeemAndTransferGeminiFunds(
 	wallet *walletutils.Info,
 	total decimal.Decimal,
 ) (*walletutils.TransactionInfo, error) {
+	logger := logging.Logger(ctx, "redeemAndTransferGeminiFunds")
 
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
 	if service.geminiConf == nil || service.geminiClient == nil {
+		logger.Error().Msg("gemini is misconfigured, missing gemini client and configuration")
 		return nil, errGeminiMisconfigured
 	}
 
-	ns, err := uuid.FromString(wallet.UserDepositDestination)
-	if err != nil {
-		return nil, fmt.Errorf("invalid user deposit destination: %w", err)
-	}
 	txType := "drain"
 	channel := "wallet"
-	transferID := uuid.NewV5(ns, txType+channel).String()
+	transferID := uuid.NewV4().String()
 
 	tx := new(walletutils.TransactionInfo)
 
@@ -496,17 +522,47 @@ func redeemAndTransferGeminiFunds(
 	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
 	serializedPayload, err := json.Marshal(payload)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to serialize payload")
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
-	b64Payload := base64.StdEncoding.EncodeToString([]byte(serializedPayload))
-	_, err = service.geminiClient.UploadBulkPayout(
+	// gemini client will base64 encode the payload prior to sending
+	resp, err := service.geminiClient.UploadBulkPayout(
 		ctx,
 		service.geminiConf.APIKey,
 		signer,
-		b64Payload,
+		string(serializedPayload),
 	)
+
 	if err != nil {
+		logger.Error().Err(err).Msg("failed request to gemini")
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, &eb) {
+			// okay, there was an errorbundle, unwrap and log the error
+			// convert err.Data() to json and report out
+			b, err := json.Marshal(eb.Data())
+			if err != nil {
+				logger.Error().Err(err).Msg("failed serialize error bundle data")
+			} else {
+				logger.Error().Err(err).
+					Str("data", string(b)).
+					Msg("gemini client error details")
+			}
+		}
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if resp == nil || len(*resp) < 1 {
+		// failed to get a response from the server
+		return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	}
+	// for all the submitted, check they are all okay
+	for _, v := range *resp {
+		if strings.ToLower(v.Result) != "ok" {
+			if v.Reason != nil {
+				return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s", *v.Reason)
+			}
+			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+		}
 	}
 
 	// check if we have a drainChannel defined on our service

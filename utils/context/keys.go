@@ -8,6 +8,8 @@ type CTXKey string
 const (
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
+	// DatabaseTransactionCTXKey - context key for database transactions
+	DatabaseTransactionCTXKey CTXKey = "db_tx"
 	// RODatastoreCTXKey - the context key for getting the datastore
 	RODatastoreCTXKey CTXKey = "ro_datastore"
 	// PaginationOrderOptionsCTXKey - this is the pagination options context key
@@ -49,6 +51,18 @@ const (
 	ReputationClientCTXKey CTXKey = "reputation_client"
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
+	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
+	GeminiBrowserClientIDCTXKey CTXKey = "gemini_browser_client_id"
+	// GeminiClientIDCTXKey - context key for the gemini client id
+	GeminiClientIDCTXKey CTXKey = "gemini_client_id"
+	// GeminiClientSecretCTXKey - context key for the gemini client secret
+	GeminiClientSecretCTXKey CTXKey = "gemini_client_secret"
+	// GeminiAPIKeyCTXKey - context key for the gemini api key
+	GeminiAPIKeyCTXKey CTXKey = "gemini_api_key"
+	// GeminiAPISecretCTXKey - context key for the gemini api secret
+	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
+	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
+	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code
@@ -74,6 +88,22 @@ const (
 
 	// QLDBSessionCTXKey - the key to grab the qldb session
 	QLDBSessionCTXKey CTXKey = "qldb_session"
+
+	// stripe related keys
+
+	// StripeEnabledCTXKey - this informs if stripe is enabled
+	StripeEnabledCTXKey CTXKey = "stripe_enabled"
+	// StripeWebhookSecretCTXKey - the webhook secret key for stripe integration
+	StripeWebhookSecretCTXKey CTXKey = "stripe_webhook_secret"
+	// StripeSecretCTXKey - the secret key for stripe integration
+	StripeSecretCTXKey CTXKey = "stripe_secret"
+	// WhitelistSKUsCTXKey - context key for whitelisted skus
+	WhitelistSKUsCTXKey CTXKey = "whitelist_skus"
+
+	// RateLimiterBurstCTXKey - context key for allowing a bursting rate limiter
+	RateLimiterBurstCTXKey CTXKey = "rate_limit_burst"
+	// NoUnlinkPriorToDurationCTXKey - the iso duration of time that no unlinkings must have happened
+	NoUnlinkPriorToDurationCTXKey CTXKey = "no_unlinkings_prior_to"
 )
 
 var (

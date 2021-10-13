@@ -2,31 +2,29 @@ package wallet
 
 import (
 	"context"
-	"crypto"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/http"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	uuid "github.com/satori/go.uuid"
 )
 
-// LookupPublicKey based on the HTTP signing keyID, which in our case is the walletID
-func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*httpsignature.Verifier, error) {
+// LookupVerifier based on the HTTP signing keyID, which in our case is the walletID
+func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	walletID, err := uuid.FromString(keyID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "KeyID format is invalid")
+		return nil, nil, errorutils.Wrap(err, "KeyID format is invalid")
 	}
 
 	wallet, err := service.GetWallet(ctx, walletID)
 	if err != nil {
-		return nil, errorutils.Wrap(err, "error getting wallet")
+		return nil, nil, errorutils.Wrap(err, "error getting wallet")
 	}
 
 	if wallet == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var publicKey httpsignature.Ed25519PubKey
@@ -34,49 +32,28 @@ func (service *Service) LookupPublicKey(ctx context.Context, keyID string) (*htt
 		var err error
 		publicKey, err = hex.DecodeString(wallet.PublicKey)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	tmp := httpsignature.Verifier(publicKey)
-	return &tmp, nil
+	return ctx, &tmp, nil
 }
 
-func validateHTTPSignature(ctx context.Context, r *http.Request, signature string) (string, error) {
-	// validate that the signature in the header is valid based on public key provided
-	var s httpsignature.Signature
-	err := s.UnmarshalText([]byte(signature))
-	if err != nil {
-		return "", fmt.Errorf("invalid signature: %w", err)
-	}
+// DecodeEd25519Keystore is a keystore that "looks up" a verifier by attempting to decode the keyID as a base64 encoded ed25519 public key
+type DecodeEd25519Keystore struct{}
 
-	// Override algorithm and headers to those we want to enforce
-	s.Algorithm = httpsignature.ED25519
-	s.Headers = []string{"digest", "(request-target)"}
+// LookupVerifier by decoding keyID
+func (d *DecodeEd25519Keystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	var publicKey httpsignature.Ed25519PubKey
-	if len(s.KeyID) > 0 {
+	if len(keyID) > 0 {
 		var err error
-		publicKey, err = hex.DecodeString(s.KeyID)
+		publicKey, err = hex.DecodeString(keyID)
 		if err != nil {
-			return "", fmt.Errorf("failed to hex decode public key: %w", err)
+			return nil, nil, fmt.Errorf("failed to hex decode public key: %w", err)
 		}
 	} else {
-		// there was no KeyId in the Signature
-		if err != nil {
-			return "", errors.New("no KeyId found in the HTTP Signature")
-		}
+		return nil, nil, errors.New("empty KeyId is not valid")
 	}
-	pubKey := httpsignature.Verifier(publicKey)
-	if len(pubKey.String()) == 0 {
-		return "", errors.New("invalid public key")
-	}
-
-	valid, err := s.Verify(pubKey, crypto.Hash(0), r)
-
-	if err != nil {
-		return "", fmt.Errorf("failed to verify signature: %w", err)
-	}
-	if !valid {
-		return "", errors.New("invalid signature")
-	}
-	return s.KeyID, nil
+	verifier := httpsignature.Verifier(publicKey)
+	return ctx, &verifier, nil
 }

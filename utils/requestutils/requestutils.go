@@ -19,6 +19,10 @@ var (
 	RequestIDHeaderKey = "x-request-id"
 	// RequestID holds the type for request ids
 	RequestID = requestID(RequestIDHeaderKey)
+	// HostHeaderKey is the request header key
+	HostHeaderKey = "host"
+	// XForwardedHostHeaderKey is the request header key
+	XForwardedHostHeaderKey = "x-forwarded-host"
 )
 
 // ReadWithLimit reads an io reader with a limit and closes

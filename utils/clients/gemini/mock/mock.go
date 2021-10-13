@@ -36,18 +36,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // ValidateAccount mocks base method
-func (m *MockClient) ValidateAccount(ctx context.Context, verificationToken string) (string, error) {
+func (m *MockClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateAccount", ctx, verificationToken)
+	ret := m.ctrl.Call(m, "ValidateAccount", ctx, verificationToken, recipientID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ValidateAccount indicates an expected call of ValidateAccount
-func (mr *MockClientMockRecorder) ValidateAccount(ctx, verificationToken interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) ValidateAccount(ctx, verificationToken, recipientID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAccount", reflect.TypeOf((*MockClient)(nil).ValidateAccount), ctx, verificationToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAccount", reflect.TypeOf((*MockClient)(nil).ValidateAccount), ctx, verificationToken, recipientID)
 }
 
 // FetchAccountList mocks base method

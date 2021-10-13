@@ -40,16 +40,17 @@ services:
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
-      - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
       - RATIOS_TOKEN
       - GEMINI_SERVER
-      - GEMINI_CLIENT_KEY
-      - GEMINI_CLIENT_SECRET
       - GEMINI_CLIENT_ID
+      - GEMINI_CLIENT_SECRET
+      - GEMINI_BROWSER_CLIENT_ID
+      - GEMINI_API_KEY
+      - GEMINI_API_SECRET
       - GEMINI_TEST_DESTINATION_ID
       - BITFLYER_SERVER
       - BITFLYER_SOURCE_FROM
@@ -109,14 +110,15 @@ services:
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
-      - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - GEMINI_SERVER
-      - GEMINI_CLIENT_KEY
-      - GEMINI_CLIENT_SECRET
       - GEMINI_CLIENT_ID
+      - GEMINI_CLIENT_SECRET
+      - GEMINI_BROWSER_CLIENT_ID
+      - GEMINI_API_KEY
+      - GEMINI_API_SECRET
       - GEMINI_TEST_DESTINATION_ID
       - BITFLYER_SERVER
       - BITFLYER_SOURCE_FROM

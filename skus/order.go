@@ -1,28 +1,101 @@
 package skus
 
 import (
-	"os"
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/logging"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	stripe "github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/v71/checkout/session"
+	"github.com/stripe/stripe-go/v71/customer"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
+//StripePaymentMethod - the label for stripe payment method
+const (
+	StripePaymentMethod               = "stripe"
+	StripeInvoiceUpdated              = "invoice.updated"
+	StripeInvoicePaid                 = "invoice.paid"
+	StripeCustomerSubscriptionDeleted = "customer.subscription.deleted"
+)
+
+var (
+	// ErrInvalidSKU - this sku is malformed or failed signature validation
+	ErrInvalidSKU = errors.New("Invalid SKU Token provided in request")
+)
+
+// Methods type is a string slice holding payments
+type Methods []string
+
+// Equal - check equality
+func (pm *Methods) Equal(b *Methods) bool {
+	s1 := []string(*pm)
+	s2 := []string(*b)
+	sort.Strings(s1)
+	sort.Strings(s2)
+	return reflect.DeepEqual(s1, s2)
+}
+
+// Scan the src sql type into the passed JSONStringArray
+func (pm *Methods) Scan(src interface{}) error {
+	var x []sql.NullString
+	var v = pq.Array(&x)
+
+	if err := v.Scan(src); err != nil {
+		return err
+	}
+	for i := 0; i < len(x); i++ {
+		if x[i].Valid {
+			*pm = append(*pm, x[i].String)
+		}
+	}
+
+	return nil
+}
+
+// Value the driver.Value representation
+func (pm *Methods) Value() (driver.Value, error) {
+	return pq.Array(pm), nil
+}
+
 // Order includes information about a particular order
 type Order struct {
-	ID         uuid.UUID            `json:"id" db:"id"`
-	CreatedAt  time.Time            `json:"createdAt" db:"created_at"`
-	Currency   string               `json:"currency" db:"currency"`
-	UpdatedAt  time.Time            `json:"updatedAt" db:"updated_at"`
-	TotalPrice decimal.Decimal      `json:"totalPrice" db:"total_price"`
-	MerchantID string               `json:"merchantId" db:"merchant_id"`
-	Location   datastore.NullString `json:"location" db:"location"`
-	Status     string               `json:"status" db:"status"`
-	Items      []OrderItem          `json:"items"`
+	ID                    uuid.UUID            `json:"id" db:"id"`
+	CreatedAt             time.Time            `json:"createdAt" db:"created_at"`
+	Currency              string               `json:"currency" db:"currency"`
+	UpdatedAt             time.Time            `json:"updatedAt" db:"updated_at"`
+	TotalPrice            decimal.Decimal      `json:"totalPrice" db:"total_price"`
+	MerchantID            string               `json:"merchantId" db:"merchant_id"`
+	Location              datastore.NullString `json:"location" db:"location"`
+	Status                string               `json:"status" db:"status"`
+	Items                 []OrderItem          `json:"items"`
+	AllowedPaymentMethods Methods              `json:"allowedPaymentMethods" db:"allowed_payment_methods"`
+	Metadata              datastore.Metadata   `json:"metadata" db:"metadata"`
+	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
+	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
+	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
+	TrialDays             *int64               `json:"-" db:"trial_days"`
+}
+
+func (order *Order) getTrialDays() int64 {
+	if order.TrialDays == nil {
+		return 0
+	}
+	return *order.TrialDays
 }
 
 // OrderItem includes information about a particular order item
@@ -39,73 +112,79 @@ type OrderItem struct {
 	Location       datastore.NullString `json:"location" db:"location"`
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
+	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO    *string              `json:"validForIso" db:"valid_for_iso"`
+	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
-// IsValidSKU checks to see if the token provided is one that we've previously created
-func IsValidSKU(sku string) bool {
-	env := os.Getenv("ENV")
-	if env == "production" {
-		switch sku {
-		case
-			// Production - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOaNAUCBMKm0IaLqxefhvxOtAKB0OfoiPn0NPVfI602J",
-			// Production - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgrMZm85YYwnmjPXcegy5pBM5C+ZLfrySZfYiSe13yp8o=",
-			// Production - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlILeuqgF6G9nPczv/CLyEtAQB/evX8RGFqXAxjga4++3HCg==":
-			return true
-		}
-	} else {
-		switch sku {
-		case
-			// Dev - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGINiB9dUmpqLyeSEdZ23E4dPXwIBOUNJCFN9d5toIME2M",
-			// Dev - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPpv+Al9jRgVCaR49/AoRrsjQqXGqkwaNfqVka00SJxQ=",
-			// Dev - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIAs+/paWWm0Kxm/do/8bPGga5ETPVRx1w6J8SPq0mzBFCg==",
-			// Staging - User Wallet Vote
-			"AgEJYnJhdmUuY29tAiNicmF2ZSB1c2VyLXdhbGxldC12b3RlIHNrdSB0b2tlbiB2MQACFHNrdT11c2VyLXdhbGxldC12b3RlAAIKcHJpY2U9MC4yNQACDGN1cnJlbmN5PUJBVAACDGRlc2NyaXB0aW9uPQACGmNyZWRlbnRpYWxfdHlwZT1zaW5nbGUtdXNlAAAGIOH4Li+rduCtFOfV8Lfa2o8h4SQjN5CuIwxmeQFjOk4W",
-			// Staging - Anon Card Vote
-			"AgEJYnJhdmUuY29tAiFicmF2ZSBhbm9uLWNhcmQtdm90ZSBza3UgdG9rZW4gdjEAAhJza3U9YW5vbi1jYXJkLXZvdGUAAgpwcmljZT0wLjI1AAIMY3VycmVuY3k9QkFUAAIMZGVzY3JpcHRpb249AAIaY3JlZGVudGlhbF90eXBlPXNpbmdsZS11c2UAAAYgPV/WYY5pXhodMPvsilnrLzNH6MA8nFXwyg0qSWX477M=",
-			// Staging - Free Trial
-			"MDAxN2xvY2F0aW9uIGJyYXZlLmNvbQowMDJkaWRlbnRpZmllciBicmF2ZSBmcmVlLXRyaWFsIHNrdSB0b2tlbiB2MQowMDE3Y2lkIHNrdT1mcmVlLXRyaWFsCjAwMTBjaWQgcHJpY2U9MAowMDE1Y2lkIGN1cnJlbmN5PUJBVAowMDM0Y2lkIGRlc2NyaXB0aW9uPUdyYW50cyByZWNpcGllbnQgb25lIGZyZWUgdHJpYWwKMDAyM2NpZCBjcmVkZW50aWFsX3R5cGU9c2luZ2xlLXVzZQowMDJmc2lnbmF0dXJlIGfeOulgTyOWVP1Qiszt8lfPnppPJQhoi8xTfI6bzqO4Cg==":
-			return true
-		}
+func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
+	macBytes, err := macaroon.Base64Decode([]byte(sku))
+	if err != nil {
+		return nil, fmt.Errorf("failed to b64 decode sku token: %w", err)
+	}
+	mac := &macaroon.Macaroon{}
+	if err = mac.UnmarshalBinary(macBytes); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal sku token: %w", err)
 	}
 
-	whitelistedSKUs := strings.Split(os.Getenv("SKUS_WHITELIST"), ",")
-	for _, whitelistedSKU := range whitelistedSKUs {
-		if sku == whitelistedSKU {
-			return true
-		}
-	}
-
-	return false
+	return mac, nil
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
-	macBytes, err := macaroon.Base64Decode([]byte(sku))
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, error) {
+	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
+
+	// validation prior to decoding/unmarshaling
+	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {
-		return nil, err
-	}
-	mac := &macaroon.Macaroon{}
-	err = mac.UnmarshalBinary(macBytes)
-	if err != nil {
-		return nil, err
+		sublogger.Error().Err(err).Msg("failed to validate sku")
+		return nil, nil, fmt.Errorf("failed to validate sku: %w", err)
 	}
 
-	// TODO Figure out how to verify macaroon using library
-	// I think we have to call .Bind()
-	// https://github.com/go-macaroon/macaroon#func-macaroon-bind
-	// I think we simply want to verify the signature and not the caveats?
-	// SO maybe VerifySignature
-	// https://github.com/go-macaroon/macaroon#func-macaroon-verifysignature
+	// perform validation
+	if !valid {
+		sublogger.Error().Err(err).Msg("invalid sku")
+		return nil, nil, ErrInvalidSKU
+	}
+
+	// read the macaroon, its valid
+	mac, err := decodeAndUnmarshalSku(sku)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to decode sku")
+		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
+	}
+
+	/*
+		 * TODO: macaroon library to validate macaroons
+		 * don't delete the below, when we have a good macaroon lib it will be applicable
+
+		// get the merchant's keys
+		keys, err := s.Datastore.GetKeys(mac.Location(), false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
+		}
+
+		// check if any of the keys for the merchant will validate the mac
+		var valid bool
+		for _, k := range *keys {
+			// decrypt the merchant's secret key from db
+			if err := k.SetSecretKey(); err != nil {
+				return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
+			}
+			// perform verify
+			if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
+				// valid
+				valid = true
+				break
+			}
+		}
+	*/
 
 	caveats := mac.Caveats()
+	allowedPaymentMethods := new(Methods)
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
@@ -113,7 +192,7 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		caveat := mac.Caveats()[i]
 		values := strings.Split(string(caveat.Id), "=")
 		key := strings.TrimSpace(values[0])
-		value := strings.TrimSpace(values[1])
+		value := strings.TrimSpace(strings.Join(values[1:], "="))
 
 		switch key {
 		case "sku":
@@ -121,32 +200,166 @@ func CreateOrderItemFromMacaroon(sku string, quantity int) (*OrderItem, error) {
 		case "price", "amount":
 			orderItem.Price, err = decimal.NewFromString(value)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		case "description":
 			orderItem.Description.String = value
 			orderItem.Description.Valid = true
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		case "currency":
 			orderItem.Currency = value
 		case "credential_type":
 			orderItem.CredentialType = value
+		case "credential_valid_duration":
+			orderItem.ValidFor = new(time.Duration)
+			id, err := timeutils.ParseDuration(value)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			t, err := id.FromNow()
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			*orderItem.ValidFor = time.Until(*t)
+			orderItem.ValidForISO = &value
+		case "allowed_payment_methods":
+			*allowedPaymentMethods = Methods(strings.Split(value, ","))
+		case "metadata":
+			err := json.Unmarshal([]byte(value), &orderItem.Metadata)
+			sublogger.Debug().Str("value", value).Msg("metadata string")
+			sublogger.Debug().Str("metadata", fmt.Sprintf("%+v", orderItem.Metadata)).Msg("metadata structure")
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku metadata")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
 		}
-
 	}
 	newQuantity, err := decimal.NewFromString(strconv.Itoa(orderItem.Quantity))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	orderItem.Subtotal = orderItem.Price.Mul(newQuantity)
 
-	return &orderItem, nil
+	return &orderItem, allowedPaymentMethods, nil
+}
+
+// IsStripePayable returns true if every item is payable by Stripe
+func (order Order) IsStripePayable() bool {
+	// TODO: if not we need to look into subscription trials:
+	/// -> https://stripe.com/docs/billing/subscriptions/trials
+	return strings.Contains(strings.Join(order.AllowedPaymentMethods, ","), StripePaymentMethod)
+}
+
+// CreateCheckoutSessionResponse - the structure of a checkout session response
+type CreateCheckoutSessionResponse struct {
+	SessionID string `json:"checkoutSessionId"`
+}
+
+func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
+	// has an existing checkout session
+	var email string
+	if stripeSession == nil {
+		// stripe session does not exist
+		return email
+	}
+	if stripeSession.CustomerEmail != "" {
+		// if the email was stored on the stripe session customer email, use it
+		email = stripeSession.CustomerEmail
+	} else if stripeSession.Customer != nil && stripeSession.Customer.Email != "" {
+		// if the stripe session has a customer record, with an email, use it
+		email = stripeSession.Customer.Email
+	}
+	// if there is no record of an email, stripe will ask for it and make a new customer
+	return email
+}
+
+// CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
+func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
+
+	var custID string
+
+	if email != "" {
+		// find the existing customer by email
+		// so we can use the customer id instead of a customer email
+		i := customer.List(&stripe.CustomerListParams{
+			Email: stripe.String(email),
+		})
+
+		for i.Next() {
+			custID = i.Customer().ID
+		}
+	}
+
+	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
+
+	// if a free trial is set, apply it
+	if freeTrialDays > 0 {
+		sd.TrialPeriodDays = &freeTrialDays
+	}
+
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{
+			"card",
+		}),
+		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
+		SuccessURL:        stripe.String(successURI),
+		CancelURL:         stripe.String(cancelURI),
+		ClientReferenceID: stripe.String(order.ID.String()),
+		SubscriptionData:  sd,
+		LineItems:         order.CreateStripeLineItems(),
+	}
+
+	if custID != "" {
+		// try to use existing customer we found by email
+		params.Customer = stripe.String(custID)
+	} else if email != "" {
+		// if we dont have an existing customer, this CustomerEmail param will create a new one
+		params.CustomerEmail = stripe.String(email)
+	}
+	// else we have no record of this email for this checkout session
+	// the user will be asked for the email, we cannot send an empty customer email as a param
+
+	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
+	params.AddExtra("allow_promotion_codes", "true")
+	session, err := session.New(params)
+	if err != nil {
+		return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe session: %w", err)
+	}
+
+	data := CreateCheckoutSessionResponse{
+		SessionID: session.ID,
+	}
+	return data, nil
+}
+
+// CreateStripeLineItems - create line items for a checkout session with stripe
+func (order Order) CreateStripeLineItems() []*stripe.CheckoutSessionLineItemParams {
+	lineItems := make([]*stripe.CheckoutSessionLineItemParams, len(order.Items))
+	for index, item := range order.Items {
+		// since we are creating stripe line item, we can assume
+		// that the stripe product is embedded in macaroon as metadata
+		lineItems[index] = &stripe.CheckoutSessionLineItemParams{
+			Price:    stripe.String(item.Metadata["stripe_item_id"]),
+			Quantity: stripe.Int64(int64(item.Quantity)),
+		}
+	}
+	return lineItems
 }
 
 // IsPaid returns true if the order is paid
 func (order Order) IsPaid() bool {
-	return order.Status == "paid"
+	// if the order status is paid it is paid.
+	// if the order is cancelled, check to make sure that expires at is after now
+	if order.Status == OrderStatusPaid {
+		return true
+	} else if order.Status == OrderStatusCanceled && order.ExpiresAt != nil {
+		expires := *order.ExpiresAt
+		return expires.After(time.Now())
+	}
+	return false
 }

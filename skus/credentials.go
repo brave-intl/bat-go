@@ -123,6 +123,15 @@ type OrderCreds struct {
 	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
+// TimeLimitedCreds encapsulates time-limited credentials
+type TimeLimitedCreds struct {
+	ID        uuid.UUID `json:"id"`
+	OrderID   uuid.UUID `json:"orderId"`
+	IssuedAt  string    `json:"issuedAt"`
+	ExpiresAt string    `json:"expiresAt"`
+	Token     string    `json:"token"`
+}
+
 // CreateOrderCreds if the order is complete
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.Datastore.GetOrder(orderID)
@@ -176,6 +185,7 @@ type OrderWorker interface {
 
 // SignOrderCreds signs the blinded credentials
 func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
+
 	resp, err := service.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
 		return nil, err

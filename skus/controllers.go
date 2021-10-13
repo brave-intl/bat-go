@@ -10,19 +10,23 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/outputs"
 	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
+	stripe "github.com/stripe/stripe-go/v71"
+	"github.com/stripe/stripe-go/webhook"
 )
 
 func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {
@@ -44,6 +48,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 // Router for order endpoints
 func Router(service *Service) chi.Router {
 	r := chi.NewRouter()
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
 	if os.Getenv("ENV") == "local" {
 		r.Method("OPTIONS", "/", middleware.InstrumentHandler("CreateOrderOptions", corsMiddleware([]string{"POST"})(nil)))
@@ -55,16 +60,20 @@ func Router(service *Service) chi.Router {
 	r.Method("OPTIONS", "/{orderID}", middleware.InstrumentHandler("GetOrderOptions", corsMiddleware([]string{"GET"})(nil)))
 	r.Method("GET", "/{orderID}", middleware.InstrumentHandler("GetOrder", corsMiddleware([]string{"GET"})(GetOrder(service))))
 
+	r.Method("DELETE", "/{orderID}", middleware.InstrumentHandler("CancelOrder", corsMiddleware([]string{"DELETE"})(merchantSignedMiddleware(CancelOrder(service)))))
+	r.Method("PATCH", "/{orderID}/set-trial", middleware.InstrumentHandler("SetOrderTrialDays", corsMiddleware([]string{"PATCH"})(merchantSignedMiddleware(SetOrderTrialDays(service)))))
+
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-		// TODO authorization should be merchant specific, however currently this is only used internally
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", middleware.SimpleTokenAuthorizedOnly(DeleteOrderCreds(service))))
+
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
 	})
@@ -75,7 +84,9 @@ func Router(service *Service) chi.Router {
 // CredentialRouter handles calls relating to credentials
 func CredentialRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", middleware.SimpleTokenAuthorizedOnly(VerifyCredential(service))))
+	merchantSignedMiddleware := service.MerchantSignedMiddleware()
+
+	r.Method("POST", "/subscription/verifications", middleware.InstrumentHandler("VerifyCredential", merchantSignedMiddleware(VerifyCredential(service))))
 	return r
 }
 
@@ -117,6 +128,12 @@ type CreateKeyRequest struct {
 	Name string `json:"name" valid:"required"`
 }
 
+// CreateKeyResponse includes information about the created key
+type CreateKeyResponse struct {
+	*Key
+	SecretKey string `json:"secretKey"`
+}
+
 // CreateKey is the handler for creating keys for a merchant
 func CreateKey(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -138,7 +155,21 @@ func CreateKey(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), key, w, http.StatusOK)
+		sk, err := key.GetSecretKey()
+		if err != nil {
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		if sk == nil {
+			err = errors.New("secret key was nil")
+			return handlers.WrapError(err, "Error create api keys", http.StatusInternalServerError)
+		}
+
+		resp := CreateKeyResponse{
+			Key:       key,
+			SecretKey: *sk,
+		}
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }
 
@@ -182,12 +213,12 @@ func DeleteKey(service *Service) handlers.AppHandler {
 // GetKeys returns all keys for a specified merchant
 func GetKeys(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		reqID := chi.URLParam(r, "merchantID")
+		merchantID := chi.URLParam(r, "merchantID")
 		expired := r.URL.Query().Get("expired")
 		showExpired := expired == "true"
 
 		var keys *[]Key
-		keys, err := service.Datastore.GetKeys(reqID, showExpired)
+		keys, err := service.Datastore.GetKeysByMerchant(merchantID, showExpired)
 		if err != nil {
 			return handlers.WrapError(err, "Error Getting Keys for Merchant", http.StatusInternalServerError)
 		}
@@ -212,11 +243,16 @@ type OrderItemRequest struct {
 // CreateOrderRequest includes information needed to create an order
 type CreateOrderRequest struct {
 	Items []OrderItemRequest `json:"items" valid:"-"`
+	Email string             `json:"email" valid:"-"`
 }
 
 // CreateOrder is the handler for creating a new order
 func CreateOrder(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		ctx := r.Context()
+		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
+
 		var req CreateOrderRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -235,21 +271,97 @@ func CreateOrder(service *Service) handlers.AppHandler {
 				},
 			)
 		}
-
-		// Validates the SKU is one of our previously created SKUs
-		for _, item := range req.Items {
-			if !IsValidSKU(item.SKU) {
-				return handlers.WrapError(err, "Invalid SKU Token provided in request", http.StatusBadRequest)
-			}
-		}
-
-		order, err := service.CreateOrderFromRequest(req)
+		// validation of sku tokens happens in createorderitemfrommacaroon
+		order, err := service.CreateOrderFromRequest(ctx, req)
 
 		if err != nil {
+			if errors.Is(err, ErrInvalidSKU) {
+				sublogger.Error().Err(err).Msg("invalid sku")
+				return handlers.ValidationError(ErrInvalidSKU.Error(), nil)
+			}
+			sublogger.Error().Err(err).Msg("error creating the order")
 			return handlers.WrapError(err, "Error creating the order in the database", http.StatusInternalServerError)
 		}
 
 		return handlers.RenderContent(r.Context(), order, w, http.StatusCreated)
+	})
+}
+
+// SetOrderTrialDaysInput - SetOrderTrialDays handler input
+type SetOrderTrialDaysInput struct {
+	TrialDays int64 `json:"trialDays" valid:"int"`
+}
+
+// SetOrderTrialDays is the handler for cancelling an order
+func SetOrderTrialDays(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			ctx     = r.Context()
+			orderID = new(inputs.ID)
+		)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		// validate order merchant and caveats (to make sure this is the right merch)
+		if err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID()); err != nil {
+			return handlers.ValidationError(
+				"Error validating request merchant and caveats",
+				map[string]interface{}{
+					"orderMerchantAndCaveats": err.Error(),
+				},
+			)
+		}
+
+		var input SetOrderTrialDaysInput
+		err := requestutils.ReadJSON(r.Body, &input)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(input)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.SetOrderTrialDays(ctx, orderID.UUID(), input.TrialDays)
+		if err != nil {
+			return handlers.WrapError(err, "Error setting the trial days on the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
+	})
+}
+
+// CancelOrder is the handler for cancelling an order
+func CancelOrder(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
+		err = service.CancelOrder(*orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 
@@ -266,7 +378,7 @@ func GetOrder(service *Service) handlers.AppHandler {
 			)
 		}
 
-		order, err := service.Datastore.GetOrder(*orderID.UUID())
+		order, err := service.GetOrder(*orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error retrieving the order", http.StatusInternalServerError)
 		}
@@ -307,6 +419,50 @@ type CreateTransactionRequest struct {
 	ExternalTransactionID uuid.UUID `json:"externalTransactionID" valid:"requiredUUID"`
 }
 
+// CreateGeminiTransaction creates a transaction against an order
+func CreateGeminiTransaction(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req CreateTransactionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		var orderID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"orderID": err.Error(),
+				},
+			)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		// Ensure the external transaction ID hasn't already been added to any orders.
+		transaction, err := service.Datastore.GetTransaction(req.ExternalTransactionID.String())
+		if err != nil {
+			return handlers.WrapError(err, "externalTransactinID has already been submitted to an order", http.StatusConflict)
+		}
+
+		if transaction != nil {
+			err = fmt.Errorf("external Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+		if err != nil {
+			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+		}
+
+		return handlers.RenderContent(r.Context(), transaction, w, http.StatusCreated)
+	})
+}
+
 // CreateUpholdTransaction creates a transaction against an order
 func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -342,7 +498,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(req, *orderID.UUID())
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTx)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
@@ -360,6 +516,10 @@ type CreateAnonCardTransactionRequest struct {
 // CreateAnonCardTransaction creates a transaction against an order
 func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		sublogger := logging.Logger(ctx, "payments").With().
+			Str("func", "CreateAnonCardTransaction").
+			Logger()
 		var req CreateAnonCardTransactionRequest
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -378,6 +538,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 
 		transaction, err := service.CreateAnonCardTransaction(r.Context(), req.WalletID, req.Transaction, *orderID.UUID())
 		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to create anon card transaction")
 			return handlers.WrapError(err, "Error creating anon card transaction", http.StatusInternalServerError)
 		}
 
@@ -435,6 +596,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 // GetOrderCreds is the handler for fetching order credentials
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -445,27 +607,11 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		creds, err := service.Datastore.GetOrderCreds(*orderID.UUID(), false)
+		// get credentials, either single-use/time-limited
+		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+			return handlers.WrapError(err, "Error getting credentials", status)
 		}
-
-		if creds == nil {
-			return &handlers.AppError{
-				Message: "Credentials do not exist",
-				Code:    http.StatusNotFound,
-				Data:    map[string]interface{}{},
-			}
-		}
-
-		status := http.StatusOK
-		for i := 0; i < len(*creds); i++ {
-			if (*creds)[i].SignedCreds == nil {
-				status = http.StatusAccepted
-				break
-			}
-		}
-
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	})
 }
@@ -483,7 +629,15 @@ func DeleteOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		err := service.Datastore.DeleteOrderCreds(*orderID.UUID())
+		err := service.ValidateOrderMerchantAndCaveats(r, *orderID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error validating auth merchant and caveats", http.StatusForbidden)
+		}
+
+		// is signed param
+		isSigned := r.URL.Query().Get("isSigned") == "true"
+
+		err = service.Datastore.DeleteOrderCreds(*orderID.UUID(), isSigned)
 		if err != nil {
 			return handlers.WrapError(err, "Error deleting credentials", http.StatusBadRequest)
 		}
@@ -630,7 +784,7 @@ func MerchantTransactions(service *Service) handlers.AppHandler {
 		}
 
 		// Build Response
-		response := &outputs.PaginationResponse{
+		response := &responses.PaginationResponse{
 			Page:    pagination.Page,
 			Items:   pagination.Items,
 			MaxPage: total/pagination.Items - 1, // 0 indexed
@@ -659,17 +813,59 @@ type VerifyCredentialRequest struct {
 // VerifyCredential is the handler for verifying subscription credentials
 func VerifyCredential(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		logger := logging.Logger(r.Context(), "VerifyCredential")
+		logger.Debug().Msg("starting VerifyCredential controller")
+
 		var req VerifyCredentialRequest
 
 		err := requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+		logger.Debug().Msg("read verify credential post body")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
+			logger.Error().Err(err).Msg("failed to validate request")
 			return handlers.WrapError(err, "Error in request validation", http.StatusBadRequest)
 		}
+
+		logger.Debug().Msg("validated verify credential post body")
+
+		merchant, err := GetMerchant(r.Context())
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get the merchant from the context")
+			return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
+		}
+
+		logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
+
+		caveats := GetCaveats(r.Context())
+
+		if req.MerchantID != merchant {
+			logger.Warn().
+				Str("req.MerchantID", req.MerchantID).
+				Str("merchant", merchant).
+				Msg("merchant does not match the key's merchant")
+			return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
+		}
+
+		logger.Debug().Str("merchant", merchant).Msg("merchant matches the key's merchant")
+
+		if caveats != nil {
+			if sku, ok := caveats["sku"]; ok {
+				if req.SKU != sku {
+					logger.Warn().
+						Str("req.SKU", req.SKU).
+						Str("sku", sku).
+						Msg("sku caveat does not match")
+					return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
+				}
+			}
+		}
+		logger.Debug().Msg("caveats validated")
 
 		if req.Type == "single-use" {
 			var bytes []byte
@@ -699,8 +895,230 @@ func VerifyCredential(service *Service) handlers.AppHandler {
 			}
 
 			return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+		} else if req.Type == "time-limited" {
+			// Presentation includes a token and token metadata test test
+			type Presentation struct {
+				IssuedAt  string `json:"issuedAt"`
+				ExpiresAt string `json:"expiresAt"`
+				Token     string `json:"token"`
+			}
+
+			var bytes []byte
+			bytes, err = base64.StdEncoding.DecodeString(req.Presentation)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to decode the request token presentation")
+				return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+			}
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
+
+			var presentation Presentation
+			err = json.Unmarshal(bytes, &presentation)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to unmarshal the request token presentation")
+				return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+			}
+
+			logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
+
+			// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+			issuerID, err := encodeIssuerID(req.MerchantID, req.SKU)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to encode the issuer id")
+				return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+			}
+			logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
+
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+
+			issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse issued at time of credential")
+				return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+			}
+			expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to parse expires at time of credential")
+				return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+			}
+
+			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to verify time limited credential")
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+			}
+
+			if verified {
+				// check against expiration time, issued time
+				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					logger.Error().
+						Msg("credentials are not valid")
+					return handlers.RenderContent(r.Context(), "Credentials are not valid", w, http.StatusForbidden)
+				}
+				logger.Debug().Msg("credentials verified")
+				return handlers.RenderContent(r.Context(), "Credentials successfully verified", w, http.StatusOK)
+			}
+			logger.Error().
+				Msg("credentials could not be verified")
+
+			return handlers.RenderContent(r.Context(), "Credentials could not be verified", w, http.StatusForbidden)
+
 		}
 
 		return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+	})
+}
+
+// WebhookRouter - handles calls from various payment method webhooks informing payments of completion
+func WebhookRouter(service *Service) chi.Router {
+	r := chi.NewRouter()
+	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	return r
+}
+
+// HandleStripeWebhook is the handler for stripe checkout session webhooks
+func HandleStripeWebhook(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		// get logger
+		sublogger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleStripeWebhook").
+			Logger()
+
+		// get webhook secret from ctx
+		endpointSecret, err := appctx.GetStringFromContext(ctx, appctx.StripeWebhookSecretCTXKey)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to get stripe_webhook_secret from context")
+			return handlers.WrapError(
+				err, "error getting stripe_webhook_secret from context",
+				http.StatusInternalServerError)
+		}
+
+		b, err := requestutils.Read(r.Body)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to read request body")
+			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)
+		}
+
+		event, err := webhook.ConstructEvent(
+			b, r.Header.Get("Stripe-Signature"), endpointSecret)
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to verify stripe signature")
+			return handlers.WrapError(err, "error verifying webhook signature", http.StatusBadRequest)
+		}
+
+		// log the event
+		sublogger.Debug().Str("event_type", event.Type).Str("data", string(event.Data.Raw)).Msg("webhook event captured")
+
+		// Handle invoice events
+		if event.Type == StripeInvoiceUpdated || event.Type == StripeInvoicePaid {
+			// Retrieve invoice from update events
+			var invoice stripe.Invoice
+			err := json.Unmarshal(event.Data.Raw, &invoice)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("error parsing webhook json")
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+			sublogger.Debug().
+				Str("event_type", event.Type).
+				Str("invoice", fmt.Sprintf("%+v", invoice)).Msg("webhook invoice")
+
+			subscription, err := service.scClient.Subscriptions.Get(invoice.Subscription.ID, nil)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("error getting subscription")
+				return handlers.WrapError(err, "error retrieving subscription", http.StatusInternalServerError)
+			}
+
+			sublogger.Debug().
+				Str("subscription", fmt.Sprintf("%+v", subscription)).Msg("corresponding subscription")
+
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			if err != nil {
+				sublogger.Error().Err(err).Msg("error getting order id from subscription metadata")
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order id")
+
+			// If the invoice is paid set order status to paid, otherwise
+			if invoice.Paid {
+				// is this an existing subscription??
+				ok, subID, err := service.Datastore.IsStripeSub(orderID)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to tell if this is a stripe subscription")
+					return handlers.WrapError(err, "error looking up payment provider", http.StatusInternalServerError)
+				}
+				if ok && subID != "" {
+					// okay, this is a subscription renewal, not first time,
+					err = service.Datastore.RenewOrder(ctx, orderID)
+					if err != nil {
+						sublogger.Error().Err(err).Msg("failed to renew the order")
+						return handlers.WrapError(err, "error renewing order", http.StatusInternalServerError)
+					}
+					// end flow for renew order
+					return handlers.RenderContent(r.Context(), "subscription renewed", w, http.StatusOK)
+				}
+
+				// not a renewal, first time
+				// and update the order's expires at as it was just paid
+				err = service.Datastore.UpdateOrder(orderID, OrderStatusPaid)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order status")
+					return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+				}
+				err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+				if err != nil {
+					sublogger.Error().Err(err).Msg("failed to update order metadata")
+					return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+				}
+
+				sublogger.Debug().Str("orderID", orderID.String()).Msg("order is now paid")
+				return handlers.RenderContent(r.Context(), "payment successful", w, http.StatusOK)
+			}
+
+			sublogger.Debug().
+				Str("orderID", orderID.String()).Msg("order not paid, set pending")
+			err = service.Datastore.UpdateOrder(orderID, "pending")
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to update order status")
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set subscription id in order metadata")
+			err = service.Datastore.UpdateOrderMetadata(orderID, "stripeSubscriptionId", subscription.ID)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to update order metadata")
+				return handlers.WrapError(err, "error updating order metadata", http.StatusInternalServerError)
+			}
+			sublogger.Debug().
+				Str("sub_id", subscription.ID).Msg("set ok response")
+			return handlers.RenderContent(r.Context(), "payment failed", w, http.StatusOK)
+		}
+
+		// Handle subscription cancellations
+		if event.Type == StripeCustomerSubscriptionDeleted {
+			var subscription stripe.Subscription
+			err := json.Unmarshal(event.Data.Raw, &subscription)
+			if err != nil {
+				return handlers.WrapError(err, "error parsing webhook JSON", http.StatusBadRequest)
+			}
+			orderID, err := uuid.FromString(subscription.Metadata["orderID"])
+			if err != nil {
+				return handlers.WrapError(err, "error retrieving orderID", http.StatusInternalServerError)
+			}
+			err = service.Datastore.UpdateOrder(orderID, OrderStatusCanceled)
+			if err != nil {
+				return handlers.WrapError(err, "error updating order status", http.StatusInternalServerError)
+			}
+			return handlers.RenderContent(r.Context(), "subscription canceled", w, http.StatusOK)
+		}
+
+		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
 	})
 }

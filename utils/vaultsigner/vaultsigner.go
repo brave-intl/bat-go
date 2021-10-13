@@ -7,8 +7,8 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	util "github.com/hashicorp/vault/command/config"
-	"github.com/hashicorp/vault/helper/jsonutil"
-	"github.com/hashicorp/vault/helper/keysutil"
+	"github.com/hashicorp/vault/sdk/helper/jsonutil"
+	"github.com/hashicorp/vault/sdk/helper/keysutil"
 	"golang.org/x/crypto/ed25519"
 )
 

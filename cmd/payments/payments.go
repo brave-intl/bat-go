@@ -180,21 +180,21 @@ func RunSubmit(cmd *cobra.Command, args []string) error {
 func Load(ctx context.Context, reportURIs ...string) error {
 	sublogger := logger(ctx).With().Str("func", "payments.Load").Logger()
 	sublogger.Warn().Msg("Load function is not yet implemented")
-	return errorutils.ErrNotYetImplemented
+	return errorutils.ErrNotImplemented
 }
 
 // Authorize - performs the loading to `prepare` payments service endpoint
 func Authorize(ctx context.Context, pubKeyID *uuid.UUID, privKeyPath string, docIDs ...*uuid.UUID) error {
 	sublogger := logger(ctx).With().Str("func", "payments.Authorize").Logger()
 	sublogger.Warn().Msg("Authorize function is not yet implemented")
-	return errorutils.ErrNotYetImplemented
+	return errorutils.ErrNotImplemented
 }
 
 // Submit - performs the loading to `prepare` payments service endpoint
 func Submit(ctx context.Context, docID ...*uuid.UUID) error {
 	sublogger := logger(ctx).With().Str("func", "payments.Submit").Logger()
 	sublogger.Warn().Msg("Submit function is not yet implemented")
-	return errorutils.ErrNotYetImplemented
+	return errorutils.ErrNotImplemented
 }
 
 // logger - get the logger no matter what

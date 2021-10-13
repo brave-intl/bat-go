@@ -8,7 +8,7 @@ services:
   # every time a file changes.
   dev-refresh:
     container_name: grant-dev-refresh
-    image: golang:1.15
+    image: golang:1.16
     ports:
       - "3335:3333"
       - "6061:6061"
@@ -47,7 +47,6 @@ services:
       - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
-      - KAFKA_SSL_KEY_PASSWORD=confluent
       - KAFKA_REQUIRED_ACKS=1
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN

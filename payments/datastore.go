@@ -45,23 +45,23 @@ func InitializeBatchedTXs(ctx context.Context, custodian pb.Custodian, txs []*pb
 	// perform insert of all transactions provided
 
 	// insert into qldb the set of transactions for the given custodian
-	return nil, errorutils.ErrNotYetImplemented
+	return nil, errorutils.ErrNotImplemented
 }
 
 // RecordAuthorization - Record an authorization for a qldb document, the submission will
 // be in charge of implementing the logic to bound the authorizations, this merely applies
 // the rubber stamp to the document in qldb stating that this record was authorized
 func RecordAuthorization(ctx context.Context, auth *Authorization, docID *uuid.UUID) error {
-	return errorutils.ErrNotYetImplemented
+	return errorutils.ErrNotImplemented
 }
 
 // RetrieveTransactionsByID - Record an authorization for a qldb document.  This will be used
 // in submission to pull the transactions and authorizations from the qldb document
 func RetrieveTransactionsByID(ctx context.Context, docID *uuid.UUID) ([]Authorization, []*pb.Transaction, error) {
-	return nil, nil, errorutils.ErrNotYetImplemented
+	return nil, nil, errorutils.ErrNotImplemented
 }
 
 // RecordStateChange - Record the state change for this particular document in qldb
 func RecordStateChange(ctx context.Context, docID *uuid.UUID, state pb.State) error {
-	return errorutils.ErrNotYetImplemented
+	return errorutils.ErrNotImplemented
 }
