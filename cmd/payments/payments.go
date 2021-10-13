@@ -30,6 +30,15 @@ func init() {
 
 	// setup the flags
 
+	// environment will be compiled into the application, if absent we are to use the flags
+	if environment == "" {
+		// --environment - location of configuration
+		paymentsCmd.PersistentFlags().StringVar(&environment, "environment", "",
+			"the environment we are running in - typically compile time var")
+		cmd.Must(viper.BindPFlag("environment", paymentsCmd.PersistentFlags().Lookup("environment")))
+		cmd.Must(viper.BindEnv("environment", "ENV"))
+	}
+
 	// configURL will be compiled into the application, if absent we are to use the flags
 	if configURL == "" {
 		// --config-url - location of configuration

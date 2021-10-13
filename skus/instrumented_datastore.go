@@ -169,8 +169,8 @@ func (_d DatastoreWithPrometheus) GetIssuerByPublicKey(publicKey string) (ip1 *I
 	return _d.base.GetIssuerByPublicKey(publicKey)
 }
 
-// GetKeys implements Datastore
-func (_d DatastoreWithPrometheus) GetKeys(merchant string, showExpired bool) (kap1 *[]Key, err error) {
+// GetKey implements Datastore
+func (_d DatastoreWithPrometheus) GetKey(id uuid.UUID, showExpired bool) (kp1 *Key, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -178,9 +178,23 @@ func (_d DatastoreWithPrometheus) GetKeys(merchant string, showExpired bool) (ka
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetKeys", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetKey", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.GetKeys(merchant, showExpired)
+	return _d.base.GetKey(id, showExpired)
+}
+
+// GetKeysByMerchant implements Datastore
+func (_d DatastoreWithPrometheus) GetKeysByMerchant(merchant string, showExpired bool) (kap1 *[]Key, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetKeysByMerchant", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetKeysByMerchant(merchant, showExpired)
 }
 
 // GetOrder implements Datastore
@@ -454,6 +468,20 @@ func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker Or
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextOrderJob", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RunNextOrderJob(ctx, worker)
+}
+
+// SetOrderTrialDays implements Datastore
+func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (op1 *Order, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetOrderTrialDays", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetOrderTrialDays(ctx, orderID, days)
 }
 
 // UpdateOrder implements Datastore

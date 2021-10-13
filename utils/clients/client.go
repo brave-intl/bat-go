@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -279,12 +280,19 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
+		// if there was an error, read the response body
+		// and inject into error for later
+		b, err := ioutil.ReadAll(resp.Body)
+		rb := string(b)
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+
 		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
-			Body    interface{}
-			Headers interface{}
+			Body            interface{}
+			ResponseHeaders interface{}
 		}{
-			Body:    v,
-			Headers: req.Header,
+			// put response body/headers in the err state data
+			Body:            rb,
+			ResponseHeaders: resp.Header,
 		})
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)

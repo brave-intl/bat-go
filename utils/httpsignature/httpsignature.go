@@ -55,8 +55,8 @@ type ParameterizedSignator struct {
 
 // Keystore provides a way to lookup a public key based on the keyID a request was signed with
 type Keystore interface {
-	// LookupPublicKey based on the keyID
-	LookupPublicKey(ctx context.Context, keyID string) (*Verifier, error)
+	// LookupVerifier based on the keyID
+	LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error)
 }
 
 // StaticKeystore is a keystore that always returns a static verifier independent of keyID
@@ -82,9 +82,9 @@ var (
 	signatureRegex = regexp.MustCompile(`(\w+)="([^"]*)"`)
 )
 
-// LookupPublicKey by returning a static verifier
-func (sk *StaticKeystore) LookupPublicKey(ctx context.Context, keyID string) (*Verifier, error) {
-	return &sk.Verifier, nil
+// LookupVerifier by returning a static verifier
+func (sk *StaticKeystore) LookupVerifier(ctx context.Context, keyID string) (context.Context, *Verifier, error) {
+	return ctx, &sk.Verifier, nil
 }
 
 // TODO Add New function
@@ -205,19 +205,19 @@ func (sp *SignatureParams) Verify(verifier Verifier, opts crypto.SignerOpts, req
 
 // VerifyRequest using keystore to lookup verifier with options opts
 // returns the key id if the signature is valid and an error otherwise
-func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (string, error) {
+func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (context.Context, string, error) {
 	sp, err := SignatureParamsFromRequest(req)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 
-	verifier, err := pkv.Keystore.LookupPublicKey(req.Context(), sp.KeyID)
+	ctx, verifier, err := pkv.Keystore.LookupVerifier(req.Context(), sp.KeyID)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 
 	if verifier == nil {
-		return "", fmt.Errorf("no verifier matching keyId %s was found", sp.KeyID)
+		return nil, "", fmt.Errorf("no verifier matching keyId %s was found", sp.KeyID)
 	}
 
 	// Override algorithm and headers to those we want to enforce
@@ -226,13 +226,13 @@ func (pkv *ParameterizedKeystoreVerifier) VerifyRequest(req *http.Request) (stri
 
 	valid, err := sp.Verify(*verifier, pkv.Opts, req)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if !valid {
-		return "", errors.New("signature is not valid")
+		return nil, "", errors.New("signature is not valid")
 	}
 
-	return sp.KeyID, nil
+	return ctx, sp.KeyID, nil
 }
 
 // MarshalText marshalls the signature into text.

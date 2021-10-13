@@ -88,6 +88,14 @@ type Order struct {
 	LastPaidAt            *time.Time           `json:"lastPaidAt" db:"last_paid_at"`
 	ExpiresAt             *time.Time           `json:"expiresAt" db:"expires_at"`
 	ValidFor              *time.Duration       `json:"validFor" db:"valid_for"`
+	TrialDays             *int64               `json:"-" db:"trial_days"`
+}
+
+func (order *Order) getTrialDays() int64 {
+	if order.TrialDays == nil {
+		return 0
+	}
+	return *order.TrialDays
 }
 
 // OrderItem includes information about a particular order item
@@ -105,6 +113,7 @@ type OrderItem struct {
 	Description    datastore.NullString `json:"description" db:"description"`
 	CredentialType string               `json:"credentialType" db:"credential_type"`
 	ValidFor       *time.Duration       `json:"validFor" db:"valid_for"`
+	ValidForISO    *string              `json:"validForIso" db:"valid_for_iso"`
 	Metadata       datastore.Metadata   `json:"metadata" db:"metadata"`
 }
 
@@ -175,6 +184,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	allowedPaymentMethods := new(Methods)
 	orderItem := OrderItem{}
 	orderItem.Quantity = quantity
+
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
@@ -204,11 +214,18 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 			orderItem.CredentialType = value
 		case "credential_valid_duration":
 			orderItem.ValidFor = new(time.Duration)
-			*orderItem.ValidFor, err = timeutils.ParseDuration(value)
+			id, err := timeutils.ParseDuration(value)
 			if err != nil {
 				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
 				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
 			}
+			t, err := id.FromNow()
+			if err != nil {
+				sublogger.Error().Err(err).Msg("failed to decode sku credential_valid_duration")
+				return nil, nil, fmt.Errorf("failed to unmarshal macaroon metadata: %w", err)
+			}
+			*orderItem.ValidFor = time.Until(*t)
+			orderItem.ValidForISO = &value
 		case "allowed_payment_methods":
 			*allowedPaymentMethods = Methods(strings.Split(value, ","))
 		case "metadata":
@@ -243,33 +260,49 @@ type CreateCheckoutSessionResponse struct {
 	SessionID string `json:"checkoutSessionId"`
 }
 
-// CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
-func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string) (CreateCheckoutSessionResponse, error) {
-	// Create customer if not already created
-	i := customer.List(&stripe.CustomerListParams{
-		Email: stripe.String(email),
-	})
-
-	matchingCustomers := 0
-	for i.Next() {
-		matchingCustomers++
+func getEmailFromCheckoutSession(stripeSession *stripe.CheckoutSession) string {
+	// has an existing checkout session
+	var email string
+	if stripeSession == nil {
+		// stripe session does not exist
+		return email
 	}
+	if stripeSession.CustomerEmail != "" {
+		// if the email was stored on the stripe session customer email, use it
+		email = stripeSession.CustomerEmail
+	} else if stripeSession.Customer != nil && stripeSession.Customer.Email != "" {
+		// if the stripe session has a customer record, with an email, use it
+		email = stripeSession.Customer.Email
+	}
+	// if there is no record of an email, stripe will ask for it and make a new customer
+	return email
+}
 
-	var customerID string
-	if matchingCustomers > 0 {
-		customerID = i.Customer().ID
-	} else {
-		customer, err := customer.New(&stripe.CustomerParams{
+// CreateStripeCheckoutSession - Create a Stripe Checkout Session for an Order
+func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI string, freeTrialDays int64) (CreateCheckoutSessionResponse, error) {
+
+	var custID string
+
+	if email != "" {
+		// find the existing customer by email
+		// so we can use the customer id instead of a customer email
+		i := customer.List(&stripe.CustomerListParams{
 			Email: stripe.String(email),
 		})
-		if err != nil {
-			return CreateCheckoutSessionResponse{}, fmt.Errorf("failed to create stripe customer: %w", err)
+
+		for i.Next() {
+			custID = i.Customer().ID
 		}
-		customerID = customer.ID
+	}
+
+	var sd = &stripe.CheckoutSessionSubscriptionDataParams{}
+
+	// if a free trial is set, apply it
+	if freeTrialDays > 0 {
+		sd.TrialPeriodDays = &freeTrialDays
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		Customer: stripe.String(customerID),
 		PaymentMethodTypes: stripe.StringSlice([]string{
 			"card",
 		}),
@@ -277,9 +310,19 @@ func (order Order) CreateStripeCheckoutSession(email, successURI, cancelURI stri
 		SuccessURL:        stripe.String(successURI),
 		CancelURL:         stripe.String(cancelURI),
 		ClientReferenceID: stripe.String(order.ID.String()),
-		SubscriptionData:  &stripe.CheckoutSessionSubscriptionDataParams{},
+		SubscriptionData:  sd,
 		LineItems:         order.CreateStripeLineItems(),
 	}
+
+	if custID != "" {
+		// try to use existing customer we found by email
+		params.Customer = stripe.String(custID)
+	} else if email != "" {
+		// if we dont have an existing customer, this CustomerEmail param will create a new one
+		params.CustomerEmail = stripe.String(email)
+	}
+	// else we have no record of this email for this checkout session
+	// the user will be asked for the email, we cannot send an empty customer email as a param
 
 	params.SubscriptionData.AddMetadata("orderID", order.ID.String())
 	params.AddExtra("allow_promotion_codes", "true")

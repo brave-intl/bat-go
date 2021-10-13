@@ -128,21 +128,23 @@ func GetConfig(ctx context.Context, location, keyARN string) (io.Reader, error) 
 		}
 		return bytes.NewBufferString(p), nil
 
-	} else {
-		// use kms to decrypt
-		svc := kms.New(session.New())
-
-		input := &kms.DecryptInput{
-			CiphertextBlob: c,
-			KeyId:          aws.String(keyARN),
-		}
-
-		result, err := svc.Decrypt(input)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to decrypt configuration")
-			return nil, fmt.Errorf("failed to decrypt configuration: %w", err)
-		}
-		return bytes.NewBuffer(result.Plaintext), nil
 	}
-	return nil, fmt.Errorf("failed to decrypt configuration")
+	session, err := session.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+	// use kms to decrypt
+	svc := kms.New(session)
+
+	input := &kms.DecryptInput{
+		CiphertextBlob: c,
+		KeyId:          aws.String(keyARN),
+	}
+
+	result, err := svc.Decrypt(input)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to decrypt configuration")
+		return nil, fmt.Errorf("failed to decrypt configuration: %w", err)
+	}
+	return bytes.NewBuffer(result.Plaintext), nil
 }

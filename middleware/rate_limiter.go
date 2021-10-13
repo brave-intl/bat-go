@@ -47,6 +47,11 @@ func IPRateLimiterWithStore(
 			},
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// override for OPTIONS request methods, as sometimes many cors requests happen quickly??
+			if r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+			}
+
 			if !isSimpleTokenInContext(r.Context()) {
 				httpRateLimiter.RateLimit(next).ServeHTTP(w, r)
 			} else {
@@ -72,6 +77,10 @@ func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.H
 	// Including burst in the existing function would break the contract so it must
 	// be 0 until a point release.
 	defaultBurst := 0
+
+	if burst, ok := ctx.Value(appctx.RateLimiterBurstCTXKey).(int); ok {
+		defaultBurst = burst
+	}
 
 	return IPRateLimiterWithStore(ctx, perMin, defaultBurst, store)
 }
