@@ -119,6 +119,8 @@ type Datastore interface {
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
+	// GetDrainsByBatchID gets the information about a drain poll job
+	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 
@@ -157,6 +159,8 @@ type ReadOnlyDatastore interface {
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
+	// GetDrainsByBatchID gets the information about a drain poll job
+	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -261,6 +265,13 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 	}
 	err = tx.Commit()
 	return err
+}
+
+// DrainTransfer info about the drains
+type DrainTransfer struct {
+	ID        *uuid.UUID      `db:"transaction_id" json:"transaction_id"`
+	Amount    decimal.Decimal `db:"amount" json:"amount"`
+	DepositID *string         `db:"deposit_destination" json:"deposit_destination"`
 }
 
 // BAPReport holds info about wallet events
@@ -699,9 +710,7 @@ func (pg *Postgres) MarkBatchTransferSubmitted(ctx context.Context, batchID *uui
 	}
 	defer pg.RollbackTx(tx)
 
-	stmt := "update claim_drain set status = 'submitted' where batch_id = $1"
-	// if there is no error we want to commit this transaction
-	// otherwise we pass the error back to the caller.
+	stmt := "update claim_drain set status = 'complete', completed=true, completed_at = now() where batch_id = $1"
 	if _, err := tx.Exec(stmt, batchID); err == nil {
 		return tx.Commit()
 	}
@@ -948,18 +957,21 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	}
 	defer pg.RollbackTx(tx)
 
+	// until nitro payments integration, this is just for bitflyer
 	statement := `
 		select
-			batch_id
+			cd.batch_id
 		from
-			claim_drain
+			claim_drain cd
+			join wallets w on w.id=cd.wallet_id
 		where
-			erred = false and
-			status='prepared'
+			cd.erred = false and
+			cd.status='prepared' and
+			w.user_deposit_account_provider = 'bitflyer'
 		group by
-			batch_id
+			cd.batch_id
 		having
-			bool_and(transaction_id is not null)=true
+			bool_and(cd.transaction_id is not null)=true
 		for update skip locked
 		limit 1;
 `
@@ -981,6 +993,16 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	if err != nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
+		status, errCode, _ := errToDrainCode(err)
+		_, err = tx.Exec(`
+			update claim_drain set
+				erred = true,
+				errcode = $1,
+				status = $2
+			where batch_id = $3`, errCode, status, batchID)
+		if err != nil {
+			return attempted, err
+		}
 		// inform sentry about this error
 		sentry.CaptureException(err)
 		return attempted, err
@@ -989,7 +1011,7 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	_, err = tx.Exec(`
 		update claim_drain set
 			status = 'submitted'
-		where batch_id = $2`, batchID)
+		where batch_id = $1`, batchID)
 	if err != nil {
 		return attempted, err
 	}
@@ -1469,16 +1491,26 @@ limit 1`
 		}
 		return attempted, err
 	}
-
-	_, err = tx.Exec(`
-		update claim_drain set
-			transaction_id = $1,
-			completed = true,
-			completed_at = now(),
-			status = 'complete'
-		where id = $2`, txn.ID, job.ID)
-	if err != nil {
-		return attempted, err
+	if txn.Status == "bitflyer-consolidate" {
+		_, err = tx.Exec(`
+			update claim_drain set
+				transaction_id = $1,
+				status = 'prepared'
+			where id = $2`, txn.ID, job.ID)
+		if err != nil {
+			return attempted, err
+		}
+	} else {
+		_, err = tx.Exec(`
+			update claim_drain set
+				transaction_id = $1,
+				completed = true,
+				completed_at = now(),
+				status = 'complete'
+			where id = $2`, txn.ID, job.ID)
+		if err != nil {
+			return attempted, err
+		}
 	}
 
 	err = tx.Commit()
@@ -1713,4 +1745,23 @@ func toUUIDs(a ...string) ([]uuid.UUID, error) {
 		b = append(b, v)
 	}
 	return b, nil
+}
+
+// GetDrainsByBatchID - get the drain by the batch id
+func (pg *Postgres) GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error) {
+	resp := []DrainTransfer{}
+	// get the linked wallet info
+	stmt := `
+select
+	transaction_id, total, deposit_destination
+from
+	claim_drain
+where
+	batch_id = $1
+`
+	if err := pg.RawDB().Select(&resp, stmt, batchID); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }

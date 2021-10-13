@@ -256,6 +256,20 @@ func (_d DatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 *DrainPo
 	return _d.base.GetDrainPoll(drainID)
 }
 
+// GetDrainsByBatchID implements Datastore
+func (_d DatastoreWithPrometheus) GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) (da1 []DrainTransfer, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainsByBatchID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetDrainsByBatchID(ctx, batchID)
+}
+
 // GetIssuer implements Datastore
 func (_d DatastoreWithPrometheus) GetIssuer(promotionID uuid.UUID, cohort string) (ip1 *Issuer, err error) {
 	_since := time.Now()
