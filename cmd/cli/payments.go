@@ -290,7 +290,7 @@ func secrets(ctx context.Context, command *cobra.Command, args []string) {
 			Str("config-url", conf).
 			Str("key-arn", key).Msg("configuration is file based")
 		// read the configuration file
-		f, err = os.ReadFile(cu.Path)
+		f, err = ioutil.ReadFile(cu.Path)
 		if err != nil {
 			logger.Fatal().Err(err).
 				Str("config-url", conf).
@@ -350,7 +350,7 @@ func secrets(ctx context.Context, command *cobra.Command, args []string) {
 
 		out := append(n[:], c...)
 
-		err = os.WriteFile(fmt.Sprintf("%s.bin", cu.Path), out, 0644)
+		err = ioutil.WriteFile(fmt.Sprintf("%s.bin", cu.Path), out, 0644)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to write encrypted config")
 			return
