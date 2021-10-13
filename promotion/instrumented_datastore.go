@@ -424,6 +424,20 @@ func (_d DatastoreWithPrometheus) InsertSuggestion(credentials []cbr.CredentialR
 	return _d.base.InsertSuggestion(credentials, suggestionText, suggestion)
 }
 
+// MarkBatchTransferSubmitted implements Datastore
+func (_d DatastoreWithPrometheus) MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "MarkBatchTransferSubmitted", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.MarkBatchTransferSubmitted(ctx, batchID)
+}
+
 // Migrate implements Datastore
 func (_d DatastoreWithPrometheus) Migrate(p1 ...uint) (err error) {
 	_since := time.Now()
@@ -485,6 +499,20 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RollbackTxAndHandle", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RollbackTxAndHandle(tx)
+}
+
+// RunNextBatchPaymentsJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextBatchPaymentsJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextBatchPaymentsJob(ctx, worker)
 }
 
 // RunNextClaimJob implements Datastore
