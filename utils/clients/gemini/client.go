@@ -74,7 +74,12 @@ func WatchGeminiBalance(ctx context.Context) error {
 				continue
 			}
 			// dont care about float downsampling from decimal errs
-			available, _ := result.Available.Float64()
+			if result == nil || len(*result) < 1 {
+				logger.Error().Msg("gemini result is empty")
+				continue
+			}
+			b := *result
+			available, _ := b[0].Available.Float64()
 			balanceGauge.Set(available)
 		}
 	}
