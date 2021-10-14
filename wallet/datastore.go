@@ -471,7 +471,9 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 	}
 
 	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
-	statement = `update wallets set user_deposit_destination='',user_account_deposit_provider=null where id = $1`
+
+	statement = `update wallets set user_deposit_destination='',user_deposit_account_provider=null where id = $1`
+
 	_, err = tx.ExecContext(ctx, statement, walletID)
 	if err != nil {
 		return err
