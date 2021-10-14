@@ -452,7 +452,7 @@ func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custod
 		from
 			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
 		where
-			wc1.wallet_id=$1 wc1.custodian=$2 and wc2.unlinked_at>$3
+			wc1.wallet_id=$1 and wc1.custodian=$2 and wc2.unlinked_at>$3
 	`
 	var count int
 	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
