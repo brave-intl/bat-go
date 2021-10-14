@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -439,6 +440,12 @@ func GrantServer(
 			}
 		}
 	}
+	// run gemini balance watch so we have balance info in prometheus
+	go func() {
+		if err := gemini.WatchGeminiBalance(ctx); err != nil {
+			logger.Panic().Err(err).Msg("error launching gemini balance watch")
+		}
+	}()
 
 	go func() {
 		err := http.ListenAndServe(":9090", middleware.Metrics())
