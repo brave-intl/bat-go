@@ -706,7 +706,7 @@ func TestUnlinkWalletV3(t *testing.T) {
 	mock.ExpectExec("^update wallet_custodian set unlinked_at=now(.+)").WithArgs(idFrom, "uphold").WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// removes the link to the user_deposit_destination record in wallets
-	mock.ExpectExec("^update wallets set user_deposit_destination='',user_account_deposit_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets set user_deposit_destination='',user_deposit_account_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()
