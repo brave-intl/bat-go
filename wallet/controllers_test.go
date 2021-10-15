@@ -63,7 +63,7 @@ func (suite *WalletControllersTestSuite) TearDownTest() {
 }
 
 func (suite *WalletControllersTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "wallet_custodian"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
