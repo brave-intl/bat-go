@@ -152,6 +152,93 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	suite.Require().Equal(http.StatusForbidden, rr.Code, expectingForbidden)
 }
 
+func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	w1 := suite.NewWallet(service, "uphold")
+	w2 := suite.NewWallet(service, "uphold")
+	w3 := suite.NewWallet(service, "uphold")
+	w4 := suite.NewWallet(service, "uphold")
+	w5 := suite.NewWallet(service, "uphold")
+	bat1 := decimal.NewFromFloat(1)
+	bat2 := decimal.NewFromFloat(2)
+
+	suite.FundWallet(w1, bat1)
+	suite.FundWallet(w2, bat1)
+	suite.FundWallet(w3, bat1)
+	suite.FundWallet(w4, bat1)
+	suite.FundWallet(w5, bat1)
+
+	anonCard1ID, err := w1.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
+
+	anonCard2ID, err := w2.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
+
+	anonCard3ID, err := w3.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
+
+	anonCard4ID, err := w4.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard4UUID := uuid.Must(uuid.FromString(anonCard4ID))
+
+	anonCard5ID, err := w5.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard5UUID := uuid.Must(uuid.FromString(anonCard5ID))
+
+	w1ProviderID := w1.GetWalletInfo().ProviderID
+	w2ProviderID := w2.GetWalletInfo().ProviderID
+	w3ProviderID := w3.GetWalletInfo().ProviderID
+	w4ProviderID := w4.GetWalletInfo().ProviderID
+	w5ProviderID := w5.GetWalletInfo().ProviderID
+
+	zero := decimal.NewFromFloat(0)
+
+	suite.CheckBalance(w1, bat1)
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	// attempt an unlink
+	suite.unlinkCardV3(service, w1, http.StatusOK)
+	// reconnect to existing card
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
+	suite.CheckBalance(w1, zero)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.CheckBalance(w2, bat1)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w2, zero)
+
+	suite.CheckBalance(w3, bat2)
+	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w3, bat1)
+
+	suite.CheckBalance(w3, bat1)
+	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.CheckBalance(w3, bat1)
+
+	suite.CheckBalance(w4, bat1)
+	suite.claimCardV3(service, w4, w4ProviderID, http.StatusOK, zero, &anonCard4UUID)
+	suite.CheckBalance(w4, bat1)
+
+	// should be able to claim a 5th card as one was unlinked
+	suite.CheckBalance(w5, bat1)
+	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
+	suite.CheckBalance(w4, bat1)
+}
+
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
@@ -216,6 +303,39 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w3, bat1)
 	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, bat1)
+}
+
+func (suite *WalletControllersTestSuite) unlinkCardV3(
+	service *Service,
+	w *uphold.Wallet,
+	status int,
+) {
+	info := w.GetWalletInfo()
+	// V3 Handler
+	handler := UnlinkWalletV3(service)
+
+	req, err := http.NewRequest("DELETE", "/v3/wallet/{custodian}/{payment_id}/unlink", nil)
+	suite.Require().NoError(err, "wallet claim unlink request creation failed")
+
+	rctx := chi.NewRouteContext()
+	fmt.Printf("info: %+v\n", info)
+	fmt.Printf("info id: %+v\n", info.ID)
+	rctx.URLParams.Add("payment_id", info.ID)
+	rctx.URLParams.Add("custodian", "uphold")
+	ctx := req.Context()
+	// add signature key id to context
+	ctx = middleware.AddKeyID(ctx, info.ID)
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-PT1M")
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
+	linked, err := service.Datastore.GetWallet(context.Background(), uuid.Must(uuid.FromString(w.ID)))
+	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
+	suite.Require().Equal(linked.UserDepositDestination, "", "unlink is supposed to wipe out the deposit dest")
 }
 
 func (suite *WalletControllersTestSuite) disconnectCardV3(
