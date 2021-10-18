@@ -18,10 +18,72 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/go-querystring/query"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )
+
+var balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "gemini_account_balance",
+	Help: "A gauge of the current account balance in gemini",
+})
+
+func init() {
+	prometheus.MustRegister(balanceGauge)
+}
+
+// WatchGeminiBalance - when called reports the balance to prometheus
+func WatchGeminiBalance(ctx context.Context) error {
+	logger := logging.Logger(ctx, "WatchGeminiBalance")
+	// create a new gemini client
+	client, _ := New()
+
+	// get api secret from context
+	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get gemini api secret")
+		return fmt.Errorf("failed to get gemini api secret: %w", err)
+	}
+	apiKey, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPIKeyCTXKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get gemini api key")
+		return fmt.Errorf("failed to get gemini api key: %w", err)
+	}
+	//create a new hmac hasher
+	signer := cryptography.NewHMACHasher([]byte(apiSecret))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		// check every 10 min
+		case <-time.After(10 * 60 * time.Second):
+			// create the gemini payload
+			payload, err := json.Marshal(NewBalancesPayload(nil))
+			if err != nil {
+				logger.Error().Err(err).Msg("failed to create gemini balance payload")
+				// okay to error, retry in 10 min
+				continue
+			}
+
+			result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
+			if err != nil {
+				logger.Error().Err(err).Msg("failed to fetch gemini balance")
+				// okay to error, retry in 10 min
+				continue
+			}
+			// dont care about float downsampling from decimal errs
+			if result == nil || len(*result) < 1 {
+				logger.Error().Msg("gemini result is empty")
+				continue
+			}
+			b := *result
+			available, _ := b[0].Available.Float64()
+			balanceGauge.Set(available)
+		}
+	}
+}
 
 // PrivateRequestSequence handles the ability to sign a request multiple times
 type PrivateRequestSequence struct {

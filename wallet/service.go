@@ -100,6 +100,24 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	return anonCard.SubmitTransaction(transaction, confirm)
 }
 
+// UnlinkWallet - unlink this wallet from the custodian
+func (service *Service) UnlinkWallet(ctx context.Context, walletID, custodian string) error {
+	id, err := uuid.FromString(walletID)
+	if err != nil {
+		return fmt.Errorf("unable to parse wallet id: %w", err)
+	}
+	switch custodian {
+	case "uphold", "bitflyer", "gemini", "brave":
+	default:
+		return fmt.Errorf("custodian '%s' not valid", custodian)
+	}
+
+	if err := service.Datastore.UnlinkWallet(ctx, id, custodian); err != nil {
+		return fmt.Errorf("unable to unlink wallet: %w", err)
+	}
+	return nil
+}
+
 // IncreaseLinkingLimit - increase this wallet's linking limit
 func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
 	// convert to provider id
@@ -328,6 +346,10 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
 				middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
 		*/
+
+		// unlink verified custodial wallet
+		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
+			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
 		// linking info api is okay to expose publically
 		r.Get("/linking-info",

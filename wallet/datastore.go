@@ -16,6 +16,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
@@ -46,6 +47,7 @@ type Datastore interface {
 	grantserver.Datastore
 	LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
+	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
@@ -267,7 +269,7 @@ func txGetCustodianLinkingIDs(ctx context.Context, tx *sqlx.Tx, providerLinkingI
 	)
 	statement := `
 		select wc1.custodian, wc1.linking_id from wallet_custodian wc1 join wallet_custodian wc2 on
-		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1
+		(wc1.wallet_id=wc2.wallet_id) where wc2.linking_id = $1 and wc1.unlinked_at is null and wc2.unlinked_at is null
 	`
 	err := tx.Select(&custodianLinkingIDs, statement, providerLinkingID)
 	if err != nil {
@@ -299,7 +301,7 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 	// we need to exclude `this` wallet from the used computation in the event we are attempting
 	// to re-link the 4th slot
 	statement := `
-		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1
+		select count(distinct(wallet_id)) as used from wallet_custodian where linking_id = $1 and unlinked_at is null
 	`
 	err := tx.Get(&used, statement, providerLinkingID)
 	return used, err
@@ -339,9 +341,10 @@ func getEnvMaxCards() int {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID        *uuid.UUID `json:"-"`
-	WalletsLinked    int        `json:"walletsLinked"`
-	OpenLinkingSlots int        `json:"openLinkingSlots"`
+	LinkingID          *uuid.UUID   `json:"-"`
+	WalletsLinked      int          `json:"walletsLinked"`
+	OpenLinkingSlots   int          `json:"openLinkingSlots"`
+	OtherWalletsLinked []*uuid.UUID `json:"otherWalletsLinked"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -380,11 +383,28 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 			return nil, fmt.Errorf("failed to parse linking id: %w", err)
 		}
 
+		// lookup other linked wallets
+		w, err := pg.GetByProviderLinkingID(ctx, lID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
+		}
+
+		wIDs := []*uuid.UUID{}
+
+		for _, v := range *w {
+			u, err := uuid.FromString(v.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse wallet id from datastore: %w", err)
+			}
+			wIDs = append(wIDs, &u)
+		}
+
 		// add to result
 		infos[custodian] = LinkingInfo{
-			LinkingID:        &lID,
-			WalletsLinked:    usedLinkings,
-			OpenLinkingSlots: maxLinkings - usedLinkings,
+			LinkingID:          &lID,
+			WalletsLinked:      usedLinkings,
+			OpenLinkingSlots:   maxLinkings - usedLinkings,
+			OtherWalletsLinked: wIDs,
 		}
 	}
 
@@ -394,6 +414,75 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 	}
 
 	return infos, nil
+}
+
+// ErrUnlinkingsExceeded - the number of custodian wallet unlinkings attempts have exceeded
+var ErrUnlinkingsExceeded = errors.New("custodian unlinking limit reached")
+
+// UnlinkWallet - unlink the wallet from the custodian completely
+func (pg *Postgres) UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error {
+	// get tx
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
+	}
+	// will rollback if tx created at this scope
+	defer rollback()
+
+	// lower bound based
+	lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
+	if !ok {
+		return fmt.Errorf("misconfigured service, no unlink prior to duration configured")
+	}
+
+	d, err := timeutils.ParseDuration(lbDur)
+	if err != nil {
+		return fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
+	}
+
+	notBefore, err := d.FromNow()
+	if err != nil {
+		return fmt.Errorf("unable to get not before time from duration: %w", err)
+	}
+
+	// validate that no other linkages were unlinked in the duration specified
+	stmt := `
+		select
+			count(wc2.*)
+		from
+			wallet_custodian wc1 join wallet_custodian wc2 on wc1.linking_id=wc2.linking_id
+		where
+			wc1.wallet_id=$1 and wc1.custodian=$2 and wc2.unlinked_at>$3
+	`
+	var count int
+	err = tx.Get(&count, stmt, walletID, custodian, notBefore)
+	if err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return ErrUnlinkingsExceeded
+	}
+
+	statement := `update wallet_custodian set unlinked_at=now() where wallet_id = $1 and custodian = $2`
+	_, err = tx.ExecContext(ctx, statement, walletID, custodian)
+	if err != nil {
+		return err
+	}
+
+	// remove the user_deposit_destination, user_account_deposit_provider from the wallets table
+
+	statement = `update wallets set user_deposit_destination='',user_deposit_account_provider=null where id = $1`
+
+	_, err = tx.ExecContext(ctx, statement, walletID)
+	if err != nil {
+		return err
+	}
+
+	if err := commit(); err != nil {
+		return fmt.Errorf("failed to commit tx: %w", err)
+	}
+	return nil
 }
 
 // IncreaseLinkingLimit - increase the linking limit for the given walletID by one
@@ -448,13 +537,14 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 // CustodianLink - representation of wallet_custodian record
 type CustodianLink struct {
-	WalletID           *uuid.UUID   `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
-	Custodian          string       `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
-	CreatedAt          time.Time    `json:"created_at" db:"created_at" valid:"-"`
-	LinkedAt           time.Time    `json:"linked_at" db:"linked_at" valid:"-"`
-	DisconnectedAt     sql.NullTime `json:"disconnected_at" db:"disconnected_at" valid:"-"`
-	DepositDestination string       `json:"deposit_destination" db:"deposit_destination" valid:"-"`
-	LinkingID          *uuid.UUID   `json:"linking_id" db:"linking_id" valid:"uuid"`
+	WalletID           *uuid.UUID `json:"wallet_id" db:"wallet_id" valid:"uuidv4"`
+	Custodian          string     `json:"custodian" db:"custodian" valid:"in(uphold,brave,gemini,bitflyer)"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at" valid:"-"`
+	LinkedAt           time.Time  `json:"linked_at" db:"linked_at" valid:"-"`
+	DisconnectedAt     *time.Time `json:"disconnected_at" db:"disconnected_at" valid:"-"`
+	DepositDestination string     `json:"deposit_destination" db:"deposit_destination" valid:"-"`
+	LinkingID          *uuid.UUID `json:"linking_id" db:"linking_id" valid:"uuid"`
+	UnlinkedAt         *time.Time `json:"unlinked_at" db:"unlinked_at" valid:"-"`
 }
 
 // GetWalletIDString - get string version of the WalletID
@@ -589,7 +679,8 @@ func (pg *Postgres) GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID
 			wallet_custodian wc
 		where
 			wc.wallet_id = $1 and
-			wc.disconnected_at is null
+			wc.disconnected_at is null and
+			wc.unlinked_at is null
 	`
 	err = tx.Get(cl, stmt, ID)
 	if err != nil {
@@ -649,7 +740,9 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		set
 			disconnected_at=now()
 		where
-			wallet_id=$1 and disconnected_at is null
+			wallet_id=$1 and
+			disconnected_at is null and
+			unlinked_at is null
 	`
 	// perform query
 	if _, err := tx.ExecContext(
@@ -695,13 +788,14 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	// get the custodial provider's linking id from db
 	stmt := `
 		select linking_id from wallet_custodian
-		where wallet_id=$1 and custodian=$2
+		where wallet_id=$1 and custodian=$2 and
+		unlinked_at is null
 	`
 	err = tx.Get(&existingLinkingID, stmt, cl.WalletID, cl.Custodian)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		sublogger.Error().Err(err).
-			Msg("failed to insert wallet_custodian")
-		return fmt.Errorf("failed to insert wallet custodian record: %w", err)
+			Msg("failed to get linking id from wallet_custodian")
+		return fmt.Errorf("failed to get linking id from custodian record: %w", err)
 	}
 
 	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {

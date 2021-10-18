@@ -758,6 +758,90 @@ func (suite *PostgresTestSuite) TestInsertClobberedClaims() {
 	suite.Assert().Equal(allCreds1, allCreds2, "creds should not be inserted more than once")
 }
 
+func (suite *PostgresTestSuite) TestDrainClaimErred() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	publicKey := "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="
+	blindedCreds := jsonutils.JSONStringArray([]string{"hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY="})
+	walletID := uuid.NewV4()
+	wallet2ID := uuid.NewV4()
+	info := &walletutils.Info{
+		ID:         walletID.String(),
+		Provider:   "uphold",
+		ProviderID: uuid.NewV4().String(),
+		PublicKey:  publicKey,
+	}
+	info2 := &walletutils.Info{
+		ID:         wallet2ID.String(),
+		Provider:   "uphold",
+		ProviderID: uuid.NewV4().String(),
+		PublicKey:  publicKey,
+	}
+	err = walletDB.UpsertWallet(context.Background(), info)
+	err = walletDB.UpsertWallet(context.Background(), info2)
+	suite.Require().NoError(err, "Upsert wallet must succeed")
+
+	{
+		tmp := uuid.NewV4()
+		info.AnonymousAddress = &tmp
+	}
+	err = walletDB.UpsertWallet(context.Background(), info)
+	suite.Require().NoError(err, "Upsert wallet should succeed")
+
+	wallet, err := walletDB.GetWallet(context.Background(), walletID)
+	suite.Require().NoError(err, "Get wallet should succeed")
+	suite.Assert().Equal(wallet.AnonymousAddress, info.AnonymousAddress)
+
+	wallet2, err := walletDB.GetWallet(context.Background(), wallet2ID)
+	suite.Require().NoError(err, "Get wallet should succeed")
+
+	total := decimal.NewFromFloat(50.0)
+	// Create promotion
+	promotion, err := pg.CreatePromotion(
+		"ugp",
+		2,
+		total,
+		"",
+	)
+	suite.Require().NoError(err, "Create promotion should succeed")
+	suite.Require().NoError(pg.ActivatePromotion(promotion), "Activate promotion should succeed")
+
+	issuer := &Issuer{PromotionID: promotion.ID, Cohort: "control", PublicKey: publicKey}
+	issuer, err = pg.InsertIssuer(issuer)
+	suite.Require().NoError(err, "Insert issuer should succeed")
+
+	claim, err := pg.ClaimForWallet(promotion, issuer, info, blindedCreds)
+	suite.Require().NoError(err, "Claim creation should succeed")
+
+	suite.Assert().Equal(false, claim.Drained)
+
+	credentials := []cbr.CredentialRedemption{}
+
+	drainID := uuid.NewV4()
+
+	err = pg.DrainClaim(&drainID, claim, credentials, wallet2, total, errMismatchedWallet)
+	suite.Require().NoError(err, "Drain claim errored call should succeed")
+
+	// should show as drained
+	claim, err = pg.GetClaimByWalletAndPromotion(wallet, promotion)
+	suite.Assert().Equal(true, claim.Drained)
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockDrainWorker := NewMockDrainWorker(mockCtrl)
+
+	// After err no further job should run
+	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
+	suite.Assert().Equal(false, attempted)
+	suite.Require().NoError(err)
+
+}
+
 func (suite *PostgresTestSuite) TestDrainClaim() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
@@ -812,7 +896,7 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 
 	drainID := uuid.NewV4()
 
-	err = pg.DrainClaim(&drainID, claim, credentials, wallet, total)
+	err = pg.DrainClaim(&drainID, claim, credentials, wallet, total, nil)
 	suite.Require().NoError(err, "Drain claim should succeed")
 
 	claim, err = pg.GetClaimByWalletAndPromotion(wallet, promotion)
