@@ -14,6 +14,16 @@ def split_contributions_referrals(filename, provider, contributions, referrals):
     with open(referrals_output_filename, 'w') as outfile:
         json.dump(referrals, outfile, indent=4)
 
+def partition(pred, iterable):
+    trues = []
+    falses = []
+    for item in iterable:
+        if pred(item):
+            trues.append(item)
+        else:
+            falses.append(item)
+    return trues, falses
+
 def convert_publishers_file(filename, provider):
     f = open(filename, 'r')
     data = json.load(f)
@@ -26,8 +36,26 @@ def convert_publishers_file(filename, provider):
     gemini_transactions = []
     contribution_amount = 0
     referral_amount = 0
+    
+    # Group the Bitflyer payouts to the same channel, summing amount due into 1 transaction
+    bitflyer_txs, non_bitflyer_txs = partition(lambda x: x['wallet_provider_id'] and x['wallet_provider_id'].startswith('bitflyer'), data)
+    # non_bitflyer_txs = (x for x in data if not x['wallet_provider_id'].startswith('bitflyer'))
+    new_grouped_bitflyer_txs = []
+    for transaction in bitflyer_txs:
+        # Find the current publisher/destination in list
+        found_bitflyer_tx = next((x for x in new_grouped_bitflyer_txs if (x['wallet_provider_id'] == transaction['wallet_provider_id'])), None)
 
-    for transaction in data:
+        if found_bitflyer_tx:
+            # If found, add our value to it, and go to next
+            found_bitflyer_tx["bat"] = Decimal(found_bitflyer_tx['bat']) + Decimal(transaction['bat'])
+        else:
+            # If not found, add us to the array
+            new_grouped_bitflyer_txs.append(transaction)
+
+
+    data_with_adjusted_bitflyer = [*non_bitflyer_txs, *new_grouped_bitflyer_txs]
+    # now do regular conversion
+    for transaction in data_with_adjusted_bitflyer:
         channel_id = transaction["publisher"]
         if transaction['wallet_provider_id'] != None and transaction['wallet_provider_id'].startswith(provider):
             if transaction['type'] == 'contribution':

@@ -162,7 +162,7 @@ func FromWalletInfo(ctx context.Context, info walletutils.Info) (*Wallet, error)
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Bearer " + accessToken)
+		req.Header.Add("Authorization", "Bearer "+accessToken)
 	}
 	return req, err
 }
@@ -423,6 +423,8 @@ type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
 	Message      string       `json:"message,omitempty"`
+	Purpose      string       `json:"purpose"`
+	Beneficiary  beneficiary  `json:"beneficiary"`
 }
 
 // denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
@@ -438,10 +440,16 @@ type transactionRequestRecode struct {
 	Denomination denominationRecode `json:"denomination"`
 	Destination  string             `json:"destination"`
 	Message      string             `json:"message,omitempty"`
+	Purpose      string             `json:"purpose"`
+	Beneficiary  beneficiary        `json:"beneficiary"`
+}
+
+type beneficiary struct {
+	Relationship string `json:"relationship"`
 }
 
 func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
+	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message, Purpose: "payout", Beneficiary: beneficiary{Relationship: "business"}}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())

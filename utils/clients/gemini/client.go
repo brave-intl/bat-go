@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/google/go-querystring/query"
 	"github.com/shengdoushi/base58"
@@ -218,6 +218,13 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
 }
 
+// isB64 - check if the input string is base64
+func isB64(s string) bool {
+	// will get an error if we fail to decode
+	_, err := base64.StdEncoding.DecodeString(s)
+	return err == nil
+}
+
 func setHeaders(
 	req *http.Request,
 	APIKey string,
@@ -229,6 +236,12 @@ func setHeaders(
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("Cache-Control", "no-cache")
 	if payload != "" {
+
+		if !isB64(payload) {
+			// payload is not base64, so encode it before sending
+			payload = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
+
 		// base64 encode the payload
 		req.Header.Set("X-GEMINI-PAYLOAD", payload)
 	}
@@ -257,6 +270,10 @@ func setPrivateRequestHeaders(
 			return errors.New("GEMINI_SUBMIT_TYPE set to 'hmac' but no signer provided")
 		}
 		signs := *signer
+		// if payload is not base64 then encode it
+		if !isB64(payload) {
+			payload = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
 		// only set if sending an hmac salt
 		signature, err := signs.HMACSha384([]byte(payload))
 		if err != nil {
@@ -287,10 +304,12 @@ func (c *HTTPClient) CheckTxStatus(
 	}
 
 	// get api secret from context
-	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
-	}
+	// apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to get gemini signing secret from ctx: %w", err)
+	// }
+
+	apiSecret := os.Getenv("GEMINI_CLIENT_SECRET")
 	//create a new hmac hasher
 	signer := cryptography.NewHMACHasher([]byte(apiSecret))
 
