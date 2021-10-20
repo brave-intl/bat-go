@@ -1067,7 +1067,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	suite.Require().NoError(err)
 	presentationPayload := base64.StdEncoding.EncodeToString(presentationBytes)
 
-	verifyRequest := VerifyCredentialRequest{
+	verifyRequest := VerifyCredentialRequestV1{
 		Type:         "single-use",
 		Version:      1,
 		SKU:          "incorrect-sku",
@@ -1078,7 +1078,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	body, err := json.Marshal(&verifyRequest)
 	suite.Require().NoError(err)
 
-	handler = VerifyCredential(suite.service)
+	handler = VerifyCredentialV1(suite.service)
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -1096,7 +1096,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	body, err = json.Marshal(&verifyRequest)
 	suite.Require().NoError(err)
 
-	handler = VerifyCredential(suite.service)
+	handler = VerifyCredentialV1(suite.service)
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
