@@ -707,6 +707,51 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 
 const oneDay = 24 * time.Hour
 
+// GetActiveCredentialSigningKey get the current active signing key for this merchant
+func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
+	// sorted by name, created_at, first result is most recent
+	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting keys by merchant: %w", err)
+	}
+	if keys == nil || len(*keys) < 1 {
+		return nil, fmt.Errorf("merchant keys is nil")
+	}
+
+	secret, err := (*keys)[0].GetSecretKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting key's secret value: %w", err)
+	}
+	if secret == nil {
+		return nil, fmt.Errorf("invalid empty value for secret key")
+	}
+
+	return []byte(*secret), nil
+}
+
+// GetCredentialSigningKeys get the current list of credential signing keys for this merchant
+func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID string) ([][]byte, error) {
+	var resp = [][]byte{}
+	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting keys by merchant: %w", err)
+	}
+	if keys == nil {
+		return nil, fmt.Errorf("merchant keys is nil")
+	}
+	for _, k := range *keys {
+		s, err := k.GetSecretKey()
+		if err != nil {
+			return nil, fmt.Errorf("error getting key's secret value: %w", err)
+		}
+		if s == nil {
+			return nil, fmt.Errorf("invalid empty value for secret key")
+		}
+		resp = append(resp, []byte(*s))
+	}
+	return resp, nil
+}
+
 // GetTimeLimitedCreds get an order's time limited creds
 func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
@@ -729,7 +774,11 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	var credentials []TimeLimitedCreds
-	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+	secret, err := s.GetActiveCredentialSigningKey(ctx, order.MerchantID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get merchant signing key: %w", err)
+	}
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
 	for _, item := range order.Items {
 		numCreds := 0
@@ -904,7 +953,10 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		}
 		logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
 
-		timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+		keys, err := s.GetCredentialSigningKeys(ctx, req.GetMerchantID(ctx))
+		if err != nil {
+			return handlers.WrapError(err, "failed to get merchant signing key", http.StatusInternalServerError)
+		}
 
 		issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
 		if err != nil {
@@ -919,22 +971,25 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 			return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
 		}
 
-		verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
-		if err != nil {
-			logger.Error().Err(err).
-				Msg("failed to verify time limited credential")
-			return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
-		}
-
-		if verified {
-			// check against expiration time, issued time
-			if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
-				logger.Error().
-					Msg("credentials are not valid")
-				return handlers.RenderContent(ctx, "Credentials are not valid", w, http.StatusForbidden)
+		for _, key := range keys {
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret(key)
+			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to verify time limited credential")
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
 			}
-			logger.Debug().Msg("credentials verified")
-			return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+
+			if verified {
+				// check against expiration time, issued time
+				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					logger.Error().
+						Msg("credentials are not valid")
+					return handlers.RenderContent(ctx, "Credentials are not valid", w, http.StatusForbidden)
+				}
+				logger.Debug().Msg("credentials verified")
+				return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+			}
 		}
 		logger.Error().
 			Msg("credentials could not be verified")
