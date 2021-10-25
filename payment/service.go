@@ -783,31 +783,31 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	for _, item := range order.Items {
 		numCreds := 0
 		var (
-			credDur *timeutils.ISODuration
-			err     error
+			issuanceInterval *timeutils.ISODuration
+			err              error
 		)
 		// get the item's credential duration, this is the amount of time a credential should
 		// be valid for.
-		if item.CredentialDurationISO != nil {
+		if item.IssuanceIntervalISO != nil {
 			// Use the sku's duration on the item
-			credDur, err = timeutils.ParseDuration(*item.CredentialDurationISO)
+			issuanceInterval, err = timeutils.ParseDuration(*item.IssuanceIntervalISO)
 			if err != nil {
 				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid credential duration: %w", err)
 			}
 		} else {
 			// legacy default is 1 day credential durations
-			credDur, err = timeutils.ParseDuration("P1D")
+			issuanceInterval, err = timeutils.ParseDuration("P1D")
 			if err != nil {
 				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid credential duration: %w", err)
 			}
 		}
 		// figure out how big each credential is
-		t, err := credDur.FromNow()
+		t, err := issuanceInterval.FromNow()
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("calculating credential duration: %w", err)
 		}
 		// go duration
-		cd := time.Until(*t)
+		ii := time.Until(*t)
 
 		if item.ValidForISO != nil {
 			// Use the sku's duration on the item
@@ -831,15 +831,15 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			var plus int
 
 			// we need 5 days at least
-			if cd > time.Hour*24*5 {
+			if ii > time.Hour*24*5 {
 				plus = 1
 			} else {
 				// how many multiples do we need?
-				plus = int((time.Hour * 24 * 5) / cd)
+				plus = int((time.Hour * 24 * 5) / ii)
 			}
 
 			// number credentials is the ratio of validity to credential duration, adding our plus
-			numCreds = int(validFor/cd) + plus
+			numCreds = int(validFor/ii) + plus
 		}
 
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
@@ -849,7 +849,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 
 		now := time.Now()
 		dStart := now.Truncate(oneDay)
-		dEnd := now.Add(cd).Truncate(oneDay)
+		dEnd := now.Add(ii).Truncate(oneDay)
 
 		// for the number of days order is valid for, create per day creds
 
@@ -871,15 +871,15 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			})
 
 			// increment dStart and dEnd
-			dStart = dStart.Add(cd)
+			dStart = dStart.Add(ii)
 			// figure out how big each credential is
-			t, err = credDur.From(dStart)
+			t, err = issuanceInterval.From(dStart)
 			if err != nil {
 				return nil, http.StatusInternalServerError, fmt.Errorf("calculating credential duration: %w", err)
 			}
 			// go duration
-			cd = time.Until(*t)
-			dEnd = dEnd.Add(cd)
+			ii = time.Until(*t)
+			dEnd = dEnd.Add(ii)
 		}
 	}
 

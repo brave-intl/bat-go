@@ -1,1 +1,1 @@
-alter table order_items add column credential_duration text default null;
+alter table order_items add column issuance_interval text default null;

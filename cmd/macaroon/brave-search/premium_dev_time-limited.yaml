@@ -9,6 +9,7 @@ tokens:
       - description: "Premium access to Brave Search"
       - credential_type: "time-limited"
       - credential_valid_duration: "P1M"
+      - issuance_interval: "P1M"
       - allowed_payment_methods: "stripe"
       - metadata: '
 {
