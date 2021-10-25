@@ -855,7 +855,6 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 
 		for i := 0; i < numCreds; i++ {
 
-			fmt.Println("!!! ", dStart, dEnd)
 			// iterate through order items, derive the time limited creds
 			timeBasedToken, err := timeLimitedSecret.Derive(
 				[]byte(issuerID),
