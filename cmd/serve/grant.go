@@ -275,6 +275,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	jobs = append(jobs, paymentService.Jobs()...)
 
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
+	r.Mount("/v2/credentials", payment.CredentialV2Router(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
 	// for payment webhook integrations
 	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))

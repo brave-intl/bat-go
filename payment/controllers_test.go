@@ -960,13 +960,23 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {
 	order := suite.setupCreateOrder(FreeTLTestSkuToken, 1)
 
+	// setup a key for our merchant
+	k := suite.SetupCreateKey(order.MerchantID)
+	// GetKey
+	keyID, err := uuid.FromString(k.ID)
+	suite.Require().NoError(err, "error parsing key id")
+
+	key, err := suite.service.Datastore.GetKey(keyID, false)
+	suite.Require().NoError(err, "error getting key from db")
+	secret, err := key.GetSecretKey()
+	suite.Require().NoError(err, "unable to decrypt secret")
+
 	ordercreds := suite.fetchTimeLimitedCredentials(context.Background(), suite.service, order)
 
 	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free")
 	suite.Require().NoError(err, "error attempting to encode issuer id")
 
-	// assert order creds validate
-	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(*secret))
 	for _, cred := range ordercreds {
 		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
 		suite.Require().NoError(err, "error attempting to parse issued at")
@@ -1067,7 +1077,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	suite.Require().NoError(err)
 	presentationPayload := base64.StdEncoding.EncodeToString(presentationBytes)
 
-	verifyRequest := VerifyCredentialRequest{
+	verifyRequest := VerifyCredentialRequestV1{
 		Type:         "single-use",
 		Version:      1,
 		SKU:          "incorrect-sku",
@@ -1078,7 +1088,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	body, err := json.Marshal(&verifyRequest)
 	suite.Require().NoError(err)
 
-	handler = VerifyCredential(suite.service)
+	handler = VerifyCredentialV1(suite.service)
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -1096,7 +1106,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	body, err = json.Marshal(&verifyRequest)
 	suite.Require().NoError(err)
 
-	handler = VerifyCredential(suite.service)
+	handler = VerifyCredentialV1(suite.service)
 	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -1112,7 +1122,7 @@ func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
 	suite.Assert().Equal(http.StatusOK, rr.Code)
 }
 
-func (suite *ControllersTestSuite) SetupCreateKey() Key {
+func (suite *ControllersTestSuite) SetupCreateKey(merchantID string) Key {
 	createRequest := &CreateKeyRequest{
 		Name: "BAT-GO",
 	}
@@ -1124,7 +1134,8 @@ func (suite *ControllersTestSuite) SetupCreateKey() Key {
 
 	createAPIHandler := CreateKey(suite.service)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
+	//rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
+	rctx.URLParams.Add("merchantID", merchantID)
 	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -1167,13 +1178,13 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 }
 
 func (suite *ControllersTestSuite) TestCreateKey() {
-	Key := suite.SetupCreateKey()
+	Key := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
 
 	suite.Assert().Equal("48dc25ed-4121-44ef-8147-4416a76201f7", Key.Merchant)
 }
 
 func (suite *ControllersTestSuite) TestDeleteKey() {
-	key := suite.SetupCreateKey()
+	key := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
 
 	deleteTime := time.Now()
 	deletedKey := suite.SetupDeleteKey(key)
@@ -1189,7 +1200,7 @@ func (suite *ControllersTestSuite) TestGetKeys() {
 	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
-	key := suite.SetupCreateKey()
+	key := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
 
 	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys", nil)
 	suite.Require().NoError(err)
@@ -1219,8 +1230,8 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 	_, err = pg.RawDB().Exec("DELETE FROM api_keys;")
 	suite.Require().NoError(err)
 
-	key := suite.SetupCreateKey()
-	toDelete := suite.SetupCreateKey()
+	key := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
+	toDelete := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
 	suite.SetupDeleteKey(toDelete)
 
 	req, err := http.NewRequest("GET", "/v1/merchant/{merchantID}/keys?expired=true", nil)
@@ -1246,7 +1257,7 @@ func (suite *ControllersTestSuite) TestGetKeysFiltered() {
 func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 	ctx := context.Background()
 	valid := 1 * time.Second
-	lastPaid := time.Now().Add(1 * time.Minute)
+	lastPaid := time.Now().Add(-1 * time.Minute)
 	expiresAt := lastPaid.Add(valid)
 
 	order := &Order{

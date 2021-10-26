@@ -3,6 +3,8 @@ package payment
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,6 +20,7 @@ import (
 	"errors"
 
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
@@ -704,6 +707,51 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 
 const oneDay = 24 * time.Hour
 
+// GetActiveCredentialSigningKey get the current active signing key for this merchant
+func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
+	// sorted by name, created_at, first result is most recent
+	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting keys by merchant: %w", err)
+	}
+	if keys == nil || len(*keys) < 1 {
+		return nil, fmt.Errorf("merchant keys is nil")
+	}
+
+	secret, err := (*keys)[0].GetSecretKey()
+	if err != nil {
+		return nil, fmt.Errorf("error getting key's secret value: %w", err)
+	}
+	if secret == nil {
+		return nil, fmt.Errorf("invalid empty value for secret key")
+	}
+
+	return []byte(*secret), nil
+}
+
+// GetCredentialSigningKeys get the current list of credential signing keys for this merchant
+func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID string) ([][]byte, error) {
+	var resp = [][]byte{}
+	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting keys by merchant: %w", err)
+	}
+	if keys == nil {
+		return nil, fmt.Errorf("merchant keys is nil")
+	}
+	for _, k := range *keys {
+		s, err := k.GetSecretKey()
+		if err != nil {
+			return nil, fmt.Errorf("error getting key's secret value: %w", err)
+		}
+		if s == nil {
+			return nil, fmt.Errorf("invalid empty value for secret key")
+		}
+		resp = append(resp, []byte(*s))
+	}
+	return resp, nil
+}
+
 // GetTimeLimitedCreds get an order's time limited creds
 func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
@@ -726,7 +774,11 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 
 	var credentials []TimeLimitedCreds
-	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(os.Getenv("BRAVE_MERCHANT_KEY")))
+	secret, err := s.GetActiveCredentialSigningKey(ctx, order.MerchantID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get merchant signing key: %w", err)
+	}
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
 	for _, item := range order.Items {
 		numCreds := 0
@@ -791,4 +843,157 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	}
 	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
 
+}
+
+type credential interface {
+	GetSku(context.Context) string
+	GetType(context.Context) string
+	GetMerchantID(context.Context) string
+	GetPresentation(context.Context) string
+}
+
+// verifyCredential - given a credential, verify it.
+func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
+	logger := logging.Logger(ctx, "verifyCredential")
+
+	merchant, err := GetMerchant(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get the merchant from the context")
+		return handlers.WrapError(err, "Error getting auth merchant", http.StatusInternalServerError)
+	}
+
+	logger.Debug().Str("merchant", merchant).Msg("got merchant from the context")
+
+	caveats := GetCaveats(ctx)
+
+	if req.GetMerchantID(ctx) != merchant {
+		logger.Warn().
+			Str("req.MerchantID", req.GetMerchantID(ctx)).
+			Str("merchant", merchant).
+			Msg("merchant does not match the key's merchant")
+		return handlers.WrapError(nil, "Verify request merchant does not match authentication", http.StatusForbidden)
+	}
+
+	logger.Debug().Str("merchant", merchant).Msg("merchant matches the key's merchant")
+
+	if caveats != nil {
+		if sku, ok := caveats["sku"]; ok {
+			if req.GetSku(ctx) != sku {
+				logger.Warn().
+					Str("req.SKU", req.GetSku(ctx)).
+					Str("sku", sku).
+					Msg("sku caveat does not match")
+				return handlers.WrapError(nil, "Verify request sku does not match authentication", http.StatusForbidden)
+			}
+		}
+	}
+	logger.Debug().Msg("caveats validated")
+
+	if req.GetType(ctx) == "single-use" {
+		var bytes []byte
+		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+		if err != nil {
+			return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+		}
+
+		var decodedCredential cbr.CredentialRedemption
+		err = json.Unmarshal(bytes, &decodedCredential)
+		if err != nil {
+			return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+		}
+
+		// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+		issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
+		if err != nil {
+			return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+		}
+		if issuerID != decodedCredential.Issuer {
+			return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
+		}
+
+		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+		if err != nil {
+			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+	} else if req.GetType(ctx) == "time-limited" {
+		// Presentation includes a token and token metadata test test
+		type Presentation struct {
+			IssuedAt  string `json:"issuedAt"`
+			ExpiresAt string `json:"expiresAt"`
+			Token     string `json:"token"`
+		}
+
+		var bytes []byte
+		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to decode the request token presentation")
+			return handlers.WrapError(err, "Error in decoding presentation", http.StatusBadRequest)
+		}
+		logger.Debug().Str("presentation", string(bytes)).Msg("presentation decoded")
+
+		var presentation Presentation
+		err = json.Unmarshal(bytes, &presentation)
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to unmarshal the request token presentation")
+			return handlers.WrapError(err, "Error in presentation formatting", http.StatusBadRequest)
+		}
+
+		logger.Debug().Str("presentation", string(bytes)).Msg("presentation unmarshalled")
+
+		// Ensure that the credential being redeemed (opaque to merchant) matches the outer credential details
+		issuerID, err := encodeIssuerID(req.GetMerchantID(ctx), req.GetSku(ctx))
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to encode the issuer id")
+			return handlers.WrapError(err, "Error in outer merchantId or sku", http.StatusBadRequest)
+		}
+		logger.Debug().Str("issuer", issuerID).Msg("issuer encoded")
+
+		keys, err := s.GetCredentialSigningKeys(ctx, req.GetMerchantID(ctx))
+		if err != nil {
+			return handlers.WrapError(err, "failed to get merchant signing key", http.StatusInternalServerError)
+		}
+
+		issuedAt, err := time.Parse("2006-01-02", presentation.IssuedAt)
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to parse issued at time of credential")
+			return handlers.WrapError(err, "Error parsing issuedAt", http.StatusBadRequest)
+		}
+		expiresAt, err := time.Parse("2006-01-02", presentation.ExpiresAt)
+		if err != nil {
+			logger.Error().Err(err).
+				Msg("failed to parse expires at time of credential")
+			return handlers.WrapError(err, "Error parsing expiresAt", http.StatusBadRequest)
+		}
+
+		for _, key := range keys {
+			timeLimitedSecret := cryptography.NewTimeLimitedSecret(key)
+			verified, err := timeLimitedSecret.Verify([]byte(issuerID), issuedAt, expiresAt, presentation.Token)
+			if err != nil {
+				logger.Error().Err(err).
+					Msg("failed to verify time limited credential")
+				return handlers.WrapError(err, "Error in token verification", http.StatusBadRequest)
+			}
+
+			if verified {
+				// check against expiration time, issued time
+				if time.Now().After(expiresAt) || time.Now().Before(issuedAt) {
+					logger.Error().
+						Msg("credentials are not valid")
+					return handlers.RenderContent(ctx, "Credentials are not valid", w, http.StatusForbidden)
+				}
+				logger.Debug().Msg("credentials verified")
+				return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
+			}
+		}
+		logger.Error().
+			Msg("credentials could not be verified")
+		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
+	}
+	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
 }
