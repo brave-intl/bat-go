@@ -23,7 +23,13 @@ func TestCredChunkFn(t *testing.T) {
 		t.Errorf("failed to parse 1 month: %s", err.Error())
 	}
 
-	next := credChunkFn(*day)(issued, true)
+	this, next := credChunkFn(*day)(issued)
+	if this.Day() != 20 {
+		t.Errorf("day - the next day should be 2")
+	}
+	if this.Month() != 1 {
+		t.Errorf("day - the next month should be 1")
+	}
 	if next.Day() != 21 {
 		t.Errorf("day - the next day should be 2")
 	}
@@ -31,7 +37,13 @@ func TestCredChunkFn(t *testing.T) {
 		t.Errorf("day - the next month should be 1")
 	}
 
-	next = credChunkFn(*mo)(issued, true)
+	this, next = credChunkFn(*mo)(issued)
+	if this.Day() != 1 {
+		t.Errorf("mo - the next day should be 1")
+	}
+	if this.Month() != 1 {
+		t.Errorf("mo - the next month should be 2")
+	}
 	if next.Day() != 1 {
 		t.Errorf("mo - the next day should be 1")
 	}

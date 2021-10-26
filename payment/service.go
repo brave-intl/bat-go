@@ -750,92 +750,75 @@ func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID strin
 	return resp, nil
 }
 
-var (
-	errInvalidIssuanceInterval = errors.New("invalid issuance interval")
-	errOrderExpired            = errors.New("order is expired")
-)
-
 // credChunkFn - given a time, calculate the next increment of time based on interval
-func credChunkFn(interval timeutils.ISODuration) func(time.Time, bool) time.Time {
-	return func(t time.Time, next bool) time.Time {
-		var result time.Time
+func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, time.Time) {
+	return func(t time.Time) (time.Time, time.Time) {
+		var (
+			start time.Time
+			end   time.Time
+		)
 
 		// get the future time one credential interval away
 		c, err := interval.From(t)
 		if err != nil {
-			return time.Time{}
+			return start, end
 		}
 		// get the go duration to that future time one credential away
 		td := (*c).Sub(t)
 		// truncate that time based on the duration it is away
 		// i.e. 1 day will truncate on the day
 		// i.e. 1 month will truncate on the month
-		if next {
-			t = t.Add(td)
-		}
+		end = t.Add(td)
 
 		switch interval.String() {
 		case "P1M":
 			y, m, _ := t.Date()
 			// reset the date to be the first of the given month
-			result = time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+			start = time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+
+			y1, m1, _ := end.Date()
+			end = time.Date(y1, m1, 1, 0, 0, 0, 0, time.UTC)
 		default:
 			// use truncate
-			result = t.Truncate(td)
+			start = t.Truncate(td)
+			end = end.Truncate(td)
 		}
-		return result
+		return start, end
 	}
 }
 
 // timeChunking - given a duration and interval size of credential, return number of credentials
 // to generate, and a function that takes a start time and increments it by an appropriate amount
-func timeChunking(ctx context.Context, issued, expiry time.Time, duration, interval timeutils.ISODuration) (int, func(time.Time, bool) time.Time, error) {
-
-	// time limited credentials should deterministically generate the same for anyone who has a
-	// credential for that particular duration/interval.
-	// eg 1 mo duration @ 1 minute interval -> start/end of credentials are minute bounds (start 1 second of min)
-	// eg 1 mo duration @ 1 day interval -> start/end of credentials are day bounds (start 1 minute of day)
-	// eg 1 mo duration @ 1 week interval -> start/end of credentials are week bounds (start 1st day of week)
-	// eg 1 mo duration @ 1 mo interval -> start/end of credentials are month bounds (start 1st day of month)
-
-	// expired
-	if time.Now().After(expiry) {
-		return 0, nil, errOrderExpired
-	}
-	// already started, use now as issued
-	if time.Now().After(issued) {
-		issued = time.Now()
-	}
-
-	// get the go duration of our order duration
-	until, err := duration.From(issued)
+func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
+	expiresAt, err := duration.From(issued)
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to calculate end of duration: %w", err)
+		return nil, fmt.Errorf("unable to compute expiry")
 	}
+	// Add at least 5 days of grace period
+	expiresAt.AddDate(0, 0, 5)
 
-	orderDuration := time.Until(*until)
-
-	// get the go duration of our issuance interval
-	chunk, err := interval.From(time.Now())
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to calculate end of issuance interval: %w", err)
+	var credentials []TimeLimitedCreds
+	var dStart time.Time
+	dEnd := time.Now()
+	chunkingFn := credChunkFn(interval)
+	for dEnd.Before(*expiresAt) {
+		dStart, dEnd = chunkingFn(dEnd)
+		timeBasedToken, err := timeLimitedSecret.Derive(
+			[]byte(issuerID),
+			dStart,
+			dEnd)
+		if err != nil {
+			return credentials, fmt.Errorf("error generating credentials: %w", err)
+		}
+		credentials = append(credentials, TimeLimitedCreds{
+			ID:        itemID,
+			OrderID:   orderID,
+			IssuedAt:  dStart.Format("2006-01-02"),
+			ExpiresAt: dEnd.Format("2006-01-02"),
+			Token:     timeBasedToken,
+		})
 	}
-
-	issuanceInterval := time.Until(*chunk)
-
-	var numCreds = int(orderDuration / issuanceInterval)
-
-	switch interval.String() {
-	case "P1D", "":
-		// 5 more days of creds
-		numCreds += 5
-	case "P1M":
-		// one more month of creds
-		numCreds++
-	default:
-		return 0, nil, errInvalidIssuanceInterval
-	}
-	return numCreds, credChunkFn(interval), nil
+	return credentials, nil
 }
 
 // GetTimeLimitedCreds get an order's time limited creds
@@ -885,54 +868,16 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
 		}
 
-		expiresAt, err := duration.FromNow()
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("unable to compute expiry")
-		}
-		if order.ExpiresAt != nil {
-			expiresAt = order.ExpiresAt
-		}
-
-		numCreds, chunkingFn, err := timeChunking(
-			ctx, *issuedAt, *expiresAt, *duration, *interval)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
-		}
-
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 		}
 
-		now := time.Now()
-		dStart := chunkingFn(now, false)
-		dEnd := chunkingFn(now, true)
-
-		// for the number of days order is valid for, create per day creds
-
-		for i := 0; i < numCreds; i++ {
-
-			// iterate through order items, derive the time limited creds
-			timeBasedToken, err := timeLimitedSecret.Derive(
-				[]byte(issuerID),
-				dStart,
-				dEnd)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
-			}
-			credentials = append(credentials, TimeLimitedCreds{
-				ID:        item.ID,
-				OrderID:   order.ID,
-				IssuedAt:  dStart.Format("2006-01-02"),
-				ExpiresAt: dEnd.Format("2006-01-02"),
-				Token:     timeBasedToken,
-			})
-
-			// increment dStart and dEnd
-
-			dStart = dEnd
-			dEnd = chunkingFn(dStart, true)
+		creds, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
 		}
+		credentials = append(credentials, creds...)
 	}
 
 	if len(credentials) > 0 {
