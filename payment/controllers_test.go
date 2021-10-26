@@ -644,8 +644,16 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 
 	suite.Require().NoError(err)
 
+	// get the go duration of our issuance interval
+	interval, err := timeutils.ParseDuration("P1D")
+	suite.Require().NoError(err)
+	chunk, err := interval.FromNow()
+	suite.Require().NoError(err)
+
+	issuanceInterval := time.Until(*chunk)
+
 	// validate we get the right number of creds back, 1 per day
-	numTokens := int(validFor.Hours()/24) + 5
+	numTokens := int(validFor/issuanceInterval) + 5
 	suite.Require().Equal(numTokens, len(ordercreds))
 
 	return

@@ -752,6 +752,94 @@ func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID strin
 	return resp, nil
 }
 
+var (
+	errInvalidIssuanceInterval = errors.New("invalid issuance interval")
+	errOrderExpired            = errors.New("order is expired")
+)
+
+// credChunkFn - given a time, calculate the next increment of time based on interval
+func credChunkFn(interval timeutils.ISODuration) func(time.Time, bool) time.Time {
+	return func(t time.Time, next bool) time.Time {
+		var result time.Time
+
+		// get the future time one credential interval away
+		c, err := interval.From(t)
+		if err != nil {
+			return time.Time{}
+		}
+		// get the go duration to that future time one credential away
+		td := (*c).Sub(t)
+		// truncate that time based on the duration it is away
+		// i.e. 1 day will truncate on the day
+		// i.e. 1 month will truncate on the month
+		if next {
+			t = t.Add(td)
+		}
+
+		switch interval.String() {
+		case "P1M":
+			y, m, _ := t.Date()
+			// reset the date to be the first of the given month
+			result = time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+		default:
+			// use truncate
+			result = t.Truncate(td)
+		}
+		return result
+	}
+}
+
+// timeChunking - given a duration and interval size of credential, return number of credentials
+// to generate, and a function that takes a start time and increments it by an appropriate amount
+func timeChunking(ctx context.Context, issued, expiry time.Time, duration, interval timeutils.ISODuration) (int, func(time.Time, bool) time.Time, error) {
+
+	// time limited credentials should deterministically generate the same for anyone who has a
+	// credential for that particular duration/interval.
+	// eg 1 mo duration @ 1 minute interval -> start/end of credentials are minute bounds (start 1 second of min)
+	// eg 1 mo duration @ 1 day interval -> start/end of credentials are day bounds (start 1 minute of day)
+	// eg 1 mo duration @ 1 week interval -> start/end of credentials are week bounds (start 1st day of week)
+	// eg 1 mo duration @ 1 mo interval -> start/end of credentials are month bounds (start 1st day of month)
+
+	// expired
+	if time.Now().After(expiry) {
+		return 0, nil, errOrderExpired
+	}
+	// already started, use now as issued
+	if time.Now().After(issued) {
+		issued = time.Now()
+	}
+
+	// get the go duration of our order duration
+	until, err := duration.From(issued)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to calculate end of duration: %w", err)
+	}
+
+	orderDuration := time.Until(*until)
+
+	// get the go duration of our issuance interval
+	chunk, err := interval.From(time.Now())
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to calculate end of issuance interval: %w", err)
+	}
+
+	issuanceInterval := time.Until(*chunk)
+
+	var numCreds = int(orderDuration / issuanceInterval)
+
+	switch interval.String() {
+	case "P1D", "":
+		// 5 more days of creds
+		numCreds += 5
+	case "P1M":
+		// one more month of creds
+		numCreds += 1
+	default:
+		return 0, nil, errInvalidIssuanceInterval
+	}
+	return numCreds, credChunkFn(interval), nil
+}
+
 // GetTimeLimitedCreds get an order's time limited creds
 func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
@@ -781,66 +869,34 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
 	for _, item := range order.Items {
-		numCreds := 0
-		var (
-			issuanceInterval *timeutils.ISODuration
-			err              error
-		)
-		// get the item's credential duration, this is the amount of time a credential should
-		// be valid for.
-		if item.IssuanceIntervalISO != nil {
-			// Use the sku's duration on the item
-			issuanceInterval, err = timeutils.ParseDuration(*item.IssuanceIntervalISO)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid credential duration: %w", err)
-			}
-		} else {
-			// legacy default is 1 day credential durations
-			issuanceInterval, err = timeutils.ParseDuration("P1D")
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid credential duration: %w", err)
-			}
+
+		if item.ValidForISO == nil {
+			return nil, http.StatusBadRequest, fmt.Errorf("order item has no valid for time")
 		}
-		// figure out how big each credential is
-		t, err := issuanceInterval.FromNow()
+		duration, err := timeutils.ParseDuration(*(item.ValidForISO))
 		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("calculating credential duration: %w", err)
+			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse order duration for credentials")
 		}
-		// go duration for issuance interval
-		ii := time.Until(*t)
 
-		if item.ValidForISO != nil {
-			// Use the sku's duration on the item
-			isoD, err := timeutils.ParseDuration(*item.ValidForISO)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid duration: %w", err)
-			}
-			expiry, err := isoD.From(*issuedAt)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("calculating expiry: %w", err)
-			}
-
-			// check if we are past valid for, if so issue nothing and return
-			if time.Now().After(*expiry) {
-				return nil, http.StatusBadRequest, fmt.Errorf("order item has expired")
-			}
-
-			validFor := time.Until(*expiry)
-
-			// how many additional credentials
-			var plus int
-
-			// we need 5 days at least
-			if ii > time.Hour*24*5 {
-				plus = 1
-			} else {
-				// how many multiples do we need?
-				plus = int((time.Hour * 24 * 5) / ii)
-			}
-
-			// number credentials is the ratio of validity to credential duration, adding our plus
-			numCreds = int(validFor/ii) + plus
+		if item.IssuanceIntervalISO == nil {
+			item.IssuanceIntervalISO = new(string)
+			*(item.IssuanceIntervalISO) = "P1D"
 		}
+		interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
+		}
+
+		expiresAt, err := duration.FromNow()
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("unable to compute expiry")
+		}
+		if order.ExpiresAt != nil {
+			expiresAt = order.ExpiresAt
+		}
+
+		numCreds, chunkingFn, err := timeChunking(
+			ctx, *issuedAt, *expiresAt, *duration, *interval)
 
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 		if err != nil {
@@ -848,8 +904,8 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		}
 
 		now := time.Now()
-		dStart := now.Truncate(oneDay)
-		dEnd := now.Add(ii).Truncate(oneDay)
+		dStart := chunkingFn(now, false)
+		dEnd := chunkingFn(now, true)
 
 		// for the number of days order is valid for, create per day creds
 
@@ -874,14 +930,7 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			// increment dStart and dEnd
 
 			dStart = dEnd
-			// figure out how big each credential is
-			t, err = issuanceInterval.From(dStart)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("calculating credential duration: %w", err)
-			}
-			// go duration
-			ii = (*t).Sub(dStart)
-			dEnd = dEnd.Add(ii).Truncate(oneDay)
+			dEnd = chunkingFn(dStart, true)
 		}
 	}
 
@@ -889,7 +938,6 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 		return credentials, http.StatusOK, nil
 	}
 	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
-
 }
 
 type credential interface {
