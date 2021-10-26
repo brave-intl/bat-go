@@ -705,8 +705,6 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	return *creds, status, nil
 }
 
-const oneDay = 24 * time.Hour
-
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
 func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
 	// sorted by name, created_at, first result is most recent
@@ -833,7 +831,7 @@ func timeChunking(ctx context.Context, issued, expiry time.Time, duration, inter
 		numCreds += 5
 	case "P1M":
 		// one more month of creds
-		numCreds += 1
+		numCreds++
 	default:
 		return 0, nil, errInvalidIssuanceInterval
 	}
@@ -897,6 +895,9 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 
 		numCreds, chunkingFn, err := timeChunking(
 			ctx, *issuedAt, *expiresAt, *duration, *interval)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
+		}
 
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
 		if err != nil {
