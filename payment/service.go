@@ -795,12 +795,17 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 		return nil, fmt.Errorf("unable to compute expiry")
 	}
 	// Add at least 5 days of grace period
-	expiresAt.AddDate(0, 0, 5)
+	*expiresAt = (*expiresAt).AddDate(0, 0, 5)
+
+	chunkingFn := credChunkFn(interval)
+
+	// reset expires at to the chunked date
+	*expiresAt, _ = chunkingFn(*expiresAt)
+	// set dEnd to today chunked
+	dEnd, _ := chunkingFn(time.Now())
 
 	var credentials []TimeLimitedCreds
 	var dStart time.Time
-	dEnd := time.Now()
-	chunkingFn := credChunkFn(interval)
 	for dEnd.Before(*expiresAt) {
 		dStart, dEnd = chunkingFn(dEnd)
 		timeBasedToken, err := timeLimitedSecret.Derive(
