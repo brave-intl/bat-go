@@ -38,7 +38,11 @@ func init() {
 func WatchGeminiBalance(ctx context.Context) error {
 	logger := logging.Logger(ctx, "WatchGeminiBalance")
 	// create a new gemini client
-	client, _ := New()
+	client, err := New()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get gemini client")
+		return fmt.Errorf("failed to get gemini client: %w", err)
+	}
 
 	// get api secret from context
 	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
