@@ -443,8 +443,9 @@ func GrantServer(
 	}
 	// run gemini balance watch so we have balance info in prometheus
 	go func() {
+		// no need to panic here, log the error and move on with serving
 		if err := gemini.WatchGeminiBalance(ctx); err != nil {
-			logger.Panic().Err(err).Msg("error launching gemini balance watch")
+			logger.Error().Err(err).Msg("error launching gemini balance watch")
 		}
 	}()
 
