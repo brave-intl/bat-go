@@ -712,8 +712,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusAccepted, rr.Code)
 
+	// check status code for error, or until status is okay (from accepted)
 	for rr.Code != http.StatusOK {
 		if rr.Code == http.StatusAccepted {
 			select {
@@ -724,6 +724,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 				rr = httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 			}
+		} else if rr.Code > 299 {
+			// error condition bail out
+			suite.Require().True(false, "error status code, expecting 2xx")
 		}
 	}
 
