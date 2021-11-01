@@ -828,7 +828,23 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	balanceBefore, err := userWallet.GetBalance(true)
+	suite.Require().NoError(err)
 	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().NoError(err)
+
+	// wait for balance to become available
+	for i := 0; i < 5; i++ {
+		select {
+		case <-time.After(500 * time.Millisecond):
+			balances, err := userWallet.GetBalance(true)
+			suite.Require().NoError(err)
+			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
+			if totalProbi.GreaterThan(decimal.Zero) {
+				break
+			}
+		}
+	}
+
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
