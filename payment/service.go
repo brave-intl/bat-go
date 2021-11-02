@@ -765,24 +765,21 @@ func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, tim
 		}
 		// get the go duration to that future time one credential away
 		td := (*c).Sub(t)
-		// truncate that time based on the duration it is away
+
 		// i.e. 1 day will truncate on the day
 		// i.e. 1 month will truncate on the month
-		end = t.Add(td)
-
 		switch interval.String() {
 		case "P1M":
 			y, m, _ := t.Date()
 			// reset the date to be the first of the given month
 			start = time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
-
-			y1, m1, _ := end.Date()
-			end = time.Date(y1, m1, 1, 0, 0, 0, 0, time.UTC)
+			end = time.Date(y, m+1, 1, 0, 0, 0, 0, time.UTC)
 		default:
 			// use truncate
 			start = t.Truncate(td)
-			end = end.Truncate(td)
+			end = start.Add(td)
 		}
+
 		return start, end
 	}
 }
@@ -799,8 +796,6 @@ func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret crypto
 
 	chunkingFn := credChunkFn(interval)
 
-	// reset expires at to the chunked date
-	*expiresAt, _ = chunkingFn(*expiresAt)
 	// set dEnd to today chunked
 	dEnd, _ := chunkingFn(time.Now())
 
