@@ -259,6 +259,8 @@ func TestTransactions(t *testing.T) {
 		t.Error("Submit with confirm should result in a balance.")
 	}
 
+	// wait for funds to be available
+	<-time.After(1 * time.Second)
 	txInfo, err := destWallet.Transfer(altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)

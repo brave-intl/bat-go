@@ -48,6 +48,7 @@ var (
 	AnonCardVoteTestSkuToken   string
 	FreeTestSkuToken           string
 	FreeTLTestSkuToken         string
+	FreeTLTest1MSkuToken       string
 	InvalidFreeTestSkuToken    string
 )
 
@@ -98,6 +99,16 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":                     "0.00",
 	}
 
+	FreeTL1MC := macarooncmd.Caveats{
+		"sku":                       "integration-test-free-1m",
+		"description":               "integration test free sku token",
+		"credential_type":           "time-limited",
+		"credential_valid_duration": "P1M",
+		"issuance_interval":         "P1M",
+		"currency":                  "BAT",
+		"price":                     "0.00",
+	}
+
 	// create sku using key
 	UserWalletToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
@@ -117,6 +128,11 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	FreeTLTestToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeTLC},
+	}
+
+	FreeTLTest1MToken := macarooncmd.Token{
+		ID: "id", Version: 2, Location: "brave.com",
+		FirstPartyCaveats: []macarooncmd.Caveats{FreeTL1MC},
 	}
 
 	var err error
@@ -142,8 +158,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	FreeTLTestSkuToken, err = FreeTLTestToken.Generate("testing123")
 	suite.Require().NoError(err)
 
+	FreeTLTest1MSkuToken, err = FreeTLTest1MToken.Generate("testing123")
+	suite.Require().NoError(err)
+
 	// hacky, put this in development sku check
 	skuMap["development"][FreeTLTestSkuToken] = true
+	skuMap["development"][FreeTLTest1MSkuToken] = true
 
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
@@ -605,6 +625,14 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 
 func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Context, service *Service, order Order) (ordercreds []TimeLimitedCreds) {
 
+	o, err := suite.service.Datastore.GetOrder(order.ID)
+	var ii string
+	if o.Items == nil || o.Items[0].IssuanceIntervalISO == nil {
+		ii = "P1D"
+	} else {
+		ii = *(o.Items[0].IssuanceIntervalISO)
+	}
+
 	// Check to see if we have HTTP Accepted
 	handler := GetOrderCreds(service)
 	req, err := http.NewRequest("GET", "/{orderID}/credentials", nil)
@@ -644,9 +672,17 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 
 	suite.Require().NoError(err)
 
+	// get the go duration of our issuance interval
+	interval, err := timeutils.ParseDuration(ii)
+	suite.Require().NoError(err)
+	chunk, err := interval.FromNow()
+	suite.Require().NoError(err)
+
+	issuanceInterval := time.Until(*chunk)
+
 	// validate we get the right number of creds back, 1 per day
-	numTokens := int(validFor.Hours()/24) + 5
-	suite.Require().Equal(numTokens, len(ordercreds))
+	numTokens := int(validFor / issuanceInterval)
+	suite.Require().True(numTokens <= len(ordercreds), "should have a buffer of tokens")
 
 	return
 }
@@ -704,8 +740,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusAccepted, rr.Code)
 
+	// check status code for error, or until status is okay (from accepted)
 	for rr.Code != http.StatusOK {
 		if rr.Code == http.StatusAccepted {
 			select {
@@ -716,6 +752,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 				rr = httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 			}
+		} else if rr.Code > 299 {
+			// error condition bail out
+			suite.Require().True(false, "error status code, expecting 2xx")
 		}
 	}
 
@@ -828,7 +867,23 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	balanceBefore, err := userWallet.GetBalance(true)
+	suite.Require().NoError(err)
 	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().NoError(err)
+
+	// wait for balance to become available
+	for i := 0; i < 5; i++ {
+		select {
+		case <-time.After(500 * time.Millisecond):
+			balances, err := userWallet.GetBalance(true)
+			suite.Require().NoError(err)
+			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
+			if totalProbi.GreaterThan(decimal.Zero) {
+				break
+			}
+		}
+	}
+
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
@@ -955,6 +1010,63 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
 	// check that the funding source matches the issuer
 	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
+}
+
+func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation1M() {
+	order := suite.setupCreateOrder(FreeTLTest1MSkuToken, 1)
+
+	// setup a key for our merchant
+	k := suite.SetupCreateKey(order.MerchantID)
+	// GetKey
+	keyID, err := uuid.FromString(k.ID)
+	suite.Require().NoError(err, "error parsing key id")
+
+	key, err := suite.service.Datastore.GetKey(keyID, false)
+	suite.Require().NoError(err, "error getting key from db")
+	secret, err := key.GetSecretKey()
+	suite.Require().NoError(err, "unable to decrypt secret")
+
+	ordercreds := suite.fetchTimeLimitedCredentials(context.Background(), suite.service, order)
+
+	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free-1m")
+	suite.Require().NoError(err, "error attempting to encode issuer id")
+
+	timeLimitedSecret := cryptography.NewTimeLimitedSecret([]byte(*secret))
+	for _, cred := range ordercreds {
+		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
+		suite.Require().NoError(err, "error attempting to parse issued at")
+		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
+		suite.Require().NoError(err, "error attempting to parse expires at")
+
+		ok, err := timeLimitedSecret.Verify([]byte(issuerID), issued, expires, cred.Token)
+		suite.Require().NoError(err, "error attempting to verify time limited cred")
+		suite.Require().True(ok, "verify failed")
+	}
+
+	var (
+		lastIssued  time.Time
+		lastExpired time.Time
+	)
+
+	var first = true
+	for _, cred := range ordercreds {
+		issued, err := time.Parse("2006-01-02", cred.IssuedAt)
+		suite.Require().NoError(err, "error attempting to parse issued at")
+		expires, err := time.Parse("2006-01-02", cred.ExpiresAt)
+		suite.Require().NoError(err, "error attempting to parse expires at")
+
+		if !first {
+			// sometimes the first month of empty time is 1
+			// validate each cred is for a different month
+			suite.Require().True(issued.Month() != lastIssued.Month())
+			suite.Require().True(expires.Month() != lastExpired.Month())
+		}
+		first = false
+
+		lastIssued = issued
+		lastExpired = expires
+	}
+
 }
 
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {

@@ -705,8 +705,6 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	return *creds, status, nil
 }
 
-const oneDay = 24 * time.Hour
-
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
 func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID string) ([]byte, error) {
 	// sorted by name, created_at, first result is most recent
@@ -752,6 +750,77 @@ func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID strin
 	return resp, nil
 }
 
+// credChunkFn - given a time, calculate the next increment of time based on interval
+func credChunkFn(interval timeutils.ISODuration) func(time.Time) (time.Time, time.Time) {
+	return func(t time.Time) (time.Time, time.Time) {
+		var (
+			start time.Time
+			end   time.Time
+		)
+
+		// get the future time one credential interval away
+		c, err := interval.From(t)
+		if err != nil {
+			return start, end
+		}
+		// get the go duration to that future time one credential away
+		td := (*c).Sub(t)
+
+		// i.e. 1 day will truncate on the day
+		// i.e. 1 month will truncate on the month
+		switch interval.String() {
+		case "P1M":
+			y, m, _ := t.Date()
+			// reset the date to be the first of the given month
+			start = time.Date(y, m, 1, 0, 0, 0, 0, time.UTC)
+			end = time.Date(y, m+1, 1, 0, 0, 0, 0, time.UTC)
+		default:
+			// use truncate
+			start = t.Truncate(td)
+			end = start.Add(td)
+		}
+
+		return start, end
+	}
+}
+
+// timeChunking - given a duration and interval size of credential, return number of credentials
+// to generate, and a function that takes a start time and increments it by an appropriate amount
+func timeChunking(ctx context.Context, issuerID string, timeLimitedSecret cryptography.TimeLimitedSecret, orderID, itemID uuid.UUID, issued time.Time, duration, interval timeutils.ISODuration) ([]TimeLimitedCreds, error) {
+	expiresAt, err := duration.From(issued)
+	if err != nil {
+		return nil, fmt.Errorf("unable to compute expiry")
+	}
+	// Add at least 5 days of grace period
+	*expiresAt = (*expiresAt).AddDate(0, 0, 5)
+
+	chunkingFn := credChunkFn(interval)
+
+	// set dEnd to today chunked
+	dEnd, _ := chunkingFn(time.Now())
+
+	var credentials []TimeLimitedCreds
+	var dStart time.Time
+	for dEnd.Before(*expiresAt) {
+		dStart, dEnd = chunkingFn(dEnd)
+		timeBasedToken, err := timeLimitedSecret.Derive(
+			[]byte(issuerID),
+			dStart,
+			dEnd)
+		if err != nil {
+			return credentials, fmt.Errorf("error generating credentials: %w", err)
+		}
+		credentials = append(credentials, TimeLimitedCreds{
+			ID:        itemID,
+			OrderID:   orderID,
+			IssuedAt:  dStart.Format("2006-01-02"),
+			ExpiresAt: dEnd.Format("2006-01-02"),
+			Token:     timeBasedToken,
+		})
+	}
+	return credentials, nil
+}
+
 // GetTimeLimitedCreds get an order's time limited creds
 func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]TimeLimitedCreds, int, error) {
 	if order == nil {
@@ -781,27 +850,22 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 	timeLimitedSecret := cryptography.NewTimeLimitedSecret(secret)
 
 	for _, item := range order.Items {
-		numCreds := 0
 
-		if item.ValidForISO != nil {
-			// Use the sku's duration on the item
-			isoD, err := timeutils.ParseDuration(*item.ValidForISO)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error decoding valid duration: %w", err)
-			}
-			expiry, err := isoD.From(*issuedAt)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("calculating expiry: %w", err)
-			}
+		if item.ValidForISO == nil {
+			return nil, http.StatusBadRequest, fmt.Errorf("order item has no valid for time")
+		}
+		duration, err := timeutils.ParseDuration(*(item.ValidForISO))
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse order duration for credentials")
+		}
 
-			// check if we are past valid for, if so issue nothing and return
-			if time.Now().After(*expiry) {
-				return nil, http.StatusBadRequest, fmt.Errorf("order item has expired")
-			}
-
-			validFor := time.Until(*expiry)
-			// number of day passes +5 to account for stripe lag on subscription webhook renewal
-			numCreds = int((validFor).Hours()/24) + 5
+		if item.IssuanceIntervalISO == nil {
+			item.IssuanceIntervalISO = new(string)
+			*(item.IssuanceIntervalISO) = "P1D"
+		}
+		interval, err := timeutils.ParseDuration(*(item.IssuanceIntervalISO))
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("unable to parse issuance interval for credentials")
 		}
 
 		issuerID, err := encodeIssuerID(order.MerchantID, item.SKU)
@@ -809,40 +873,17 @@ func (s *Service) GetTimeLimitedCreds(ctx context.Context, order *Order) ([]Time
 			return nil, http.StatusInternalServerError, fmt.Errorf("error encoding issuer: %w", err)
 		}
 
-		now := time.Now()
-		dStart := now.Truncate(oneDay)
-		dEnd := now.Add(oneDay).Truncate(oneDay)
-
-		// for the number of days order is valid for, create per day creds
-
-		for i := 0; i < numCreds; i++ {
-			// iterate through order items, derive the time limited creds
-			timeBasedToken, err := timeLimitedSecret.Derive(
-				[]byte(issuerID),
-				dStart,
-				dEnd)
-			if err != nil {
-				return nil, http.StatusInternalServerError, fmt.Errorf("error generating credentials: %w", err)
-			}
-			credentials = append(credentials, TimeLimitedCreds{
-				ID:        item.ID,
-				OrderID:   order.ID,
-				IssuedAt:  dStart.Format("2006-01-02"),
-				ExpiresAt: dEnd.Format("2006-01-02"),
-				Token:     timeBasedToken,
-			})
-
-			// increment dStart and dEnd
-			dStart = dStart.Add(oneDay)
-			dEnd = dEnd.Add(oneDay)
+		creds, err := timeChunking(ctx, issuerID, timeLimitedSecret, order.ID, item.ID, *issuedAt, *duration, *interval)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to derive credential chunking: %w", err)
 		}
+		credentials = append(credentials, creds...)
 	}
 
 	if len(credentials) > 0 {
 		return credentials, http.StatusOK, nil
 	}
 	return nil, http.StatusBadRequest, fmt.Errorf("failed to issue credentials")
-
 }
 
 type credential interface {

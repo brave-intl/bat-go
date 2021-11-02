@@ -274,6 +274,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, paymentService.Jobs()...)
 
+	// initialize payment service keys for credentials to use
+	payment.InitEncryptionKeys()
+
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
 	r.Mount("/v2/credentials", payment.CredentialV2Router(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
@@ -282,7 +285,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		payment.InitEncryptionKeys()
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
@@ -441,12 +443,16 @@ func GrantServer(
 			}
 		}
 	}
-	// run gemini balance watch so we have balance info in prometheus
-	go func() {
-		if err := gemini.WatchGeminiBalance(ctx); err != nil {
-			logger.Panic().Err(err).Msg("error launching gemini balance watch")
-		}
-	}()
+	if viper.GetString("environment") != "local" &&
+		viper.GetString("environment") != "development" {
+		// run gemini balance watch so we have balance info in prometheus
+		go func() {
+			// no need to panic here, log the error and move on with serving
+			if err := gemini.WatchGeminiBalance(ctx); err != nil {
+				logger.Error().Err(err).Msg("error launching gemini balance watch")
+			}
+		}()
+	}
 
 	go func() {
 		err := http.ListenAndServe(":9090", middleware.Metrics())
