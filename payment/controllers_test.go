@@ -704,8 +704,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	suite.Assert().Equal(http.StatusAccepted, rr.Code)
 
+	// check status code for error, or until status is okay (from accepted)
 	for rr.Code != http.StatusOK {
 		if rr.Code == http.StatusAccepted {
 			select {
@@ -716,6 +716,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service
 				rr = httptest.NewRecorder()
 				handler.ServeHTTP(rr, req)
 			}
+		} else if rr.Code > 299 {
+			// error condition bail out
+			suite.Require().True(false, "error status code, expecting 2xx")
 		}
 	}
 
@@ -828,7 +831,23 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	suite.Require().NoError(err)
 
 	balanceBefore, err := userWallet.GetBalance(true)
+	suite.Require().NoError(err)
 	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	suite.Require().NoError(err)
+
+	// wait for balance to become available
+	for i := 0; i < 5; i++ {
+		select {
+		case <-time.After(500 * time.Millisecond):
+			balances, err := userWallet.GetBalance(true)
+			suite.Require().NoError(err)
+			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
+			if totalProbi.GreaterThan(decimal.Zero) {
+				break
+			}
+		}
+	}
+
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
 	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
 	suite.Require().NoError(err)
