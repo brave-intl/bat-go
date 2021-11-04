@@ -118,6 +118,10 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
 
+	// get last un linking
+	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
+	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
+
 	// insert into wallet custodian
 	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
 
@@ -479,6 +483,9 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
+	// get last un linking
+	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
+	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
