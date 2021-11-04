@@ -130,6 +130,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -175,6 +176,7 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	// setup keypair
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
@@ -226,6 +228,7 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -268,6 +271,7 @@ func TestGetWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -379,6 +383,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -445,6 +450,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	mockGeminiClient.EXPECT().ValidateAccount(
 		gomock.Any(),
@@ -551,6 +557,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	mockGeminiClient.EXPECT().ValidateAccount(
 		gomock.Any(),
@@ -646,6 +653,7 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
