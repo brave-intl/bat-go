@@ -406,6 +406,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
