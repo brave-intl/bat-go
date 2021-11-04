@@ -431,14 +431,35 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 			return nil, fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
 		}
 
+		// get the latest unlinking
+		stmt := `
+			select
+				max(unlinked_at)
+			from
+				wallet_custodian
+			where
+				linking_id = $1 and unlinked_at is not null
+		`
+		var last time.Time
+		err = tx.Get(&last, stmt, lID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, fmt.Errorf("failed to get max time: %w", err)
+		}
+
 		notBefore, err := d.FromNow()
 		if err != nil {
 			return nil, fmt.Errorf("unable to get not before time from duration: %w", err)
 		}
+		var nextUnlink time.Time
+		if (*notBefore).Before(last) {
+			// last - notBefore is the duration we need to cool off
+			// now + ( last - notBefore )
+			nextUnlink = time.Now().Add(last.Sub(*notBefore))
+		}
 
 		// add to result
 		infos[custodian] = LinkingInfo{
-			NextAvailableUnlinking: notBefore,
+			NextAvailableUnlinking: &nextUnlink,
 			LinkingID:              &lID,
 			WalletsLinked:          usedLinkings,
 			OpenLinkingSlots:       maxLinkings - usedLinkings,
