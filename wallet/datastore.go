@@ -370,10 +370,11 @@ type LinkingMetadata struct {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID          *uuid.UUID         `json:"-"`
-	WalletsLinked      int                `json:"walletsLinked"`
-	OpenLinkingSlots   int                `json:"openLinkingSlots"`
-	OtherWalletsLinked []*LinkingMetadata `json:"otherWalletsLinked,omitempty"`
+	LinkingID              *uuid.UUID         `json:"-"`
+	NextAvailableUnlinking *time.Time         `json:"nextAvailbleUnlinking,omitempty"`
+	WalletsLinked          int                `json:"walletsLinked"`
+	OpenLinkingSlots       int                `json:"openLinkingSlots"`
+	OtherWalletsLinked     []*LinkingMetadata `json:"otherWalletsLinked,omitempty"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -418,12 +419,30 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
 		}
 
+		// get the next available unlinking time
+		// lower bound based
+		lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
+		if !ok {
+			return nil, fmt.Errorf("misconfigured service, no unlink prior to duration configured")
+		}
+
+		d, err := timeutils.ParseDuration(lbDur)
+		if err != nil {
+			return nil, fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
+		}
+
+		notBefore, err := d.FromNow()
+		if err != nil {
+			return nil, fmt.Errorf("unable to get not before time from duration: %w", err)
+		}
+
 		// add to result
 		infos[custodian] = LinkingInfo{
-			LinkingID:          &lID,
-			WalletsLinked:      usedLinkings,
-			OpenLinkingSlots:   maxLinkings - usedLinkings,
-			OtherWalletsLinked: linkings,
+			NextAvailableUnlinking: notBefore,
+			LinkingID:              &lID,
+			WalletsLinked:          usedLinkings,
+			OpenLinkingSlots:       maxLinkings - usedLinkings,
+			OtherWalletsLinked:     linkings,
 		}
 	}
 
