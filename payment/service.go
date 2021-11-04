@@ -730,6 +730,10 @@ func (s *Service) GetActiveCredentialSigningKey(ctx context.Context, merchantID 
 // GetCredentialSigningKeys get the current list of credential signing keys for this merchant
 func (s *Service) GetCredentialSigningKeys(ctx context.Context, merchantID string) ([][]byte, error) {
 	var resp = [][]byte{}
+
+	// fall back to encryption key from environment
+	resp = append(resp, []byte(os.Getenv("ENCRYPTION_KEY")))
+
 	keys, err := s.Datastore.GetKeysByMerchant(merchantID, false)
 	if err != nil {
 		return nil, fmt.Errorf("error getting keys by merchant: %w", err)
