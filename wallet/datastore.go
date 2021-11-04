@@ -217,10 +217,10 @@ func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walle
 func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error) {
 	statement := `
 	select
-		wallet_id, disconnected_at, created_at, linked_at, unlinked_at, 
-		bool_and(disconnected_at is null, unlinked_at is null) as active,
+		wallet_id, disconnected_at, created_at, linked_at, unlinked_at,
+		(disconnected_at is null and unlinked_at is null) as active
 	from
-		wallets
+		wallet_custodian
 	WHERE linking_id = $1
 	`
 	var linkings []*LinkingMetadata
