@@ -124,6 +124,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -145,6 +146,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -573,6 +575,7 @@ func (suite *WalletControllersTestSuite) getWallet(
 
 	req = req.WithContext(context.WithValue(req.Context(), appctx.DatastoreCTXKey, service.Datastore))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", paymentId.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -602,6 +605,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(
@@ -639,6 +643,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(

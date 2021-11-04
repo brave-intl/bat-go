@@ -127,7 +127,7 @@ func (_d DatastoreWithPrometheus) GetLinkingLimitInfo(ctx context.Context, provi
 }
 
 // GetLinkingsByProviderLinkingID implements Datastore
-func (_d DatastoreWithPrometheus) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (lpa1 []*LinkingMetadata, err error) {
+func (_d DatastoreWithPrometheus) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (la1 []LinkingMetadata, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

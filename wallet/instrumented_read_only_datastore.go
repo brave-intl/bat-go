@@ -85,7 +85,7 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianLinkCount(ctx context.Cont
 }
 
 // GetLinkingsByProviderLinkingID implements ReadOnlyDatastore
-func (_d ReadOnlyDatastoreWithPrometheus) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (lpa1 []*LinkingMetadata, err error) {
+func (_d ReadOnlyDatastoreWithPrometheus) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (la1 []LinkingMetadata, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

@@ -50,7 +50,7 @@ type Datastore interface {
 	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
-	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error)
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -77,7 +77,7 @@ type Datastore interface {
 type ReadOnlyDatastore interface {
 	grantserver.Datastore
 	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
-	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error)
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error)
 	// GetByProviderLinkingID gets a wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -214,7 +214,7 @@ func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walle
 }
 
 // GetLinkingsByProviderLinkingID gets wallet linkings by a provider address
-func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error) {
+func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error) {
 	statement := `
 	select
 		wallet_id, disconnected_at, created_at, linked_at, unlinked_at,
@@ -223,7 +223,7 @@ func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, provider
 		wallet_custodian
 	WHERE linking_id = $1
 	`
-	var linkings []*LinkingMetadata
+	var linkings []LinkingMetadata
 	err := pg.RawDB().SelectContext(ctx, &linkings, statement, providerLinkingID)
 	return linkings, err
 }
@@ -360,7 +360,7 @@ func getEnvMaxCards() int {
 
 // LinkingMetadata - show more details in linking info about the linkages
 type LinkingMetadata struct {
-	ID             uuid.UUID  `json:"id" db:"wallet_id"`
+	WalletID       uuid.UUID  `json:"id" db:"wallet_id"`
 	DisconnectedAt *time.Time `json:"disconnectedAt,omitempty" db:"disconnected_at"`
 	LastLinkedAt   *time.Time `json:"LastLinkedAt,omitempty" db:"linked_at"`
 	FirstLinkedAt  *time.Time `json:"firstLinkedAt,omitempty" db:"created_at"`
@@ -370,11 +370,11 @@ type LinkingMetadata struct {
 
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID              *uuid.UUID         `json:"-"`
-	NextAvailableUnlinking *time.Time         `json:"nextAvailbleUnlinking,omitempty"`
-	WalletsLinked          int                `json:"walletsLinked"`
-	OpenLinkingSlots       int                `json:"openLinkingSlots"`
-	OtherWalletsLinked     []*LinkingMetadata `json:"otherWalletsLinked,omitempty"`
+	LinkingID              *uuid.UUID        `json:"-"`
+	NextAvailableUnlinking *time.Time        `json:"nextAvailbleUnlinking,omitempty"`
+	WalletsLinked          int               `json:"walletsLinked"`
+	OpenLinkingSlots       int               `json:"openLinkingSlots"`
+	OtherWalletsLinked     []LinkingMetadata `json:"otherWalletsLinked,omitempty"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -434,7 +434,7 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 		// get the latest unlinking
 		stmt := `
 			select
-				max(unlinked_at)
+				max(unlinked_at) as last_unlinking
 			from
 				wallet_custodian
 			where
