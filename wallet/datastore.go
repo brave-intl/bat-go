@@ -49,6 +49,8 @@ type Datastore interface {
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
 	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
+	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -74,6 +76,8 @@ type Datastore interface {
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
 	grantserver.Datastore
+	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error)
 	// GetByProviderLinkingID gets a wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -209,6 +213,21 @@ func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walle
 	return &wallet, err
 }
 
+// GetLinkingsByProviderLinkingID gets wallet linkings by a provider address
+func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]*LinkingMetadata, error) {
+	statement := `
+	select
+		wallet_id, disconnected_at, created_at, linked_at, unlinked_at, 
+		bool_and(disconnected_at is null, unlinked_at is null) as active,
+	from
+		wallets
+	WHERE linking_id = $1
+	`
+	var linkings []*LinkingMetadata
+	err := pg.RawDB().SelectContext(ctx, &linkings, statement, providerLinkingID)
+	return linkings, err
+}
+
 // GetByProviderLinkingID gets a wallet by a provider address
 func (pg *Postgres) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
@@ -339,12 +358,22 @@ func getEnvMaxCards() int {
 	return 4
 }
 
+// LinkingMetadata - show more details in linking info about the linkages
+type LinkingMetadata struct {
+	ID             uuid.UUID  `json:"id"`
+	DisconnectedAt *time.Time `json:"disconnectedAt,omitempty"`
+	LastLinkedAt   *time.Time `json:"LastLinkedAt,omitempty"`
+	FirstLinkedAt  *time.Time `json:"firstLinkedAt,omitempty"`
+	UnLinkedAt     *time.Time `json:"unlinkedAt,omitempty"`
+	Active         bool       `json:"active"`
+}
+
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID          *uuid.UUID   `json:"-"`
-	WalletsLinked      int          `json:"walletsLinked"`
-	OpenLinkingSlots   int          `json:"openLinkingSlots"`
-	OtherWalletsLinked []*uuid.UUID `json:"otherWalletsLinked"`
+	LinkingID          *uuid.UUID         `json:"-"`
+	WalletsLinked      int                `json:"walletsLinked"`
+	OpenLinkingSlots   int                `json:"openLinkingSlots"`
+	OtherWalletsLinked []*LinkingMetadata `json:"otherWalletsLinked,omitempty"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -384,19 +413,9 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 		}
 
 		// lookup other linked wallets
-		w, err := pg.GetByProviderLinkingID(ctx, lID)
+		linkings, err := pg.GetLinkingsByProviderLinkingID(ctx, lID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
-		}
-
-		wIDs := []*uuid.UUID{}
-
-		for _, v := range *w {
-			u, err := uuid.FromString(v.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse wallet id from datastore: %w", err)
-			}
-			wIDs = append(wIDs, &u)
 		}
 
 		// add to result
@@ -404,7 +423,7 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 			LinkingID:          &lID,
 			WalletsLinked:      usedLinkings,
 			OpenLinkingSlots:   maxLinkings - usedLinkings,
-			OtherWalletsLinked: wIDs,
+			OtherWalletsLinked: linkings,
 		}
 	}
 
