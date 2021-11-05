@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -129,8 +128,6 @@ func Initialize(command *cobra.Command, args []string) error {
 	if secretShares > 1 && secretThreshold == 1 {
 		// We need to encrypt the single returned share to all keys ourselves
 		key := resp.Keys[0]
-		keyBuf := new(bytes.Buffer)
-		keyBuf.Write([]byte(key))
 
 		logger.Info().Msgf("Writing share-0.gpg for all identities\n")
 		out, err := os.OpenFile("share-0.gpg", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -145,7 +142,7 @@ func Initialize(command *cobra.Command, args []string) error {
 		}
 		defer closers.Panic(encOut)
 
-		_, err = io.Copy(encOut, keyBuf)
+		_, err = encOut.Write([]byte(key))
 		if err != nil {
 			return err
 		}
