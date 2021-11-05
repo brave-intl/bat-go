@@ -351,9 +351,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
 			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
-		// linking info api is okay to expose publically
-		r.Get("/linking-info",
-			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
+		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
+			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
 
 		// get wallet routes
 		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
