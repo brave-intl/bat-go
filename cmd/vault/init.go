@@ -112,6 +112,12 @@ func Initialize(command *cobra.Command, args []string) error {
 	req.SecretShares = int(secretShares)
 	req.SecretThreshold = int(secretThreshold)
 
+	if secretShares > 1 && secretThreshold == 1 {
+		// Vault does not support this case but we can workaround and encrypt the single share to all keys
+		req.PGPKeys = []string{}
+		req.SecretShares = 1
+	}
+
 	resp, err := wrappedClient.Client.Sys().Init(&req)
 	if err != nil {
 		return err
@@ -119,36 +125,60 @@ func Initialize(command *cobra.Command, args []string) error {
 
 	logger.Info().Msg("success, vault has been initialized")
 
-	var b []byte
-	for i := range resp.KeysB64 {
-		b, err = base64.StdEncoding.DecodeString(resp.KeysB64[i])
+	if secretShares > 1 && secretThreshold == 1 {
+		// We need to encrypt the single returned share to all keys ourselves
+		key := resp.Keys[0]
+
+		logger.Info().Msgf("Writing share-0.gpg for all identities\n")
+		out, err := os.OpenFile("share-0.gpg", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
 			return err
 		}
+		defer closers.Panic(out)
 
-		// Parse the resulting encrypted files to print corresponding key for each
-		buf := bytes.NewBuffer(b)
-		packets := packet.NewReader(buf)
-		var p packet.Packet
-		for {
-			p, err = packets.Next()
+		encOut, err := openpgp.Encrypt(out, entityList, nil, &openpgp.FileHints{IsBinary: true}, nil)
+		if err != nil {
+			return err
+		}
+		defer closers.Panic(encOut)
+
+		_, err = encOut.Write([]byte(key))
+		if err != nil {
+			return err
+		}
+	} else {
+		// Vault has encrypted the shares for us
+		var b []byte
+		for i := range resp.KeysB64 {
+			b, err = base64.StdEncoding.DecodeString(resp.KeysB64[i])
 			if err != nil {
-				break
+				return err
 			}
-			switch p := p.(type) {
-			case *packet.EncryptedKey:
-				keys := entityList.KeysById(p.KeyId)
-				if len(keys) == 1 {
-					for k := range keys[0].Entity.Identities {
-						logger.Info().Msgf("Writing share-%d.gpg for %s\n", i, k)
+
+			// Parse the resulting encrypted files to print corresponding key for each
+			buf := bytes.NewBuffer(b)
+			packets := packet.NewReader(buf)
+			var p packet.Packet
+			for {
+				p, err = packets.Next()
+				if err != nil {
+					break
+				}
+				switch p := p.(type) {
+				case *packet.EncryptedKey:
+					keys := entityList.KeysById(p.KeyId)
+					if len(keys) == 1 {
+						for k := range keys[0].Entity.Identities {
+							logger.Info().Msgf("Writing share-%d.gpg for %s\n", i, k)
+						}
 					}
 				}
 			}
-		}
 
-		err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
-		if err != nil {
-			return err
+			err = ioutil.WriteFile(fmt.Sprintf("share-%d.gpg", i), b, 0600)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
