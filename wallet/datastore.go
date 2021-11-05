@@ -903,7 +903,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 			$1, $2, $3
 		)
 		on conflict (wallet_id, custodian, linking_id) 
-		do update set disconnected_at=null, linked_at=now()
+		do update set disconnected_at=null, unlinked_at=null, linked_at=now()
 		returning *
 	`
 
