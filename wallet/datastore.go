@@ -362,7 +362,7 @@ func getEnvMaxCards() int {
 type LinkingMetadata struct {
 	WalletID       uuid.UUID  `json:"id" db:"wallet_id"`
 	DisconnectedAt *time.Time `json:"disconnectedAt,omitempty" db:"disconnected_at"`
-	LastLinkedAt   *time.Time `json:"LastLinkedAt,omitempty" db:"linked_at"`
+	LastLinkedAt   *time.Time `json:"lastLinkedAt,omitempty" db:"linked_at"`
 	FirstLinkedAt  *time.Time `json:"firstLinkedAt,omitempty" db:"created_at"`
 	UnLinkedAt     *time.Time `json:"unlinkedAt,omitempty" db:"unlinked_at"`
 	Active         bool       `json:"active" db:"active"`
@@ -371,7 +371,7 @@ type LinkingMetadata struct {
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
 	LinkingID              *uuid.UUID        `json:"-"`
-	NextAvailableUnlinking *time.Time        `json:"nextAvailbleUnlinking,omitempty"`
+	NextAvailableUnlinking *time.Time        `json:"nextAvailableUnlinking,omitempty"`
 	WalletsLinked          int               `json:"walletsLinked"`
 	OpenLinkingSlots       int               `json:"openLinkingSlots"`
 	OtherWalletsLinked     []LinkingMetadata `json:"otherWalletsLinked,omitempty"`
