@@ -97,8 +97,10 @@ func CheckStatusGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+
 	return GeminiUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"checkstatus",
 		input,
 		sig,
