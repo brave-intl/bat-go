@@ -71,20 +71,24 @@ func WatchGeminiBalance(ctx context.Context) error {
 				continue
 			}
 
-			result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
-			if err != nil {
-				logger.Error().Err(err).Msg("failed to fetch gemini balance")
-				// okay to error, retry in 10 min
-				continue
-			}
-			// dont care about float downsampling from decimal errs
-			if result == nil || len(*result) < 1 {
-				logger.Error().Msg("gemini result is empty")
-				continue
-			}
-			b := *result
-			available, _ := b[0].Available.Float64()
-			balanceGauge.Set(available)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to fetch gemini balance, panic")
+					}
+				}()
+				result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
+				// dont care about float downsampling from decimal errs
+				if result == nil || len(*result) < 1 {
+					logger.Error().Msg("gemini result is empty")
+				}
+				b := *result
+				available, _ := b[0].Available.Float64()
+				balanceGauge.Set(available)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to fetch gemini balance")
+				}
+			}()
 		}
 	}
 }
