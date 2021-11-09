@@ -1,4 +1,4 @@
-// +build ratios-integration
+// +build ratiosintegration
 
 package ratios
 
