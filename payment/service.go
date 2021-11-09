@@ -954,6 +954,10 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 
 		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
 		if err != nil {
+			// if this is a duplicate redemption these are not verified
+			if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
+				return handlers.WrapError(err, "invalid credentials", http.StatusForbidden)
+			}
 			return handlers.WrapError(err, "Error verifying credentials", http.StatusInternalServerError)
 		}
 

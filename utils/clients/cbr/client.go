@@ -106,6 +106,13 @@ type CredentialRedeemRequest struct {
 	Payload       string `json:"payload"`
 }
 
+var (
+	// ErrDupRedeem - Error for duplicate redemptions
+	ErrDupRedeem = errors.New("cbr duplicate redemption")
+	// ErrBadRequest - Error for cbr bad requests
+	ErrBadRequest = errors.New("cbr bad request")
+)
+
 func handleRedeemError(err error) error {
 	var eb *errorutils.ErrorBundle
 	if errors.As(err, &eb) {
@@ -117,13 +124,13 @@ func handleRedeemError(err error) error {
 			// 429/404 - retry later
 			switch hs.Status {
 			case http.StatusConflict:
-				return errorutils.New(err, "cbr duplicate redemption",
+				return errorutils.New(err, ErrDupRedeem.Error(),
 					errorutils.Codified{
 						ErrCode: "cbr_dup_redeem",
 						Retry:   false,
 					})
 			case http.StatusBadRequest:
-				return errorutils.New(err, "cbr bad request",
+				return errorutils.New(err, ErrBadRequest.Error(),
 					errorutils.Codified{
 						ErrCode: "cbr_bad_request",
 						Retry:   false,

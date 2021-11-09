@@ -8,8 +8,15 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/contains"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
+)
+
+var (
+	errMissingSignature = errors.New("missing http signature")
+	errInvalidSignature = errors.New("invalid http signature")
+	errInvalidHeader    = errors.New("invalid http header")
 )
 
 type httpSignedKeyID struct{}
@@ -51,17 +58,25 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 
 			if len(r.Header.Get("Signature")) == 0 {
 				logger.Warn().Msg("signature must be present for signed middleware")
-				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				ae := handlers.AppError{
+					Cause:   errMissingSignature,
+					Message: "signature must be present for signed middleware",
+					Code:    http.StatusUnauthorized,
+				}
+				ae.ServeHTTP(w, r)
 				return
 			}
 
 			ctx, keyID, err := verifier.VerifyRequest(r)
 
 			if err != nil {
-
 				logger.Error().Err(err).Msg("failed to verify request")
-				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-
+				ae := handlers.AppError{
+					Cause:   errInvalidSignature,
+					Message: "request signature verification failure",
+					Code:    http.StatusForbidden,
+				}
+				ae.ServeHTTP(w, r)
 				return
 			}
 
@@ -71,18 +86,33 @@ func VerifyHTTPSignedOnly(verifier httpsignature.ParameterizedKeystoreVerifier) 
 				date, err := time.Parse(time.RFC1123, dateStr)
 				if err != nil {
 					logger.Error().Err(err).Msg("failed to parse the date header")
-					http.Error(w, "Invalid date header", http.StatusBadRequest)
+					ae := handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "Invalid date header",
+						Code:    http.StatusBadRequest,
+					}
+					ae.ServeHTTP(w, r)
 					return
 				}
 
 				if time.Now().Add(10 * time.Minute).Before(date) {
 					logger.Error().Err(err).Msg("date is invalid")
-					http.Error(w, "Request date is invalid", http.StatusTooEarly)
+					ae := handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "date is invalid",
+						Code:    http.StatusTooEarly,
+					}
+					ae.ServeHTTP(w, r)
 					return
 				}
 				if time.Now().Add(-10 * time.Minute).After(date) {
 					logger.Error().Err(err).Msg("date is invalid")
-					http.Error(w, "Request date is too old", http.StatusRequestTimeout)
+					ae := handlers.AppError{
+						Cause:   errInvalidHeader,
+						Message: "date is invalid",
+						Code:    http.StatusRequestTimeout,
+					}
+					ae.ServeHTTP(w, r)
 					return
 				}
 			}
