@@ -47,10 +47,10 @@ func TestHTTPSignedOnly(t *testing.T) {
 
 	// parse the json response, make sure message matches expected
 	var v map[string]interface{}
-	err = json.Unmarshal(rr.Body(), &v)
+	err = json.NewDecoder(rr.Body).Decode(&v)
 	assert.NoError(t, err)
 
-	assert.Equal(t, v["message"].(string) == "signature must be present for signed middleware", "response does not match")
+	assert.Equal(t, v["message"].(string), "signature must be present for signed middleware", "response does not match")
 
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
