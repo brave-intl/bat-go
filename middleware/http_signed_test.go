@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -43,6 +44,13 @@ func TestHTTPSignedOnly(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code, "request without signature should fail")
+
+	// parse the json response, make sure message matches expected
+	var v map[string]interface{}
+	err = json.Unmarshal(rr.Body(), &v)
+	assert.NoError(t, err)
+
+	assert.Equal(t, v["message"].(string) == "signature must be present for signed middleware", "response does not match")
 
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
