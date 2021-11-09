@@ -801,7 +801,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 	if !uuid.Equal(existingLinkingID, *new(uuid.UUID)) {
 		// check if the member matches the associated member
 		if !uuid.Equal(*cl.LinkingID, existingLinkingID) {
-			return handlers.WrapError(errors.New("wallets do not match"), "unable to match wallets", http.StatusForbidden)
+			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
 		}
 	} else {
 		// if the existingLinkingID is null then we need to check the linking limits
