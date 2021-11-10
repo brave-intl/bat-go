@@ -84,6 +84,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetCustodianLinkCount(ctx context.Cont
 	return _d.base.GetCustodianLinkCount(ctx, linkingID)
 }
 
+// GetLinkingsByProviderLinkingID implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (la1 []LinkingMetadata, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetLinkingsByProviderLinkingID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetLinkingsByProviderLinkingID(ctx, providerLinkingID)
+}
+
 // GetWallet implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetWallet(ctx context.Context, ID uuid.UUID) (ip1 *walletutils.Info, err error) {
 	_since := time.Now()

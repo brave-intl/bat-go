@@ -124,6 +124,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -145,6 +146,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -209,34 +211,45 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	// attempt an unlink
 	suite.unlinkCardV3(service, w1, http.StatusOK)
-	// reconnect to existing card
-	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, zero, &anonCard3UUID)
-	suite.CheckBalance(w1, zero)
 
 	suite.CheckBalance(w2, bat1)
 	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
 	suite.CheckBalance(w2, bat1)
 
+	// 1 linking
+
 	suite.CheckBalance(w2, bat1)
 	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w2, zero)
+
+	// 1 linking
 
 	suite.CheckBalance(w3, bat2)
 	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
 	suite.CheckBalance(w3, bat1)
 
+	// 2 linking
+
 	suite.CheckBalance(w3, bat1)
 	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
 	suite.CheckBalance(w3, bat1)
+
+	// 2 linking
 
 	suite.CheckBalance(w4, bat1)
 	suite.claimCardV3(service, w4, w4ProviderID, http.StatusOK, zero, &anonCard4UUID)
 	suite.CheckBalance(w4, bat1)
 
-	// should be able to claim a 5th card as one was unlinked
+	// 3 linking
+
 	suite.CheckBalance(w5, bat1)
 	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
 	suite.CheckBalance(w4, bat1)
+
+	// 4 linking
+
+	// reconnecting original wallet should fail
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusConflict, bat1, &anonCard3UUID)
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
@@ -404,6 +417,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -573,6 +587,7 @@ func (suite *WalletControllersTestSuite) getWallet(
 
 	req = req.WithContext(context.WithValue(req.Context(), appctx.DatastoreCTXKey, service.Datastore))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", paymentId.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -602,6 +617,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(
@@ -639,6 +655,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(
