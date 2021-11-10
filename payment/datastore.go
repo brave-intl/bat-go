@@ -437,13 +437,13 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // CheckExpiredCheckoutSession - check order metadata for an expired checkout session id
 func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
 	var (
-		expired         bool
-		checkoutSession string
+		// can be nil in db
+		checkoutSession *string
 		err             error
 	)
 
 	err = pg.RawDB().Get(&checkoutSession, `
-		SELECT metadata->>'stripeCheckoutSessionId'
+		SELECT metadata->>'stripeCheckoutSessionId' as checkout_session
 		FROM orders
 		WHERE id = $1 
 			AND metadata is not null
@@ -451,15 +451,21 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 			AND updated_at<now() - interval '1 hour'
 	`, orderID)
 
-	if err == nil && checkoutSession != "" {
-		expired = true
+	// handle error
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// no records,
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("failed to check expired state of checkout session: %w", err)
 	}
-	if errors.Is(err, sql.ErrNoRows) {
-		// if there are no rows, then we are not expired
-		// drop this error
-		return expired, checkoutSession, nil
+	// handle checkout session being nil, which is possible
+	if checkoutSession == nil {
+		return false, "", nil
+	} else {
+		// there is a checkout session that is expired
+		return true, *checkoutSession, nil
 	}
-	return expired, checkoutSession, err
 }
 
 // IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
