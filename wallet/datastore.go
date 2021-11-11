@@ -49,6 +49,8 @@ type Datastore interface {
 	IncreaseLinkingLimit(ctx context.Context, providerLinkingID uuid.UUID) error
 	UnlinkWallet(ctx context.Context, walletID uuid.UUID, custodian string) error
 	GetLinkingLimitInfo(ctx context.Context, providerLinkingID string) (map[string]LinkingInfo, error)
+	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error)
 	// GetByProviderLinkingID gets the wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -74,6 +76,8 @@ type Datastore interface {
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
 type ReadOnlyDatastore interface {
 	grantserver.Datastore
+	// GetLinkingsByProviderLinkingID gets the wallet linking info by provider linking id
+	GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error)
 	// GetByProviderLinkingID gets a wallet by provider linking id
 	GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error)
 	// GetWallet by ID
@@ -209,6 +213,21 @@ func (pg *Postgres) GetWalletByPublicKey(ctx context.Context, pk string) (*walle
 	return &wallet, err
 }
 
+// GetLinkingsByProviderLinkingID gets wallet linkings by a provider address
+func (pg *Postgres) GetLinkingsByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) ([]LinkingMetadata, error) {
+	statement := `
+	select
+		wallet_id, disconnected_at, created_at, linked_at, unlinked_at,
+		(disconnected_at is null and unlinked_at is null) as active
+	from
+		wallet_custodian
+	WHERE linking_id = $1
+	`
+	var linkings []LinkingMetadata
+	err := pg.RawDB().SelectContext(ctx, &linkings, statement, providerLinkingID)
+	return linkings, err
+}
+
 // GetByProviderLinkingID gets a wallet by a provider address
 func (pg *Postgres) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (*[]walletutils.Info, error) {
 	statement := `
@@ -339,12 +358,23 @@ func getEnvMaxCards() int {
 	return 4
 }
 
+// LinkingMetadata - show more details in linking info about the linkages
+type LinkingMetadata struct {
+	WalletID       uuid.UUID  `json:"id" db:"wallet_id"`
+	DisconnectedAt *time.Time `json:"disconnectedAt,omitempty" db:"disconnected_at"`
+	LastLinkedAt   *time.Time `json:"lastLinkedAt,omitempty" db:"linked_at"`
+	FirstLinkedAt  *time.Time `json:"firstLinkedAt,omitempty" db:"created_at"`
+	UnLinkedAt     *time.Time `json:"unlinkedAt,omitempty" db:"unlinked_at"`
+	Active         bool       `json:"active" db:"active"`
+}
+
 // LinkingInfo - a structure for wallet linking information
 type LinkingInfo struct {
-	LinkingID          *uuid.UUID   `json:"-"`
-	WalletsLinked      int          `json:"walletsLinked"`
-	OpenLinkingSlots   int          `json:"openLinkingSlots"`
-	OtherWalletsLinked []*uuid.UUID `json:"otherWalletsLinked"`
+	LinkingID              *uuid.UUID        `json:"-"`
+	NextAvailableUnlinking *time.Time        `json:"nextAvailableUnlinking,omitempty"`
+	WalletsLinked          int               `json:"walletsLinked"`
+	OpenLinkingSlots       int               `json:"openLinkingSlots"`
+	OtherWalletsLinked     []LinkingMetadata `json:"otherWalletsLinked,omitempty"`
 }
 
 // GetLinkingLimitInfo - get some basic info about linking limit
@@ -384,27 +414,59 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 		}
 
 		// lookup other linked wallets
-		w, err := pg.GetByProviderLinkingID(ctx, lID)
+		linkings, err := pg.GetLinkingsByProviderLinkingID(ctx, lID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get other wallets by linking id: %w", err)
 		}
 
-		wIDs := []*uuid.UUID{}
+		// get the next available unlinking time
+		// lower bound based
+		lbDur, ok := ctx.Value(appctx.NoUnlinkPriorToDurationCTXKey).(string)
+		if !ok {
+			return nil, fmt.Errorf("misconfigured service, no unlink prior to duration configured")
+		}
 
-		for _, v := range *w {
-			u, err := uuid.FromString(v.ID)
+		d, err := timeutils.ParseDuration(lbDur)
+		if err != nil {
+			return nil, fmt.Errorf("misconfigured service, invalid no unlink prior to duration configured")
+		}
+
+		// get the latest unlinking
+		stmt := `
+			select
+				max(unlinked_at) as last_unlinking
+			from
+				wallet_custodian
+			where
+				linking_id = $1 and unlinked_at is not null
+		`
+		var last *time.Time
+		err = tx.Get(&last, stmt, lID)
+		if err != nil && err != sql.ErrNoRows {
+			return nil, fmt.Errorf("failed to get max time: %w", err)
+		}
+
+		var nextUnlink time.Time
+
+		if last != nil {
+			notBefore, err := d.FromNow()
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse wallet id from datastore: %w", err)
+				return nil, fmt.Errorf("unable to get not before time from duration: %w", err)
 			}
-			wIDs = append(wIDs, &u)
+			if (*notBefore).Before(*last) {
+				// last - notBefore is the duration we need to cool off
+				// now + ( last - notBefore )
+				nextUnlink = time.Now().Add(last.Sub(*notBefore))
+			}
 		}
 
 		// add to result
 		infos[custodian] = LinkingInfo{
-			LinkingID:          &lID,
-			WalletsLinked:      usedLinkings,
-			OpenLinkingSlots:   maxLinkings - usedLinkings,
-			OtherWalletsLinked: wIDs,
+			NextAvailableUnlinking: &nextUnlink,
+			LinkingID:              &lID,
+			WalletsLinked:          usedLinkings,
+			OpenLinkingSlots:       maxLinkings - usedLinkings,
+			OtherWalletsLinked:     linkings,
 		}
 	}
 
@@ -841,7 +903,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 			$1, $2, $3
 		)
 		on conflict (wallet_id, custodian, linking_id) 
-		do update set disconnected_at=null, linked_at=now()
+		do update set disconnected_at=null, unlinked_at=null, linked_at=now()
 		returning *
 	`
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
@@ -98,7 +99,7 @@ func (suite *WalletPostgresTestSuite) TestGetWallet() {
 
 func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
