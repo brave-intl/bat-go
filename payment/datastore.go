@@ -462,10 +462,9 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 	// handle checkout session being nil, which is possible
 	if checkoutSession == nil {
 		return false, "", nil
-	} else {
-		// there is a checkout session that is expired
-		return true, *checkoutSession, nil
 	}
+	// there is a checkout session that is expired
+	return true, *checkoutSession, nil
 }
 
 // IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned
