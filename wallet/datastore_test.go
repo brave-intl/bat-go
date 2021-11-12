@@ -6,13 +6,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"testing"
-
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
+	"testing"
 )
 
 type WalletPostgresTestSuite struct {
@@ -161,4 +160,28 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	// should return sql not found error after a disconnect
 	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
 	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
+}
+
+func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+	linkingID := uuid.NewV4()
+	depositDest := uuid.NewV4().String()
+
+	err = pg.ConnectCustodialWallet(ctx, &CustodianLink{
+		WalletID:  &walletID,
+		Custodian: "uphold",
+		LinkingID: &linkingID,
+	}, depositDest)
+
+	suite.Require().True(err != nil, "should have returned error")
+
+	count, _, err := pg.GetCustodianLinkCount(ctx, linkingID)
+
+	suite.Require().NoError(err)
+	suite.Require().True(count == 0, "should have performed rollback on connect custodial wallet")
 }
