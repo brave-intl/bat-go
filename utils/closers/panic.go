@@ -16,7 +16,7 @@ func Panic(c io.Closer) {
 	}
 	if err := c.Close(); err != nil {
 		logger.Error().Err(err).Msg("error attempting to close")
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) || err.Error() == "context canceled" {
 			// after this is merged we can remove this, the context timeout
 			// on the http client will manifest into this if the stream is not
 			// completed in time as "impact from not canceling the context is minor"
