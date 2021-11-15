@@ -120,7 +120,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 			Custodian: "gemini",
 			LinkingID: &linkingID,
 		}, depositDest.String()),
-		"Connect Custodial Wallet wallet should succeed")
+		"connect custodial wallet should succeed")
 
 	// get the wallet and check that the custodian link entry id is right
 	// get the custodian link entry and validate that the data is correct
@@ -137,7 +137,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	// disconnect the wallet
 	suite.Require().NoError(
 		pg.DisconnectCustodialWallet(ctx, id),
-		"Connect Custodial Wallet wallet should succeed")
+		"connect custodial wallet should succeed")
 
 	// perform a connect custodial wallet to make sure not more than one linking is added for same cust/wallet
 	suite.Require().NoError(
@@ -146,7 +146,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 			Custodian: "gemini",
 			LinkingID: &linkingID,
 		}, depositDest.String()),
-		"Connect Custodial Wallet wallet should succeed")
+		"connect custodial wallet should succeed")
 
 	// only one slot should be taken
 	suite.Require().True(used == 1, "linking count is not right")
@@ -155,7 +155,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 	// perform a disconnect custodial wallet
 	suite.Require().NoError(
 		pg.DisconnectCustodialWallet(ctx, id),
-		"disconnect Custodial Wallet wallet should succeed")
+		"disconnect custodial wallet should succeed")
 
 	// should return sql not found error after a disconnect
 	cl, err = pg.GetCustodianLinkByWalletID(ctx, id)
@@ -163,10 +163,10 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 }
 
 func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
-	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
-
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
+
+	ctx := context.Background()
 
 	walletID := uuid.NewV4()
 	linkingID := uuid.NewV4()
@@ -184,4 +184,49 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
 
 	suite.Require().NoError(err)
 	suite.Require().True(count == 0, "should have performed rollback on connect custodial wallet")
+}
+
+func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_ReLinkWallet() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+	provider := "uphold"
+	providerID := uuid.NewV4().String()
+	altCurrency := altcurrency.BAT
+
+	walletInfo := &walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    provider,
+		ProviderID:  providerID,
+		AltCurrency: &altCurrency,
+		PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
+	}
+
+	err = pg.UpsertWallet(context.Background(), walletInfo)
+	suite.Require().NoError(err, "save wallet should succeed")
+
+	userDepositDestination := uuid.NewV4().String()
+	providerLinkingID := uuid.NewV4()
+
+	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination, providerLinkingID, nil, provider)
+	suite.Require().NoError(err, "link wallet should succeed")
+
+	actual, err := pg.GetCustodianLinkByWalletID(context.Background(), walletID)
+	suite.Require().True(*actual.WalletID == walletID && actual.Custodian == provider && *actual.LinkingID == providerLinkingID,
+		"incorrect wallet returned")
+
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+	err = pg.UnlinkWallet(ctx, walletID, provider)
+	suite.Require().NoError(err, "should unlink wallet")
+
+	_, err = pg.GetCustodianLinkByWalletID(context.Background(), walletID)
+	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
+
+	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination, providerLinkingID, nil, provider)
+	suite.Require().NoError(err, "link wallet should succeed")
+
+	actual, err = pg.GetCustodianLinkByWalletID(context.Background(), walletID)
+	suite.Require().True(*actual.WalletID == walletID && actual.Custodian == provider && *actual.LinkingID == providerLinkingID,
+		"incorrect wallet returned")
 }
