@@ -244,7 +244,7 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 
 	suite.CheckBalance(w5, bat1)
 	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
-	suite.CheckBalance(w4, bat1)
+	suite.CheckBalance(w5, bat1)
 
 	// 4 linking
 
