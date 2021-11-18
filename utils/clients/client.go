@@ -26,6 +26,7 @@ import (
 var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
 	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
+	regexp.MustCompile(`(?i)signature: .+\n`):       []byte("Signature: <sig>\n"),
 }
 
 func redactSensitiveHeaders(corpus []byte) []byte {
