@@ -186,7 +186,7 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
 	suite.Require().True(count == 0, "should have performed rollback on connect custodial wallet")
 }
 
-func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_ReLinkWallet() {
+func (suite *WalletPostgresTestSuite) TestLinkWallet_RelinkWallet() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
@@ -209,7 +209,8 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_ReLinkWallet() 
 	userDepositDestination := uuid.NewV4().String()
 	providerLinkingID := uuid.NewV4()
 
-	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination, providerLinkingID, nil, provider)
+	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination,
+		providerLinkingID, nil, provider)
 	suite.Require().NoError(err, "link wallet should succeed")
 
 	actual, err := pg.GetCustodianLinkByWalletID(context.Background(), walletID)
@@ -223,10 +224,47 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_ReLinkWallet() 
 	_, err = pg.GetCustodianLinkByWalletID(context.Background(), walletID)
 	suite.Require().True(errors.Is(err, sql.ErrNoRows), "should be no rows found error")
 
-	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination, providerLinkingID, nil, provider)
+	err = pg.LinkWallet(context.Background(), walletID.String(), userDepositDestination,
+		providerLinkingID, nil, provider)
 	suite.Require().NoError(err, "link wallet should succeed")
 
 	actual, err = pg.GetCustodianLinkByWalletID(context.Background(), walletID)
 	suite.Require().True(*actual.WalletID == walletID && actual.Custodian == provider && *actual.LinkingID == providerLinkingID,
 		"incorrect wallet returned")
+}
+
+func (suite *WalletPostgresTestSuite) TestLinkWallet_MultipleLinkWalletWithoutUnlink() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+	provider := "uphold"
+	providerID := uuid.NewV4().String()
+	altCurrency := altcurrency.BAT
+
+	walletInfo := &walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    provider,
+		ProviderID:  providerID,
+		AltCurrency: &altCurrency,
+		PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
+	}
+
+	ctx := context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
+
+	err = pg.UpsertWallet(ctx, walletInfo)
+	suite.Require().NoError(err, "save wallet should succeed")
+
+	userDepositDestination := uuid.NewV4().String()
+	providerLinkingID := uuid.NewV4()
+
+	for i := 0; i < 5; i++ {
+		err = pg.LinkWallet(ctx, walletID.String(), userDepositDestination,
+			providerLinkingID, nil, provider)
+		suite.Require().NoError(err, "link wallet should succeed")
+	}
+
+	used, _, err := pg.GetCustodianLinkCount(ctx, providerLinkingID)
+	suite.Require().NoError(err, "should have no error getting custodian link count")
+	suite.Require().True(used == 1)
 }
