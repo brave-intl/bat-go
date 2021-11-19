@@ -347,7 +347,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		BatchMeta: &paymentspb.BatchMeta{
 			// TODO: get the batch id in here
 		},
-		State:     paymentspb.State_PREPARED,
 		Custodian: paymentspb.Custodian(paymentspb.Custodian_value[strings.ToUpper(*wallet.UserDepositAccountProvider)]),
 		BatchTxs: []*pb.Transaction{
 			{
@@ -364,7 +363,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 	tx := new(walletutils.TransactionInfo)
 
-	tx.ID = resp.DocumentId
+	tx.ID = resp.DocumentIds[0]
 	tx.Destination = wallet.UserDepositDestination
 	tx.DestAmount = total
 

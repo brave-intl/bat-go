@@ -29,7 +29,7 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 		logger.Error().Msg("failed to get the datastore from the context")
 		return &pb.PrepareResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
 	}
@@ -50,29 +50,29 @@ func (s *Service) Prepare(ctx context.Context, pr *pb.PrepareRequest) (*pb.Prepa
 		if errors.Is(err, errorutils.ErrNotImplemented) {
 			return &pb.PrepareResponse{
 				Meta: &pb.MetaResponse{
-					Status: pb.MetaResponse_FAILURE,
+					Status: pb.Status_FAILURE,
 				},
 			}, status.Errorf(codes.Unimplemented, "error initializing batched txs: %s", err.Error())
 		}
 		return &pb.PrepareResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Unknown, "error initializing batched txs: %s", err.Error())
 	}
 	if docID == nil {
 		return &pb.PrepareResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Unknown, "error initializing batched txs: %s", err.Error())
 	}
 
 	return &pb.PrepareResponse{
 		Meta: &pb.MetaResponse{
-			Status: pb.MetaResponse_SUCCESS,
+			Status: pb.Status_SUCCESS,
 		},
-		DocumentId: *docID,
+		DocumentIds: []string{*docID},
 	}, nil
 }
 
@@ -86,7 +86,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		logger.Warn().Err(err).Msg("failed to parse document id")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 				Msg:    err.Error(),
 			},
 		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
@@ -98,7 +98,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		logger.Error().Msg("failed to get environment from context")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
 	}
@@ -112,7 +112,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 				Msg("invalid public key for payment authorizations")
 			return &pb.AuthorizeResponse{
 				Meta: &pb.MetaResponse{
-					Status: pb.MetaResponse_FAILURE,
+					Status: pb.Status_FAILURE,
 				},
 			}, status.Errorf(codes.InvalidArgument, "invalid public key for payments authorization")
 		}
@@ -127,7 +127,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 				Msg("invalid signature for authorization")
 			return &pb.AuthorizeResponse{
 				Meta: &pb.MetaResponse{
-					Status: pb.MetaResponse_FAILURE,
+					Status: pb.Status_FAILURE,
 				},
 			}, status.Errorf(codes.InvalidArgument, "invalid signature for authorization")
 		}
@@ -137,7 +137,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 			Msg("failed to get authorized keys for environment")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Internal, "failed to get authorized keys for environment")
 	}
@@ -148,7 +148,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		logger.Error().Msg("failed to get the datastore from the context")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 			},
 		}, status.Errorf(codes.Internal, "failed to get datastore from the context")
 	}
@@ -165,7 +165,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 		logger.Warn().Err(err).Msg("failed to record authorization")
 		return &pb.AuthorizeResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 				Msg:    fmt.Sprintf("failed to record authorization: %s", err.Error()),
 			},
 		}, status.Errorf(codes.Internal, "failed to record authorization: %s", err.Error())
@@ -173,7 +173,7 @@ func (s *Service) Authorize(ctx context.Context, ar *pb.AuthorizeRequest) (*pb.A
 
 	return &pb.AuthorizeResponse{
 		Meta: &pb.MetaResponse{
-			Status: pb.MetaResponse_SUCCESS,
+			Status: pb.Status_SUCCESS,
 		},
 	}, nil
 }
@@ -187,7 +187,7 @@ func (s *Service) Submit(ctx context.Context, sm *pb.SubmitRequest) (*pb.SubmitR
 		logger.Warn().Err(err).Msg("failed to parse document id")
 		return &pb.SubmitResponse{
 			Meta: &pb.MetaResponse{
-				Status: pb.MetaResponse_FAILURE,
+				Status: pb.Status_FAILURE,
 				Msg:    err.Error(),
 			},
 		}, status.Errorf(codes.InvalidArgument, "failed to parse document id: %s", err.Error())
@@ -199,7 +199,7 @@ func (s *Service) Submit(ctx context.Context, sm *pb.SubmitRequest) (*pb.SubmitR
 
 	return &pb.SubmitResponse{
 		Meta: &pb.MetaResponse{
-			Status: pb.MetaResponse_SUCCESS,
+			Status: pb.Status_SUCCESS,
 		},
 	}, nil
 }

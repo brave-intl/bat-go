@@ -137,7 +137,6 @@ func prepare(ctx context.Context, command *cobra.Command, args []string) {
 
 	// perform api call
 	resp, err := client.Prepare(ctx, &pb.PrepareRequest{
-		State:     pb.State_PREPARED,
 		Custodian: pb.Custodian(pb.Custodian_value[strings.ToUpper(custodian)]),
 		BatchTxs:  txs,
 	})
@@ -148,7 +147,7 @@ func prepare(ctx context.Context, command *cobra.Command, args []string) {
 
 	// note response
 	logger.Info().
-		Str("doc_id", resp.GetDocumentId()).
+		Str("doc_ids", strings.Join(resp.GetDocumentIds(), ",")).
 		Msg("prepare to payments service successful")
 }
 
