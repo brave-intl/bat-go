@@ -80,3 +80,8 @@ Please note the following:
     4. Use the GRPC status codes to determine if you need to re-run the prepare for a transaction batch
 3. Once an Authorization happens on a batch, the batch is immutable.
     1. Be sure to have submitted all transactions prior to notification of authorizers to authorize the batch.
+
+## Diagrams
+
+[Here is the high level flow](NitroPayments-PrepareAPI_GRPC.pdf), including examples of potential responses.
+
