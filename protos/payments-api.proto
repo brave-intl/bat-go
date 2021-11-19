@@ -16,12 +16,23 @@ service PaymentsGRPCService {
     rpc Submit (SubmitRequest) returns (SubmitResponse){}
 }
 
+// Status - the status of the request
+enum Status {
+    SUCCESS = 0;
+    FAILURE = 1;
+}
+
 // State - the state of the "document"
 enum State {
-    PREPARED = 0;
-    INITIALIZED = 1;
-    WAITING_AUTH = 2;
+    // prepare started
+    INITIALIZED = 0;
+    // prepare completed (waiting for auth)
+    PREPARED = 1;
+    // authorized
+    AUTHORIZED = 2;
+    // being processed
     IN_PROGRESS = 3;
+    // completed
     COMPLETED = 4;
 }
 
@@ -53,35 +64,32 @@ message BatchMeta {
 
 // Transactions - structure of a transaction
 message Transaction {
-    string transaction_id = 1;
-    string destination = 2;
-    string origin = 3;
-    string amount = 4;
-    string currency = 5;
-    repeated ContextItem metadata = 6;
+    string idempotency_key = 1; // idempotency key, safe to retry
+    string destination = 2; // card to send to for custodian
+    string origin = 3; // card from which to send for custodian 
+    string amount = 4; // str repr of decimal.Decimal
+    string currency = 5; // BAT
+    repeated ContextItem metadata = 6; // various futureproofing metadata
 }
 
 // PrepareRequest - this is the protobuf definition
 // of the payments service prepare request type
 message PrepareRequest {
-    State state = 1;
-    Custodian custodian = 2;
+    // custodian identifier (uphold/gemini/bitflyer/brave)
+    Custodian custodian = 1;
     // batch size, batch count, batch id
-    // all help figure out if this is a partial
-    // message or not
-    BatchMeta batch_meta = 3;
+    // the batch_id in the BatchMetadata indicates that this prepare request
+    // is related to a particular batch (incase we have lots and lots of batch tx.
+    // if this is the case it would be good to use batch size to indicate how many
+    BatchMeta batch_meta = 2;
     // paged transaction list
-    repeated Transaction batch_txs = 4;
+    repeated Transaction batch_txs = 3;
 }
 
 // MetaResponse - this is the protobuf definition
 // of the payments service meta response type
 message MetaResponse {
     // Status - enumeration of the request's success/failure
-    enum Status {
-        SUCCESS = 0;
-        FAILURE = 1;
-    }
     Status status = 1;
     string msg = 2;
     repeated ContextItem context = 3;
@@ -98,10 +106,12 @@ message Signature {
 // of the payments service prepare response type
 message PrepareResponse {
     MetaResponse meta = 1;
-    // document reference in qldb
-    string document_id = 2;
-    // payments service signature of tx list
-    Signature signature = 3;
+    // batch identifier for this preparation
+    string batch_id = 2;
+    // the (s3 object) url that outlines the entire batch
+    string auth_url = 3;
+    // document references in qldb (one per tx)
+    repeated string document_id = 4;
 }
 
 // AuthorizeRequest - this is the protobuf definition
