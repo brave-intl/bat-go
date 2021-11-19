@@ -111,7 +111,7 @@ message PrepareResponse {
     // the (s3 object) url that outlines the entire batch
     string auth_url = 3;
     // document references in qldb (one per tx)
-    repeated string document_id = 4;
+    repeated string document_ids = 4;
 }
 
 // AuthorizeRequest - this is the protobuf definition
