@@ -264,7 +264,7 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 	// TODO: We should make a generalized helper to handle bulk inserts
 	query := `
 		insert into order_items 
-			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso)
+			(order_id, sku, quantity, price, currency, subtotal, location, description, credential_type, metadata, valid_for, valid_for_iso, issuance_interval)
 		values `
 	params := []interface{}{}
 	for i := 0; i < len(orderItems); i++ {
@@ -275,8 +275,9 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 			orderItems[i].Location, orderItems[i].Description,
 			orderItems[i].CredentialType, orderItems[i].Metadata, orderItems[i].ValidFor,
 			orderItems[i].ValidForISO,
+			orderItems[i].IssuanceIntervalISO,
 		)
-		numFields := 12 // the number of fields you are inserting
+		numFields := 13 // the number of fields you are inserting
 		n := i * numFields
 
 		query += `(`
@@ -320,7 +321,7 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 
 	foundOrderItems := []OrderItem{}
 	statement = `
-		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
 		FROM order_items WHERE order_id = $1`
 	err = pg.RawDB().Select(&foundOrderItems, statement, orderID)
 
@@ -436,13 +437,13 @@ func (pg *Postgres) GetTransaction(externalTransactionID string) (*Transaction, 
 // CheckExpiredCheckoutSession - check order metadata for an expired checkout session id
 func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string, error) {
 	var (
-		expired         bool
-		checkoutSession string
+		// can be nil in db
+		checkoutSession *string
 		err             error
 	)
 
 	err = pg.RawDB().Get(&checkoutSession, `
-		SELECT metadata->>'stripeCheckoutSessionId'
+		SELECT metadata->>'stripeCheckoutSessionId' as checkout_session
 		FROM orders
 		WHERE id = $1 
 			AND metadata is not null
@@ -450,15 +451,20 @@ func (pg *Postgres) CheckExpiredCheckoutSession(orderID uuid.UUID) (bool, string
 			AND updated_at<now() - interval '1 hour'
 	`, orderID)
 
-	if err == nil && checkoutSession != "" {
-		expired = true
+	// handle error
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// no records,
+			return false, "", nil
+		}
+		return false, "", fmt.Errorf("failed to check expired state of checkout session: %w", err)
 	}
-	if errors.Is(err, sql.ErrNoRows) {
-		// if there are no rows, then we are not expired
-		// drop this error
-		return expired, checkoutSession, nil
+	// handle checkout session being nil, which is possible
+	if checkoutSession == nil {
+		return false, "", nil
 	}
-	return expired, checkoutSession, err
+	// there is a checkout session that is expired
+	return true, *checkoutSession, nil
 }
 
 // IsStripeSub - is this order related to a stripe subscription, if so, true, subscription id returned

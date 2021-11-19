@@ -26,6 +26,7 @@ import (
 var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
 	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
+	regexp.MustCompile(`(?i)signature: .+\n`):       []byte("Signature: <sig>\n"),
 }
 
 func redactSensitiveHeaders(corpus []byte) []byte {
@@ -232,9 +233,10 @@ func (c *SimpleHTTPClient) do(
 	// dump out the full request, right before we submit it
 	requestDump, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
-		panic(err)
+		logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
+	} else {
+		logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
 	}
-	logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -244,10 +246,10 @@ func (c *SimpleHTTPClient) do(
 	defer closers.Panic(resp.Body)
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
-		panic(err)
+		logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
+	} else {
+		logger.Debug().Str("type", "http.Response").Msg(string(dump))
 	}
-
-	logger.Debug().Str("type", "http.Response").Msg(string(dump))
 
 	// // helpful if you want to read the body as it is
 	// bodyBytes, _ := requestutils.Read(resp.Body)

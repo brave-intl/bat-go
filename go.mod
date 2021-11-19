@@ -20,11 +20,11 @@ require (
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
 	github.com/google/uuid v1.1.2
-	github.com/hashicorp/vault v1.8.2
+	github.com/hashicorp/vault v1.8.4
 	github.com/hashicorp/vault/api v1.1.2-0.20210713235431-1fc8af4c041f
-	github.com/hashicorp/vault/sdk v0.2.2-0.20210825150427-9b1f4d486f5d
+	github.com/hashicorp/vault/sdk v0.2.2-0.20211005222123-93e045565e4a
 	github.com/jmoiron/sqlx v1.3.4
-	github.com/lib/pq v1.10.2
+	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mssola/user_agent v0.5.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible

@@ -212,7 +212,9 @@ func (service *Service) LinkWallet(
 
 	tx, err := wallet.VerifyTransaction(transaction)
 	if err != nil {
-		return handlers.WrapError(errors.New("failed to verify transaction"), "failed to verify transaction", http.StatusForbidden)
+		return handlers.WrapError(
+			errors.New("failed to verify transaction"), "transaction verification failure",
+			http.StatusForbidden)
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
@@ -224,18 +226,20 @@ func (service *Service) LinkWallet(
 		)
 	} else if !ok {
 		// fail
-		return &handlers.AppError{
-			Cause: errors.New("user kyc did not pass"),
-			Code:  http.StatusForbidden,
-		}
+		return handlers.WrapError(
+			errors.New("user kyc did not pass"),
+			"KYC required",
+			http.StatusForbidden)
 	} else {
 		userID = uID
 	}
 
 	// check kyc user id validity
 	if userID == "" {
-		err := errors.New("user id not provided")
-		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
+		return handlers.WrapError(
+			errors.New("user id not provided"),
+			"KYC required",
+			http.StatusForbidden)
 	}
 
 	probi = tx.Probi
@@ -351,9 +355,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
 			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
-		// linking info api is okay to expose publically
-		r.Get("/linking-info",
-			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
+		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
+			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
 
 		// get wallet routes
 		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(

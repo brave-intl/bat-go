@@ -388,6 +388,14 @@ func (c *HTTPClient) RefreshToken(
 	ctx context.Context,
 	payload TokenPayload,
 ) (*TokenResponse, error) {
+
+	logger := logging.Logger(ctx, "RefreshToken")
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to refresh bitflyer token")
+		}
+	}()
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
