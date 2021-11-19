@@ -1,4 +1,4 @@
-create view as normalized_credentials as (
+create view normalized_credentials as (
   select
     id,
     substring(json_array_elements(credentials)->>'issuer', 0, 37) as promotion_id,
