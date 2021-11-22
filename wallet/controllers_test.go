@@ -444,7 +444,7 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	info := walletutils.Info{
 		ID:          uuid.NewV4().String(),
 		PublicKey:   publicKeyString,
-		Provider:    "uphold",
+		Provider:    provider,
 		AltCurrency: &bat,
 	}
 	w := &uphold.Wallet{

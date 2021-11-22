@@ -88,7 +88,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	// get wallet from datastore
 	err = db.InsertWallet(ctx, info)
 	if err != nil {
-		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create brave wallet")
+		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create uphold wallet")
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
 	}
 
