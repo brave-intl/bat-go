@@ -188,14 +188,16 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
 	suite.Require().True(count == 0, "should have performed rollback on connect custodial wallet")
 }
 
-func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent() {
+func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
 	for i := 0; i < 1; i++ {
 
+		// seed 3 wallets with same linkingID
 		userDepositDestination, providerLinkingID := suite.seedWallet(pg)
 
+		// concurrently link new wallet with same linkingID
 		altCurrency := altcurrency.BAT
 		walletInfo := &walletutils.Info{
 			ID:          uuid.NewV4().String(),
