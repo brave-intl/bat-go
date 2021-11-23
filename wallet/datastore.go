@@ -559,20 +559,32 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
-	sublogger := logger(ctx).With().
-		Str("wallet_id", ID).
-		Logger()
+	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
 
 	// create tx
 	tx, err := createTx(ctx, pg)
 	if err != nil || tx == nil {
-		sublogger.Error().Err(err).
-			Msg("error creating tx for wallet linking")
+		sublogger.Error().Err(err).Msg("error creating tx for wallet linking")
 		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
 	}
+
+	err = waitAndLock(ctx, tx, providerLinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("link wallet error acquire lock")
+		return fmt.Errorf("failed to acquire lock link wallet : %w", err)
+	}
+
 	// add tx to ctx for future
 	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
-	defer pg.RollbackTx(tx)
+	defer func() {
+		if err != nil {
+			err = unlock(ctx, tx, providerLinkingID)
+			if err != nil {
+				sublogger.Error().Err(err).Msg("link wallet failed to release lock")
+			}
+		}
+		pg.RollbackTx(tx)
+	}()
 
 	id, err := uuid.FromString(ID)
 	if err != nil {
@@ -590,10 +602,17 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		return fmt.Errorf("failed to insert new custodian link: %w", err)
 	}
 
+	err = unlock(ctx, tx, providerLinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("link wallet failed to release lock")
+		return fmt.Errorf("failed to release lock link wallet : %w", err)
+	}
+
 	err = tx.Commit()
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -820,7 +839,6 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit DisconnectCustodialWallet transaction: %w", err)
 	}
-
 	// done
 	return nil
 }
@@ -968,4 +986,26 @@ func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
 		return tx, fmt.Errorf("failed to create transaction: %w", err)
 	}
 	return tx, nil
+}
+
+func waitAndLock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
+	logger(ctx).Info().Msg(fmt.Sprintf("acquiring lock %s", id.String()))
+	query := "SELECT pg_advisory_lock(hashtext($1))"
+	_, err := tx.ExecContext(ctx, query, id.String())
+	if err != nil {
+		logger(ctx).Error().Err(err).Msg(fmt.Sprintf("error acquiring lock id %s", id.String()))
+		return err
+	}
+	return nil
+}
+
+func unlock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
+	logger(ctx).Info().Msg(fmt.Sprintf("releasing lock %s", id.String()))
+	query := "SELECT pg_advisory_unlock(hashtext($1))"
+	_, err := tx.ExecContext(ctx, query, id.String())
+	if err != nil {
+		logger(ctx).Err(err).Msg(fmt.Sprintf("error releasing lock id %s", id.String()))
+		return err
+	}
+	return nil
 }

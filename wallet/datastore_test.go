@@ -7,13 +7,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	"sync"
-	"testing"
 )
 
 type WalletPostgresTestSuite struct {
@@ -220,7 +223,6 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 				defer wg.Done()
 				err = pg.LinkWallet(context.WithValue(context.Background(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"),
 					walletInfo.ID, userDepositDestination, providerLinkingID, walletInfo.AnonymousAddress, walletInfo.Provider)
-				suite.Require().NoError(err, "link wallet should succeed")
 			}()
 		}
 
@@ -243,7 +245,7 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 		altCurrency := altcurrency.BAT
 		walletInfo := &walletutils.Info{
 			ID:               uuid.NewV4().String(),
-			Provider:         "brave",
+			Provider:         "uphold",
 			ProviderID:       uuid.NewV4().String(),
 			AltCurrency:      &altCurrency,
 			PublicKey:        "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
@@ -277,7 +279,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 		altCurrency := altcurrency.BAT
 		walletInfo := &walletutils.Info{
 			ID:          uuid.NewV4().String(),
-			Provider:    "brave",
+			Provider:    "uphold",
 			ProviderID:  uuid.NewV4().String(),
 			AltCurrency: &altCurrency,
 			PublicKey:   "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu1jMwryY=",
@@ -308,4 +310,39 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
+}
+
+func (suite *WalletPostgresTestSuite) TestWaitAndLock() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	actual := make(chan int, 2)
+
+	f := func(ctx context.Context, tx *sqlx.Tx, waitSeconds int, process int, lockID uuid.UUID) {
+		err = waitAndLock(ctx, tx, lockID)
+		suite.Require().NoError(err)
+
+		_, err = tx.ExecContext(ctx, "SELECT 1, pg_sleep($1)", waitSeconds)
+		suite.Require().NoError(err)
+
+		actual <- process
+
+		err = unlock(ctx, tx, lockID)
+		suite.Require().NoError(err)
+	}
+
+	lockID := uuid.NewV4()
+
+	tx1, err := pg.RawDB().Beginx()
+	suite.Require().NoError(err)
+
+	tx2, err := pg.RawDB().Beginx()
+	suite.Require().NoError(err)
+
+	go f(context.Background(), tx1, 2, 1, lockID)
+	time.Sleep(500 * time.Millisecond)
+	go f(context.Background(), tx2, 0, 2, lockID)
+
+	suite.Require().True(<-actual == 1)
+	suite.Require().True(<-actual == 2)
 }
