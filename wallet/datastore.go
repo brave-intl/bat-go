@@ -994,7 +994,7 @@ func waitAndLock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 	_, err := tx.ExecContext(ctx, query, id.String())
 	if err != nil {
 		logger(ctx).Error().Err(err).Msg(fmt.Sprintf("error acquiring lock id %s", id.String()))
-		return err
+		return fmt.Errorf("failed to acquire lock id: %s %w", id.String(), err)
 	}
 	return nil
 }
@@ -1005,7 +1005,7 @@ func unlock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 	_, err := tx.ExecContext(ctx, query, id.String())
 	if err != nil {
 		logger(ctx).Err(err).Msg(fmt.Sprintf("error releasing lock id %s", id.String()))
-		return err
+		return fmt.Errorf("failed to release lock id: %s %w", id.String(), err)
 	}
 	return nil
 }
