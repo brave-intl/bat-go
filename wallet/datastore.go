@@ -70,7 +70,7 @@ type Datastore interface {
 	// GetCustodianLinkByWalletID - get the custodian link by ID
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
-	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -87,7 +87,7 @@ type ReadOnlyDatastore interface {
 	// GetCustodianLinkByWalletID - get the current custodian link by wallet id
 	GetCustodianLinkByWalletID(ctx context.Context, ID uuid.UUID) (*CustodianLink, error)
 	// GetCustodianLinkCount - get the wallet custodian link count across all wallets
-	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error)
+	GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -302,14 +302,14 @@ func txGetCustodianLinkingIDs(ctx context.Context, tx *sqlx.Tx, providerLinkingI
 	return resp, nil
 }
 
-func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID string) (int, error) {
+func txGetMaxLinkingSlots(ctx context.Context, tx *sqlx.Tx, custodian, providerLinkingID string) (int, error) {
 	var (
 		max int
 	)
 	statement := `
 		select ($2 + count(1)) as max from linking_limit_adjust where provider_linking_id = $1
 	`
-	err := tx.Get(&max, statement, providerLinkingID, getEnvMaxCards())
+	err := tx.Get(&max, statement, providerLinkingID, getEnvMaxCards(custodian))
 	return max, err
 }
 
@@ -351,9 +351,20 @@ func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
 	return false
 }
 
-func getEnvMaxCards() int {
-	if v, err := strconv.Atoi(os.Getenv("UPHOLD_WALLET_LINKING_LIMIT")); err == nil {
-		return v
+func getEnvMaxCards(custodian string) int {
+	switch custodian {
+	case "uphold":
+		if v, err := strconv.Atoi(os.Getenv("UPHOLD_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
+	case "bitflyer":
+		if v, err := strconv.Atoi(os.Getenv("BITFLYER_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
+	case "gemini":
+		if v, err := strconv.Atoi(os.Getenv("GEMINI_WALLET_LINKING_LIMIT")); err == nil {
+			return v
+		}
 	}
 	return 4
 }
@@ -397,7 +408,7 @@ func (pg *Postgres) GetLinkingLimitInfo(ctx context.Context, providerLinkingID s
 
 	// for each custodian linking id found, get the max/used
 	for custodian, linkingID := range custodianLinkingIDs {
-		maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, linkingID)
+		maxLinkings, err := txGetMaxLinkingSlots(ctx, tx, custodian, linkingID)
 		if err != nil {
 			return nil, errorutils.Wrap(err, "error looking up max linkings for wallet")
 		}
@@ -626,7 +637,7 @@ func (cl *CustodianLink) GetLinkingIDString() string {
 }
 
 // GetCustodianLinkCount - get the wallet custodian link count across all wallets
-func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID) (int, int, error) {
+func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UUID, custodian string) (int, int, error) {
 	// the count of linked wallets
 	var err error
 
@@ -668,7 +679,7 @@ func (pg *Postgres) GetCustodianLinkCount(ctx context.Context, linkingID uuid.UU
 	// wallets linked/ open linking slots not found
 	// this is the case where there is no prior linkages
 	// 0 linked, get max from environment
-	return 0, getEnvMaxCards(), nil
+	return 0, getEnvMaxCards(custodian), nil
 
 }
 
@@ -869,7 +880,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 		// if the existingLinkingID is null then we need to check the linking limits
 
 		// get the count
-		used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID)
+		used, max, err := pg.GetCustodianLinkCount(ctx, *cl.LinkingID, cl.Custodian)
 		if err != nil {
 			sublogger.Error().Err(err).
 				Msg("failed to insert wallet_custodian due to db err checking linking limits")
