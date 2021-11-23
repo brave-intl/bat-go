@@ -1004,7 +1004,7 @@ func unlock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
 	query := "SELECT pg_advisory_unlock(hashtext($1))"
 	_, err := tx.ExecContext(ctx, query, id.String())
 	if err != nil {
-		logger(ctx).Err(err).Msg(fmt.Sprintf("error releasing lock id %s", id.String()))
+		logger(ctx).Error().Err(err).Msg(fmt.Sprintf("error releasing lock id %s", id.String()))
 		return fmt.Errorf("failed to release lock id: %s %w", id.String(), err)
 	}
 	return nil
