@@ -563,8 +563,8 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		sublogger.Error().Err(err).Msg("link wallet error acquire lock")
-		return fmt.Errorf("failed to create db transaction UnlinkWallet: %w", err)
+		sublogger.Error().Err(err).Msg("link wallet error get tx")
+		return fmt.Errorf("failed to get tx link wallet: %w", err)
 	}
 
 	defer func() {
