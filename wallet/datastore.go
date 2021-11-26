@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	txLockGauge = prometheus.NewGauge(
+	metricTxLockGauge = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name:        "pg_tx_advisory_lock_gauge",
 			Help:        "Monitors number of tx advisory locks",
@@ -46,7 +46,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
-	prometheus.MustRegister(txLockGauge)
+	prometheus.MustRegister(metricTxLockGauge)
 }
 
 // Datastore holds the interface for the wallet datastore
@@ -570,24 +570,24 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
-		sublogger.Error().Err(err).Msg("link wallet error get tx")
-		return fmt.Errorf("failed to get tx link wallet: %w", err)
+		sublogger.Error().Err(err).Msg("error getting tx")
+		return fmt.Errorf("error getting tx: %w", err)
 	}
 	defer func() {
-		txLockGauge.Dec()
+		metricTxLockGauge.Dec()
 		rollback()
 	}()
 
-	txLockGauge.Inc()
+	metricTxLockGauge.Inc()
 	err = waitAndLockTx(ctx, tx, providerLinkingID)
 	if err != nil {
-		sublogger.Error().Err(err).Msg("link wallet: error acquiring tx lock")
-		return fmt.Errorf("link wallet: failed to acquire tx lock  %w", err)
+		sublogger.Error().Err(err).Msg("error acquiring tx lock")
+		return fmt.Errorf("error acquiring tx lock: %w", err)
 	}
 
 	id, err := uuid.FromString(ID)
 	if err != nil {
-		return errorutils.Wrap(err, "invalid id")
+		return errorutils.Wrap(err, "error invalid id")
 	}
 
 	// connect custodian link (does the link limit checking in insert)
@@ -597,13 +597,15 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		LinkingID: &providerLinkingID,
 	}, userDepositDestination); err != nil {
 		sublogger.Error().Err(err).
-			Msg("failed to insert new custodian link")
-		return fmt.Errorf("failed to insert new custodian link: %w", err)
+			Msg("error connect custodian wallet")
+		return fmt.Errorf("error connect custodian wallet: %w", err)
 	}
 
 	err = commit()
 	if err != nil {
-		return err
+		sublogger.Error().Err(err).
+			Msg("error committing tx")
+		return fmt.Errorf("error committing tx: %w", err)
 	}
 
 	return nil
