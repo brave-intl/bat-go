@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )
@@ -318,8 +317,11 @@ func (suite *WalletPostgresTestSuite) TestWaitAndLock() {
 
 	actual := make(chan int, 2)
 
-	f := func(ctx context.Context, tx *sqlx.Tx, waitSeconds int, process int, lockID uuid.UUID) {
-		err = waitAndLock(ctx, tx, lockID)
+	f := func(ctx context.Context, waitSeconds int, process int, lockID uuid.UUID) {
+		tx, err := pg.RawDB().Beginx()
+		suite.Require().NoError(err)
+
+		err = waitAndLockTx(ctx, tx, lockID)
 		suite.Require().NoError(err)
 
 		_, err = tx.ExecContext(ctx, "SELECT 1, pg_sleep($1)", waitSeconds)
@@ -327,22 +329,22 @@ func (suite *WalletPostgresTestSuite) TestWaitAndLock() {
 
 		actual <- process
 
-		err = unlock(ctx, tx, lockID)
+		err = tx.Commit()
 		suite.Require().NoError(err)
 	}
 
 	lockID := uuid.NewV4()
 
-	tx1, err := pg.RawDB().Beginx()
-	suite.Require().NoError(err)
-
-	tx2, err := pg.RawDB().Beginx()
-	suite.Require().NoError(err)
-
-	go f(context.Background(), tx1, 2, 1, lockID)
+	go f(context.Background(), 2, 1, lockID)
 	time.Sleep(500 * time.Millisecond)
-	go f(context.Background(), tx2, 0, 2, lockID)
+	go f(context.Background(), 0, 2, lockID)
 
 	suite.Require().True(<-actual == 1)
 	suite.Require().True(<-actual == 2)
+
+	row := pg.RawDB().QueryRow("SELECT COUNT(*) FROM pg_locks pl WHERE pl.objid = hashtext($1)", lockID)
+
+	var lockCount int
+	err = row.Scan(&lockCount)
+	suite.Require().True(lockCount == 0, fmt.Sprintf("should have released all locks but found %d", lockCount))
 }

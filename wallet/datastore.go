@@ -30,6 +30,12 @@ import (
 )
 
 var (
+	txLockGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name:        "pg_tx_advisory_lock_gauge",
+			Help:        "Monitors number of tx advisory locks",
+			ConstLabels: prometheus.Labels{"service": "wallet"},
+		})
 	tooManyCardsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name:        "too_many_linked_cards",
@@ -40,6 +46,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
+	prometheus.MustRegister(txLockGauge)
 }
 
 // Datastore holds the interface for the wallet datastore
@@ -566,22 +573,16 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		sublogger.Error().Err(err).Msg("link wallet error get tx")
 		return fmt.Errorf("failed to get tx link wallet: %w", err)
 	}
-
 	defer func() {
-		if err != nil {
-			err = unlock(ctx, tx, providerLinkingID)
-			if err != nil {
-				sublogger.Error().Err(err).
-					Msg(fmt.Sprintf("link wallet failed to release lock id %s", providerLinkingID))
-			}
-		}
+		txLockGauge.Dec()
 		rollback()
 	}()
 
-	err = waitAndLock(ctx, tx, providerLinkingID)
+	txLockGauge.Inc()
+	err = waitAndLockTx(ctx, tx, providerLinkingID)
 	if err != nil {
-		sublogger.Error().Err(err).Msg("link wallet error acquire lock")
-		return fmt.Errorf("failed to acquire lock link wallet : %w", err)
+		sublogger.Error().Err(err).Msg("link wallet: error acquiring tx lock")
+		return fmt.Errorf("link wallet: failed to acquire tx lock  %w", err)
 	}
 
 	id, err := uuid.FromString(ID)
@@ -598,12 +599,6 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		sublogger.Error().Err(err).
 			Msg("failed to insert new custodian link")
 		return fmt.Errorf("failed to insert new custodian link: %w", err)
-	}
-
-	err = unlock(ctx, tx, providerLinkingID)
-	if err != nil {
-		sublogger.Error().Err(err).Msg("link wallet failed to release lock")
-		return fmt.Errorf("failed to release lock link wallet : %w", err)
 	}
 
 	err = commit()
@@ -986,26 +981,12 @@ func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
 	return tx, nil
 }
 
-// acquire advisory lock for id
-func waitAndLock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
-	logger(ctx).Info().Msg(fmt.Sprintf("acquiring lock %s", id.String()))
-	query := "SELECT pg_advisory_lock(hashtext($1))"
+// acquire tx advisory lock for id automatically released when tx ends
+func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
+	query := "SELECT pg_advisory_xact_lock(hashtext($1))"
 	_, err := tx.ExecContext(ctx, query, id.String())
 	if err != nil {
-		logger(ctx).Error().Err(err).Msg(fmt.Sprintf("error acquiring lock id %s", id.String()))
-		return fmt.Errorf("failed to acquire lock id: %s %w", id.String(), err)
-	}
-	return nil
-}
-
-// release advisory lock for id
-func unlock(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
-	logger(ctx).Info().Msg(fmt.Sprintf("releasing lock %s", id.String()))
-	query := "SELECT pg_advisory_unlock(hashtext($1))"
-	_, err := tx.ExecContext(ctx, query, id.String())
-	if err != nil {
-		logger(ctx).Error().Err(err).Msg(fmt.Sprintf("error releasing lock id %s", id.String()))
-		return fmt.Errorf("failed to release lock id: %s %w", id.String(), err)
+		return fmt.Errorf("failed to acquire tx lock id %s: %w", id.String(), err)
 	}
 	return nil
 }

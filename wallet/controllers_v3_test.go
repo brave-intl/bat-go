@@ -103,7 +103,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// not before linked
@@ -132,10 +132,6 @@ func TestLinkBraveWalletV3(t *testing.T) {
 
 	// updates the user_deposit_destination
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "brave", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// release lock linkingID
-	mock.ExpectExec("^SELECT pg_advisory_unlock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -377,7 +373,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
 
 	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// this wallet has been linked prior, with the same linking id that the request is with
@@ -393,10 +389,6 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_unlock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -489,7 +481,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// not before linked
@@ -517,10 +509,6 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_unlock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
@@ -609,7 +597,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
 
 	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
@@ -624,10 +612,6 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
-
-	// acquire lock for linkingID
-	mock.ExpectExec("^SELECT pg_advisory_unlock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction
 	mock.ExpectCommit()
