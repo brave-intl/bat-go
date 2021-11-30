@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
@@ -237,6 +238,14 @@ func (c *SimpleHTTPClient) do(
 	} else {
 		logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
 	}
+
+	// the original request context will be cancelled as soon as the dialer closes the connection.
+	// this will setup a new context with the same values and a 90 second timeout
+	asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	scopedCtx := appctx.Wrap(req.Context(), asyncCtx)
+	defer asyncCancel()
+
+	req = req.WithContext(scopedCtx)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
