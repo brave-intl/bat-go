@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package promotion
@@ -2774,7 +2775,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 }
 
 func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
-	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total) values ($1, '[{"t":123}]', $2, $3, $4, $5);`, batchID, completed, erred, walletID, 1)
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":123}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
 	return err
 }
 
