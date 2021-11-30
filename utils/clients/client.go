@@ -230,20 +230,24 @@ func (c *SimpleHTTPClient) do(
 	}()
 
 	logger := log.Ctx(ctx)
+	debug, okDebug := ctx.Value(appctx.DebugLoggingCTXKey).(bool)
 
-	// dump out the full request, right before we submit it
-	requestDump, err := httputil.DumpRequestOut(req, true)
-	if err != nil {
-		logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
-	} else {
-		logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+	if okDebug && debug {
+		// if debug is set, then dump response
+		// dump out the full request, right before we submit it
+		requestDump, err := httputil.DumpRequestOut(req, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
+		} else {
+			logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+		}
 	}
 
-	// the original request context will be cancelled as soon as the dialer closes the connection.
-	// this will setup a new context with the same values and a 90 second timeout
-	asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 20*time.Second)
-	scopedCtx := appctx.Wrap(req.Context(), asyncCtx)
-	defer asyncCancel()
+	// put a timeout on the request context
+	reqCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	scopedCtx := appctx.Wrap(req.Context(), reqCtx)
+	// cancel the context when complete
+	defer cancel()
 
 	req = req.WithContext(scopedCtx)
 
@@ -253,11 +257,15 @@ func (c *SimpleHTTPClient) do(
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
-	} else {
-		logger.Debug().Str("type", "http.Response").Msg(string(dump))
+
+	if okDebug && debug {
+		// if debug is set, then dump response
+		dump, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
+		} else {
+			logger.Debug().Str("type", "http.Response").Msg(string(dump))
+		}
 	}
 
 	// // helpful if you want to read the body as it is
