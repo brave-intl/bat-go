@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
@@ -229,14 +230,26 @@ func (c *SimpleHTTPClient) do(
 	}()
 
 	logger := log.Ctx(ctx)
+	debug, okDebug := ctx.Value(appctx.DebugLoggingCTXKey).(bool)
 
-	// dump out the full request, right before we submit it
-	requestDump, err := httputil.DumpRequestOut(req, true)
-	if err != nil {
-		logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
-	} else {
-		logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+	if okDebug && debug {
+		// if debug is set, then dump response
+		// dump out the full request, right before we submit it
+		requestDump, err := httputil.DumpRequestOut(req, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
+		} else {
+			logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+		}
 	}
+
+	// put a timeout on the request context
+	reqCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	scopedCtx := appctx.Wrap(req.Context(), reqCtx)
+	// cancel the context when complete
+	defer cancel()
+
+	req = req.WithContext(scopedCtx)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -244,11 +257,15 @@ func (c *SimpleHTTPClient) do(
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
-	} else {
-		logger.Debug().Str("type", "http.Response").Msg(string(dump))
+
+	if okDebug && debug {
+		// if debug is set, then dump response
+		dump, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
+		} else {
+			logger.Debug().Str("type", "http.Response").Msg(string(dump))
+		}
 	}
 
 	// // helpful if you want to read the body as it is
