@@ -8,7 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.14.5
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
-	github.com/containerd/containerd v1.4.11 // indirect
+	github.com/containerd/containerd v1.4.12 // indirect
 	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.0
@@ -17,13 +17,14 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
-	github.com/hashicorp/vault v1.8.4
+	github.com/hashicorp/vault v1.8.5
 	github.com/hashicorp/vault/api v1.1.2-0.20210713235431-1fc8af4c041f
-	github.com/hashicorp/vault/sdk v0.2.2-0.20211005222123-93e045565e4a
+	github.com/hashicorp/vault/sdk v0.2.2-0.20211101151547-6654f4b913f9
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mssola/user_agent v0.5.3
+	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/zerolog v1.23.0
