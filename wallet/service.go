@@ -158,7 +158,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
 	return nil
 }
@@ -210,7 +210,7 @@ func (service *Service) LinkWallet(
 		probi           decimal.Decimal
 	)
 
-	tx, err := wallet.VerifyTransaction(transaction)
+	transactionInfo, err := wallet.VerifyTransaction(transaction)
 	if err != nil {
 		return handlers.WrapError(
 			errors.New("failed to verify transaction"), "transaction verification failure",
@@ -218,7 +218,7 @@ func (service *Service) LinkWallet(
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx, tx.Destination); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -242,18 +242,18 @@ func (service *Service) LinkWallet(
 			http.StatusForbidden)
 	}
 
-	probi = tx.Probi
+	probi = transactionInfo.Probi
 	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
 
 	// if this wallet is linking a deposit account do not submit a transaction
@@ -402,7 +402,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			// this will cause an error in the client prior to attempting draining
 			status = http.StatusTeapot
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}
 
 	return nil

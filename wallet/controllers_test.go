@@ -244,7 +244,7 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 
 	suite.CheckBalance(w5, bat1)
 	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
-	suite.CheckBalance(w4, bat1)
+	suite.CheckBalance(w5, bat1)
 
 	// 4 linking
 
@@ -444,7 +444,7 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	info := walletutils.Info{
 		ID:          uuid.NewV4().String(),
 		PublicKey:   publicKeyString,
-		Provider:    "uphold",
+		Provider:    provider,
 		AltCurrency: &bat,
 	}
 	w := &uphold.Wallet{

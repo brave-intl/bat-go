@@ -101,6 +101,11 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "brave").WillReturnError(sql.ErrNoRows)
 
@@ -367,6 +372,10 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
 
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// this wallet has been linked prior, with the same linking id that the request is with
 	// SHOULD SKIP THE linking limit checks
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
@@ -470,6 +479,11 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
 
@@ -581,6 +595,11 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
 
 	// this wallet has been linked prior, with the same linking id that the request is with

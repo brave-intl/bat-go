@@ -30,6 +30,12 @@ import (
 )
 
 var (
+	metricTxLockGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name:        "pg_tx_advisory_lock_gauge",
+			Help:        "Monitors number of tx advisory locks",
+			ConstLabels: prometheus.Labels{"service": "wallet"},
+		})
 	tooManyCardsCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name:        "too_many_linked_cards",
@@ -40,6 +46,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
+	prometheus.MustRegister(metricTxLockGauge)
 }
 
 // Datastore holds the interface for the wallet datastore
@@ -559,24 +566,28 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
-	sublogger := logger(ctx).With().
-		Str("wallet_id", ID).
-		Logger()
+	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
 
-	// create tx
-	tx, err := createTx(ctx, pg)
-	if err != nil || tx == nil {
-		sublogger.Error().Err(err).
-			Msg("error creating tx for wallet linking")
-		return fmt.Errorf("failed to create tx for wallet linking: %w", err)
+	ctx, tx, rollback, commit, err := getTx(ctx, pg)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("error getting tx")
+		return fmt.Errorf("error getting tx: %w", err)
 	}
-	// add tx to ctx for future
-	ctx = context.WithValue(ctx, appctx.DatabaseTransactionCTXKey, tx)
-	defer pg.RollbackTx(tx)
+	defer func() {
+		metricTxLockGauge.Dec()
+		rollback()
+	}()
+
+	metricTxLockGauge.Inc()
+	err = waitAndLockTx(ctx, tx, providerLinkingID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("error acquiring tx lock")
+		return fmt.Errorf("error acquiring tx lock: %w", err)
+	}
 
 	id, err := uuid.FromString(ID)
 	if err != nil {
-		return errorutils.Wrap(err, "invalid id")
+		return errorutils.Wrap(err, "error invalid id")
 	}
 
 	// connect custodian link (does the link limit checking in insert)
@@ -586,14 +597,17 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 		LinkingID: &providerLinkingID,
 	}, userDepositDestination); err != nil {
 		sublogger.Error().Err(err).
-			Msg("failed to insert new custodian link")
-		return fmt.Errorf("failed to insert new custodian link: %w", err)
+			Msg("error connect custodian wallet")
+		return fmt.Errorf("error connect custodian wallet: %w", err)
 	}
 
-	err = tx.Commit()
+	err = commit()
 	if err != nil {
-		return err
+		sublogger.Error().Err(err).
+			Msg("error committing tx")
+		return fmt.Errorf("error committing tx: %w", err)
 	}
+
 	return nil
 }
 
@@ -820,7 +834,6 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 	if err := commit(); err != nil {
 		return fmt.Errorf("failed to commit DisconnectCustodialWallet transaction: %w", err)
 	}
-
 	// done
 	return nil
 }
@@ -968,4 +981,14 @@ func createTx(ctx context.Context, pg *Postgres) (tx *sqlx.Tx, err error) {
 		return tx, fmt.Errorf("failed to create transaction: %w", err)
 	}
 	return tx, nil
+}
+
+// acquire tx advisory lock for id automatically released when tx ends
+func waitAndLockTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) error {
+	query := "SELECT pg_advisory_xact_lock(hashtext($1))"
+	_, err := tx.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return fmt.Errorf("failed to acquire tx lock id %s: %w", id.String(), err)
+	}
+	return nil
 }
