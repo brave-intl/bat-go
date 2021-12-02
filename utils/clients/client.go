@@ -299,20 +299,24 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
-		// if there was an error, read the response body
-		// and inject into error for later
-		b, err := ioutil.ReadAll(resp.Body)
-		rb := string(b)
-		resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+		// errors returned from c.do could be go errors or upstream api errors
+		if resp != nil {
+			// if there was an error from the service, read the response body
+			// and inject into error for later
+			b, err := ioutil.ReadAll(resp.Body)
+			rb := string(b)
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
-			Body            interface{}
-			ResponseHeaders interface{}
-		}{
-			// put response body/headers in the err state data
-			Body:            rb,
-			ResponseHeaders: resp.Header,
-		})
+			return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
+				Body            interface{}
+				ResponseHeaders interface{}
+			}{
+				// put response body/headers in the err state data
+				Body:            rb,
+				ResponseHeaders: resp.Header,
+			})
+		}
+		return resp, fmt.Errorf("failed c.do, no response body: %w", err)
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil
