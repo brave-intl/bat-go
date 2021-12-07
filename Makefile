@@ -19,6 +19,7 @@ buildcmd:
 mock:
 	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
+	mockgen -source=./promotion/service.go -destination=promotion/mockservice.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr

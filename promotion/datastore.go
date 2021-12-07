@@ -97,7 +97,8 @@ type Datastore interface {
 	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
-
+	// RunNextDrainRetryJob toggles failed drain jobs to be reprocessed if eligible
+	RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
 
@@ -1477,7 +1478,7 @@ limit 1`
 
 	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
 	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
-	if job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem" {
+	if job.ErrCode != nil && (*job.ErrCode == "cbr_dup_redeem" || *job.ErrCode == "retry-bypass-cbr") {
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
@@ -1528,6 +1529,35 @@ limit 1`
 	}
 
 	return attempted, nil
+}
+
+// RunNextDrainRetryJob - toggles failed drain jobs to be reprocessed if eligible
+func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			walletID, err := worker.FetchAdminAttestationWalletID(ctx)
+			if err != nil {
+				err = fmt.Errorf("drain retry job: failed to retrieve walletID: %w", err)
+				logging.FromContext(ctx).Error().Err(err).Msg("")
+				sentry.CaptureException(err)
+			} else {
+				query := `
+					UPDATE claim_drain
+					SET erred = FALSE, status = 'retry-bypass-cbr'
+					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'failure'
+				`
+				_, err = pg.ExecContext(ctx, query, walletID.String())
+				if err != nil {
+					err = fmt.Errorf("drain retry job: failed to update drain job for walletID %s: %w ", walletID, err)
+					logging.FromContext(ctx).Error().Err(err).Msg("")
+					sentry.CaptureException(err)
+				}
+			}
+		}
+	}
 }
 
 // MintDrainJob - Job structure for the mint_drain queue
