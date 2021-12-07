@@ -1167,7 +1167,7 @@ func (suite *ControllersTestSuite) TestPostReportWalletEvent() {
 	suite.Require().JSONEq(string(serializedExpected2), string(serializedActual2))
 }
 
-func (suite *ControllersTestSuite) TestClaimCompatability() {
+func (suite *ControllersTestSuite) TestClaimCompatibility() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
 	pg, _, err := NewPostgres()

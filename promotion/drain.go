@@ -219,6 +219,11 @@ type DrainWorker interface {
 	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error)
 }
 
+// DrainRetryWorker - reads walletID
+type DrainRetryWorker interface {
+	FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error)
+}
+
 // MintWorker mint worker describes what a mint worker is able to do, mint grants
 type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
@@ -287,6 +292,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			Msg("RedeemAndTransferFunds: no deposit provider destination")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
+
 	if wallet.UserDepositAccountProvider == nil {
 		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider")
 		return nil, errorutils.ErrNoDepositProviderDestination
@@ -313,6 +319,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			return nil, errWalletNotReputable
 		}
 	}
+
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
@@ -609,4 +616,40 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		return errors.New("limit of draining 4 wallets to brave wallet exceeded")
 	}
 	return nil
+}
+
+// FetchAdminAttestationWalletID - retrieves walletID from topic
+func (s *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
+	message, err := s.kafkaAdminAttestationReader.ReadMessage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
+	}
+
+	codec, ok := s.codecs[adminAttestationTopic]
+	if !ok {
+		return nil, fmt.Errorf("read message: could not find codec %s", adminAttestationTopic)
+	}
+
+	native, _, err := codec.NativeFromBinary(message.Value)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+	}
+
+	textual, err := codec.TextualFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+	}
+
+	var adminAttestationEvent AdminAttestationEvent
+	err = json.Unmarshal(textual, &adminAttestationEvent)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+	}
+
+	walletID := uuid.FromStringOrNil(adminAttestationEvent.WalletID)
+	if walletID == uuid.Nil {
+		return nil, fmt.Errorf("read message: error could not decode walletID %s", adminAttestationEvent.WalletID)
+	}
+
+	return &walletID, nil
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -919,6 +920,46 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	suite.Require().NoError(err)
 
 	// FIXME add test for successful drain job
+}
+
+func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	walletID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID.String(), true, "reputation-failed", "failure",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	drainRetryWorker := NewMockDrainRetryWorker(ctrl)
+	drainRetryWorker.EXPECT().
+		FetchAdminAttestationWalletID(gomock.Eq(ctx)).
+		Return(&walletID, nil).
+		AnyTimes()
+
+	go func(ctx2 context.Context) {
+		pg.RunNextDrainRetryJob(ctx2, drainRetryWorker)
+	}(ctx)
+
+	time.Sleep(2 * time.Millisecond)
+	cancel()
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Equal("reputation-failed", *drainJob.ErrCode)
+	suite.Require().Equal("retry-bypass-cbr", *drainJob.Status)
 }
 
 func TestPostgresTestSuite(t *testing.T) {
