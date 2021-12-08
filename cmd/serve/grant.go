@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -273,14 +274,17 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// add runnable jobs:
 	jobs = append(jobs, paymentService.Jobs()...)
 
+	// initialize payment service keys for credentials to use
+	payment.InitEncryptionKeys()
+
 	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
+	r.Mount("/v2/credentials", payment.CredentialV2Router(paymentService))
 	r.Mount("/v1/orders", payment.Router(paymentService))
 	// for payment webhook integrations
 	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
 	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		payment.InitEncryptionKeys()
 		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
 		if err != nil {
 			sentry.CaptureException(err)
@@ -438,6 +442,16 @@ func GrantServer(
 				go jobWorker(ctx, job.Func, job.Cadence)
 			}
 		}
+	}
+	if viper.GetString("environment") != "local" &&
+		viper.GetString("environment") != "development" {
+		// run gemini balance watch so we have balance info in prometheus
+		go func() {
+			// no need to panic here, log the error and move on with serving
+			if err := gemini.WatchGeminiBalance(ctx); err != nil {
+				logger.Error().Err(err).Msg("error launching gemini balance watch")
+			}
+		}()
 	}
 
 	go func() {

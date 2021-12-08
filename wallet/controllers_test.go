@@ -63,7 +63,7 @@ func (suite *WalletControllersTestSuite) TearDownTest() {
 }
 
 func (suite *WalletControllersTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "wallet_custodian"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -124,6 +124,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -145,11 +146,110 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	rctx.URLParams.Add("paymentID", w1.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, pg))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr = httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
 	expectingForbidden := fmt.Sprintf("status is expected to match %d: %s", http.StatusForbidden, rr.Body.String())
 	suite.Require().Equal(http.StatusForbidden, rr.Code, expectingForbidden)
+}
+
+func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres connection")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	w1 := suite.NewWallet(service, "uphold")
+	w2 := suite.NewWallet(service, "uphold")
+	w3 := suite.NewWallet(service, "uphold")
+	w4 := suite.NewWallet(service, "uphold")
+	w5 := suite.NewWallet(service, "uphold")
+	bat1 := decimal.NewFromFloat(1)
+	bat2 := decimal.NewFromFloat(2)
+
+	suite.FundWallet(w1, bat1)
+	suite.FundWallet(w2, bat1)
+	suite.FundWallet(w3, bat1)
+	suite.FundWallet(w4, bat1)
+	suite.FundWallet(w5, bat1)
+
+	anonCard1ID, err := w1.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
+
+	anonCard2ID, err := w2.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
+
+	anonCard3ID, err := w3.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
+
+	anonCard4ID, err := w4.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard4UUID := uuid.Must(uuid.FromString(anonCard4ID))
+
+	anonCard5ID, err := w5.CreateCardAddress("anonymous")
+	suite.Require().NoError(err, "create anon card must not fail")
+	anonCard5UUID := uuid.Must(uuid.FromString(anonCard5ID))
+
+	w1ProviderID := w1.GetWalletInfo().ProviderID
+	w2ProviderID := w2.GetWalletInfo().ProviderID
+	w3ProviderID := w3.GetWalletInfo().ProviderID
+	w4ProviderID := w4.GetWalletInfo().ProviderID
+	w5ProviderID := w5.GetWalletInfo().ProviderID
+
+	zero := decimal.NewFromFloat(0)
+
+	suite.CheckBalance(w1, bat1)
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	// attempt an unlink
+	suite.unlinkCardV3(service, w1, http.StatusOK)
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, zero, &anonCard1UUID)
+	suite.CheckBalance(w2, bat1)
+
+	// 1 linking
+
+	suite.CheckBalance(w2, bat1)
+	suite.claimCardV3(service, w2, w1ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w2, zero)
+
+	// 1 linking
+
+	suite.CheckBalance(w3, bat2)
+	suite.claimCardV3(service, w3, w2ProviderID, http.StatusOK, bat1, &anonCard3UUID)
+	suite.CheckBalance(w3, bat1)
+
+	// 2 linking
+
+	suite.CheckBalance(w3, bat1)
+	suite.claimCardV3(service, w3, w1ProviderID, http.StatusOK, zero, &anonCard2UUID)
+	suite.CheckBalance(w3, bat1)
+
+	// 2 linking
+
+	suite.CheckBalance(w4, bat1)
+	suite.claimCardV3(service, w4, w4ProviderID, http.StatusOK, zero, &anonCard4UUID)
+	suite.CheckBalance(w4, bat1)
+
+	// 3 linking
+
+	suite.CheckBalance(w5, bat1)
+	suite.claimCardV3(service, w5, w5ProviderID, http.StatusOK, zero, &anonCard5UUID)
+	suite.CheckBalance(w5, bat1)
+
+	// 4 linking
+
+	// reconnecting original wallet should fail
+	suite.claimCardV3(service, w1, w3ProviderID, http.StatusConflict, bat1, &anonCard3UUID)
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
@@ -218,6 +318,39 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.CheckBalance(w3, bat1)
 }
 
+func (suite *WalletControllersTestSuite) unlinkCardV3(
+	service *Service,
+	w *uphold.Wallet,
+	status int,
+) {
+	info := w.GetWalletInfo()
+	// V3 Handler
+	handler := UnlinkWalletV3(service)
+
+	req, err := http.NewRequest("DELETE", "/v3/wallet/{custodian}/{payment_id}/unlink", nil)
+	suite.Require().NoError(err, "wallet claim unlink request creation failed")
+
+	rctx := chi.NewRouteContext()
+	fmt.Printf("info: %+v\n", info)
+	fmt.Printf("info id: %+v\n", info.ID)
+	rctx.URLParams.Add("payment_id", info.ID)
+	rctx.URLParams.Add("custodian", "uphold")
+	ctx := req.Context()
+	// add signature key id to context
+	ctx = middleware.AddKeyID(ctx, info.ID)
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-PT1M")
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	handlers.AppHandler(handler).ServeHTTP(rr, req)
+	suite.Require().Equal(status, rr.Code, fmt.Sprintf("status is expected to match %d: %s", status, rr.Body.String()))
+	linked, err := service.Datastore.GetWallet(context.Background(), uuid.Must(uuid.FromString(w.ID)))
+	suite.Require().NoError(err, "retrieving the wallet did not cause an error")
+	suite.Require().Equal(linked.UserDepositDestination, "", "unlink is supposed to wipe out the deposit dest")
+}
+
 func (suite *WalletControllersTestSuite) disconnectCardV3(
 	service *Service,
 	w *uphold.Wallet,
@@ -284,6 +417,7 @@ func (suite *WalletControllersTestSuite) claimCardV3(
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", info.ID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	rr := httptest.NewRecorder()
 	handlers.AppHandler(handler).ServeHTTP(rr, req)
@@ -310,7 +444,7 @@ func (suite *WalletControllersTestSuite) NewWallet(service *Service, provider st
 	info := walletutils.Info{
 		ID:          uuid.NewV4().String(),
 		PublicKey:   publicKeyString,
-		Provider:    "uphold",
+		Provider:    provider,
 		AltCurrency: &bat,
 	}
 	w := &uphold.Wallet{
@@ -453,6 +587,7 @@ func (suite *WalletControllersTestSuite) getWallet(
 
 	req = req.WithContext(context.WithValue(req.Context(), appctx.DatastoreCTXKey, service.Datastore))
 	req = req.WithContext(context.WithValue(req.Context(), appctx.RODatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("paymentID", paymentId.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -482,6 +617,7 @@ func (suite *WalletControllersTestSuite) createBraveWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(
@@ -519,6 +655,7 @@ func (suite *WalletControllersTestSuite) createUpholdWalletV3(
 
 	// setup context
 	req = req.WithContext(context.WithValue(context.Background(), appctx.DatastoreCTXKey, service.Datastore))
+	req = req.WithContext(context.WithValue(req.Context(), appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"))
 
 	if shouldSign {
 		suite.SignRequest(

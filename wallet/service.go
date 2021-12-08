@@ -158,7 +158,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
 	return nil
 }
@@ -210,13 +210,15 @@ func (service *Service) LinkWallet(
 		probi           decimal.Decimal
 	)
 
-	tx, err := wallet.VerifyTransaction(transaction)
+	transactionInfo, err := wallet.VerifyTransaction(transaction)
 	if err != nil {
-		return handlers.WrapError(errors.New("failed to verify transaction"), "failed to verify transaction", http.StatusForbidden)
+		return handlers.WrapError(
+			errors.New("failed to verify transaction"), "transaction verification failure",
+			http.StatusForbidden)
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx, tx.Destination); err != nil {
+	if uID, ok, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -224,32 +226,34 @@ func (service *Service) LinkWallet(
 		)
 	} else if !ok {
 		// fail
-		return &handlers.AppError{
-			Cause: errors.New("user kyc did not pass"),
-			Code:  http.StatusForbidden,
-		}
+		return handlers.WrapError(
+			errors.New("user kyc did not pass"),
+			"KYC required",
+			http.StatusForbidden)
 	} else {
 		userID = uID
 	}
 
 	// check kyc user id validity
 	if userID == "" {
-		err := errors.New("user id not provided")
-		return handlers.WrapError(err, "unable to link wallet", http.StatusBadRequest)
+		return handlers.WrapError(
+			errors.New("user id not provided"),
+			"KYC required",
+			http.StatusForbidden)
 	}
 
-	probi = tx.Probi
+	probi = transactionInfo.Probi
 	depositProvider = "uphold"
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, tx.Destination, providerLinkingID, anonymousAddress, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
 
 	// if this wallet is linking a deposit account do not submit a transaction
@@ -351,9 +355,8 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
 			middleware.InstrumentHandlerFunc("UnlinkWallet", UnlinkWalletV3(s))).ServeHTTP)
 
-		// linking info api is okay to expose publically
-		r.Get("/linking-info",
-			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s)).ServeHTTP)
+		r.Get("/linking-info", middleware.SimpleTokenAuthorizedOnly(
+			middleware.InstrumentHandlerFunc("GetLinkingInfo", GetLinkingInfoV3(s))).ServeHTTP)
 
 		// get wallet routes
 		r.Get("/{paymentID}", middleware.InstrumentHandlerFunc(
@@ -399,7 +402,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			// this will cause an error in the client prior to attempting draining
 			status = http.StatusTeapot
 		}
-		return handlers.WrapError(err, "unable to link wallets", status)
+		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}
 
 	return nil

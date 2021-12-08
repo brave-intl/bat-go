@@ -1306,8 +1306,8 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 
 	if codedErr == nil {
 		statement := `
-		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination)
-		values ($1, $2, $3, $4, $5, $6)
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, updated_at)
+		values ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
 		returning *`
 		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
 		if err != nil {
@@ -1318,8 +1318,8 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 
 		// insert errored claim drain item
 		statement := `
-		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode)
-		values ($1, $2, $3, $4, $5, $6, true, $7)
+		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, erred, errcode, updated_at)
+		values ($1, $2, $3, $4, $5, $6, true, $7, CURRENT_TIMESTAMP)
 		returning *`
 		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
 			drainPollID, claimID, &wallet.UserDepositDestination, code)

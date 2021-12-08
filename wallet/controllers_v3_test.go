@@ -101,6 +101,11 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "brave").WillReturnError(sql.ErrNoRows)
 
@@ -113,10 +118,14 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
+
+	// get last un linking
+	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
+	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	// insert into wallet custodian
 	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
@@ -130,6 +139,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -175,6 +185,7 @@ func TestCreateBraveWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	// setup keypair
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
@@ -226,6 +237,7 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -268,6 +280,7 @@ func TestGetWalletV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -359,6 +372,10 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
 
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// this wallet has been linked prior, with the same linking id that the request is with
 	// SHOULD SKIP THE linking limit checks
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
@@ -379,6 +396,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -445,6 +463,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	mockGeminiClient.EXPECT().ValidateAccount(
 		gomock.Any(),
@@ -460,6 +479,11 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	// not before linked
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnError(sql.ErrNoRows)
 
@@ -472,7 +496,10 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectQuery("^select wc1.custodian, wc1.linking_id from wallet_custodian (.+)").WithArgs(linkingID).WillReturnRows(custLinks)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID, 4).WillReturnRows(max)
 	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(open)
-	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(uuid.NewV4().String()))
+	mock.ExpectQuery("^select (.+)").WithArgs(linkingID).WillReturnRows(sqlmock.NewRows([]string{"wallet_id"}).AddRow(uuid.NewV4().String()))
+	// get last un linking
+	var lastUnlink = sqlmock.NewRows([]string{"last_unlinking"}).AddRow(time.Now())
+	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	clRows := sqlmock.NewRows([]string{"created_at", "linked_at"}).
 		AddRow(time.Now(), time.Now())
@@ -551,6 +578,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputationClient)
 	ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, mockGeminiClient)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	mockGeminiClient.EXPECT().ValidateAccount(
 		gomock.Any(),
@@ -567,6 +595,11 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	// make sure old linking id matches new one for same custodian
 	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
+
+	// acquire lock for linkingID
+	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
 	mock.ExpectQuery("^select linking_id from (.+)").WithArgs(idFrom, "gemini").WillReturnRows(linkingIDRows)
 
 	// this wallet has been linked prior, with the same linking id that the request is with
@@ -646,6 +679,7 @@ func TestDisconnectCustodianLinkV3(t *testing.T) {
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
 	ctx = context.WithValue(ctx, appctx.RODatastoreCTXKey, roDatastore)
+	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
 	r = r.WithContext(ctx)
 
@@ -706,7 +740,7 @@ func TestUnlinkWalletV3(t *testing.T) {
 	mock.ExpectExec("^update wallet_custodian set unlinked_at=now(.+)").WithArgs(idFrom, "uphold").WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// removes the link to the user_deposit_destination record in wallets
-	mock.ExpectExec("^update wallets set user_deposit_destination='',user_account_deposit_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("^update wallets set user_deposit_destination='',user_deposit_account_provider=null(.+)").WithArgs(idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// commit transaction because we are done disconnecting
 	mock.ExpectCommit()

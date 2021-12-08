@@ -132,21 +132,21 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		if err != nil || claim == nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
 			// the case where there this wallet never got this promotion
-			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errMismatchedWallet)
+			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errMismatchedWallet)
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
 			// the case where there is an invalid number of suggestions
-			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionCount)
+			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionCount)
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
 			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
 			// the case where there the amount is higher than expected
-			return nil, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionAmount)
+			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionAmount)
 		}
 
 		// Skip already drained promotions for idempotency

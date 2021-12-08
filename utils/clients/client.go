@@ -15,6 +15,7 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/getsentry/sentry-go"
@@ -26,6 +27,7 @@ import (
 var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
 	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
+	regexp.MustCompile(`(?i)signature: .+\n`):       []byte("Signature: <sig>\n"),
 }
 
 func redactSensitiveHeaders(corpus []byte) []byte {
@@ -228,13 +230,26 @@ func (c *SimpleHTTPClient) do(
 	}()
 
 	logger := log.Ctx(ctx)
+	debug, okDebug := ctx.Value(appctx.DebugLoggingCTXKey).(bool)
 
-	// dump out the full request, right before we submit it
-	requestDump, err := httputil.DumpRequestOut(req, true)
-	if err != nil {
-		panic(err)
+	if okDebug && debug {
+		// if debug is set, then dump response
+		// dump out the full request, right before we submit it
+		requestDump, err := httputil.DumpRequestOut(req, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
+		} else {
+			logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+		}
 	}
-	logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+
+	// put a timeout on the request context
+	reqCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	scopedCtx := appctx.Wrap(req.Context(), reqCtx)
+	// cancel the context when complete
+	defer cancel()
+
+	req = req.WithContext(scopedCtx)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -242,12 +257,16 @@ func (c *SimpleHTTPClient) do(
 	}
 	status := resp.StatusCode
 	defer closers.Panic(resp.Body)
-	dump, err := httputil.DumpResponse(resp, true)
-	if err != nil {
-		panic(err)
-	}
 
-	logger.Debug().Str("type", "http.Response").Msg(string(dump))
+	if okDebug && debug {
+		// if debug is set, then dump response
+		dump, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			logger.Error().Err(err).Str("type", "http.Response").Msg("failed to dump response body")
+		} else {
+			logger.Debug().Str("type", "http.Response").Msg(string(dump))
+		}
+	}
 
 	// // helpful if you want to read the body as it is
 	// bodyBytes, _ := requestutils.Read(resp.Body)
@@ -280,20 +299,24 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		header = resp.Header
 	}
 	if err != nil {
-		// if there was an error, read the response body
-		// and inject into error for later
-		b, err := ioutil.ReadAll(resp.Body)
-		rb := string(b)
-		resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+		// errors returned from c.do could be go errors or upstream api errors
+		if resp != nil {
+			// if there was an error from the service, read the response body
+			// and inject into error for later
+			b, err := ioutil.ReadAll(resp.Body)
+			rb := string(b)
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-		return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
-			Body            interface{}
-			ResponseHeaders interface{}
-		}{
-			// put response body/headers in the err state data
-			Body:            rb,
-			ResponseHeaders: resp.Header,
-		})
+			return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
+				Body            interface{}
+				ResponseHeaders interface{}
+			}{
+				// put response body/headers in the err state data
+				Body:            rb,
+				ResponseHeaders: resp.Header,
+			})
+		}
+		return resp, fmt.Errorf("failed c.do, no response body: %w", err)
 	}
 	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil
