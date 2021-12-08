@@ -25,6 +25,7 @@ import (
 // regular expression mapped to the replacement
 var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
+	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Bearer <token>\n"),
 	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
 	regexp.MustCompile(`(?i)signature: .+\n`):       []byte("Signature: <sig>\n"),
 	regexp.MustCompile(`(?i)x_cg_pro_api_key=.+\n`): []byte("x_cg_pro_api_key:<key>\n"),
