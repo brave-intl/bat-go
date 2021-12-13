@@ -330,8 +330,8 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	)
 
 	for _, v := range transfers {
-		totalF64, _ := v.Amount.Float64()
-		totalJPYTransfer = totalJPYTransfer.Add(v.Amount.Mul(quote.Rate))
+		totalF64, _ := v.Total.Float64()
+		totalJPYTransfer = totalJPYTransfer.Add(v.Total.Mul(quote.Rate))
 
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()

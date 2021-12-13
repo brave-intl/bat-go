@@ -270,7 +270,7 @@ func (pg *Postgres) InsertClobberedClaims(ctx context.Context, ids []uuid.UUID, 
 // DrainTransfer info about the drains
 type DrainTransfer struct {
 	ID        *uuid.UUID      `db:"transaction_id" json:"transaction_id"`
-	Amount    decimal.Decimal `db:"amount" json:"amount"`
+	Total     decimal.Decimal `db:"total" json:"total"`
 	DepositID *string         `db:"deposit_destination" json:"deposit_destination"`
 }
 
@@ -957,7 +957,9 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	}
 	defer pg.RollbackTx(tx)
 
-	// until nitro payments integration, this is just for bitflyer
+	// first get a lock on the batch id,
+	// only for batches that are all "pending" and have transaction_ids
+
 	statement := `
 		select
 			cd.batch_id
@@ -970,23 +972,24 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 			w.user_deposit_account_provider = 'bitflyer'
 		group by
 			cd.batch_id
-		having
-			bool_and(cd.transaction_id is not null)=true
-		for update skip locked
-		limit 1;
+		having bool_and(transaction_id is not null) = true
+		limit 1
 `
-	var batchID *uuid.UUID
+	var batchID = new(uuid.UUID)
 
-	err = tx.Select(&batchID, statement)
+	err = tx.Get(batchID, statement)
 	if err != nil {
 		return attempted, err
 	}
 
-	if batchID == nil {
-		return attempted, nil
-	}
-
 	attempted = true
+
+	// put a lock on the batch so it is not picked up
+	query := "SELECT pg_advisory_xact_lock(hashtext($1))"
+	_, err = tx.ExecContext(ctx, query, batchID.String())
+	if err != nil {
+		return false, fmt.Errorf("failed to acquire tx lock for batch id %s: %w", batchID.String(), err)
+	}
 
 	// perform submit against payments API
 	err = worker.SubmitBatchTransfer(ctx, batchID)
@@ -1001,6 +1004,9 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 				status = $2
 			where batch_id = $3`, errCode, status, batchID)
 		if err != nil {
+			return attempted, err
+		}
+		if err := tx.Commit(); err != nil {
 			return attempted, err
 		}
 		// inform sentry about this error

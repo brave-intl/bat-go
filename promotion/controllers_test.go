@@ -2361,7 +2361,12 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	<-time.After(2 * time.Second)
+	<-service.drainChannel
+
+	// the runnextbatchpayments job needs to kick in before checking the drain status
+	attempted, err := service.RunNextBatchPaymentsJob(ctx)
+	suite.Require().True(attempted)
+	suite.Require().NoError(err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
