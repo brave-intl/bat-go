@@ -1362,6 +1362,9 @@ func errToDrainCode(err error) (string, string, bool) {
 		if c, ok := eb.Data().(errorutils.Codified); ok {
 			errCode, retriable = c.DrainCode()
 			return status, strings.ToLower(errCode), retriable
+		} else if c, ok := eb.Data().(errorutils.DrainCodified); ok {
+			errCode, retriable = c.DrainCode()
+			return status, strings.ToLower(errCode), retriable
 		}
 	}
 
