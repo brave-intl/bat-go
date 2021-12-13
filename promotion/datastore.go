@@ -714,7 +714,7 @@ func (pg *Postgres) MarkBatchTransferSubmitted(ctx context.Context, batchID *uui
 	if _, err := tx.Exec(stmt, batchID); err == nil {
 		return tx.Commit()
 	}
-	return nil
+	return fmt.Errorf("failed to mark batch transfer submitted: %w", err)
 }
 
 // GetCustodianDrainInfo Get the status of the custodian drain info
@@ -1010,7 +1010,7 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 			return attempted, err
 		}
 		// inform sentry about this error
-		sentry.CaptureException(err)
+		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
 		return attempted, err
 	}
 
