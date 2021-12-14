@@ -184,13 +184,13 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 
 	// start service
 	go func(ctx context.Context) {
-		service, ctx := suite.createService()
+		service, _ := InitService(ctx, pg, nil, nil)
 		service.RunNextDrainRetryJob(ctx)
 	}(ctx)
 
 	// assert drain job has been updated
 	index := 0
-	end := time.Now().Add(30 * time.Second) // timeout
+	end := time.Now().Add(60 * time.Second) // max timeout
 	var drainJob DrainJob
 	for {
 		if time.Now().After(end) {

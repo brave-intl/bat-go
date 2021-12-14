@@ -26,6 +26,7 @@ services:
     environment:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
+      - DRAIN_RETRY_JOB_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -48,6 +49,7 @@ services:
       - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_REQUIRED_ACKS=1
+      - KAFKA_CONSUMER_GROUP_PROMOTIONS=grant-bat-promotions-local
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
