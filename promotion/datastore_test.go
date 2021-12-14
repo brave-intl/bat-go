@@ -927,6 +927,8 @@ func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 	suite.Require().NoError(err)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	walletID := uuid.NewV4()
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
@@ -949,8 +951,7 @@ func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 		pg.RunNextDrainRetryJob(ctx2, drainRetryWorker)
 	}(ctx)
 
-	time.Sleep(2 * time.Millisecond)
-	cancel()
+	time.Sleep(1 * time.Millisecond)
 
 	var drainJob DrainJob
 	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
