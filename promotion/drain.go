@@ -224,6 +224,14 @@ type MintWorker interface {
 	MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error
 }
 
+// BatchTransferWorker - Worker that has the ability to "submit" a batch of transactions with payments service.
+// The DrainWorker tasks employ the payments GRPC client "prepare" method, and provide the "batch id" in the
+// metadata of the grpc request.  Payments GRPC server will append all TXs in a batch to a single transfer job.
+// The SubmitBatchTransfer will notice claim_drain batches that are complete, and perform a submit to the Payments API
+type BatchTransferWorker interface {
+	SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error
+}
+
 // drainClaimErred - a codified err type for draind
 type drainClaimErred struct {
 	error
@@ -256,6 +264,141 @@ type bitflyerOverTransferLimit struct{}
 
 func (botl *bitflyerOverTransferLimit) DrainCode() (string, bool) {
 	return "bf_transfer_limit", true
+}
+
+// SubmitBatchTransfer after validating that all the credential bindings
+func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error {
+	// setup a logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		// no logger, setup
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	// TODO: when nitro enablement we will perform tx submissions here
+	// but for now we will perform the bf client bulk upload
+	/*
+		// use paymentsClient to "prepare" transfer with batch id
+		_, err = service.paymentsClient.Submit(ctx, &paymentspb.SubmitRequest{
+			BatchMeta: &paymentspb.BatchMeta{
+				BatchId: batchID.String(),
+			},
+		})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to call submit to payments")
+			return fmt.Errorf("failed to call submit for payments transfer: %w", err)
+		}
+	*/
+	// for now we will only be batching bitflyer txs
+
+	// get quote, make sure we dont go over 100K JPY
+	quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+	if err != nil {
+		// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+		var bfe *clients.BitflyerError
+		if errors.As(err, &bfe) {
+			if bfe.HTTPStatusCode == http.StatusUnauthorized {
+				// try to refresh the token and go again
+				logger.Warn().Msg("attempting to refresh the bf token")
+				_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+				if err != nil {
+					return fmt.Errorf("failed to get token from bf: %w", err)
+				}
+				// redo the request after token refresh
+				quote, err = service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
+				if err != nil {
+					return fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+				}
+			}
+		} else {
+			// unknown error
+			return fmt.Errorf("failed to fetch bitflyer quote: %w", err)
+		}
+	}
+
+	JPYLimit := decimal.NewFromFloat(100000)
+	var overLimitErr error
+
+	// get all transactions associated with batch id
+	transfers, err := service.Datastore.GetDrainsByBatchID(ctx, batchID)
+	if err != nil {
+		return fmt.Errorf("failed to get transactions for batch: %w", err)
+	}
+	var (
+		withdraws        = []bitflyer.WithdrawToDepositIDPayload{}
+		totalJPYTransfer = decimal.Zero
+	)
+
+	for _, v := range transfers {
+		totalF64, _ := v.Total.Float64()
+		totalJPYTransfer = totalJPYTransfer.Add(v.Total.Mul(quote.Rate))
+
+		if totalJPYTransfer.GreaterThan(JPYLimit) {
+			over := JPYLimit.Sub(totalJPYTransfer).String()
+			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
+			overLimitErr = errorutils.New(
+				fmt.Errorf(
+					"over custodian transfer limit - JPY by %s; BAT_JPY rate: %v; BAT: %v",
+					over, quote.Rate, totalJPYTransfer),
+				"over custodian transfer limit",
+				new(bitflyerOverTransferLimit))
+		}
+
+		withdraws = append(withdraws, bitflyer.WithdrawToDepositIDPayload{
+			CurrencyCode: "BAT",
+			Amount:       totalF64,
+			DepositID:    *v.DepositID,
+			TransferID:   v.ID.String(),
+			SourceFrom:   "userdrain",
+		})
+	}
+
+	// create a WithdrawToDepositIDBulkPayload
+	payload := bitflyer.WithdrawToDepositIDBulkPayload{
+		Withdrawals: withdraws,
+	}
+	// upload
+	_, err = service.bfClient.UploadBulkPayout(ctx, payload)
+	if err != nil {
+		// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+		var bfe *clients.BitflyerError
+		if errors.As(err, &bfe) {
+			if bfe.HTTPStatusCode == http.StatusUnauthorized {
+				// try to refresh the token and go again
+				logger.Warn().Msg("attempting to refresh the bf token")
+				_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+				if err != nil {
+					return fmt.Errorf("failed to get token from bf: %w", err)
+				}
+				// redo the request after token refresh
+				_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+				if err != nil {
+					return fmt.Errorf("failed to transfer funds: %w", err)
+				}
+			}
+
+			for _, v := range bfe.ErrorIDs {
+				// non-retry errors, report to sentry
+				if v == "NO_INV" {
+					logger.Error().Err(bfe).Msg("no bitflyer inventory")
+					sentry.CaptureException(bfe)
+				}
+			}
+			// runner has ability to read ErrorIDs from bfe and code it
+			return bfe
+		}
+		return fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if err := service.Datastore.MarkBatchTransferSubmitted(ctx, batchID); err != nil {
+		return err
+	}
+
+	if overLimitErr != nil {
+		return overLimitErr
+	}
+
+	return nil
 }
 
 // RedeemAndTransferFunds after validating that all the credential bindings
@@ -313,6 +456,41 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			return nil, errWalletNotReputable
 		}
 	}
+
+	/* TODO: for nitro enablement we will use the prepare api to send individual txs on a batch
+
+	// use paymentsClient to "prepare" transfer with batch id
+	resp, err := service.paymentsClient.Prepare(ctx, &paymentspb.PrepareRequest{
+		BatchMeta: &paymentspb.BatchMeta{
+			// TODO: get the batch id in here
+		},
+		State:     paymentspb.State_PREPARED,
+		Custodian: paymentspb.Custodian(paymentspb.Custodian_value[strings.ToUpper(*wallet.UserDepositAccountProvider)]),
+		BatchTxs: []*pb.Transaction{
+			{
+				Destination: wallet.UserDepositDestination,
+				Amount:      total.String(),
+				Currency:    "BAT",
+			},
+		},
+	})
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to make connection to payments")
+		return nil, fmt.Errorf("failed to call prepare for payments transfer: %w", err)
+	}
+
+	tx := new(walletutils.TransactionInfo)
+
+	tx.ID = resp.DocumentId
+	tx.Destination = wallet.UserDepositDestination
+	tx.DestAmount = total
+
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
+	}
+	return tx, nil
+	*/
+
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
 		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
@@ -324,117 +502,9 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		}
 		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "bitflyer" {
-
-		transferID := uuid.NewV4().String()
-
-		totalF64, _ := total.Float64()
-
-		// get quote, make sure we dont go over 100K JPY
-		quote, err := service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
-		if err != nil {
-			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
-			var bfe *clients.BitflyerError
-			if errors.As(err, &bfe) {
-				if bfe.HTTPStatusCode == http.StatusUnauthorized {
-					// try to refresh the token and go again
-					logger.Warn().Msg("attempting to refresh the bf token")
-					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
-					if err != nil {
-						return nil, fmt.Errorf("failed to get token from bf: %w", err)
-					}
-					// redo the request after token refresh
-					quote, err = service.bfClient.FetchQuote(ctx, "BAT_JPY", false)
-					if err != nil {
-						return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
-					}
-				}
-			} else {
-				// unknown error
-				return nil, fmt.Errorf("failed to fetch bitflyer quote: %w", err)
-			}
-		}
-
-		JPYLimit := decimal.NewFromFloat(100000)
-		var overLimitErr error
-
-		totalJPYTransfer := total.Mul(quote.Rate)
-
-		if totalJPYTransfer.GreaterThan(JPYLimit) {
-			over := JPYLimit.Sub(totalJPYTransfer).String()
-			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
-			overLimitErr = errorutils.New(
-				fmt.Errorf(
-					"over custodian transfer limit - JPY by %s; BAT_JPY rate: %v; BAT: %v",
-					over, quote.Rate, total),
-				"over custodian transfer limit",
-				new(bitflyerOverTransferLimit))
-		}
-
-		tx := new(walletutils.TransactionInfo)
-
-		tx.ID = transferID
-		tx.Destination = wallet.UserDepositDestination
-		tx.DestAmount = total
-
-		// create a WithdrawToDepositIDBulkPayload
-		payload := bitflyer.WithdrawToDepositIDBulkPayload{
-			Withdrawals: []bitflyer.WithdrawToDepositIDPayload{
-				{
-					CurrencyCode: "BAT",
-					Amount:       totalF64,
-					DepositID:    wallet.UserDepositDestination,
-					TransferID:   transferID,
-					SourceFrom:   "userdrain",
-				},
-			},
-		}
-		// upload
-		_, err = service.bfClient.UploadBulkPayout(ctx, payload)
-		if err != nil {
-			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
-			var bfe *clients.BitflyerError
-			if errors.As(err, &bfe) {
-				if bfe.HTTPStatusCode == http.StatusUnauthorized {
-					// try to refresh the token and go again
-					logger.Warn().Msg("attempting to refresh the bf token")
-					_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
-					if err != nil {
-						return nil, fmt.Errorf("failed to get token from bf: %w", err)
-					}
-					// redo the request after token refresh
-					_, err := service.bfClient.UploadBulkPayout(ctx, payload)
-					if err != nil {
-						return nil, fmt.Errorf("failed to transfer funds: %w", err)
-					}
-				}
-
-				for _, v := range bfe.ErrorIDs {
-					// non-retry errors, report to sentry
-					if v == "NO_INV" {
-						logger.Error().Err(bfe).Msg("no bitflyer inventory")
-						sentry.CaptureException(bfe)
-					}
-				}
-				// runner has ability to read ErrorIDs from bfe and code it
-				return nil, bfe
-			}
-			return nil, fmt.Errorf("failed to transfer funds: %w", err)
-		}
-		// check if this
-
-		if service.drainChannel != nil {
-			service.drainChannel <- tx
-		}
-
-		if overLimitErr != nil {
-			return tx, overLimitErr
-		}
-
-		return tx, err
+		return redeemAndTransferBitflyerFunds(ctx, service, wallet, total)
 	} else if *wallet.UserDepositAccountProvider == "gemini" {
-
 		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
-
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
 
@@ -469,6 +539,32 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	return nil, fmt.Errorf(
 		"failed to transfer funds: user_deposit_account_provider unknown: %s",
 		*wallet.UserDepositAccountProvider)
+}
+
+func redeemAndTransferBitflyerFunds(
+	ctx context.Context,
+	service *Service,
+	wallet *walletutils.Info,
+	total decimal.Decimal,
+) (*walletutils.TransactionInfo, error) {
+
+	transferID := uuid.NewV4().String()
+
+	tx := new(walletutils.TransactionInfo)
+
+	tx.ID = transferID
+	tx.Destination = wallet.UserDepositDestination
+	tx.DestAmount = total
+	tx.Status = "bitflyer-consolidate"
+
+	// Actual Transfer is now done in SubmitBatchTransfer worker
+	// job will be marked as completed
+
+	if service.drainChannel != nil {
+		service.drainChannel <- tx
+	}
+
+	return tx, nil
 }
 
 func redeemAndTransferGeminiFunds(

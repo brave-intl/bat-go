@@ -7,6 +7,7 @@ package promotion
 //go:generate gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t ../.prom-gowrap.tmpl -o instrumented_read_only_datastore.go -l ""
 
 import (
+	"context"
 	"time"
 
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
@@ -137,6 +138,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetDrainPoll(drainID *uuid.UUID) (dp1 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainPoll", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetDrainPoll(drainID)
+}
+
+// GetDrainsByBatchID implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) (da1 []DrainTransfer, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainsByBatchID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetDrainsByBatchID(ctx, batchID)
 }
 
 // GetIssuer implements ReadOnlyDatastore

@@ -1546,6 +1546,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	BAT := "BAT"
 	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
 
+	rate, err := decimal.NewFromString("100000000000000.025")
+	suite.Require().NoError(err)
 	bfClient.EXPECT().
 		FetchQuote(gomock.Any(), currencyCode, false).
 		Return(&bitflyer.Quote{
@@ -1553,7 +1555,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 			ProductCode:  currencyCode,
 			MainCurrency: JPY,
 			SubCurrency:  BAT,
-			Rate:         decimal.New(1, -9),
+			Rate:         rate,
 		}, nil)
 
 	bfClient.EXPECT().
@@ -1710,11 +1712,17 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
 	<-ch
-	//suite.Require().True(grantAmount.Equals(altcurrency.BAT.FromProbi(tx.Probi)))
+	<-time.After(1 * time.Second)
 
-	//settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	//_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
-	//suite.Require().NoError(err)
+	// the runnextbatchpayments job needs to kick in before checking the drain status
+	attempted, err := service.RunNextBatchPaymentsJob(ctx)
+	suite.Require().True(attempted)
+	suite.Require().NoError(err)
+
+	<-time.After(1 * time.Second)
+	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
+	suite.Require().True(drainJob.Erred)
+	suite.Require().Equal(*drainJob.ErrCode, "bf_transfer_limit", "error code should be transfer limit")
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainSkipCBRDupRedeem() {
@@ -2361,7 +2369,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	fmt.Printf("%s", b)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	<-time.After(2 * time.Second)
+	<-service.drainChannel
+	<-time.After(1 * time.Second)
+
+	// the runnextbatchpayments job needs to kick in before checking the drain status
+	attempted, err := service.RunNextBatchPaymentsJob(ctx)
+	suite.Require().True(attempted)
+	suite.Require().NoError(err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
