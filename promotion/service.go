@@ -120,7 +120,12 @@ func (s *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
-	s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, adminAttestationTopic)
+	groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
+	if groupID == "" {
+		return errors.New("failed not initialize kafka could not find consumer group")
+	}
+
+	s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic, kafka.FirstOffset)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
 	}
@@ -291,7 +296,7 @@ func InitService(
 		},
 		{
 			Func:    service.RunNextDrainRetryJob,
-			Cadence: time.Second,
+			Cadence: 5 * time.Second,
 			Workers: 1,
 		},
 	}

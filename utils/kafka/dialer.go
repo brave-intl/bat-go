@@ -22,12 +22,11 @@ import (
 )
 
 type KafkaRead struct {
-	codecs      *goavro.Codec
 	kafkaReader *kafka.Reader
 	kafkaDialer *kafka.Dialer
 }
 
-func NewKafkaReader(ctx context.Context, topic string) (*KafkaRead, error) {
+func NewKafkaReader(ctx context.Context, groupID string, topic string, startOffset int64) (*KafkaRead, error) {
 	_, logger := logging.SetupLogger(ctx)
 
 	dialer, x509Cert, err := TLSDialer()
@@ -41,10 +40,12 @@ func NewKafkaReader(ctx context.Context, topic string) (*KafkaRead, error) {
 	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: strings.Split(kafkaBrokers, ","),
-		Topic:   topic,
-		Dialer:  dialer,
-		Logger:  kafka.LoggerFunc(logger.Printf), // FIXME
+		Brokers:     strings.Split(kafkaBrokers, ","),
+		GroupID:     groupID,
+		Topic:       topic,
+		StartOffset: startOffset,
+		Dialer:      dialer,
+		Logger:      kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
 	return &KafkaRead{
