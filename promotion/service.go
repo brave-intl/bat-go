@@ -93,6 +93,11 @@ func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
+// SetAdminAttestationTopic allows new topic to be set
+func SetAdminAttestationTopic(newTopic string) {
+	adminAttestationTopic = newTopic
+}
+
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 }
@@ -137,6 +142,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 
 	// toggle for drain retry job
 	if enableDrainRetryJob {
+		fmt.Printf("RUNNIG KAFKA ################################################################")
 		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
 		if groupID == "" {
 			return errors.New("failed not initialize kafka could not find consumer group")
@@ -321,6 +327,7 @@ func InitService(
 
 	// toggle for drain  retry job
 	if enableDrainRetryJob {
+		fmt.Printf("REGISTER JOB ################################################################")
 		service.jobs = append(service.jobs,
 			srv.Job{
 				Func:    service.RunNextDrainRetryJob,

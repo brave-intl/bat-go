@@ -5,6 +5,7 @@ package promotion
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
@@ -131,6 +132,8 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 	}
 
 	// setup kafka topic and dialer
+	SetAdminAttestationTopic(fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", uuid.NewV4().String()))
+
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	c := context.WithValue(context.Background(), appctx.KafkaBrokersCTXKey, kafkaBrokers)
 	ctx, cancel := context.WithCancel(c)
