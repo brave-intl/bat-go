@@ -93,6 +93,11 @@ func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
+// SetAdminAttestationTopic set admin attestation topic
+func SetAdminAttestationTopic(newTopic string) {
+	adminAttestationTopic = newTopic
+}
+
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 }
