@@ -26,14 +26,18 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
 
 const localEnv = "local"
 
 var (
-	suggestionTopic = os.Getenv("ENV") + ".grant.suggestion"
+	// toggle for drain retry job
+	enableDrainRetryJob = isDrainRetryJobEnabled()
+
+	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
+	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
 	// countContributionsTotal counts the number of contributions made broken down by funding and type
 	countContributionsTotal = prometheus.NewCounterVec(
@@ -72,29 +76,46 @@ var (
 	)
 )
 
+func isDrainRetryJobEnabled() bool {
+	var toggle = false
+	if os.Getenv("DRAIN_RETRY_JOB_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("DRAIN_RETRY_JOB_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 // SetSuggestionTopic allows for a new topic to be suggested
 func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
+type KafkaReader interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+}
+
 // Service contains datastore and challenge bypass client connections
 type Service struct {
-	wallet                  *wallet.Service
-	Datastore               Datastore
-	RoDatastore             ReadOnlyDatastore
-	cbClient                cbr.Client
-	reputationClient        reputation.Client
-	bfClient                bitflyer.Client
-	geminiClient            gemini.Client
-	geminiConf              *gemini.Conf
-	codecs                  map[string]*goavro.Codec
-	kafkaWriter             *kafka.Writer
-	kafkaDialer             *kafka.Dialer
-	hotWallet               *uphold.Wallet
-	drainChannel            chan *w.TransactionInfo
-	jobs                    []srv.Job
-	pauseSuggestionsUntil   time.Time
-	pauseSuggestionsUntilMu sync.RWMutex
+	wallet                      *wallet.Service
+	Datastore                   Datastore
+	RoDatastore                 ReadOnlyDatastore
+	cbClient                    cbr.Client
+	reputationClient            reputation.Client
+	bfClient                    bitflyer.Client
+	geminiClient                gemini.Client
+	geminiConf                  *gemini.Conf
+	codecs                      map[string]*goavro.Codec
+	kafkaWriter                 *kafka.Writer
+	kafkaDialer                 *kafka.Dialer
+	kafkaAdminAttestationReader KafkaReader
+	hotWallet                   *uphold.Wallet
+	drainChannel                chan *w.TransactionInfo
+	jobs                        []srv.Job
+	pauseSuggestionsUntil       time.Time
+	pauseSuggestionsUntilMu     sync.RWMutex
 }
 
 // Jobs - Implement srv.JobService interface
@@ -114,8 +135,22 @@ func (s *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
+	// toggle for drain retry job
+	if enableDrainRetryJob {
+		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
+		if groupID == "" {
+			return errors.New("failed not initialize kafka could not find consumer group")
+		}
+
+		s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic, kafka.FirstOffset)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
+		}
+	}
+
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"suggestion": suggestionEventSchema,
+		"suggestion":          suggestionEventSchema,
+		adminAttestationTopic: adminAttestationEventSchema,
 	})
 
 	if err != nil {
@@ -284,6 +319,16 @@ func InitService(
 		},
 	}
 
+	// toggle for drain  retry job
+	if enableDrainRetryJob {
+		service.jobs = append(service.jobs,
+			srv.Job{
+				Func:    service.RunNextDrainRetryJob,
+				Cadence: 5 * time.Second,
+				Workers: 1,
+			})
+	}
+
 	var enableLinkingDraining bool
 	// make sure that we only enable the DrainJob if we have linking/draining enabled
 	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
@@ -346,6 +391,11 @@ func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
 // RunNextDrainJob takes the next drain job and completes it
 func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
 	return s.Datastore.RunNextDrainJob(ctx, s)
+}
+
+// RunNextDrainRetryJob - retires failed drain jobs
+func (s *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) {
+	return true, s.Datastore.RunNextDrainRetryJob(ctx, s)
 }
 
 // RunNextPromotionMissingIssuer takes the next job and completes it

@@ -529,6 +529,20 @@ func (_d DatastoreWithPrometheus) RunNextBatchPaymentsJob(ctx context.Context, w
 	return _d.base.RunNextBatchPaymentsJob(ctx, worker)
 }
 
+// RunNextDrainRetryJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextDrainRetryJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextDrainRetryJob(ctx, worker)
+}
+
 // RunNextClaimJob implements Datastore
 func (_d DatastoreWithPrometheus) RunNextClaimJob(ctx context.Context, worker ClaimWorker) (b1 bool, err error) {
 	_since := time.Now()

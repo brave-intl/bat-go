@@ -6,38 +6,39 @@ package promotion
 
 import (
 	context "context"
+	reflect "reflect"
+
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
-	reflect "reflect"
 )
 
-// MockDrainWorker is a mock of DrainWorker interface
+// MockDrainWorker is a mock of DrainWorker interface.
 type MockDrainWorker struct {
 	ctrl     *gomock.Controller
 	recorder *MockDrainWorkerMockRecorder
 }
 
-// MockDrainWorkerMockRecorder is the mock recorder for MockDrainWorker
+// MockDrainWorkerMockRecorder is the mock recorder for MockDrainWorker.
 type MockDrainWorkerMockRecorder struct {
 	mock *MockDrainWorker
 }
 
-// NewMockDrainWorker creates a new mock instance
+// NewMockDrainWorker creates a new mock instance.
 func NewMockDrainWorker(ctrl *gomock.Controller) *MockDrainWorker {
 	mock := &MockDrainWorker{ctrl: ctrl}
 	mock.recorder = &MockDrainWorkerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 	return m.recorder
 }
 
-// RedeemAndTransferFunds mocks base method
+// RedeemAndTransferFunds mocks base method.
 func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total)
@@ -46,36 +47,74 @@ func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credential
 	return ret0, ret1
 }
 
-// RedeemAndTransferFunds indicates an expected call of RedeemAndTransferFunds
+// RedeemAndTransferFunds indicates an expected call of RedeemAndTransferFunds.
 func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total)
 }
 
-// MockMintWorker is a mock of MintWorker interface
+// MockDrainRetryWorker is a mock of DrainRetryWorker interface.
+type MockDrainRetryWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockDrainRetryWorkerMockRecorder
+}
+
+// MockDrainRetryWorkerMockRecorder is the mock recorder for MockDrainRetryWorker.
+type MockDrainRetryWorkerMockRecorder struct {
+	mock *MockDrainRetryWorker
+}
+
+// NewMockDrainRetryWorker creates a new mock instance.
+func NewMockDrainRetryWorker(ctrl *gomock.Controller) *MockDrainRetryWorker {
+	mock := &MockDrainRetryWorker{ctrl: ctrl}
+	mock.recorder = &MockDrainRetryWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDrainRetryWorker) EXPECT() *MockDrainRetryWorkerMockRecorder {
+	return m.recorder
+}
+
+// FetchAdminAttestationWalletID mocks base method.
+func (m *MockDrainRetryWorker) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchAdminAttestationWalletID", ctx)
+	ret0, _ := ret[0].(*uuid.UUID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchAdminAttestationWalletID indicates an expected call of FetchAdminAttestationWalletID.
+func (mr *MockDrainRetryWorkerMockRecorder) FetchAdminAttestationWalletID(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAdminAttestationWalletID", reflect.TypeOf((*MockDrainRetryWorker)(nil).FetchAdminAttestationWalletID), ctx)
+}
+
+// MockMintWorker is a mock of MintWorker interface.
 type MockMintWorker struct {
 	ctrl     *gomock.Controller
 	recorder *MockMintWorkerMockRecorder
 }
 
-// MockMintWorkerMockRecorder is the mock recorder for MockMintWorker
+// MockMintWorkerMockRecorder is the mock recorder for MockMintWorker.
 type MockMintWorkerMockRecorder struct {
 	mock *MockMintWorker
 }
 
-// NewMockMintWorker creates a new mock instance
+// NewMockMintWorker creates a new mock instance.
 func NewMockMintWorker(ctrl *gomock.Controller) *MockMintWorker {
 	mock := &MockMintWorker{ctrl: ctrl}
 	mock.recorder = &MockMintWorkerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMintWorker) EXPECT() *MockMintWorkerMockRecorder {
 	return m.recorder
 }
 
-// MintGrant mocks base method
+// MintGrant mocks base method.
 func (m *MockMintWorker) MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, walletID, total}
@@ -87,7 +126,7 @@ func (m *MockMintWorker) MintGrant(ctx context.Context, walletID uuid.UUID, tota
 	return ret0
 }
 
-// MintGrant indicates an expected call of MintGrant
+// MintGrant indicates an expected call of MintGrant.
 func (mr *MockMintWorkerMockRecorder) MintGrant(ctx, walletID, total interface{}, promoIDs ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, walletID, total}, promoIDs...)

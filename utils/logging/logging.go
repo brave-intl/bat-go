@@ -161,3 +161,12 @@ func Logger(ctx context.Context, prefix string) *zerolog.Logger {
 	sl := l.With().Str("module", prefix).Logger()
 	return &sl
 }
+
+// FromContext - retrieves logger from context or gets a new logger if not present
+func FromContext(ctx context.Context) *zerolog.Logger {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = SetupLogger(ctx)
+	}
+	return logger
+}
