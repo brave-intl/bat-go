@@ -132,3 +132,40 @@ func (mr *MockMintWorkerMockRecorder) MintGrant(ctx, walletID, total interface{}
 	varargs := append([]interface{}{ctx, walletID, total}, promoIDs...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MintGrant", reflect.TypeOf((*MockMintWorker)(nil).MintGrant), varargs...)
 }
+
+// MockBatchTransferWorker is a mock of BatchTransferWorker interface.
+type MockBatchTransferWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockBatchTransferWorkerMockRecorder
+}
+
+// MockBatchTransferWorkerMockRecorder is the mock recorder for MockBatchTransferWorker.
+type MockBatchTransferWorkerMockRecorder struct {
+	mock *MockBatchTransferWorker
+}
+
+// NewMockBatchTransferWorker creates a new mock instance.
+func NewMockBatchTransferWorker(ctrl *gomock.Controller) *MockBatchTransferWorker {
+	mock := &MockBatchTransferWorker{ctrl: ctrl}
+	mock.recorder = &MockBatchTransferWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockBatchTransferWorker) EXPECT() *MockBatchTransferWorkerMockRecorder {
+	return m.recorder
+}
+
+// SubmitBatchTransfer mocks base method.
+func (m *MockBatchTransferWorker) SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitBatchTransfer", ctx, batchID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitBatchTransfer indicates an expected call of SubmitBatchTransfer.
+func (mr *MockBatchTransferWorkerMockRecorder) SubmitBatchTransfer(ctx, batchID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBatchTransfer", reflect.TypeOf((*MockBatchTransferWorker)(nil).SubmitBatchTransfer), ctx, batchID)
+}

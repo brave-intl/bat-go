@@ -963,6 +963,20 @@ func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 	suite.Require().Equal("retry-bypass-cbr", *drainJob.Status)
 }
 
+func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NoClaimsToProcess() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	batchTransferWorker := NewMockBatchTransferWorker(ctrl)
+
+	actual, err := pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
+	suite.Require().NoError(err)
+	suite.Require().False(actual, "should not have attempted job run")
+}
+
 func TestPostgresTestSuite(t *testing.T) {
 	suite.Run(t, new(PostgresTestSuite))
 }
