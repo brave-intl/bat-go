@@ -147,7 +147,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 			return errors.New("failed not initialize kafka could not find consumer group")
 		}
 
-		s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic, kafka.FirstOffset)
+		s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
 		}
