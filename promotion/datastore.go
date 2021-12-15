@@ -980,9 +980,12 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 
 	err = tx.Get(batchID, statement)
 	if err != nil {
-		return attempted, err
+		// no claims to process
+		if errors.Is(err, sql.ErrNoRows) {
+			return attempted, nil
+		}
+		return attempted, fmt.Errorf("batch payment job: sql error %w", err)
 	}
-
 	attempted = true
 
 	// put a lock on the batch so it is not picked up
