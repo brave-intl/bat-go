@@ -6,35 +6,36 @@ package promotion
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	go_uuid "github.com/satori/go.uuid"
-	reflect "reflect"
 )
 
-// MockClaimWorker is a mock of ClaimWorker interface
+// MockClaimWorker is a mock of ClaimWorker interface.
 type MockClaimWorker struct {
 	ctrl     *gomock.Controller
 	recorder *MockClaimWorkerMockRecorder
 }
 
-// MockClaimWorkerMockRecorder is the mock recorder for MockClaimWorker
+// MockClaimWorkerMockRecorder is the mock recorder for MockClaimWorker.
 type MockClaimWorkerMockRecorder struct {
 	mock *MockClaimWorker
 }
 
-// NewMockClaimWorker creates a new mock instance
+// NewMockClaimWorker creates a new mock instance.
 func NewMockClaimWorker(ctrl *gomock.Controller) *MockClaimWorker {
 	mock := &MockClaimWorker{ctrl: ctrl}
 	mock.recorder = &MockClaimWorkerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClaimWorker) EXPECT() *MockClaimWorkerMockRecorder {
 	return m.recorder
 }
 
-// SignClaimCreds mocks base method
+// SignClaimCreds mocks base method.
 func (m *MockClaimWorker) SignClaimCreds(ctx context.Context, claimID go_uuid.UUID, issuer Issuer, blindedCreds []string) (*ClaimCreds, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignClaimCreds", ctx, claimID, issuer, blindedCreds)
@@ -43,7 +44,7 @@ func (m *MockClaimWorker) SignClaimCreds(ctx context.Context, claimID go_uuid.UU
 	return ret0, ret1
 }
 
-// SignClaimCreds indicates an expected call of SignClaimCreds
+// SignClaimCreds indicates an expected call of SignClaimCreds.
 func (mr *MockClaimWorkerMockRecorder) SignClaimCreds(ctx, claimID, issuer, blindedCreds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignClaimCreds", reflect.TypeOf((*MockClaimWorker)(nil).SignClaimCreds), ctx, claimID, issuer, blindedCreds)

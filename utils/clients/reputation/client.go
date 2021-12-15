@@ -63,7 +63,7 @@ func (iro *IsReputableOpts) GenerateQueryString() (url.Values, error) {
 }
 
 // IsWalletAdsReputable makes the request to the reputation server
-// and reutrns whether a paymentId has enough reputation
+// and returns whether a paymentId has enough reputation
 // to claim a grant
 func (c *HTTPClient) IsWalletAdsReputable(
 	ctx context.Context,
@@ -100,7 +100,7 @@ func (c *HTTPClient) IsWalletAdsReputable(
 }
 
 // IsWalletReputable makes the request to the reputation server
-// and reutrns whether a paymentId has enough reputation
+// and returns whether a paymentId has enough reputation
 // to claim a grant
 func (c *HTTPClient) IsWalletReputable(
 	ctx context.Context,

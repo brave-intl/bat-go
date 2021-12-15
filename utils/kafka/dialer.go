@@ -21,6 +21,43 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
+type KafkaRead struct {
+	kafkaReader *kafka.Reader
+	kafkaDialer *kafka.Dialer
+}
+
+func NewKafkaReader(ctx context.Context, groupID string, topic string, startOffset int64) (*KafkaRead, error) {
+	_, logger := logging.SetupLogger(ctx)
+
+	dialer, x509Cert, err := TLSDialer()
+	if err != nil {
+		return nil, fmt.Errorf("kafka reader: could not create new kafka reader: %w", err)
+	}
+
+	// throw the cert on the context, instrument kafka
+	InstrumentKafka(context.WithValue(ctx, appctx.Kafka509CertCTXKey, x509Cert))
+
+	kafkaBrokers := ctx.Value(appctx.KafkaBrokersCTXKey).(string)
+
+	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     strings.Split(kafkaBrokers, ","),
+		GroupID:     groupID,
+		Topic:       topic,
+		StartOffset: startOffset,
+		Dialer:      dialer,
+		Logger:      kafka.LoggerFunc(logger.Printf), // FIXME
+	})
+
+	return &KafkaRead{
+		kafkaReader: kafkaReader,
+		kafkaDialer: dialer,
+	}, nil
+}
+
+func (k *KafkaRead) ReadMessage(ctx context.Context) (kafka.Message, error) {
+	return k.kafkaReader.ReadMessage(ctx)
+}
+
 // TLSDialer creates a Kafka dialer over TLS. The function requires
 // KAFKA_SSL_CERTIFICATE_LOCATION and KAFKA_SSL_KEY_LOCATION environment
 // variables to be set.
