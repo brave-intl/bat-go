@@ -1000,7 +1000,11 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	if err != nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
+
 		status, errCode, _ := errToDrainCode(err)
+		// inform sentry about this error
+		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
+
 		_, err = tx.Exec(`
 			update claim_drain set
 				erred = true,
@@ -1013,8 +1017,6 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 		if err := tx.Commit(); err != nil {
 			return attempted, err
 		}
-		// inform sentry about this error
-		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
 		return attempted, err
 	}
 
