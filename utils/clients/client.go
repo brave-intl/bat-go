@@ -268,14 +268,15 @@ func (c *SimpleHTTPClient) do(
 		}
 	}
 
-	// // helpful if you want to read the body as it is
-	// bodyBytes, _ := requestutils.Read(resp.Body)
-	// resp.Body.Close() // must close
+	// helpful if you want to read the body as it is
+	bodyBytes, _ := requestutils.Read(resp.Body)
+	resp.Body.Close() // must close
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+
 	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
-	// resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 	if status >= 200 && status <= 299 {
 		if v != nil {
-			err = json.NewDecoder(resp.Body).Decode(v)
+			err = json.Unmarshal(bodyBytes, v)
 			if err != nil {
 				return resp, errors.Wrap(err, ErrUnableToDecode)
 			}
