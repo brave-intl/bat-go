@@ -429,8 +429,15 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 	if resp == nil {
 		return e
 	}
+
+	// if this is is not an error just return err passed in
+	if resp.StatusCode > 299 {
+		return e
+	}
+
 	b, err := requestutils.Read(resp.Body)
 	if err != nil {
+		fmt.Println("!!!!!!! err reading resp from bitflyer for err: ", err)
 		return err
 	}
 	var bfError = new(clients.BitflyerError)
