@@ -334,8 +334,16 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		totalJPYTransfer = decimal.Zero
 	)
 
+	var (
+		totalF64   float64
+		depositID  string
+		transferID string
+	)
+
 	for _, v := range transfers {
-		totalF64, _ := v.Total.Float64()
+		t, _ := v.Total.Float64()
+		totalF64 += t
+
 		totalJPYTransfer = totalJPYTransfer.Add(v.Total.Mul(quote.Rate))
 
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
@@ -347,16 +355,21 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 					over, quote.Rate, totalJPYTransfer),
 				"over custodian transfer limit",
 				new(bitflyerOverTransferLimit))
+			break
 		}
-
-		withdraws = append(withdraws, bitflyer.WithdrawToDepositIDPayload{
-			CurrencyCode: "BAT",
-			Amount:       totalF64,
-			DepositID:    *v.DepositID,
-			TransferID:   v.ID.String(),
-			SourceFrom:   "userdrain",
-		})
+		depositID = *v.DepositID
+		transferID = transferID + v.ID.String()
 	}
+
+	// collapse into one transaction, not multiples in a bulk upload
+
+	withdraws = append(withdraws, bitflyer.WithdrawToDepositIDPayload{
+		CurrencyCode: "BAT",
+		Amount:       totalF64,
+		DepositID:    depositID,
+		TransferID:   transferID,
+		SourceFrom:   "userdrain",
+	})
 
 	// create a WithdrawToDepositIDBulkPayload
 	payload := bitflyer.WithdrawToDepositIDBulkPayload{
