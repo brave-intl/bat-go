@@ -163,8 +163,9 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 
 		if issuer, ok = issuers[publicKey]; !ok {
 			issuer, err = service.Datastore.GetIssuerByPublicKey(publicKey)
-			if err != nil {
-				err = errorutils.Wrap(err, "error finding issuer")
+			if err != nil || issuer == nil {
+				e := fmt.Errorf("error finding issuer %s: %w", publicKey, err)
+				err = errorutils.Wrap(e, e.Error())
 				return
 			}
 		}
@@ -175,8 +176,9 @@ func (service *Service) GetCredentialRedemptions(ctx context.Context, credential
 
 		if promotion, ok = promotions[publicKey]; !ok {
 			promotion, err = service.Datastore.GetPromotion(issuer.PromotionID)
-			if err != nil {
-				err = errorutils.Wrap(err, "error finding promotion")
+			if err != nil || promotion == nil {
+				e := fmt.Errorf("error finding promotion %s: %w", issuer.PromotionID, err)
+				err = errorutils.Wrap(e, e.Error())
 				return
 			}
 			promotions[publicKey] = promotion
