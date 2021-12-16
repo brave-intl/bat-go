@@ -437,8 +437,7 @@ func handleBitflyerError(e error, req *http.Request, resp *http.Response) error 
 
 	b, err := requestutils.Read(resp.Body)
 	if err != nil {
-		fmt.Println("!!!!!!! err reading resp from bitflyer for err: ", err)
-		return err
+		return fmt.Errorf("failed to read body of bitflyer response to handle err: %w", err)
 	}
 	var bfError = new(clients.BitflyerError)
 	if len(b) != 0 {
