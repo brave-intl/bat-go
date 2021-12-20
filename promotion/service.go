@@ -98,6 +98,7 @@ func SetAdminAttestationTopic(newTopic string) {
 	adminAttestationTopic = newTopic
 }
 
+// KafkaReader - reader interface
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 }
