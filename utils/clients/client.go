@@ -284,6 +284,9 @@ func (c *SimpleHTTPClient) do(
 		return resp, nil
 	}
 
+	logger.Warn().Int("response_status", status).Err(err).Msg("failed http client call")
+	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
+	logger.Debug().Str("host", req.URL.Host).Str("path", req.URL.Path).Str("body", string(bodyBytes)).Msg("failed http client call")
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
 
