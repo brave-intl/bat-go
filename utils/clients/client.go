@@ -160,7 +160,6 @@ func (c *SimpleHTTPClient) newRequest(
 	})
 
 	// m, _ := json.MarshalIndent(body, "", "  ")
-	// fmt.Println(path, string(m))
 	if body != nil && method != "GET" {
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
@@ -273,7 +272,6 @@ func (c *SimpleHTTPClient) do(
 	resp.Body.Close() // must close
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
 	if status >= 200 && status <= 299 {
 		if v != nil {
 			err = json.Unmarshal(bodyBytes, v)
@@ -285,7 +283,6 @@ func (c *SimpleHTTPClient) do(
 	}
 
 	logger.Warn().Int("response_status", status).Err(err).Msg("failed http client call")
-	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
 	logger.Debug().Str("host", req.URL.Host).Str("path", req.URL.Path).Str("body", string(bodyBytes)).Msg("failed http client call")
 	return resp, errors.Wrap(err, ErrProtocolError)
 }
