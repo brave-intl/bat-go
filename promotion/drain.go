@@ -726,13 +726,13 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 }
 
 // FetchAdminAttestationWalletID - retrieves walletID from topic
-func (s *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
-	message, err := s.kafkaAdminAttestationReader.ReadMessage(ctx)
+func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
+	message, err := service.kafkaAdminAttestationReader.ReadMessage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
-	codec, ok := s.codecs[adminAttestationTopic]
+	codec, ok := service.codecs[adminAttestationTopic]
 	if !ok {
 		return nil, fmt.Errorf("read message: could not find codec %s", adminAttestationTopic)
 	}

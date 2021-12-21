@@ -14,19 +14,21 @@ import (
 	"time"
 
 	"github.com/linkedin/goavro"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
-type KafkaRead struct {
+// Reader - implements KafkaReader
+type Reader struct {
 	kafkaReader *kafka.Reader
 	kafkaDialer *kafka.Dialer
 }
 
-func NewKafkaReader(ctx context.Context, groupID string, topic string) (*KafkaRead, error) {
+// NewKafkaReader - creates a new kafka reader for groupID and topic
+func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader, error) {
 	_, logger := logging.SetupLogger(ctx)
 
 	dialer, x509Cert, err := TLSDialer()
@@ -49,13 +51,14 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*KafkaRe
 		Logger:        kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
-	return &KafkaRead{
+	return &Reader{
 		kafkaReader: kafkaReader,
 		kafkaDialer: dialer,
 	}, nil
 }
 
-func (k *KafkaRead) ReadMessage(ctx context.Context) (kafka.Message, error) {
+// ReadMessage - reads kafka messages
+func (k *Reader) ReadMessage(ctx context.Context) (kafka.Message, error) {
 	return k.kafkaReader.ReadMessage(ctx)
 }
 

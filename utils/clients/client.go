@@ -270,7 +270,7 @@ func (c *SimpleHTTPClient) do(
 
 	// helpful if you want to read the body as it is
 	bodyBytes, _ := requestutils.Read(resp.Body)
-	resp.Body.Close() // must close
+	_ = resp.Body.Close() // must close
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// fmt.Println(req.URL.Host, req.URL.Path, string(bodyBytes))
