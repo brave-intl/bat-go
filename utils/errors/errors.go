@@ -32,6 +32,8 @@ var (
 	ErrNoDepositProviderDestination = errors.New("no deposit provider destination for wallet for transfer")
 	// ErrNotImplemented - this function is not yet implemented
 	ErrNotImplemented = errors.New("this function is not yet implemented")
+	// ErrNotFound - resource not found
+	ErrNotFound = errors.New("not found")
 )
 
 // ErrorBundle creates a new response error

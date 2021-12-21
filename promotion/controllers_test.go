@@ -3222,3 +3222,46 @@ func (suite *ControllersTestSuite) TestPostReportBAPEvent() {
 	suite.Require().JSONEq(string(serializedExpected1), string(serializedActual1))
 
 }
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	data := DrainJobRequest{
+		Erred: false,
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", walletID), bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusNoContent, rw.Code)
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Equal("manual-retry", *drainJob.Status)
+}
