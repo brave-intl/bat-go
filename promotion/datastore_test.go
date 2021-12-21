@@ -5,6 +5,8 @@ package promotion
 import (
 	"context"
 	"errors"
+	"fmt"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"testing"
 	"time"
 
@@ -975,6 +977,115 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NoClaimsToProcess() 
 	actual, err := pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
 	suite.Require().NoError(err)
 	suite.Require().False(actual, "should not have attempted job run")
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+	suite.Require().NoError(err, "should have updated claim drain row")
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Equal("manual-retry", *drainJob.Status)
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_WalletID() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, uuid.NewV4(), true, "some-failed-state", "failure",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	walletID := uuid.NewV4()
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Failure() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	walletID := uuid.NewV4()
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "not-other-failure",
+		uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Erred() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+
+	walletID := uuid.NewV4()
+	erred := false
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, erred, "some-failed-state", "failure",
+		uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_TransactionID() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total, transaction_id) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1, $6);`
+
+	walletID := uuid.NewV4()
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+		uuid.NewV4(), uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
 }
 
 func TestPostgresTestSuite(t *testing.T) {
