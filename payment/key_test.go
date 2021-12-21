@@ -71,7 +71,7 @@ func TestGenerateSecret(t *testing.T) {
 	if len(bareSecretKey) != 32 {
 		t.Error("Secret key does not have correct length", err)
 	}
-	if len(k) < 0 {
+	if len(k) <= 0 {
 		t.Error("the key should be bigger than nothing")
 	}
 }

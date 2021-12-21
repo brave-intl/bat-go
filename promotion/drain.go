@@ -335,9 +335,8 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	)
 
 	var (
-		totalF64   float64
-		depositID  string
-		transferID string
+		totalF64  float64
+		depositID string
 	)
 
 	for _, v := range transfers {
@@ -358,7 +357,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 			break
 		}
 		depositID = *v.DepositID
-		transferID = transferID + v.ID.String()
 	}
 
 	// collapse into one transaction, not multiples in a bulk upload
@@ -367,7 +365,7 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		CurrencyCode: "BAT",
 		Amount:       totalF64,
 		DepositID:    depositID,
-		TransferID:   transferID,
+		TransferID:   batchID.String(),
 		SourceFrom:   "userdrain",
 	})
 
@@ -726,13 +724,13 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 }
 
 // FetchAdminAttestationWalletID - retrieves walletID from topic
-func (s *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
-	message, err := s.kafkaAdminAttestationReader.ReadMessage(ctx)
+func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
+	message, err := service.kafkaAdminAttestationReader.ReadMessage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
-	codec, ok := s.codecs[adminAttestationTopic]
+	codec, ok := service.codecs[adminAttestationTopic]
 	if !ok {
 		return nil, fmt.Errorf("read message: could not find codec %s", adminAttestationTopic)
 	}

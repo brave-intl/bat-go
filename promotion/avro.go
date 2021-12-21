@@ -42,6 +42,7 @@ const adminAttestationEventSchema = `{
 		{ "name": "created_at", "type": "string" }
 	]}`
 
+// AdminAttestationEvent - kafka admin attestation event
 type AdminAttestationEvent struct {
 	WalletID      string `json:"wallet_id"`
 	Service       string `json:"service"`
