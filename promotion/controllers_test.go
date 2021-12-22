@@ -2791,7 +2791,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 }
 
 func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
-	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":123}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":"123"}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
 	return err
 }
 
@@ -3232,7 +3232,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
 	walletID := uuid.NewV4()
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
 		uuid.NewV4().String())
