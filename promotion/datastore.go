@@ -1476,12 +1476,15 @@ limit 1`
 	if err != nil {
 		return attempted, err
 	}
-
+	fmt.Println(job.Credentials)
+	fmt.Println("HERE")
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
+	fmt.Println("HERE1")
 	if err != nil {
 		return attempted, err
 	}
+	fmt.Println("HERE2")
 
 	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
 	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
