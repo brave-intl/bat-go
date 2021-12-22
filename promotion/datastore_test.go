@@ -4,19 +4,24 @@ package promotion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/wallet"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -1146,6 +1151,66 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Transacti
 		errorutils.ErrNotFound)
 
 	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	randomString := func() string {
+		return uuid.NewV4().String()
+	}
+
+	credentialRedemption := cbr.CredentialRedemption{
+		Issuer:        randomString(),
+		TokenPreimage: randomString(),
+		Signature:     randomString(),
+	}
+	credentialRedemptions := make([]cbr.CredentialRedemption, 0)
+	credentialRedemptions = append(credentialRedemptions, credentialRedemption)
+
+	credentials, err := json.Marshal(credentialRedemptions)
+	suite.Require().NoError(err, "should have serialised credentials")
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, FALSE, 'manual-retry', 'failure', $2, $3, FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, uuid.NewV4().String(), credentials)
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	// expected context with bypass cbr true
+	ctrl := gomock.NewController(suite.T())
+	drainWorker := NewMockDrainWorker(ctrl)
+
+	ctx := context.Background()
+
+	drainWorker.EXPECT().
+		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0)).
+		Return(&walletutils.TransactionInfo{}, nil)
+
+	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
+
+	suite.Require().NoError(err, "should have been successful attempted job")
+	suite.Require().True(attempted)
+}
+
+func isCBRBypass(ctx context.Context) gomock.Matcher {
+	return cbrBypass{ctx: ctx}
+}
+
+type cbrBypass struct {
+	ctx context.Context
+}
+
+func (c cbrBypass) Matches(arg interface{}) bool {
+	ctx := arg.(context.Context)
+	return ctx.Value(appctx.SkipRedeemCredentialsCTXKey) == true
+}
+
+func (c cbrBypass) String() string {
+	return "failed: cbr bypass is false"
 }
 
 func TestPostgresTestSuite(t *testing.T) {
