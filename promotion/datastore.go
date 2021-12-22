@@ -1476,15 +1476,12 @@ limit 1`
 	if err != nil {
 		return attempted, err
 	}
-	fmt.Println(job.Credentials)
-	fmt.Println("HERE")
+
 	var credentials []cbr.CredentialRedemption
 	err = json.Unmarshal([]byte(job.Credentials), &credentials)
-	fmt.Println("HERE1")
 	if err != nil {
 		return attempted, err
 	}
-	fmt.Println("HERE2")
 
 	if job.Status != nil && *job.Status == "retry-bypass-cbr" {
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)

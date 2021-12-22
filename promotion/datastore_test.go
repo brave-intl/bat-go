@@ -55,7 +55,7 @@ func (suite *PostgresTestSuite) TearDownTest() {
 }
 
 func (suite *PostgresTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "claim_drain"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -937,7 +937,7 @@ func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 	walletID := uuid.NewV4()
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID.String(), true, "reputation-failed", "reputation-failed",
 		uuid.NewV4().String())
@@ -989,7 +989,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
 	walletID := uuid.NewV4()
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
 		uuid.NewV4().String())
@@ -1012,7 +1012,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_WalletID(
 	suite.Require().NoError(err)
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, uuid.NewV4(), true, "some-failed-state", "failure",
 		uuid.NewV4().String())
@@ -1032,7 +1032,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Failure()
 	suite.Require().NoError(err)
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	walletID := uuid.NewV4()
 
@@ -1053,7 +1053,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Erred() {
 	suite.Require().NoError(err)
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	walletID := uuid.NewV4()
 	erred := false
@@ -1075,7 +1075,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Transacti
 	suite.Require().NoError(err)
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total, transaction_id) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1, $6);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1, $6);`
 
 	walletID := uuid.NewV4()
 
@@ -1092,6 +1092,9 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Transacti
 }
 
 func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
@@ -1103,7 +1106,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 
 	credentialRedemption := cbr.CredentialRedemption{
 		Issuer:        randomString(),
-		TokenPreimage: "test",
+		TokenPreimage: randomString(),
 		Signature:     randomString(),
 	}
 	credentialRedemptions := make([]cbr.CredentialRedemption, 0)
