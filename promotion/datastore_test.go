@@ -1165,7 +1165,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 
 	credentialRedemption := cbr.CredentialRedemption{
 		Issuer:        randomString(),
-		TokenPreimage: randomString(),
+		TokenPreimage: "test",
 		Signature:     randomString(),
 	}
 	credentialRedemptions := make([]cbr.CredentialRedemption, 0)

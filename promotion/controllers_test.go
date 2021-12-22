@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/handlers"
+
 	"github.com/brave-intl/bat-go/utils/clients"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -3264,4 +3266,80 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
 	suite.Require().Equal(walletID, drainJob.WalletID)
 	suite.Require().Equal(false, drainJob.Erred)
 	suite.Require().Equal("manual-retry", *drainJob.Status)
+}
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_NotFound() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	data := DrainJobRequest{
+		Erred: false,
+	}
+
+	walletID := uuid.NewV4()
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", walletID),
+		bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	expected := handlers.AppError{
+		Cause:   nil,
+		Message: fmt.Sprintf("patch drain job: no updateable drain job found for walletId %s", walletID),
+		Code:    http.StatusNotFound,
+	}
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	suite.Require().Equal(http.StatusNotFound, rw.Code)
+	suite.Require().Equal(expected, appError)
+}
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_ValidationError_Erred() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	drainJobRequest := DrainJobRequest{
+		Erred: true,
+	}
+
+	payload, err := json.Marshal(drainJobRequest)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", uuid.NewV4()),
+		bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	expected := "invalid value true only false is supported"
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	data := appError.Data.(map[string]interface{})
+	actual := data["validationErrors"].(map[string]interface{})
+
+	suite.Require().Equal(http.StatusBadRequest, rw.Code)
+	suite.Require().Equal(http.StatusBadRequest, appError.Code)
+	suite.Require().Equal(expected, actual["erred"])
 }
