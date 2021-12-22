@@ -864,11 +864,12 @@ func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
 	})
 }
 
+// DrainJobRequest holds data for drain job requests
 type DrainJobRequest struct {
 	Erred bool `json:"erred"`
 }
 
-// PatchDrainJobErred - is the handler for toggling a drain job as retriable
+// PatchDrainJobErred is the handler for toggling a drain job as retriable
 func PatchDrainJobErred(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
@@ -879,16 +880,16 @@ func PatchDrainJobErred(service *Service) handlers.AppHandler {
 			})
 		}
 
-		var request DrainJobRequest
-		err = requestutils.ReadJSON(r.Body, &request)
+		var drainJobRequest DrainJobRequest
+		err = requestutils.ReadJSON(r.Body, &drainJobRequest)
 		if err != nil {
 			return handlers.WrapError(errors.New("could not decode request body"), "patch drain job",
 				http.StatusBadRequest)
 		}
 
-		if request.Erred != false {
+		if drainJobRequest.Erred {
 			return handlers.ValidationError("validation error", map[string]string{
-				"erred": "only false is supported",
+				"erred": "invalid value true only false is supported",
 			})
 		}
 
