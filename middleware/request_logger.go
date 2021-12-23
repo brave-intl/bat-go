@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -69,8 +70,12 @@ func RequestLogger(logger *zerolog.Logger) func(next http.Handler) http.Handler 
 				// Recover and record stack traces in case of a panic
 				if rec := recover(); rec != nil {
 					// report the reason for the panic
-					logger.Error().Stack().Str("panic", fmt.Sprintf("%+v", rec)).Msg("panic recovered")
-					// consolodate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
+					logger.Error().
+						Str("panic", fmt.Sprintf("%+v", rec)).
+						Str("stacktrace", string(debug.Stack())).
+						Msg("panic recovered")
+
+					// consolidate these: `http: proxy error: read tcp x.x.x.x:xxxx->x.x.x.x:xxxx: i/o timeout`
 					// any panic that has an ipaddress/port in it
 					m := string(ipPortRE.ReplaceAll(
 						[]byte(fmt.Sprint(rec)), []byte("x.x.x.x:xxxx")))
