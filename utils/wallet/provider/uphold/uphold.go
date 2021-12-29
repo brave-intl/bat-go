@@ -860,7 +860,8 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils
 		if len(parts) != 2 {
 			return nil, errors.New("invalid Content-Range header returned")
 		}
-		tmp, err := strconv.ParseInt(parts[1], 10, 64)
+
+		tmp, err := strconv.Atoi(parts[1])
 		if err != nil {
 			return nil, err
 		}
