@@ -63,7 +63,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
-	r.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("PatchDrainJobErred", PatchDrainJobErred(service))))
+	r.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("PatchDrainJobErred", PatchDrainJobErred(service))))
 	return r
 }
 
