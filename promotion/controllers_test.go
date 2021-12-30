@@ -3240,7 +3240,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
 	service := &Service{Datastore: pg}
 
 	router := chi.NewRouter()
-	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
 
 	rw := httptest.NewRecorder()
 
@@ -3251,7 +3251,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
 	payload, err := json.Marshal(data)
 	suite.Require().NoError(err, "should serialize data")
 
-	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", walletID), bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", walletID), bytes.NewReader(payload))
 
 	server := &http.Server{Addr: ":8080", Handler: router}
 	server.Handler.ServeHTTP(rw, req)
@@ -3274,7 +3274,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_NotFound() {
 	service := &Service{Datastore: pg}
 
 	router := chi.NewRouter()
-	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
 
 	rw := httptest.NewRecorder()
 
@@ -3287,7 +3287,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_NotFound() {
 	payload, err := json.Marshal(data)
 	suite.Require().NoError(err, "should serialize data")
 
-	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", walletID),
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", walletID),
 		bytes.NewReader(payload))
 
 	server := &http.Server{Addr: ":8080", Handler: router}
@@ -3313,7 +3313,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_ValidationError_Erred(
 	service := &Service{Datastore: pg}
 
 	router := chi.NewRouter()
-	router.Method("PATCH", "/drain-jobs/wallet/{walletId}/erred", PatchDrainJobErred(service))
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
 
 	rw := httptest.NewRecorder()
 
@@ -3324,7 +3324,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_ValidationError_Erred(
 	payload, err := json.Marshal(drainJobRequest)
 	suite.Require().NoError(err, "should serialize data")
 
-	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallet/%s/erred", uuid.NewV4()),
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", uuid.NewV4()),
 		bytes.NewReader(payload))
 
 	server := &http.Server{Addr: ":8080", Handler: router}
