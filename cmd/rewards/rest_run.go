@@ -67,7 +67,7 @@ func RestRun(command *cobra.Command, args []string) {
 	// setup the service now
 	s, err := rewards.InitService(ctx)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initalize rewards service")
+		logger.Fatal().Err(err).Msg("failed to initialize rewards service")
 	}
 
 	// do rest endpoints
