@@ -178,8 +178,6 @@ func (cvcl *CoingeckoVsCurrencyList) Decode(ctx context.Context, v []byte) error
 // Validate - implement validatable
 func (cvcl *CoingeckoVsCurrencyList) Validate(ctx context.Context) error {
 	vsCurrencyLimit := ctx.Value(appctx.CoingeckoVsCurrencyLimitCTXKey).(int)
-	fmt.Println(len(*cvcl))
-	fmt.Println(vsCurrencyLimit)
 	if len(*cvcl) > vsCurrencyLimit {
 		return fmt.Errorf("%w: %s is not valid", ErrCoingeckoVsCurrencyLimit, cvcl.String())
 	}
