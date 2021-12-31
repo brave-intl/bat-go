@@ -18,7 +18,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
@@ -66,8 +66,15 @@ type SimpleHTTPClient struct {
 	client *http.Client
 }
 
-// New returns a new SimpleHTTPClient, retrieving the base URL from the environment
+// New returns a new SimpleHTTPClient
 func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
+	return NewWithHttpClient(serverURL, authToken, &http.Client{
+		Timeout: time.Second * 10,
+	})
+}
+
+// NewWithHttpClient returns a new SimpleHTTPClient, using the provided http.Client
+func NewWithHttpClient(serverURL string, authToken string, client *http.Client) (*SimpleHTTPClient, error) {
 	baseURL, err := url.Parse(serverURL)
 
 	if err != nil {
@@ -77,9 +84,7 @@ func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
 	return &SimpleHTTPClient{
 		BaseURL:   baseURL,
 		AuthToken: authToken,
-		client: &http.Client{
-			Timeout: time.Second * 10,
-		},
+		client:    client,
 	}, nil
 }
 

@@ -49,12 +49,14 @@ instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/reputation -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/reputation/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/gemini -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/gemini/instrumented_client.go
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/bitflyer -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/bitflyer/instrumented_client.go
+	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/coingecko -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/coingecko/instrumented_client.go
 	# fix all instrumented cause the interfaces are all called "client"
 	sed -i'bak' 's/client_duration_seconds/cbr_client_duration_seconds/g' utils/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/ratios_client_duration_seconds/g' utils/clients/ratios/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/reputation_client_duration_seconds/g' utils/clients/reputation/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/gemini_client_duration_seconds/g' utils/clients/gemini/instrumented_client.go
 	sed -i'bak' 's/client_duration_seconds/bitflyer_client_duration_seconds/g' utils/clients/bitflyer/instrumented_client.go
+	sed -i'bak' 's/client_duration_seconds/coingecko_client_duration_seconds/g' utils/clients/coingecko/instrumented_client.go
 
 %-docker: docker
 	docker build --build-arg COMMIT=$(GIT_COMMIT) --build-arg VERSION=$(GIT_VERSION) \
