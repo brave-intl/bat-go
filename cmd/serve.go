@@ -8,6 +8,8 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/logging"
+	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
 	"github.com/rs/zerolog/hlog"
@@ -27,6 +29,11 @@ func init() {
 		"the default address to bind to")
 	Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
 	Must(viper.BindEnv("address", "ADDR"))
+
+	ServeCmd.PersistentFlags().Bool("enable-job-workers", true,
+		"enable job workers (defaults true)")
+	Must(viper.BindPFlag("enable-job-workers", ServeCmd.PersistentFlags().Lookup("enable-job-workers")))
+	Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
 }
 
 // ServeCmd the serve command
@@ -75,4 +82,28 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 		ctx.Value(appctx.VersionCTXKey).(string),
 		ctx.Value(appctx.VersionCTXKey).(string)))
 	return r
+}
+
+func SetupJobWorkers(ctx context.Context, jobs []srv.Job) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	enableJobWorkers, err := ServeCmd.Flags().GetBool("enable-job-workers")
+	if err != nil {
+		return err
+	}
+
+	if enableJobWorkers {
+		for _, job := range jobs {
+			// iterate over jobs
+			for i := 0; i < job.Workers; i++ {
+				// spin up a job worker for each worker
+				logger.Debug().Msg("starting job worker")
+				go srv.JobWorker(ctx, job.Func, job.Cadence)
+			}
+		}
+	}
+	return nil
 }

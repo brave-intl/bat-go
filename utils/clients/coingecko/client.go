@@ -2,6 +2,7 @@ package coingecko
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,8 +10,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/gomodule/redigo/redis"
 	"github.com/google/go-querystring/query"
-	cache "github.com/patrickmn/go-cache"
 	"github.com/shopspring/decimal"
 )
 
@@ -19,18 +20,18 @@ type Client interface {
 	FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error)
 	FetchCoinList(ctx context.Context, includePlatform bool) (*CoinListResponse, error)
 	FetchSupportedVsCurrencies(ctx context.Context) (*SupportedVsCurrenciesResponse, error)
-	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, error)
+	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the coingecko server
 type HTTPClient struct {
 	baseParams
 	client *clients.SimpleHTTPClient
-	cache  *cache.Cache
+	redis  *redis.Pool
 }
 
 // NewWithContext returns a new HTTPClient, retrieving the base URL from the context
-func NewWithContext(ctx context.Context) (Client, error) {
+func NewWithContext(ctx context.Context, redis *redis.Pool) (Client, error) {
 	// get the server url from context
 	serverURL, err := appctx.GetStringFromContext(ctx, appctx.CoingeckoServerCTXKey)
 	if err != nil {
@@ -68,8 +69,25 @@ func NewWithContext(ctx context.Context) (Client, error) {
 				ApiKey: accessToken,
 			},
 			client: client,
-			cache:  cache.New(cache.NoExpiration, cache.NoExpiration),
+			redis:  redis,
 		}, "coingecko_context_client"), nil
+}
+
+func (c *HTTPClient) cacheKey(ctx context.Context, path string, body clients.QueryStringBody) (string, error) {
+	qs, err := body.GenerateQueryString()
+	if err != nil {
+		return "", err
+	}
+
+	return c.client.BaseURL.ResolveReference(&url.URL{
+		Path:     path,
+		RawQuery: qs.Encode(),
+	}).String(), nil
+}
+
+type cacheEntry struct {
+	Payload     string    `json:"payload"`
+	LastUpdated time.Time `json:"lastUpdated"`
 }
 
 // baseParams that must be included with every request
@@ -95,12 +113,6 @@ type SimplePriceResponse map[string]map[string]decimal.Decimal
 
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error) {
-	//var cacheKey = fmt.Sprintf("%s_%s", base, currency)
-	// check cache for this rate
-	//if rate, found := c.cache.Get(cacheKey); found {
-	//return rate.(*RateResponse), nil
-	//}
-
 	req, err := c.client.NewRequest(ctx, "GET", "/api/v3/simple/price", nil, &simplePriceParams{
 		baseParams:        c.baseParams,
 		Ids:               ids,
@@ -116,8 +128,6 @@ func (c *HTTPClient) FetchSimplePrice(ctx context.Context, ids string, vsCurrenc
 	if err != nil {
 		return nil, err
 	}
-
-	//c.cache.Set(cacheKey, &body, cache.DefaultExpiration)
 
 	return &body, nil
 }
@@ -143,33 +153,74 @@ type MarketChartResponse struct {
 }
 
 // FetchRate fetches the rate of a currency to BAT
-func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, error) {
-	//var cacheKey = fmt.Sprintf("%s_%s", base, currency)
-	// check cache for this rate
-	//if rate, found := c.cache.Get(cacheKey); found {
-	//return rate.(*RateResponse), nil
-	//}
+func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error) {
+	updated := time.Now()
 
 	url := fmt.Sprintf("/api/v3/coins/%s/market_chart", id)
-	req, err := c.client.NewRequest(ctx, "GET", url, nil, &marketChartParams{
+	params := &marketChartParams{
 		baseParams: c.baseParams,
 		Id:         id,
 		VsCurrency: vsCurrency,
 		Days:       days,
-	})
-	if err != nil {
-		return nil, err
 	}
+	cacheKey, err := c.cacheKey(ctx, url, params)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	conn := c.redis.Get()
+	defer conn.Close()
 
 	var body MarketChartResponse
-	_, err = c.client.Do(ctx, req, &body)
-	if err != nil {
-		return nil, err
+	var entry cacheEntry
+	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
+	if err == nil {
+		err = json.Unmarshal(entryBytes, &entry)
+		if err != nil {
+			return nil, updated, err
+		}
+		err = json.Unmarshal([]byte(entry.Payload), &body)
+		if err != nil {
+			return nil, updated, err
+		}
+
+		// 1h chart is cached for 2.5m
+		// 1d chart is cached for 1 hour
+		// 1w chart is cached for 7 hours
+		// etc
+		if time.Since(entry.LastUpdated).Hours() < float64(days) {
+			return &body, entry.LastUpdated, err
+		}
 	}
 
-	//c.cache.Set(cacheKey, &body, cache.DefaultExpiration)
+	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
+	if err != nil {
+		return nil, updated, err
+	}
 
-	return &body, nil
+	_, err = c.client.Do(ctx, req, &body)
+	if err != nil {
+		// attempt to use cache response on error if exists
+		if len(entry.Payload) > 0 {
+			return &body, entry.LastUpdated, nil
+		}
+		return nil, updated, err
+	}
+
+	bodyBytes, err := json.Marshal(&body)
+	if err != nil {
+		return nil, updated, err
+	}
+	entryBytes, err = json.Marshal(&cacheEntry{Payload: string(bodyBytes), LastUpdated: updated})
+	if err != nil {
+		return nil, updated, err
+	}
+	_, err = conn.Do("SET", cacheKey, entryBytes)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	return &body, updated, nil
 }
 
 type coinListParams struct {
