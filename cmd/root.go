@@ -39,6 +39,7 @@ func Execute(version, commit, buildTime string) {
 	// setup context with logging, but first we need to setup the environment
 	var logger *zerolog.Logger
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, viper.Get("environment"))
+	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, viper.GetBool("debug"))
 	ctx, logger = logging.SetupLogger(ctx)
 	// setup ratios service values
 	ctx = context.WithValue(ctx, appctx.RatiosServerCTXKey, viper.Get("ratios-service"))
@@ -67,6 +68,11 @@ func init() {
 		"the default environment")
 	Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
 	Must(viper.BindEnv("environment", "ENV"))
+
+	// debug logging - defaults to off
+	RootCmd.PersistentFlags().Bool("debug", false, "turn on debug logging")
+	Must(viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug")))
+	Must(viper.BindEnv("debug", "DEBUG"))
 
 	// ratiosAccessToken (required by all)
 	RootCmd.PersistentFlags().String("ratios-token", "",

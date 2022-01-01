@@ -18,7 +18,6 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/requestutils"
-	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
@@ -28,6 +27,8 @@ var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)authorization: .+\n`):   []byte("Authorization: Basic <token>\n"),
 	regexp.MustCompile(`(?i)x-gemini-apikey: .+\n`): []byte("X-GEMINI-APIKEY: <key>\n"),
 	regexp.MustCompile(`(?i)signature: .+\n`):       []byte("Signature: <sig>\n"),
+	regexp.MustCompile(`(?i)x_cg_pro_api_key=.+\n`): []byte("x_cg_pro_api_key:<key>\n"),
+	regexp.MustCompile(`(?i)x_cg_pro_api_key=.+&`):  []byte("x_cg_pro_api_key:<key>&"),
 }
 
 func redactSensitiveHeaders(corpus []byte) []byte {
@@ -296,13 +297,11 @@ func (c *SimpleHTTPClient) do(
 func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 	var (
 		code      int
-		header    http.Header
 		resp, err = c.do(ctx, req, v)
 	)
 	if resp != nil {
 		// it is possible to have a nil resp from c.do...
 		code = resp.StatusCode
-		header = resp.Header
 	}
 	if err != nil {
 		// errors returned from c.do could be go errors or upstream api errors
@@ -324,35 +323,5 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 		}
 		return resp, fmt.Errorf("failed c.do, no response body: %w", err)
 	}
-	logOut(ctx, "response", *req.URL, code, header, v)
 	return resp, nil
-}
-
-func logOut(
-	ctx context.Context,
-	outType string,
-	url url.URL,
-	status int,
-	headers http.Header,
-	body interface{},
-) {
-
-	logger := log.Ctx(ctx)
-	hash := map[string]interface{}{
-		"url":     url.String(),
-		"body":    body,
-		"headers": headers,
-	}
-	if status != 0 {
-		hash["status"] = status
-	}
-	input, err := json.Marshal(hash)
-	if err != nil {
-		sentry.CaptureException(err)
-	} else {
-		logger.Debug().
-			Str("type", "http."+outType).
-			RawJSON(outType, redactSensitiveHeaders(input)).
-			Msg(outType + " dump")
-	}
 }

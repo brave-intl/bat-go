@@ -79,6 +79,9 @@ func (c *HTTPClient) cacheKey(ctx context.Context, path string, body clients.Que
 		return "", err
 	}
 
+	// redact API key
+	qs.Del("x_cg_pro_api_key")
+
 	return c.client.BaseURL.ResolveReference(&url.URL{
 		Path:     path,
 		RawQuery: qs.Encode(),
