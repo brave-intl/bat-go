@@ -106,17 +106,17 @@ const (
 	// CoingeckoAccessTokenCTXKey - the context key for getting the coingecko server access token
 	CoingeckoAccessTokenCTXKey CTXKey = "coingecko_access_token"
 
-	// CoingeckoIdToSymbolKey - the context key for getting the mapping from coin id to symbol
-	CoingeckoIdToSymbolCTXKey CTXKey = "coingecko_id_to_symbol"
-	// CoingeckoSymbolToIdKey - the context key for getting the mapping from coin symbol to id
-	CoingeckoSymbolToIdCTXKey CTXKey = "coingecko_symbol_to_id"
-	// CoingeckoContractToIdKey - the context key for getting the mapping from coin contract to id
-	CoingeckoContractToIdCTXKey CTXKey = "coingecko_contract_to_id"
-	// CoingeckoSupportedVsCurrenciesKey - the context key for getting the list of supporved vs currencies
+	// CoingeckoIDToSymbolCTXKey - the context key for getting the mapping from coin id to symbol
+	CoingeckoIDToSymbolCTXKey CTXKey = "coingecko_id_to_symbol"
+	// CoingeckoSymbolToIDCTXKey - the context key for getting the mapping from coin symbol to id
+	CoingeckoSymbolToIDCTXKey CTXKey = "coingecko_symbol_to_id"
+	// CoingeckoContractToIDCTXKey - the context key for getting the mapping from coin contract to id
+	CoingeckoContractToIDCTXKey CTXKey = "coingecko_contract_to_id"
+	// CoingeckoSupportedVsCurrenciesCTXKey - the context key for getting the list of supporved vs currencies
 	CoingeckoSupportedVsCurrenciesCTXKey CTXKey = "coingecko_supported_vs_currencies"
-	// CoingeckoCoinLimitKey - the context key for getting the max number of coins
+	// CoingeckoCoinLimitCTXKey - the context key for getting the max number of coins
 	CoingeckoCoinLimitCTXKey CTXKey = "coingecko_coin_limit"
-	// CoingeckoVsCurrencyLimitKey - the context key for getting the max number of vs currencies
+	// CoingeckoVsCurrencyLimitCTXKey - the context key for getting the max number of vs currencies
 	CoingeckoVsCurrencyLimitCTXKey CTXKey = "coingecko_vs_currency_limit"
 	// RatiosRedisAddrCTXKey - the context key for getting the ratios redis address
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"

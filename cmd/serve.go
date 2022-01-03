@@ -84,6 +84,7 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 	return r
 }
 
+// SetupJobWorkers - setup job workers
 func SetupJobWorkers(ctx context.Context, jobs []srv.Job) error {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {

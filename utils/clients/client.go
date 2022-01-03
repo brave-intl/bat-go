@@ -69,13 +69,13 @@ type SimpleHTTPClient struct {
 
 // New returns a new SimpleHTTPClient
 func New(serverURL string, authToken string) (*SimpleHTTPClient, error) {
-	return NewWithHttpClient(serverURL, authToken, &http.Client{
+	return NewWithHTTPClient(serverURL, authToken, &http.Client{
 		Timeout: time.Second * 10,
 	})
 }
 
-// NewWithHttpClient returns a new SimpleHTTPClient, using the provided http.Client
-func NewWithHttpClient(serverURL string, authToken string, client *http.Client) (*SimpleHTTPClient, error) {
+// NewWithHTTPClient returns a new SimpleHTTPClient, using the provided http.Client
+func NewWithHTTPClient(serverURL string, authToken string, client *http.Client) (*SimpleHTTPClient, error) {
 	baseURL, err := url.Parse(serverURL)
 
 	if err != nil {

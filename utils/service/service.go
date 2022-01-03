@@ -26,6 +26,7 @@ type JobService interface {
 	Jobs() []Job
 }
 
+// JobWorker - a job worker
 func JobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {

@@ -93,7 +93,7 @@ func (suite *CoingeckoTestSuite) TestFetchCoinList() {
 	// simple price response should have a bat key
 	var foundBAT bool
 	for _, v := range *resp {
-		if v.Id == "basic-attention-token" {
+		if v.ID == "basic-attention-token" {
 			foundBAT = true
 			break
 		}

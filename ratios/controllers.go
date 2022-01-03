@@ -18,7 +18,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			coinIdsInput      = chi.URLParam(r, "coinIds")
+			coinIDsInput      = chi.URLParam(r, "coinIDs")
 			vsCurrenciesInput = chi.URLParam(r, "vsCurrencies")
 			durationInput     = chi.URLParam(r, "duration")
 		)
@@ -29,15 +29,15 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			ctx, logger = logging.SetupLogger(ctx)
 		}
 
-		var coinIds = new(CoingeckoCoinList)
-		if err = inputs.DecodeAndValidate(ctx, coinIds, []byte(coinIdsInput)); err != nil {
+		var coinIDs = new(CoingeckoCoinList)
+		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
 				logger.Error().Err(err).Msg("invalid coin input from caller")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
 					map[string]interface{}{
 						"err":     err.Error(),
-						"coinIds": "invalid coin",
+						"coinIDs": "invalid coin",
 					},
 				)
 			}
@@ -80,7 +80,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 		}
 
-		rates, err := service.GetRelative(ctx, *coinIds, *vsCurrencies, *duration)
+		rates, err := service.GetRelative(ctx, *coinIDs, *vsCurrencies, *duration)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get relative exchange rate")
 			return handlers.WrapError(err, "failed to get relative exchange rate", http.StatusInternalServerError)
@@ -96,7 +96,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			coinIdInput     = chi.URLParam(r, "coinId")
+			coinIDInput     = chi.URLParam(r, "coinID")
 			vsCurrencyInput = chi.URLParam(r, "vsCurrency")
 			durationInput   = chi.URLParam(r, "duration")
 		)
@@ -107,15 +107,15 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			ctx, logger = logging.SetupLogger(ctx)
 		}
 
-		var coinId = new(CoingeckoCoin)
-		if err = inputs.DecodeAndValidate(ctx, coinId, []byte(coinIdInput)); err != nil {
+		var coinID = new(CoingeckoCoin)
+		if err = inputs.DecodeAndValidate(ctx, coinID, []byte(coinIDInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
 				logger.Error().Err(err).Msg("invalid coin input from caller")
 				return handlers.ValidationError(
 					"Error validating coin url parameter",
 					map[string]interface{}{
 						"err":     err.Error(),
-						"coinIds": "invalid coin",
+						"coinIDs": "invalid coin",
 					},
 				)
 			}
@@ -158,7 +158,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
 		}
 
-		rates, err := service.GetHistory(ctx, *coinId, *vsCurrency, *duration)
+		rates, err := service.GetHistory(ctx, *coinID, *vsCurrency, *duration)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to get historical exchange rate")
 			return handlers.WrapError(err, "failed to get historical exchange rate", http.StatusInternalServerError)

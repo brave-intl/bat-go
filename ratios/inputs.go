@@ -31,16 +31,16 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 		ok bool
 	)
 
-	symbolToId := ctx.Value(appctx.CoingeckoSymbolToIdCTXKey).(map[string]string)
-	contractToId := ctx.Value(appctx.CoingeckoContractToIdCTXKey).(map[string]string)
+	symbolToID := ctx.Value(appctx.CoingeckoSymbolToIDCTXKey).(map[string]string)
+	contractToID := ctx.Value(appctx.CoingeckoContractToIDCTXKey).(map[string]string)
 
 	coin := strings.ToLower(string(v))
 	if coin == "" {
 		return ErrCoingeckoCoinEmpty
 	}
 
-	if c, ok = symbolToId[coin]; !ok {
-		if c, ok = contractToId[coin]; !ok {
+	if c, ok = symbolToID[coin]; !ok {
+		if c, ok = contractToID[coin]; !ok {
 			c = coin
 		}
 	}
@@ -51,7 +51,7 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 
 // Validate - implement validatable
 func (cc *CoingeckoCoin) Validate(ctx context.Context) error {
-	idToSymbol := ctx.Value(appctx.CoingeckoIdToSymbolCTXKey).(map[string]string)
+	idToSymbol := ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
 
 	if _, ok := idToSymbol[cc.String()]; ok {
 		return nil

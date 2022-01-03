@@ -133,8 +133,8 @@ var (
 func (s *Service) initializeCoingeckoCurrencies(ctx context.Context) (context.Context, error) {
 	var (
 		idToSymbol            = map[string]string{}
-		symbolToId            = map[string]string{}
-		contractToId          = map[string]string{}
+		symbolToID            = map[string]string{}
+		contractToID          = map[string]string{}
 		supportedVsCurrencies = map[string]bool{}
 	)
 
@@ -152,30 +152,30 @@ func (s *Service) initializeCoingeckoCurrencies(ctx context.Context) (context.Co
 	}
 
 	for _, coin := range *list {
-		if specialId, ok := special[coin.Symbol]; ok && specialId != coin.Id {
+		if specialID, ok := special[coin.Symbol]; ok && specialID != coin.ID {
 			continue
 		}
 
-		if coin.Id != "link" {
-			idToSymbol[coin.Id] = coin.Symbol
+		if coin.ID != "link" {
+			idToSymbol[coin.ID] = coin.Symbol
 		}
-		symbolToId[coin.Symbol] = coin.Id
+		symbolToID[coin.Symbol] = coin.ID
 
 		if len(coin.Platforms.Ethereum) > 0 {
-			contractToId[strings.ToLower(coin.Platforms.Ethereum)] = coin.Id
+			contractToID[strings.ToLower(coin.Platforms.Ethereum)] = coin.ID
 		}
 	}
 
-	ctx = context.WithValue(ctx, appctx.CoingeckoIdToSymbolCTXKey, idToSymbol)
-	ctx = context.WithValue(ctx, appctx.CoingeckoSymbolToIdCTXKey, symbolToId)
-	ctx = context.WithValue(ctx, appctx.CoingeckoContractToIdCTXKey, contractToId)
+	ctx = context.WithValue(ctx, appctx.CoingeckoIDToSymbolCTXKey, idToSymbol)
+	ctx = context.WithValue(ctx, appctx.CoingeckoSymbolToIDCTXKey, symbolToID)
+	ctx = context.WithValue(ctx, appctx.CoingeckoContractToIDCTXKey, contractToID)
 	ctx = context.WithValue(ctx, appctx.CoingeckoSupportedVsCurrenciesCTXKey, supportedVsCurrencies)
 
 	return ctx, nil
 }
 
 func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceResponse, duration CoingeckoDuration) coingecko.SimplePriceResponse {
-	idToSymbol := ctx.Value(appctx.CoingeckoIdToSymbolCTXKey).(map[string]string)
+	idToSymbol := ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
 	out := map[string]map[string]decimal.Decimal{}
 
 	for k, v := range resp {

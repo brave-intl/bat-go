@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/gomodule/redigo/redis"
 	"github.com/google/go-querystring/query"
 	"github.com/shopspring/decimal"
@@ -44,7 +45,7 @@ func NewWithContext(ctx context.Context, redis *redis.Pool) (Client, error) {
 		return nil, fmt.Errorf("failed to get CoingeckoAccessToken from context: %w", err)
 	}
 
-	client, err := clients.NewWithHttpClient(serverURL, "", &http.Client{
+	client, err := clients.NewWithHTTPClient(serverURL, "", &http.Client{
 		Timeout: time.Second * 30,
 	})
 	if err != nil {
@@ -66,7 +67,7 @@ func NewWithContext(ctx context.Context, redis *redis.Pool) (Client, error) {
 	return NewClientWithPrometheus(
 		&HTTPClient{
 			baseParams: baseParams{
-				ApiKey: accessToken,
+				APIKey: accessToken,
 			},
 			client: client,
 			redis:  redis,
@@ -95,7 +96,7 @@ type cacheEntry struct {
 
 // baseParams that must be included with every request
 type baseParams struct {
-	ApiKey string `url:"x_cg_pro_api_key"`
+	APIKey string `url:"x_cg_pro_api_key"`
 }
 
 // simplePriceParams for fetching prices
@@ -114,7 +115,7 @@ func (p *simplePriceParams) GenerateQueryString() (url.Values, error) {
 // SimplePriceResponse is the response received from coingecko
 type SimplePriceResponse map[string]map[string]decimal.Decimal
 
-// FetchRate fetches the rate of a currency to BAT
+// FetchSimplePrice fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error) {
 	req, err := c.client.NewRequest(ctx, "GET", "/api/v3/simple/price", nil, &simplePriceParams{
 		baseParams:        c.baseParams,
@@ -138,7 +139,7 @@ func (c *HTTPClient) FetchSimplePrice(ctx context.Context, ids string, vsCurrenc
 // marketChartParams for fetching market chart
 type marketChartParams struct {
 	baseParams
-	Id         string  `url:"id"`
+	ID         string  `url:"id"`
 	VsCurrency string  `url:"vs_currency"`
 	Days       float32 `url:"days,omitempty"`
 }
@@ -155,14 +156,14 @@ type MarketChartResponse struct {
 	TotalVolumes [][]decimal.Decimal `json:"total_volumes"`
 }
 
-// FetchRate fetches the rate of a currency to BAT
+// FetchMarketChart fetches the history rate of a currency to BAT
 func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error) {
 	updated := time.Now()
 
 	url := fmt.Sprintf("/api/v3/coins/%s/market_chart", id)
 	params := &marketChartParams{
 		baseParams: c.baseParams,
-		Id:         id,
+		ID:         id,
 		VsCurrency: vsCurrency,
 		Days:       days,
 	}
@@ -172,7 +173,10 @@ func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency
 	}
 
 	conn := c.redis.Get()
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		logutils.Logger(ctx, "coingecko.FetchMarketChart").Error().Err(err).Msg("failed to close redis conn")
+	}()
 
 	var body MarketChartResponse
 	var entry cacheEntry
@@ -236,12 +240,14 @@ func (p *coinListParams) GenerateQueryString() (url.Values, error) {
 	return query.Values(p)
 }
 
+// CoinInfoPlatform - platform coin info
 type CoinInfoPlatform struct {
 	Ethereum string `json:"ethereum,omitempty"`
 }
 
+// CoinInfo - info about coin
 type CoinInfo struct {
-	Id        string           `json:"id"`
+	ID        string           `json:"id"`
 	Symbol    string           `json:"symbol"`
 	Name      string           `json:"name"`
 	Platforms CoinInfoPlatform `json:"platforms,omitempty"`
