@@ -39,6 +39,7 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.CoingeckoAccessTokenCTXKey, viper.Get("coingecko-token"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoCoinLimitCTXKey, viper.GetInt("coingecko-coin-limit"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, viper.GetInt("coingecko-vs-currency-limit"))
+	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
 
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
@@ -50,6 +51,11 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r.Get("/v2/relative/provider/coingecko/{coinIds}/{vsCurrencies}/{duration}", middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)).ServeHTTP)
 	r.Get("/v2/history/coingecko/{coinId}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
+
+	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initalize job workers")
+	}
 
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)

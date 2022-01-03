@@ -132,7 +132,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 					"Error validating vs currency url parameter",
 					map[string]interface{}{
 						"err":          err.Error(),
-						"vScurrencies": "invalid vs currency",
+						"vsCurrencies": "invalid vs currency",
 					},
 				)
 			}

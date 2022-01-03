@@ -118,6 +118,8 @@ const (
 	CoingeckoCoinLimitCTXKey CTXKey = "coingecko_coin_limit"
 	// CoingeckoVsCurrencyLimitKey - the context key for getting the max number of vs currencies
 	CoingeckoVsCurrencyLimitCTXKey CTXKey = "coingecko_vs_currency_limit"
+	// RatiosRedisAddrCTXKey - the context key for getting the ratios redis address
+	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 )
 
 var (

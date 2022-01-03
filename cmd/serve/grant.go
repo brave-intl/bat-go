@@ -18,11 +18,9 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
-	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
@@ -333,32 +331,6 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	return ctx, r, promotionService, jobs
 }
 
-func jobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
-	for {
-		_, err := job(ctx)
-		if err != nil {
-			log := logger.Error().Err(err)
-			httpError, ok := err.(*errorutils.ErrorBundle)
-			if ok {
-				state, ok := httpError.Data().(clients.HTTPState)
-				if ok {
-					log = log.Int("status", state.Status).
-						Str("path", state.Path).
-						Interface("data", state.Body)
-				}
-			}
-			log.Msg("error encountered in job run")
-			sentry.CaptureException(err)
-		}
-		// regardless if attempted or not, wait for the duration until retrying
-		<-time.After(duration)
-	}
-}
-
 // RunGrantServer is the runner for starting up the grant server
 func RunGrantServer(cmd *cobra.Command, args []string) error {
 	enableJobWorkers, err := cmd.Flags().GetBool("enable-job-workers")
@@ -439,7 +411,7 @@ func GrantServer(
 			for i := 0; i < job.Workers; i++ {
 				// spin up a job worker for each worker
 				logger.Debug().Msg("starting job worker")
-				go jobWorker(ctx, job.Func, job.Cadence)
+				go srv.JobWorker(ctx, job.Func, job.Cadence)
 			}
 		}
 	}

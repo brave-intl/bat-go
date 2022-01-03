@@ -53,7 +53,7 @@ func (_d ClientWithPrometheus) FetchCoinList(ctx context.Context, includePlatfor
 }
 
 // FetchMarketChart implements Client
-func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (mp1 *MarketChartResponse, err error) {
+func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (mp1 *MarketChartResponse, t1 time.Time, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

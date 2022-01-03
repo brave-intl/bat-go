@@ -3,20 +3,23 @@ package ratios
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
 )
 
 // NewService - create a new ratios service structure
-func NewService(ctx context.Context, coingecko coingecko.Client) *Service {
+func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool) *Service {
 	return &Service{
 		jobs:      []srv.Job{},
 		coingecko: coingecko,
+		redis:     redis,
 	}
 }
 
@@ -25,6 +28,7 @@ type Service struct {
 	jobs []srv.Job
 	// coingecko client
 	coingecko coingecko.Client
+	redis     *redis.Pool
 }
 
 // Jobs - Implement srv.JobService interface
@@ -40,12 +44,36 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	client, err := coingecko.NewWithContext(ctx)
+	redisAddr, err := appctx.GetStringFromContext(ctx, appctx.RatiosRedisAddrCTXKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize the redis client")
+		return ctx, nil, fmt.Errorf("failed to initialize redis client: %w", err)
+	}
+
+	redis := &redis.Pool{
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+		// Dial or DialContext must be set. When both are set, DialContext takes precedence over Dial.
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", strings.ReplaceAll(redisAddr, "redis://", ""))
+		},
+	}
+
+	conn := redis.Get()
+	defer conn.Close()
+	err = conn.Err()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize the redis client")
+		return ctx, nil, fmt.Errorf("failed to initialize redis client: %w", err)
+	}
+
+	client, err := coingecko.NewWithContext(ctx, redis)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	service := NewService(ctx, client)
+
+	service := NewService(ctx, client, redis)
 
 	ctx, err = service.initializeCoingeckoCurrencies(ctx)
 	if err != nil {
@@ -53,10 +81,46 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko coin mappings: %w", err)
 	}
 
+	service.jobs = []srv.Job{
+		{
+			Func:    service.RunNextRelativeCachePrepopulationJob,
+			Cadence: 5 * time.Minute,
+			Workers: 1,
+		},
+	}
+
 	// Sigh, for compatibility with existing ratios mistakes
 	decimal.MarshalJSONWithoutQuotes = true
 
 	return ctx, service, nil
+}
+
+// RunNextRelativeCachePrepopulationJob takes the next job to prepopulate the relative cache and completes it
+func (s *Service) RunNextRelativeCachePrepopulationJob(ctx context.Context) (bool, error) {
+	topCoins, err := s.GetTopCoins(ctx, 25)
+	if err != nil {
+		return true, fmt.Errorf("failed to retrieve top coins: %w", err)
+	}
+	topCurrencies, err := s.GetTopCurrencies(ctx, 5)
+	if err != nil {
+		return true, fmt.Errorf("failed to retrieve top currencies: %w", err)
+	}
+
+	if len(topCoins) == 0 || len(topCurrencies) == 0 {
+		return false, nil
+	}
+
+	rates, err := s.coingecko.FetchSimplePrice(ctx, topCoins.String(), topCurrencies.String(), true)
+	if err != nil {
+		return true, fmt.Errorf("failed to fetch price from coingecko: %w", err)
+	}
+
+	err = s.CacheRelative(ctx, *rates)
+	if err != nil {
+		return true, fmt.Errorf("failed to cache relative rates: %w", err)
+	}
+
+	return true, nil
 }
 
 type RelativeResponse struct {
@@ -72,16 +136,30 @@ func (s *Service) GetRelative(ctx context.Context, coinIds CoingeckoCoinList, vs
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	rates, err := s.coingecko.FetchSimplePrice(ctx, coinIds.String(), vsCurrencies.String(), duration == "1d")
+	// record coin / currency usage
+	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin(coinIds), []CoingeckoVsCurrency(vsCurrencies))
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to fetch price from coingecko")
-		return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
+		logger.Error().Err(err).Msg("failed to record coin / currency statistics")
+	}
+
+	// attempt to fetch from cache
+	rates, updated, err := s.GetRelativeFromCache(ctx, vsCurrencies, []CoingeckoCoin(coinIds)...)
+	if err != nil || rates == nil {
+		if err != nil {
+			logger.Debug().Err(err).Msg("failed to fetch cached relative rates")
+		}
+		rates, err = s.coingecko.FetchSimplePrice(ctx, coinIds.String(), vsCurrencies.String(), true)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to fetch price from coingecko")
+			return nil, fmt.Errorf("failed to fetch price from coingecko: %w", err)
+		}
+		updated = time.Now()
 	}
 
 	if duration != "1d" {
 		if len(coinIds) == 1 {
 			// request history for duration to calculate change
-			chart, err := s.coingecko.FetchMarketChart(ctx, coinIds[0].String(), vsCurrencies[0].String(), duration.ToDays())
+			chart, _, err := s.coingecko.FetchMarketChart(ctx, coinIds[0].String(), vsCurrencies[0].String(), duration.ToDays())
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to fetch chart from coingecko")
 				return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
@@ -95,6 +173,8 @@ func (s *Service) GetRelative(ctx context.Context, coinIds CoingeckoCoinList, vs
 			tmp[coinIds[0].String()][vsCurrencies[0].String()+"_timeframe_change"] = change
 			r := coingecko.SimplePriceResponse(tmp)
 			rates = &r
+
+			// FIXME fudge the other vsCurrencies
 		} else {
 			// fill change with 0s ( it's unused )
 			out := map[string]map[string]decimal.Decimal{}
@@ -112,8 +192,8 @@ func (s *Service) GetRelative(ctx context.Context, coinIds CoingeckoCoinList, vs
 	}
 
 	return &RelativeResponse{
-		Payload:     mapSimplePriceResponse(ctx, *rates),
-		LastUpdated: time.Now(),
+		Payload:     mapSimplePriceResponse(ctx, *rates, duration),
+		LastUpdated: updated,
 	}, nil
 }
 
@@ -130,7 +210,12 @@ func (s *Service) GetHistory(ctx context.Context, coinId CoingeckoCoin, vsCurren
 		ctx, logger = logging.SetupLogger(ctx)
 	}
 
-	chart, err := s.coingecko.FetchMarketChart(ctx, coinId.String(), vsCurrency.String(), duration.ToDays())
+	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin{coinId}, []CoingeckoVsCurrency{vsCurrency})
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to record coin / currency statistics")
+	}
+
+	chart, updated, err := s.coingecko.FetchMarketChart(ctx, coinId.String(), vsCurrency.String(), duration.ToDays())
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to fetch chart from coingecko")
 		return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
@@ -138,6 +223,6 @@ func (s *Service) GetHistory(ctx context.Context, coinId CoingeckoCoin, vsCurren
 
 	return &HistoryResponse{
 		Payload:     *chart,
-		LastUpdated: time.Now(),
+		LastUpdated: updated,
 	}, nil
 }

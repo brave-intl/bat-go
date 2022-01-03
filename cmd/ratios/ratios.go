@@ -35,6 +35,10 @@ func init() {
 	ratiosCmd.PersistentFlags().Int("coingecko-vs-currency-limit", 5, "the coingecko vs currency limit")
 	cmd.Must(viper.BindPFlag("coingecko-vs-currency-limit", ratiosCmd.PersistentFlags().Lookup("coingecko-vs-currency-limit")))
 	cmd.Must(viper.BindEnv("coingecko-vs-currency-limit", "COINGECKO_VS_CURRENCY_LIMIT"))
+
+	ratiosCmd.PersistentFlags().String("redis-addr", "redis://localhost:6379", "the redis address")
+	cmd.Must(viper.BindPFlag("redis-addr", ratiosCmd.PersistentFlags().Lookup("redis-addr")))
+	cmd.Must(viper.BindEnv("redis-addr", "REDIS_ADDR"))
 }
 
 var (
