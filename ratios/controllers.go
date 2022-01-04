@@ -2,6 +2,7 @@ package ratios
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -30,6 +31,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 		}
 
 		var coinIDs = new(CoingeckoCoinList)
+		fmt.Println(coinIDs)
 		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
 				logger.Error().Err(err).Msg("invalid coin input from caller")

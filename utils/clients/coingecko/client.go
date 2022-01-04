@@ -52,18 +52,6 @@ func NewWithContext(ctx context.Context, redis *redis.Pool) (Client, error) {
 		return nil, err
 	}
 
-	// get default timeout and purge from context
-	//expires, err := appctx.GetDurationFromContext(ctx, appctx.RatiosCacheExpiryDurationCTXKey)
-	//if err != nil {
-	//expires = 5 * time.Second
-	//}
-
-	// get default purge and purge from context
-	//purge, err := appctx.GetDurationFromContext(ctx, appctx.RatiosCachePurgeDurationCTXKey)
-	//if err != nil {
-	//purge = 1 * time.Minute
-	//}
-
 	return NewClientWithPrometheus(
 		&HTTPClient{
 			baseParams: baseParams{

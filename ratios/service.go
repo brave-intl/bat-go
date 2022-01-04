@@ -162,6 +162,17 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	}
 
 	if duration != "1d" {
+		// fill change with 0s ( it's unused for multiple coinIDs and we will overwrite for single )
+		out := map[string]map[string]decimal.Decimal{}
+		for k, v := range *rates {
+			innerOut := map[string]decimal.Decimal{}
+			for kk, vv := range v {
+				innerOut[kk+"_timeframe_change"] = decimal.Zero
+				innerOut[kk] = vv
+			}
+			out[k] = innerOut
+		}
+
 		if len(coinIDs) == 1 {
 			// request history for duration to calculate change
 			chart, _, err := s.coingecko.FetchMarketChart(ctx, coinIDs[0].String(), vsCurrencies[0].String(), duration.ToDays())
@@ -170,30 +181,15 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 				return nil, fmt.Errorf("failed to fetch chart from coingecko: %w", err)
 			}
 
-			tmp := map[string]map[string]decimal.Decimal(*rates)
-			current := tmp[coinIDs[0].String()][vsCurrencies[0].String()]
+			current := out[coinIDs[0].String()][vsCurrencies[0].String()]
 			previous := chart.Prices[0][1]
 			change := current.Sub(previous).Div(previous).Mul(decimal.NewFromFloat(100))
 
-			tmp[coinIDs[0].String()][vsCurrencies[0].String()+"_timeframe_change"] = change
-			r := coingecko.SimplePriceResponse(tmp)
-			rates = &r
-
-			// FIXME fudge the other vsCurrencies
-		} else {
-			// fill change with 0s ( it's unused )
-			out := map[string]map[string]decimal.Decimal{}
-			for k, v := range *rates {
-				innerOut := map[string]decimal.Decimal{}
-				for kk, vv := range v {
-					innerOut[kk+"_timeframe_change"] = decimal.Zero
-					innerOut[kk] = vv
-				}
-				out[k] = innerOut
-			}
-			tmp := coingecko.SimplePriceResponse(out)
-			rates = &tmp
+			out[coinIDs[0].String()][vsCurrencies[0].String()+"_timeframe_change"] = change
 		}
+
+		tmp := coingecko.SimplePriceResponse(out)
+		rates = &tmp
 	}
 
 	return &RelativeResponse{

@@ -164,7 +164,9 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 			// the least recently updated
 			if r.LastUpdated.Before(updated) {
 				updated = r.LastUpdated
-				// FIXME check if response is too old
+				if time.Since(updated) > 15*time.Minute {
+					return nil, updated, fmt.Errorf("cached rate is too old: %s", updated)
+				}
 			}
 
 			// check that all vs currencies are included
