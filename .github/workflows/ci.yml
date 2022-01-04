@@ -40,6 +40,7 @@ env:
   BITFLYER_EXTRA_CLIENT_SECRET: ${{secrets.BITFLYER_EXTRA_CLIENT_SECRET}}
   BITFLYER_SERVER: ${{secrets.BITFLYER_SERVER}}
   BITFLYER_TOKEN: ${{secrets.BITFLYER_TOKEN}}
+  REDIS_ADDR: redis://grant-redis/
 
 jobs:
   CI:

@@ -101,6 +101,25 @@ const (
 	RateLimiterBurstCTXKey CTXKey = "rate_limit_burst"
 	// NoUnlinkPriorToDurationCTXKey - the iso duration of time that no unlinkings must have happened
 	NoUnlinkPriorToDurationCTXKey CTXKey = "no_unlinkings_prior_to"
+	// CoingeckoServerCTXKey - the context key for getting the coingecko server
+	CoingeckoServerCTXKey CTXKey = "coingecko_server"
+	// CoingeckoAccessTokenCTXKey - the context key for getting the coingecko server access token
+	CoingeckoAccessTokenCTXKey CTXKey = "coingecko_access_token"
+
+	// CoingeckoIDToSymbolCTXKey - the context key for getting the mapping from coin id to symbol
+	CoingeckoIDToSymbolCTXKey CTXKey = "coingecko_id_to_symbol"
+	// CoingeckoSymbolToIDCTXKey - the context key for getting the mapping from coin symbol to id
+	CoingeckoSymbolToIDCTXKey CTXKey = "coingecko_symbol_to_id"
+	// CoingeckoContractToIDCTXKey - the context key for getting the mapping from coin contract to id
+	CoingeckoContractToIDCTXKey CTXKey = "coingecko_contract_to_id"
+	// CoingeckoSupportedVsCurrenciesCTXKey - the context key for getting the list of supporved vs currencies
+	CoingeckoSupportedVsCurrenciesCTXKey CTXKey = "coingecko_supported_vs_currencies"
+	// CoingeckoCoinLimitCTXKey - the context key for getting the max number of coins
+	CoingeckoCoinLimitCTXKey CTXKey = "coingecko_coin_limit"
+	// CoingeckoVsCurrencyLimitCTXKey - the context key for getting the max number of vs currencies
+	CoingeckoVsCurrencyLimitCTXKey CTXKey = "coingecko_vs_currency_limit"
+	// RatiosRedisAddrCTXKey - the context key for getting the ratios redis address
+	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 )
 
 var (
