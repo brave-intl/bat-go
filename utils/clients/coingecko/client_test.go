@@ -29,9 +29,8 @@ func TestCoingeckoTestSuite(t *testing.T) {
 var (
 	coingeckoService       string = "https://api.coingecko.com/"
 	coingeckoToken         string
-	coingeckoCoinLimit     int    = 2
-	coingeckoCurrencyLimit int    = 2
-	redisAddr              string = os.Getenv("REDIS_ADDR")
+	coingeckoCoinLimit     int = 2
+	coingeckoCurrencyLimit int = 2
 )
 
 func (suite *CoingeckoTestSuite) SetupTest() {
@@ -54,6 +53,11 @@ func (suite *CoingeckoTestSuite) SetupTest() {
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoCoinLimitCTXKey, coingeckoCoinLimit)
 	// vs-currency limit
 	suite.ctx = context.WithValue(suite.ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, coingeckoCurrencyLimit)
+
+	var redisAddr string = "redis://grant-redis"
+	if len(os.Getenv("REDIS_ADDR")) > 0 {
+		redisAddr = os.Getenv("REDIS_ADDR")
+	}
 
 	suite.redisPool = &redis.Pool{
 		MaxIdle:   50,
