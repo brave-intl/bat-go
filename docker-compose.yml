@@ -67,6 +67,7 @@ services:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
     depends_on:
+      - redis
       - kafka
       - postgres
       - challenge-bypass
@@ -135,6 +136,7 @@ services:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
     depends_on:
+      - redis
       - kafka
       - postgres
       - challenge-bypass
