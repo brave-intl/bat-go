@@ -1550,7 +1550,7 @@ func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryW
 			query := `
 					UPDATE claim_drain
 					SET erred = FALSE, status = 'retry-bypass-cbr'
-					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'failed'
+					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'reputation-failed'
 				`
 			result, err := pg.ExecContext(ctx, query, walletID.String())
 			if err != nil {
