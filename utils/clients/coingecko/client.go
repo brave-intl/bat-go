@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
-	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/gomodule/redigo/redis"
 	"github.com/google/go-querystring/query"
 	"github.com/shopspring/decimal"
@@ -161,10 +161,7 @@ func (c *HTTPClient) FetchMarketChart(ctx context.Context, id string, vsCurrency
 	}
 
 	conn := c.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "coingecko.FetchMarketChart").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	var body MarketChartResponse
 	var entry cacheEntry
