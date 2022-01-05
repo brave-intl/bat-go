@@ -3,7 +3,6 @@ package ratios
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
@@ -56,7 +55,7 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		IdleTimeout: 240 * time.Second,
 		// Dial or DialContext must be set. When both are set, DialContext takes precedence over Dial.
 		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", strings.ReplaceAll(redisAddr, "redis://", ""))
+			return redis.DialURL(redisAddr)
 		},
 	}
 
