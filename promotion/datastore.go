@@ -1550,16 +1550,25 @@ func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryW
 			query := `
 					UPDATE claim_drain
 					SET erred = FALSE, status = 'retry-bypass-cbr'
-					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'failure'
+					WHERE wallet_id = $1 AND erred = TRUE AND errcode = 'reputation-failed' AND status = 'failed'
 				`
-			_, err = pg.ExecContext(ctx, query, walletID.String())
+			result, err := pg.ExecContext(ctx, query, walletID.String())
 			if err != nil {
 				err = fmt.Errorf("drain retry job: failed to update drain job for walletID %s: %w ", walletID, err)
 				logging.FromContext(ctx).Error().Err(err).Msg("")
 				sentry.CaptureException(err)
+			} else {
+				rowsAffected, err := result.RowsAffected()
+				if err != nil {
+					err = fmt.Errorf("drain retry job: failed to get rows affected for walletID %s: %w ", walletID, err)
+					logging.FromContext(ctx).Error().Err(err).Msg("")
+					sentry.CaptureException(err)
+				}
+				if rowsAffected > 0 {
+					logging.FromContext(ctx).Info().
+						Msgf("drain retry job: successfully updated drain job for walletID %s", walletID)
+				}
 			}
-			logging.FromContext(ctx).Info().
-				Msgf("drain retry job: successfully updated drain job for walletID %s", walletID)
 		}
 	}
 }
