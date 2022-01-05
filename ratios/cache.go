@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
-	logutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
 )
@@ -15,10 +15,7 @@ import (
 //GetTopCoins - get the top coins
 func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList, error) {
 	conn := s.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.GetTopCoins").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	var resp CoingeckoCoinList
 	coinCacheKey := fmt.Sprintf("coins-%s", time.Now().Format("2006-01-02"))
@@ -40,10 +37,7 @@ func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList
 //GetTopCurrencies - get the top currencies
 func (s *Service) GetTopCurrencies(ctx context.Context, limit int) (CoingeckoVsCurrencyList, error) {
 	conn := s.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.GetTopCurrencies").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	var resp CoingeckoVsCurrencyList
 	currencyCacheKey := fmt.Sprintf("currencies-%s", time.Now().Format("2006-01-02"))
@@ -65,10 +59,7 @@ func (s *Service) GetTopCurrencies(ctx context.Context, limit int) (CoingeckoVsC
 // RecordCoinsAndCurrencies - record the coins and currencies in the cache
 func (s *Service) RecordCoinsAndCurrencies(ctx context.Context, coinIds []CoingeckoCoin, vsCurrencies []CoingeckoVsCurrency) error {
 	conn := s.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.RecordCoinsAndCurrencies").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	coinCacheKey := fmt.Sprintf("coins-%s", time.Now().Format("2006-01-02"))
 	currencyCacheKey := fmt.Sprintf("currencies-%s", time.Now().Format("2006-01-02"))
@@ -98,10 +89,7 @@ func (s *Service) RecordCoinsAndCurrencies(ctx context.Context, coinIds []Coinge
 // CacheRelative - cache the relative values
 func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceResponse) error {
 	conn := s.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.CacheRelative").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	now := time.Now()
 
@@ -134,10 +122,7 @@ func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceR
 // GetRelativeFromCache - get the relative response from the cache
 func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies CoingeckoVsCurrencyList, coinIds ...CoingeckoCoin) (*coingecko.SimplePriceResponse, time.Time, error) {
 	conn := s.redis.Get()
-	defer func() {
-		err := conn.Close()
-		logutils.Logger(ctx, "ratios.GetRelativeFromCache").Error().Err(err).Msg("failed to close redis conn")
-	}()
+	defer closers.Log(ctx, conn)
 
 	updated := time.Now()
 
