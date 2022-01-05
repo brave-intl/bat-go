@@ -126,7 +126,7 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 		walletIDs[i] = uuid.NewV4()
 
 		_, err = pg.RawDB().ExecContext(context.Background(), query, walletIDs[i].String(), true,
-			"reputation-failed", "failure", uuid.NewV4().String())
+			"reputation-failed", "failed", uuid.NewV4().String())
 
 		suite.Require().NoError(err, "should have inserted claim drain row")
 	}
