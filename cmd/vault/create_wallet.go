@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -42,18 +44,35 @@ func init() {
 	createWalletBuilder.Flag().Bool("offline", false,
 		"operate in multi-step offline mode").
 		Bind("offline")
+
+	createWalletBuilder.Flag().Bool("debug", false,
+		"debug logging").
+		Bind("debug")
 }
 
 // CreateWallet creates a wallet
 func CreateWallet(command *cobra.Command, args []string) error {
+
+	ctx := command.Context()
+
 	offline, err := command.Flags().GetBool("offline")
 	if err != nil {
 		return err
 	}
-	logger, err := appctx.GetLogger(command.Context())
+
+	debug, err := command.Flags().GetBool("debug")
 	if err != nil {
 		return err
 	}
+	if debug {
+		// setup debug for client
+		ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
+		// setup debug log level
+		ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, "debug")
+	}
+
+	// setup a new logger, add to context as well
+	ctx, logger := logutils.SetupLogger(ctx)
 
 	name := args[0]
 	logFile := name + "-registration.json"
@@ -107,7 +126,11 @@ func CreateWallet(command *cobra.Command, args []string) error {
 
 		state.WalletInfo.PublicKey = signer.String()
 
-		wallet := &uphold.Wallet{Info: state.WalletInfo, PrivKey: signer, PubKey: signer}
+		// pass ctx (with logger on it to new uphold, so wallet will set logger)
+		wallet, err := uphold.New(ctx, state.WalletInfo, signer, signer)
+		if err != nil {
+			return err
+		}
 
 		reg, err := wallet.PrepareRegistration(name)
 		if err != nil {
@@ -134,7 +157,12 @@ func CreateWallet(command *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		wallet := uphold.Wallet{Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
+
+		// pass ctx (with logger on it to new uphold, so wallet will set logger)
+		wallet, err := uphold.New(ctx, state.WalletInfo, ed25519.PrivateKey{}, publicKey)
+		if err != nil {
+			return err
+		}
 
 		err = wallet.SubmitRegistration(state.Registration)
 		if err != nil {
