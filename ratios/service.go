@@ -3,6 +3,7 @@ package ratios
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
@@ -166,8 +167,10 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 		for k, v := range *rates {
 			innerOut := map[string]decimal.Decimal{}
 			for kk, vv := range v {
-				innerOut[kk+"_timeframe_change"] = decimal.Zero
-				innerOut[kk] = vv
+				if !strings.HasSuffix(kk, "_24h_change") {
+					innerOut[kk+"_timeframe_change"] = decimal.Zero
+					innerOut[kk] = vv
+				}
 			}
 			out[k] = innerOut
 		}
