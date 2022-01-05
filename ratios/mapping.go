@@ -182,7 +182,7 @@ func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceRespo
 		innerOut := map[string]decimal.Decimal{}
 		for kk, rate := range v {
 			if strings.HasSuffix(kk, "_24h_change") {
-				if duration == "1d" {
+				if duration != CoingeckoDuration("1d") {
 					// skip key if duration is mismatched
 					continue
 				}
