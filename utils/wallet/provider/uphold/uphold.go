@@ -16,7 +16,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/digest"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -61,9 +61,6 @@ const (
 )
 
 var (
-	// filter out authorization tokens from logs
-	authLogFilter = regexp.MustCompile(`Authorization: .+\n`)
-
 	// SettlementDestination is the address of the settlement wallet
 	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
 
@@ -76,10 +73,11 @@ var (
 	grantWalletPrivateKey = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletPublicKey  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 
-	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
-	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
-	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
-	upholdAPIBase = map[string]string{
+	personalAccessToken    = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	clientCredentialsToken = os.Getenv("UPHOLD_CLIENT_CREDENTIALS_TOKEN")
+	environment            = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy            = os.Getenv("UPHOLD_HTTP_PROXY")
+	upholdAPIBase          = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
@@ -162,7 +160,11 @@ func FromWalletInfo(ctx context.Context, info walletutils.Info) (*Wallet, error)
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
+		if len(clientCredentialsToken) > 0 {
+			req.Header.Add("Authorization", "Bearer "+clientCredentialsToken)
+		} else {
+			req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(personalAccessToken+":X-OAuth-Basic")))
+		}
 	}
 	return req, err
 }
@@ -174,7 +176,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	if err != nil {
 		panic(err)
 	}
-	dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
+	dump = clients.RedactSensitiveHeaders(dump)
 
 	if logger != nil {
 		logger.Debug().
