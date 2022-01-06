@@ -116,6 +116,7 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 	}
 	var beneficiary *uphold.Beneficiary
 	if len(beneficiaryJSON) > 0 {
+		beneficiary = &uphold.Beneficiary{}
 		err := json.Unmarshal([]byte(beneficiaryJSON), beneficiary)
 		if err != nil {
 			return err
