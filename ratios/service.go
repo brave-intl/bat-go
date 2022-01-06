@@ -195,7 +195,7 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	}
 
 	return &RelativeResponse{
-		Payload:     mapSimplePriceResponse(ctx, *rates, duration),
+		Payload:     mapSimplePriceResponse(ctx, *rates, duration, vsCurrencies),
 		LastUpdated: updated,
 	}, nil
 }
