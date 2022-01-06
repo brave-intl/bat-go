@@ -188,6 +188,8 @@ func TestTransactions(t *testing.T) {
 		altcurrency.BAT.ToProbi(value),
 		destWallet.Info.ProviderID,
 		"bat-go:uphold.TestTransactions",
+		"",
+		nil,
 	)
 	if err != nil {
 		t.Error(err)

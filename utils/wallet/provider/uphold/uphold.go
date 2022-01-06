@@ -419,6 +419,7 @@ type denomination struct {
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
+// Beneficiary includes information about the recipient of the transaction
 type Beneficiary struct {
 	Relationship string `json:"relationship"`
 }
