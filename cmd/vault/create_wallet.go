@@ -72,7 +72,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 	}
 
 	// setup a new logger, add to context as well
-	ctx, logger := logutils.SetupLogger(ctx)
+	_, logger := logutils.SetupLogger(ctx)
 
 	name := args[0]
 	logFile := name + "-registration.json"
