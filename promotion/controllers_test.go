@@ -3234,7 +3234,7 @@ func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
 				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "reputation-failed",
 		uuid.NewV4().String())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
