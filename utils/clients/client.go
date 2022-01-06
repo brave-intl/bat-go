@@ -32,6 +32,7 @@ var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)x_cg_pro_api_key=.+&`):  []byte("x_cg_pro_api_key:<key>&"),
 }
 
+// RedactSensitiveHeaders from http request dumps
 func RedactSensitiveHeaders(corpus []byte) []byte {
 	for k, v := range redactHeaders {
 		corpus = k.ReplaceAll(corpus, v)
