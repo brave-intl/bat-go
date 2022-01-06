@@ -203,8 +203,8 @@ func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceRespo
 		}
 
 		for _, vv := range []CoingeckoCoin(coinIDs) {
-			if vv.Coin == k {
-				out[vv.Input] = innerOut
+			if vv.String() == k {
+				out[vv.input] = innerOut
 			}
 		}
 	}

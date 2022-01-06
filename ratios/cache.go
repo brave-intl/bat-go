@@ -27,7 +27,7 @@ func (s *Service) GetTopCoins(ctx context.Context, limit int) (CoingeckoCoinList
 
 	list := make([]CoingeckoCoin, len(tmp))
 	for i, coin := range tmp {
-		list[i] = CoingeckoCoin{Coin: coin}
+		list[i] = CoingeckoCoin{coin: coin}
 	}
 
 	resp = CoingeckoCoinList(list)
