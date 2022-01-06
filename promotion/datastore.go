@@ -1480,7 +1480,7 @@ limit 1`
 		return attempted, err
 	}
 
-	if job.Status != nil && *job.Status == "retry-bypass-cbr" {
+	if job.Status != nil && (*job.Status == "retry-bypass-cbr" || *job.Status == "manual-retry") {
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
@@ -1787,7 +1787,7 @@ func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid
 	query := `
 				UPDATE claim_drain
 				SET erred = FALSE, status = 'manual-retry'
-				WHERE wallet_id = $1 AND erred = TRUE AND status = 'failure' AND transaction_id IS NULL
+				WHERE wallet_id = $1 AND erred = TRUE AND status IN ('reputation-failed', 'failed') AND transaction_id IS NULL
 			`
 	result, err := pg.ExecContext(ctx, query, walletID)
 	if err != nil {
