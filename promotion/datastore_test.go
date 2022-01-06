@@ -991,7 +991,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
 				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "failed",
 		uuid.NewV4().String())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
@@ -1014,7 +1014,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_WalletID(
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
 				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, uuid.NewV4(), true, "some-failed-state", "failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, uuid.NewV4(), true, "some-failed-errcode", "failed",
 		uuid.NewV4().String())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
@@ -1027,7 +1027,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_WalletID(
 	suite.Require().Error(err, expected.Error())
 }
 
-func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Failure() {
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NoRetriableJobFound() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 
@@ -1036,7 +1036,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Failure()
 
 	walletID := uuid.NewV4()
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "not-other-failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-errcode", "complete",
 		uuid.NewV4())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
@@ -1058,7 +1058,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Erred() {
 	walletID := uuid.NewV4()
 	erred := false
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, erred, "some-failed-state", "failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, erred, "some-failed-errcode", "failed",
 		uuid.NewV4())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
@@ -1079,7 +1079,7 @@ func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Transacti
 
 	walletID := uuid.NewV4()
 
-	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-state", "failure",
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "failed",
 		uuid.NewV4(), uuid.NewV4())
 	suite.Require().NoError(err, "should have inserted claim drain row")
 
@@ -1116,7 +1116,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 	suite.Require().NoError(err, "should have serialised credentials")
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, FALSE, 'manual-retry', 'failure', $2, $3, FALSE, 1);`
+				VALUES ($1, FALSE, 'some-errcode', 'manual-retry', $2, $3, FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, uuid.NewV4().String(), credentials)
 	suite.Require().NoError(err, "should have inserted claim drain row")
