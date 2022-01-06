@@ -1481,9 +1481,7 @@ limit 1`
 		return attempted, err
 	}
 
-	// if the error code is "cbr_dup_redeem" we can skip the redeem credentials on drain
-	// as we are reprocessing a failed job that failed due to duplicate cbr redeem
-	if (job.ErrCode != nil && *job.ErrCode == "cbr_dup_redeem") || (job.Status != nil && *job.Status == "retry-bypass-cbr") {
+	if job.Status != nil && *job.Status == "retry-bypass-cbr" {
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
