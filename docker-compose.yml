@@ -67,6 +67,7 @@ services:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
     depends_on:
+      - redis
       - kafka
       - postgres
       - challenge-bypass
@@ -135,9 +136,17 @@ services:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
     depends_on:
+      - redis
       - kafka
       - postgres
       - challenge-bypass
+    networks:
+      - grant
+  redis:
+    container_name: grant-redis
+    image: redis
+    ports:
+      - "6379:6379"
     networks:
       - grant
   postgres:

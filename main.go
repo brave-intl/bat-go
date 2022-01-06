@@ -16,6 +16,8 @@ import (
 	_ "github.com/brave-intl/bat-go/cmd/serve"
 	// pull in macaroon module. setup code is in init
 	_ "github.com/brave-intl/bat-go/cmd/macaroon"
+	// pull in ratios module. setup code is in init
+	_ "github.com/brave-intl/bat-go/cmd/ratios"
 )
 
 var (
