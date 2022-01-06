@@ -32,7 +32,7 @@ var redactHeaders = map[*regexp.Regexp][]byte{
 	regexp.MustCompile(`(?i)x_cg_pro_api_key=.+&`):  []byte("x_cg_pro_api_key:<key>&"),
 }
 
-func redactSensitiveHeaders(corpus []byte) []byte {
+func RedactSensitiveHeaders(corpus []byte) []byte {
 	for k, v := range redactHeaders {
 		corpus = k.ReplaceAll(corpus, v)
 	}
@@ -245,7 +245,7 @@ func (c *SimpleHTTPClient) do(
 		if err != nil {
 			logger.Error().Err(err).Str("type", "http.Request").Msg("failed to dump request body")
 		} else {
-			logger.Debug().Str("type", "http.Request").Msg(string(redactSensitiveHeaders(requestDump)))
+			logger.Debug().Str("type", "http.Request").Msg(string(RedactSensitiveHeaders(requestDump)))
 		}
 	}
 
