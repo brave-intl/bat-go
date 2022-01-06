@@ -260,7 +260,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	}
 
 	// prepare a transaction by creating a payload
-	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "")
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "", "", nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
 		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
@@ -421,10 +421,17 @@ type denomination struct {
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
+// Beneficiary includes information about the recipient of the transaction
+type Beneficiary struct {
+	Relationship string `json:"relationship"`
+}
+
 type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
 	Message      string       `json:"message,omitempty"`
+	Purpose      string       `json:"purpose,omitempty"`
+	Beneficiary  *Beneficiary `json:"beneficiary,omitempty"`
 }
 
 // denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
@@ -440,10 +447,12 @@ type transactionRequestRecode struct {
 	Denomination denominationRecode `json:"denomination"`
 	Destination  string             `json:"destination"`
 	Message      string             `json:"message,omitempty"`
+	Purpose      string             `json:"purpose,omitempty"`
+	Beneficiary  *Beneficiary       `json:"beneficiary,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
+func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string, purpose string, beneficiary *Beneficiary) (*http.Request, error) {
+	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message, Purpose: purpose, Beneficiary: beneficiary}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())
@@ -466,8 +475,8 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
-func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (string, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, message)
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string, purpose string, beneficiary *Beneficiary) (string, error) {
+	req, err := w.signTransfer(altcurrency, probi, destination, message, purpose, beneficiary)
 	if err != nil {
 		return "", err
 	}
@@ -487,7 +496,7 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, "")
+	req, err := w.signTransfer(altcurrency, probi, destination, "", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign the transfer: %w", err)
 	}

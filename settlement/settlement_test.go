@@ -81,7 +81,7 @@ func TestTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = PrepareTransactions(donorWallet, settlements)
+	err = PrepareTransactions(donorWallet, settlements, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestDeterministicSigning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = PrepareTransactions(donorWallet, settlements)
+	err = PrepareTransactions(donorWallet, settlements, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -885,7 +885,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	}
 
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC")
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC", "", nil)
 	suite.Require().NoError(err)
 
 	walletID, err := uuid.FromString(userWallet.ID)
