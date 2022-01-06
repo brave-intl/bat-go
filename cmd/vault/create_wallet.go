@@ -126,7 +126,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 
 		state.WalletInfo.PublicKey = signer.String()
 
-		wallet := &uphold.Wallet{Info: state.WalletInfo, PrivKey: signer, PubKey: signer}
+		wallet := &uphold.Wallet{Logger: logger, Info: state.WalletInfo, PrivKey: signer, PubKey: signer}
 
 		reg, err := wallet.PrepareRegistration(name)
 		if err != nil {
@@ -154,7 +154,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			return err
 		}
 
-		wallet := uphold.Wallet{Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
+		wallet := uphold.Wallet{Logger: logger, Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
 
 		err = wallet.SubmitRegistration(state.Registration)
 		if err != nil {

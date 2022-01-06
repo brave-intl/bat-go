@@ -43,7 +43,7 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	walletutils.Info
-	logger  *zerolog.Logger
+	Logger  *zerolog.Logger
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
 }
@@ -143,7 +143,7 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 	if !info.AltCurrency.IsValid() {
 		return nil, errors.New("a wallet must have a valid altcurrency")
 	}
-	return &Wallet{logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
+	return &Wallet{Logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
@@ -303,7 +303,7 @@ func (w *Wallet) Register(label string) error {
 		return err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func (w *Wallet) SubmitRegistration(registrationB64 string) error {
 		return err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return err
 	}
@@ -394,7 +394,7 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -490,7 +490,7 @@ func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Dec
 		return nil, fmt.Errorf("failed to sign the transfer: %w", err)
 	}
 
-	respBody, _, err := submit(w.logger, req)
+	respBody, _, err := submit(w.Logger, req)
 	if err != nil {
 		// we need this to be draincoded wrapped error so we get the reason for failure in drains
 		if codedErr, ok := err.(Coded); ok {
@@ -754,7 +754,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	respBody, _, err := submit(w.logger, req)
+	respBody, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -774,7 +774,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*walletutils.TransactionInfo, er
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +798,7 @@ func (w *Wallet) GetTransaction(id string) (*walletutils.TransactionInfo, error)
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -839,10 +839,10 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils
 		var body []byte
 		var resp *http.Response
 		for i := 0; i < listTransactionsRetries; i++ {
-			body, resp, err = submit(w.logger, req)
+			body, resp, err = submit(w.Logger, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-				if w.logger != nil {
-					w.logger.Debug().
+				if w.Logger != nil {
+					w.Logger.Debug().
 						Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
 						Str("type", "net.Error").
 						Msg("Temporary error occurred, retrying")
@@ -939,7 +939,7 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 		return "", err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return "", err
 	}
