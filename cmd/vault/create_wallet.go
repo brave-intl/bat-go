@@ -126,11 +126,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 
 		state.WalletInfo.PublicKey = signer.String()
 
-		// pass ctx (with logger on it to new uphold, so wallet will set logger)
-		wallet, err := uphold.New(ctx, state.WalletInfo, signer, signer)
-		if err != nil {
-			return err
-		}
+		wallet := &uphold.Wallet{Info: state.WalletInfo, PrivKey: signer, PubKey: signer}
 
 		reg, err := wallet.PrepareRegistration(name)
 		if err != nil {
@@ -158,11 +154,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			return err
 		}
 
-		// pass ctx (with logger on it to new uphold, so wallet will set logger)
-		wallet, err := uphold.New(ctx, state.WalletInfo, ed25519.PrivateKey{}, publicKey)
-		if err != nil {
-			return err
-		}
+		wallet := uphold.Wallet{Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
 
 		err = wallet.SubmitRegistration(state.Registration)
 		if err != nil {
