@@ -174,8 +174,7 @@ func (s *Service) initializeCoingeckoCurrencies(ctx context.Context) (context.Co
 	return ctx, nil
 }
 
-func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceResponse, duration CoingeckoDuration, vsCurrencies CoingeckoVsCurrencyList) coingecko.SimplePriceResponse {
-	idToSymbol := ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
+func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceResponse, duration CoingeckoDuration, coinIDs CoingeckoCoinList, vsCurrencies CoingeckoVsCurrencyList) coingecko.SimplePriceResponse {
 	out := map[string]map[string]decimal.Decimal{}
 
 	for k, v := range resp {
@@ -202,7 +201,12 @@ func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceRespo
 			}
 			innerOut[kk] = rate
 		}
-		out[idToSymbol[k]] = innerOut
+
+		for _, vv := range []CoingeckoCoin(coinIDs) {
+			if vv.Coin == k {
+				out[vv.Input] = innerOut
+			}
+		}
 	}
 
 	return coingecko.SimplePriceResponse(out)
