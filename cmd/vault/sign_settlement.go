@@ -211,7 +211,7 @@ func createUpholdArtifact(
 	}
 	settlementWallet := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: signer}
 
-	err = settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements)
+	err = settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements, "payout", &uphold.Beneficiary{Relationship: "business"}))
 	if err != nil {
 		return err
 	}

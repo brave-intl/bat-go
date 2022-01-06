@@ -155,7 +155,7 @@ func (tx Transaction) IsFailed() bool {
 }
 
 // PrepareTransactions by embedding signed transactions into the settlement documents
-func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error {
+func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction, purpose string, beneficiary *uphold.Beneficiary) error {
 	for i := 0; i < len(settlements); i++ {
 		settlement := &settlements[i]
 
@@ -164,7 +164,7 @@ func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction) error
 		if len(settlement.Note) > 0 {
 			message = settlement.Note
 		}
-		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, message, "payout", &uphold.Beneficiary{Relationship: "business"})
+		tx, err := wallet.PrepareTransaction(*settlement.AltCurrency, settlement.Probi, settlement.Destination, message, purpose, beneficiary)
 		if err != nil {
 			return err
 		}
