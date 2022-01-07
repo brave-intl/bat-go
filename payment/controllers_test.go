@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -461,7 +462,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: external Transaction ID: 150d7a21-c203-4ba4-8fdf-c5fc36aca004 has already been added to the order\",\"code\":400}\n")
 }
 
-func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
+func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 1/.25)
 
 	handler := CreateUpholdTransaction(suite.service)
@@ -494,7 +495,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
 
 	// Check the order was updated to paid
@@ -517,7 +518,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
+	suite.Assert().Equal(rr.Body.String(), fmt.Sprintf("{\"message\":\"Error creating the transaction: external Transaction ID: %s has already been added to the order\",\"code\":400}\n", createRequest.ExternalTransactionID.String()))
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
