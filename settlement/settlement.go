@@ -53,9 +53,9 @@ type Transaction struct {
 // AntifraudTransaction a transaction object that comes from antifraud
 type AntifraudTransaction struct {
 	Transaction
-	BAT                decimal.Decimal `json:"bat, omitempty"`
-	PayoutReportID     string          `json:"payout_report_id, omitempty"`
-	WalletProviderInfo string          `json:"wallet_provider_id, omitempty"`
+	BAT                decimal.Decimal `json:"bat,omitempty"`
+	PayoutReportID     string          `json:"payout_report_id,omitempty"`
+	WalletProviderInfo string          `json:"wallet_provider_id,omitempty"`
 }
 
 // ProviderInfo holds information parsed from the wallet_provider_id
