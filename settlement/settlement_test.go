@@ -10,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -262,14 +263,27 @@ func TestUnmarshalTransaction(t *testing.T) {
   ]
   `)
 
-	var settlements []Transaction
-	err := json.Unmarshal(settlementJSON, &settlements)
+	var afTransactions []AntifraudTransaction
+	err := json.Unmarshal(settlementJSON, &afTransactions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	var settlements []Transaction
+	for _, txn := range afTransactions {
+		settlements = append(settlements, txn.ToTransaction())
+	}
+
 	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
 		t.Error("DocumentId does not match settlementJSON")
+	}
+
+	expected, err := decimal.NewFromString("25.444211185665096101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settlements[0].Amount.Equals(expected) {
+		t.Fatal("Amount does not match")
 	}
 }
 
