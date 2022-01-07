@@ -9,6 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
+	mock_bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/shopspring/decimal"
+
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
@@ -160,6 +166,62 @@ func TestReadMessage_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, &expected, actual)
+}
+
+func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bitFlyerClient := mock_bitflyer.NewMockClient(ctrl)
+	bitFlyerClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 5)
+
+	for i := 0; i < len(drainTransfers); i++ {
+		depositID := stringToPointer(uuid.NewV4().String())
+		// set invalid deposit id
+		if i == 3 {
+			depositID = nil
+		}
+		drainTransfers[i] = DrainTransfer{
+			ID:        uuidToPointer(uuid.NewV4()),
+			Total:     decimal.NewFromFloat(1),
+			DepositID: depositID,
+		}
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	s := Service{
+		bfClient:  bitFlyerClient,
+		Datastore: datastore,
+	}
+
+	expected := errorutils.New(fmt.Errorf("failed invalid depositID for batchID %s", batchID),
+		"submit batch transfer", drainCodeErrorInvalidDepositID)
+
+	err := s.SubmitBatchTransfer(ctx, batchID)
+	assert.Equal(t, expected, err)
+}
+
+func stringToPointer(s string) *string {
+	return &s
+}
+
+func uuidToPointer(u uuid.UUID) *uuid.UUID {
+	return &u
 }
 
 func makeMsg() AdminAttestationEvent {
