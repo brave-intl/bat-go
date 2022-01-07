@@ -34,9 +34,9 @@ var (
 	// the combination of provider + transaction type gives you the key
 	// under which the vault secrets are located by default
 	providerTransactionTypes = map[string][]string{
-		"uphold":   {"contribution", "referral"},
+		"uphold":   {"contribution", "referral", "adsDirectDeposit"},
 		"paypal":   {"default"},
-		"gemini":   {"contribution", "referral"},
+		"gemini":   {"contribution", "referral", "adsDirectDeposit"},
 		"bitflyer": {"default"},
 	}
 	artifactGenerators = map[string]func(
@@ -165,6 +165,7 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 			// might as well go into one (default)
 			wallet = providerTransactionTypes[provider][0]
 		}
+
 		// which secret values to use to sign (paypal-default, uphold-referral, gemini-contribution)
 		walletKey := provider + "-" + wallet
 		// append to the nested structure

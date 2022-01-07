@@ -52,27 +52,17 @@ type Transaction struct {
 
 // AntifraudTransaction a transaction object that comes from antifraud
 type AntifraudTransaction struct {
-	Address           string          `json:"address"`
-	BAT               decimal.Decimal `json:"bat"`
-	ChannelType       string          `json:"channel_type"`
-	Fees              decimal.Decimal `json:"fees"`
-	ID                string          `json:"id"`
-	Owner             string          `json:"owner"`
-	OwnerState        string          `json:"owner_state"`
-	PayoutReportID    string          `json:"payout_report_id"`
-	Publisher         string          `json:"publisher"`
-	Type              string          `json:"type"`
-	URL               string          `json:"url"`
-	WalletCountryCode string          `json:"wallet_country_code"`
-	WalletProvider    string          `json:"wallet_provider"`
-	WalletProviderID  string          `json:"wallet_provider_id"`
+	Transaction
+	BAT                decimal.Decimal `json:"bat,omitempty"`
+	PayoutReportID     string          `json:"payout_report_id,omitempty"`
+	WalletProviderInfo string          `json:"wallet_provider_id,omitempty"`
 }
 
 // ProviderInfo holds information parsed from the wallet_provider_id
 type ProviderInfo struct {
-	Establishment string `json:"establishment"`
-	Type          string `json:"type"`
-	ID            string `json:"id"`
+	Establishment string
+	Type          string
+	ID            string
 }
 
 // TransferID generate the transfer id
@@ -95,7 +85,7 @@ func (tx Transaction) Log() {
 
 // ProviderInfo splits apart provider info from wallet provider id
 func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
-	establishmentSplit := strings.Split(at.WalletProviderID, "#")
+	establishmentSplit := strings.Split(at.WalletProviderInfo, "#")
 	establishment := establishmentSplit[0]
 	typeAndID := establishmentSplit[1]
 	typeAndIDSplit := strings.Split(typeAndID, ":")
@@ -108,22 +98,23 @@ func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
 
 // ToTransaction turns the antifraud transaction into a transaction understandable by settlement tools
 func (at AntifraudTransaction) ToTransaction() Transaction {
-	alt := altcurrency.BAT
-	providerInfo := at.ProviderInfo()
-	return Transaction{
-		AltCurrency:      &alt,
-		Amount:           at.BAT,
-		Currency:         alt.String(),
-		Destination:      at.Address,
-		Publisher:        at.Owner,
-		BATPlatformFee:   alt.ToProbi(at.Fees),
-		Probi:            alt.ToProbi(at.BAT),
-		WalletProvider:   providerInfo.Establishment,
-		WalletProviderID: providerInfo.ID,
-		Channel:          at.Publisher,
-		SettlementID:     at.PayoutReportID,
-		Type:             at.Type,
+	t := at.Transaction
+	if at.BAT.GreaterThan(decimal.Zero) {
+		alt := altcurrency.BAT
+		providerInfo := at.ProviderInfo()
+
+		t.Probi = alt.ToProbi(at.BAT)
+		t.AltCurrency = &alt
+		t.Amount = at.BAT
+		t.Currency = alt.String()
+		t.BATPlatformFee = alt.ToProbi(at.BATPlatformFee)
+		t.WalletProvider = providerInfo.Establishment
+		t.WalletProviderID = providerInfo.ID
+		t.SettlementID = at.PayoutReportID
+	} else if at.Probi.GreaterThan(decimal.Zero) {
+		t.Amount = t.AltCurrency.FromProbi(at.Probi)
 	}
+	return t
 }
 
 // State contains the current state of the settlement, including wallet and transaction status
