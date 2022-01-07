@@ -503,7 +503,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTx)
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}

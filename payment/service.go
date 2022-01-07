@@ -392,7 +392,7 @@ func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value strin
 type getCustodialTxFn func(context.Context, string) (*decimal.Decimal, string, string, string, error)
 
 // get the uphold tx based on txRef
-func getUpholdTx(txRef string) (*decimal.Decimal, string, string, string, error) {
+func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	var wallet uphold.Wallet
 	upholdTransaction, err := wallet.GetTransaction(txRef)
 
@@ -413,8 +413,8 @@ func getUpholdTx(txRef string) (*decimal.Decimal, string, string, string, error)
 	return &amount, status, currency, custodian, nil
 }
 
-// getUpholdCustodialTx - the the custodial tx information from uphold
-func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+// getUpholdCustodialTxWithRetries - the the custodial tx information from uphold with retries
+func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 
 	var (
 		amount    *decimal.Decimal
@@ -431,7 +431,7 @@ OUTER:
 		case <-ctx.Done():
 			break OUTER
 		case <-time.After(500 * time.Millisecond):
-			amount, status, currency, custodian, err = getUpholdTx(txRef)
+			amount, status, currency, custodian, err = getUpholdCustodialTx(ctx, txRef)
 			if err != nil {
 				return nil, "", "", "", fmt.Errorf("failed to get uphold tx by txRef %s: %w", txRef, err)
 			}
