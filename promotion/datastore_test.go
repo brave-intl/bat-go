@@ -5,6 +5,8 @@ package promotion
 import (
 	"context"
 	"errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"testing"
 	"time"
 
@@ -975,6 +977,65 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NoClaimsToProcess() 
 	actual, err := pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
 	suite.Require().NoError(err)
 	suite.Require().False(actual, "should not have attempted job run")
+}
+
+func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_SubmitBatchTransfer_Error() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx, _ := logging.SetupLogger(context.Background())
+
+	// setup wallet
+	walletID := uuid.NewV4()
+	userDepositAccountProvider := "bitflyer"
+
+	info := &walletutils.Info{
+		ID:                         walletID.String(),
+		Provider:                   "uphold",
+		ProviderID:                 uuid.NewV4().String(),
+		PublicKey:                  "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY=",
+		UserDepositAccountProvider: &userDepositAccountProvider,
+	}
+	err = walletDB.UpsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	// setup claim drain
+	batchID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total, transaction_id) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1, $6);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, false, nil, "prepared", batchID, uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	drainCodeErr := drainCodeErrorInvalidDepositID
+	drainCodeError := errorutils.New(errors.New("error-text"),
+		"error-message", drainCodeErr)
+
+	batchTransferWorker := NewMockBatchTransferWorker(ctrl)
+	batchTransferWorker.EXPECT().
+		SubmitBatchTransfer(ctx, &batchID).
+		Return(drainCodeError)
+
+	actual, actualErr := pg.RunNextBatchPaymentsJob(ctx, batchTransferWorker)
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(true, drainJob.Erred)
+	suite.Require().Equal(drainCodeErr.ErrCode, *drainJob.ErrCode)
+	suite.Require().Equal("failed", *drainJob.Status)
+
+	suite.Require().True(actual, "should have attempted job run")
+	suite.Require().Equal(drainCodeError, actualErr)
 }
 
 func TestPostgresTestSuite(t *testing.T) {

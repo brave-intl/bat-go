@@ -1005,18 +1005,15 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 		// inform sentry about this error
 		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
 
-		_, err = tx.Exec(`
-			update claim_drain set
-				erred = true,
-				errcode = $1,
-				status = $2
-			where batch_id = $3`, errCode, status, batchID)
-		if err != nil {
+		stmt := "update claim_drain set erred = true, errcode = $1, status = $2 where batch_id = $3"
+		if _, err := tx.Exec(stmt, errCode, status, batchID); err != nil {
 			return attempted, err
 		}
+
 		if err := tx.Commit(); err != nil {
 			return attempted, err
 		}
+
 		return attempted, err
 	}
 
