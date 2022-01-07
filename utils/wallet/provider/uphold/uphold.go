@@ -985,7 +985,7 @@ func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, er
 	if err != nil {
 		return zero, err
 	}
-	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey, Logger: destWallet.Logger}
 
 	if len(donorWallet.ID) > 0 {
 		return zero, errors.New("donor wallet does not have an ID")

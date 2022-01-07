@@ -435,7 +435,7 @@ OUTER:
 			if err != nil {
 				return nil, "", "", "", fmt.Errorf("failed to get uphold tx by txRef %s: %w", txRef, err)
 			}
-			if status != "processing" {
+			if status != "processing" && status != "pending" {
 				break OUTER
 			}
 		}
