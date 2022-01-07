@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	logutils "github.com/brave-intl/bat-go/utils/logging"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -44,12 +46,13 @@ import (
 
 var (
 	// these skus will be generated with the appropriate merchant key in setup
-	UserWalletVoteTestSkuToken string
-	AnonCardVoteTestSkuToken   string
-	FreeTestSkuToken           string
-	FreeTLTestSkuToken         string
-	FreeTLTest1MSkuToken       string
-	InvalidFreeTestSkuToken    string
+	UserWalletVoteTestSkuToken      string
+	UserWalletVoteTestSmallSkuToken string
+	AnonCardVoteTestSkuToken        string
+	FreeTestSkuToken                string
+	FreeTLTestSkuToken              string
+	FreeTLTest1MSkuToken            string
+	InvalidFreeTestSkuToken         string
 )
 
 type ControllersTestSuite struct {
@@ -80,6 +83,14 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"credential_type": "single-use",
 		"currency":        "BAT",
 		"price":           "0.25",
+	}
+
+	UserWalletSmallC := macarooncmd.Caveats{
+		"sku":             "user-wallet-vote",
+		"description":     "brave user-wallet-vote sku token v1",
+		"credential_type": "single-use",
+		"currency":        "BAT",
+		"price":           "0.00000000000000001",
 	}
 
 	FreeC := macarooncmd.Caveats{
@@ -115,6 +126,11 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletC},
 	}
 
+	UserWalletSmallToken := macarooncmd.Token{
+		ID: "id", Version: 2, Location: "brave.com",
+		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletSmallC},
+	}
+
 	AnonCardToken := macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{AnonCardC},
@@ -142,6 +158,12 @@ func (suite *ControllersTestSuite) SetupSuite() {
 
 	// hacky, put this in development sku check
 	skuMap["development"][UserWalletVoteTestSkuToken] = true
+
+	UserWalletVoteTestSmallSkuToken, err = UserWalletSmallToken.Generate("testing123")
+	suite.Require().NoError(err)
+
+	// hacky, put this in development sku check
+	skuMap["development"][UserWalletVoteTestSmallSkuToken] = true
 
 	AnonCardVoteTestSkuToken, err = AnonCardToken.Generate("testing123")
 	suite.Require().NoError(err)
@@ -461,13 +483,59 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: external Transaction ID: 150d7a21-c203-4ba4-8fdf-c5fc36aca004 has already been added to the order\",\"code\":400}\n")
 }
 
-func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 1/.25)
+func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
+
+	orderAmount := decimal.NewFromFloat(0.00000000000000001)
+
+	order := suite.setupCreateOrder(UserWalletVoteTestSmallSkuToken, 1)
 
 	handler := CreateUpholdTransaction(suite.service)
 
+	// create an uphold wallet
+	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err, "Failed to create wallet keypair")
+
+	walletID := uuid.NewV4()
+	bat := altcurrency.BAT
+	info := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: &bat,
+		PublicKey:   hex.EncodeToString(publicKey),
+		LastBalance: nil,
+	}
+
+	ctx := context.Background()
+	// setup debug for client
+	ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
+	// setup debug log level
+	ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, "debug")
+
+	// setup a new logger, add to context as well
+	_, logger := logutils.SetupLogger(ctx)
+
+	w := uphold.Wallet{
+		Logger:  logger,
+		Info:    info,
+		PrivKey: privKey,
+		PubKey:  publicKey,
+	}
+	err = w.Register("drain-card-test")
+	suite.Require().NoError(err, "Failed to register wallet")
+
+	_, err = uphold.FundWallet(&w, altcurrency.BAT.ToProbi(orderAmount))
+	suite.Require().NoError(err, "Failed to fund wallet")
+
+	<-time.After(1 * time.Second)
+
+	// pay the transaction
+	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
+	tInfo, err := w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
+	suite.Require().NoError(err)
+
 	createRequest := &CreateTransactionRequest{
-		ExternalTransactionID: uuid.Must(uuid.FromString("150d7a21-c203-4ba4-8fdf-c5fc36aca004")),
+		ExternalTransactionID: uuid.Must(uuid.FromString(tInfo.ID)),
 	}
 
 	body, err := json.Marshal(&createRequest)
@@ -490,11 +558,11 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	suite.Require().NoError(err)
 
 	// Check the transaction
-	suite.Assert().Equal(decimal.NewFromFloat32(1), transaction.Amount)
+	suite.Assert().Equal(orderAmount, transaction.Amount)
 	suite.Assert().Equal("uphold", transaction.Kind)
 	suite.Assert().Equal("completed", transaction.Status)
 	suite.Assert().Equal("BAT", transaction.Currency)
-	suite.Assert().Equal(createRequest.ExternalTransactionID, transaction.ExternalTransactionID)
+	suite.Assert().Equal(createRequest.ExternalTransactionID.String(), transaction.ExternalTransactionID)
 	suite.Assert().Equal(order.ID, transaction.OrderID, order.TotalPrice)
 
 	// Check the order was updated to paid
@@ -517,7 +585,7 @@ func (suite *ControllersTestSuite) E2EOrdersUpholdTransactionsTest() {
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: External Transaction ID: 3db2f74e-df23-42e2-bf25-a302a93baa2d has already been added to the order\",\"code\":400}\n")
+	suite.Assert().Equal(rr.Body.String(), fmt.Sprintf("{\"message\":\"Error creating the transaction: external Transaction ID: %s has already been added to the order\",\"code\":400}\n", createRequest.ExternalTransactionID.String()))
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
