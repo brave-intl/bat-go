@@ -10,11 +10,14 @@ import (
 )
 
 // CoingeckoCoin - type for coingecko coin input
-type CoingeckoCoin string
+type CoingeckoCoin struct {
+	input string
+	coin  string
+}
 
 // String - stringer implmentation
 func (cc *CoingeckoCoin) String() string {
-	return string(*cc)
+	return string(cc.coin)
 }
 
 var (
@@ -45,7 +48,7 @@ func (cc *CoingeckoCoin) Decode(ctx context.Context, v []byte) error {
 		}
 	}
 
-	*cc = CoingeckoCoin(c)
+	*cc = CoingeckoCoin{input: coin, coin: c}
 	return nil
 }
 

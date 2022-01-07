@@ -10,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -81,7 +82,7 @@ func TestTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = PrepareTransactions(donorWallet, settlements)
+	err = PrepareTransactions(donorWallet, settlements, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestDeterministicSigning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = PrepareTransactions(donorWallet, settlements)
+	err = PrepareTransactions(donorWallet, settlements, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,13 +263,87 @@ func TestUnmarshalTransaction(t *testing.T) {
   ]
   `)
 
-	var settlements []Transaction
-	err := json.Unmarshal(settlementJSON, &settlements)
+	var afTransactions []AntifraudTransaction
+	err := json.Unmarshal(settlementJSON, &afTransactions)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	var settlements []Transaction
+	for _, txn := range afTransactions {
+		settlements = append(settlements, txn.ToTransaction())
+	}
+
 	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
 		t.Error("DocumentId does not match settlementJSON")
+	}
+
+	expected, err := decimal.NewFromString("25.444211185665096101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settlements[0].Amount.Equals(expected) {
+		t.Fatal("Amount does not match")
+	}
+}
+
+func TestUnmarshalCreatorsTransaction(t *testing.T) {
+	settlementJSON := []byte(`
+	{
+			"address": "5e14c5b2-8651-427d-905e-b078513b6fc3",
+			"bat": "0.712500000000000000",
+			"channel_type": "TwitchChannelDetails",
+			"created_at": "2021-11-09 02:20:47.586946+00:00",
+			"fees": "0.037500000000000006",
+			"id": "c6d5983b-fef7-4e7d-b0a3-5bf68e0bd95a",
+			"inserted_at": "2021-11-08 21:53:30.146504+00:00",
+			"owner": "publishers#uuid:008c092b-7afa-47f0-9677-22538d9abc3d",
+			"owner_state": "active",
+			"payout_report_id": "4520e913-664e-479e-a58c-357cf750b00a",
+			"publisher": "twitch#author:meliunu",
+			"type": "contribution",
+			"url": "https://twitch.tv/meliunu",
+			"wallet_country_code": "CL",
+			"wallet_provider": "0",
+			"wallet_provider_id": "uphold#id:6c0397f3-df41-440a-9fbb-b517e1142a9a"
+	}
+  `)
+
+	var settlement AntifraudTransaction
+	err := json.Unmarshal(settlementJSON, &settlement)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := json.MarshalIndent(settlement.ToTransaction(), "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []byte(`{
+    "altcurrency": "BAT",
+    "authority": "",
+    "amount": "0.7125",
+    "commission": "0",
+    "currency": "BAT",
+    "address": "5e14c5b2-8651-427d-905e-b078513b6fc3",
+    "owner": "publishers#uuid:008c092b-7afa-47f0-9677-22538d9abc3d",
+    "fees": "37500000000000006",
+    "probi": "712500000000000000",
+    "hash": "",
+    "walletProvider": "uphold",
+    "walletProviderId": "6c0397f3-df41-440a-9fbb-b517e1142a9a",
+    "publisher": "twitch#author:meliunu",
+    "signedTx": "",
+    "status": "",
+    "transactionId": "4520e913-664e-479e-a58c-357cf750b00a",
+    "fee": "0",
+    "type": "contribution",
+    "validUntil": "0001-01-01T00:00:00Z",
+    "note": ""
+}`)
+
+	if string(out) != string(expected) {
+		t.Fatal("Converted transaction does not match")
 	}
 }

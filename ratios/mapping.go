@@ -174,13 +174,24 @@ func (s *Service) initializeCoingeckoCurrencies(ctx context.Context) (context.Co
 	return ctx, nil
 }
 
-func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceResponse, duration CoingeckoDuration) coingecko.SimplePriceResponse {
-	idToSymbol := ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
+func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceResponse, duration CoingeckoDuration, coinIDs CoingeckoCoinList, vsCurrencies CoingeckoVsCurrencyList) coingecko.SimplePriceResponse {
 	out := map[string]map[string]decimal.Decimal{}
 
 	for k, v := range resp {
 		innerOut := map[string]decimal.Decimal{}
 		for kk, rate := range v {
+			var foundCurrency bool
+			for _, vv := range []CoingeckoVsCurrency(vsCurrencies) {
+				if strings.HasPrefix(kk, string(vv)) {
+					foundCurrency = true
+					break
+				}
+			}
+			if !foundCurrency {
+				// exclude non-matching currencies
+				continue
+			}
+
 			if strings.HasSuffix(kk, "_24h_change") {
 				if duration != CoingeckoDuration("1d") {
 					// skip key if duration is mismatched
@@ -190,7 +201,12 @@ func mapSimplePriceResponse(ctx context.Context, resp coingecko.SimplePriceRespo
 			}
 			innerOut[kk] = rate
 		}
-		out[idToSymbol[k]] = innerOut
+
+		for _, vv := range []CoingeckoCoin(coinIDs) {
+			if vv.String() == k {
+				out[vv.input] = innerOut
+			}
+		}
 	}
 
 	return coingecko.SimplePriceResponse(out)

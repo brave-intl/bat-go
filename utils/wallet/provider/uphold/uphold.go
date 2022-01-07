@@ -16,7 +16,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/digest"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -43,7 +43,7 @@ import (
 // A wallet corresponds to a single Uphold "card"
 type Wallet struct {
 	walletutils.Info
-	logger  *zerolog.Logger
+	Logger  *zerolog.Logger
 	PrivKey crypto.Signer
 	PubKey  httpsignature.Verifier
 }
@@ -61,9 +61,6 @@ const (
 )
 
 var (
-	// filter out authorization tokens from logs
-	authLogFilter = regexp.MustCompile(`Authorization: .+\n`)
-
 	// SettlementDestination is the address of the settlement wallet
 	SettlementDestination = os.Getenv("BAT_SETTLEMENT_ADDRESS")
 
@@ -76,10 +73,11 @@ var (
 	grantWalletPrivateKey = os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletPublicKey  = os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 
-	accessToken   = os.Getenv("UPHOLD_ACCESS_TOKEN")
-	environment   = os.Getenv("UPHOLD_ENVIRONMENT")
-	upholdProxy   = os.Getenv("UPHOLD_HTTP_PROXY")
-	upholdAPIBase = map[string]string{
+	personalAccessToken    = os.Getenv("UPHOLD_ACCESS_TOKEN")
+	clientCredentialsToken = os.Getenv("UPHOLD_CLIENT_CREDENTIALS_TOKEN")
+	environment            = os.Getenv("UPHOLD_ENVIRONMENT")
+	upholdProxy            = os.Getenv("UPHOLD_HTTP_PROXY")
+	upholdAPIBase          = map[string]string{
 		"":        "https://api-sandbox.uphold.com", // os.Getenv() will return empty string if not set
 		"sandbox": "https://api-sandbox.uphold.com",
 		"prod":    "https://api.uphold.com",
@@ -143,7 +141,7 @@ func New(ctx context.Context, info walletutils.Info, privKey crypto.Signer, pubK
 	if !info.AltCurrency.IsValid() {
 		return nil, errors.New("a wallet must have a valid altcurrency")
 	}
-	return &Wallet{logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
+	return &Wallet{Logger: logger, Info: info, PrivKey: privKey, PubKey: pubKey}, nil
 }
 
 // FromWalletInfo returns an uphold wallet matching the provided wallet info
@@ -162,7 +160,11 @@ func FromWalletInfo(ctx context.Context, info walletutils.Info) (*Wallet, error)
 func newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, upholdAPIBase+path, body)
 	if err == nil {
-		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(accessToken+":X-OAuth-Basic")))
+		if len(clientCredentialsToken) > 0 {
+			req.Header.Add("Authorization", "Bearer "+clientCredentialsToken)
+		} else {
+			req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(personalAccessToken+":X-OAuth-Basic")))
+		}
 	}
 	return req, err
 }
@@ -174,7 +176,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 	if err != nil {
 		panic(err)
 	}
-	dump = authLogFilter.ReplaceAll(dump, []byte("Authorization: Basic <token>\n"))
+	dump = clients.RedactSensitiveHeaders(dump)
 
 	if logger != nil {
 		logger.Debug().
@@ -258,7 +260,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	}
 
 	// prepare a transaction by creating a payload
-	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "")
+	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "", "", nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
 		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
@@ -303,7 +305,7 @@ func (w *Wallet) Register(label string) error {
 		return err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return err
 	}
@@ -340,7 +342,7 @@ func (w *Wallet) SubmitRegistration(registrationB64 string) error {
 		return err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return err
 	}
@@ -394,7 +396,7 @@ func (w *Wallet) GetCardDetails() (*CardDetails, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -419,10 +421,17 @@ type denomination struct {
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
+// Beneficiary includes information about the recipient of the transaction
+type Beneficiary struct {
+	Relationship string `json:"relationship"`
+}
+
 type transactionRequest struct {
 	Denomination denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
 	Message      string       `json:"message,omitempty"`
+	Purpose      string       `json:"purpose,omitempty"`
+	Beneficiary  *Beneficiary `json:"beneficiary,omitempty"`
 }
 
 // denominationRecode type was used in this case to maintain trailing zeros so that the validation performed
@@ -438,10 +447,12 @@ type transactionRequestRecode struct {
 	Denomination denominationRecode `json:"denomination"`
 	Destination  string             `json:"destination"`
 	Message      string             `json:"message,omitempty"`
+	Purpose      string             `json:"purpose,omitempty"`
+	Beneficiary  *Beneficiary       `json:"beneficiary,omitempty"`
 }
 
-func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message}
+func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string, purpose string, beneficiary *Beneficiary) (*http.Request, error) {
+	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message, Purpose: purpose, Beneficiary: beneficiary}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())
@@ -464,8 +475,8 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 }
 
 // PrepareTransaction returns a b64 encoded serialized signed transaction suitable for SubmitTransaction
-func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string) (string, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, message)
+func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string, purpose string, beneficiary *Beneficiary) (string, error) {
+	req, err := w.signTransfer(altcurrency, probi, destination, message, purpose, beneficiary)
 	if err != nil {
 		return "", err
 	}
@@ -485,12 +496,12 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
-	req, err := w.signTransfer(altcurrency, probi, destination, "")
+	req, err := w.signTransfer(altcurrency, probi, destination, "", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign the transfer: %w", err)
 	}
 
-	respBody, _, err := submit(w.logger, req)
+	respBody, _, err := submit(w.Logger, req)
 	if err != nil {
 		// we need this to be draincoded wrapped error so we get the reason for failure in drains
 		if codedErr, ok := err.(Coded); ok {
@@ -754,7 +765,7 @@ func (w *Wallet) SubmitTransaction(transactionB64 string, confirm bool) (*wallet
 		return nil, err
 	}
 
-	respBody, _, err := submit(w.logger, req)
+	respBody, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -774,7 +785,7 @@ func (w *Wallet) ConfirmTransaction(id string) (*walletutils.TransactionInfo, er
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +809,7 @@ func (w *Wallet) GetTransaction(id string) (*walletutils.TransactionInfo, error)
 	if err != nil {
 		return nil, err
 	}
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return nil, err
 	}
@@ -839,10 +850,10 @@ func (w *Wallet) ListTransactions(limit int, startDate time.Time) ([]walletutils
 		var body []byte
 		var resp *http.Response
 		for i := 0; i < listTransactionsRetries; i++ {
-			body, resp, err = submit(w.logger, req)
+			body, resp, err = submit(w.Logger, req)
 			if nerr, ok := err.(net.Error); ok && nerr.Temporary() {
-				if w.logger != nil {
-					w.logger.Debug().
+				if w.Logger != nil {
+					w.Logger.Debug().
 						Str("path", "github.com/brave-intl/bat-go/wallet/provider/uphold").
 						Str("type", "net.Error").
 						Msg("Temporary error occurred, retrying")
@@ -939,7 +950,7 @@ func (w *Wallet) CreateCardAddress(network string) (string, error) {
 		return "", err
 	}
 
-	body, _, err := submit(w.logger, req)
+	body, _, err := submit(w.Logger, req)
 	if err != nil {
 		return "", err
 	}
@@ -974,7 +985,7 @@ func FundWallet(destWallet *Wallet, amount decimal.Decimal) (decimal.Decimal, er
 	if err != nil {
 		return zero, err
 	}
-	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey}
+	donorWallet := &Wallet{Info: donorInfo, PrivKey: donorPrivateKey, PubKey: donorPublicKey, Logger: destWallet.Logger}
 
 	if len(donorWallet.ID) > 0 {
 		return zero, errors.New("donor wallet does not have an ID")

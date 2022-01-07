@@ -391,7 +391,7 @@ func (s *Service) UpdateOrderMetadata(orderID uuid.UUID, key string, value strin
 // return amount, status, currency, kind, err
 type getCustodialTxFn func(context.Context, string) (*decimal.Decimal, string, string, string, error)
 
-// getUpholdCustodialTx - the the custodial tx information from uphold
+// get the uphold tx based on txRef
 func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	var wallet uphold.Wallet
 	upholdTransaction, err := wallet.GetTransaction(txRef)
@@ -411,6 +411,37 @@ func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, 
 	}
 
 	return &amount, status, currency, custodian, nil
+}
+
+// getUpholdCustodialTxWithRetries - the the custodial tx information from uphold with retries
+func getUpholdCustodialTxWithRetries(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+
+	var (
+		amount    *decimal.Decimal
+		status    string
+		currency  string
+		custodian string
+		err       error
+	)
+
+	// best effort to check that the tx is done processing
+OUTER:
+	for i := 0; i < 5; i++ {
+		select {
+		case <-ctx.Done():
+			break OUTER
+		case <-time.After(500 * time.Millisecond):
+			amount, status, currency, custodian, err = getUpholdCustodialTx(ctx, txRef)
+			if err != nil {
+				return nil, "", "", "", fmt.Errorf("failed to get uphold tx by txRef %s: %w", txRef, err)
+			}
+			if status != "processing" && status != "pending" {
+				break OUTER
+			}
+		}
+	}
+
+	return amount, status, currency, custodian, nil
 }
 
 // returns gemini client, api key, client id, settlement address, error

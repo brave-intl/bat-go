@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 
@@ -52,6 +53,14 @@ func init() {
 		"optional note for the transfer").
 		Bind("note")
 
+	transferFundsBuilder.Flag().String("purpose", "",
+		"purpose for the transfer, required for value > $3000").
+		Bind("purpose")
+
+	transferFundsBuilder.Flag().String("beneficiary", "",
+		"JSON formatted beneficiary for the transfer, required for value > $3000").
+		Bind("beneficiary")
+
 	transferFundsBuilder.Flag().Bool("oneshot", false,
 		"submit and commit without confirming").
 		Bind("oneshot")
@@ -97,6 +106,22 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	purpose, err := command.Flags().GetString("purpose")
+	if err != nil {
+		return err
+	}
+	beneficiaryJSON, err := command.Flags().GetString("beneficiary")
+	if err != nil {
+		return err
+	}
+	var beneficiary *uphold.Beneficiary
+	if len(beneficiaryJSON) > 0 {
+		beneficiary = &uphold.Beneficiary{}
+		err := json.Unmarshal([]byte(beneficiaryJSON), beneficiary)
+		if err != nil {
+			return err
+		}
+	}
 	oneshot, err := command.Flags().GetBool("oneshot")
 	if err != nil {
 		return err
@@ -114,6 +139,8 @@ func RunTransferFunds(command *cobra.Command, args []string) error {
 		value,
 		currency,
 		note,
+		purpose,
+		beneficiary,
 		oneshot,
 		usevault,
 	)
@@ -201,6 +228,8 @@ func TransferFunds(
 	value string,
 	currency string,
 	note string,
+	purpose string,
+	beneficiary *uphold.Beneficiary,
 	oneshot bool,
 	usevault bool,
 ) error {
@@ -268,7 +297,7 @@ func TransferFunds(
 		}
 	}
 
-	signedTx, err := w.PrepareTransaction(altc, valueProbi, to, note)
+	signedTx, err := w.PrepareTransaction(altc, valueProbi, to, note, purpose, beneficiary)
 	if err != nil {
 		return err
 	}
