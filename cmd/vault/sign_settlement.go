@@ -13,8 +13,10 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	settlementcmd "github.com/brave-intl/bat-go/cmd/settlement"
 	"github.com/brave-intl/bat-go/settlement"
+	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	geminisettlement "github.com/brave-intl/bat-go/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
@@ -92,6 +94,21 @@ func init() {
 	signSettlementBuilder.Flag().Bool("merge", false,
 		"when multiple input files are passed, merge all transactions and output one file per provider / transaction type ").
 		Bind("merge")
+
+	signSettlementBuilder.Flag().String("bitflyer-client-token", "",
+		"the token to be sent for auth on bitflyer").
+		Bind("bitflyer-client-token").
+		Env("BITFLYER_TOKEN")
+
+	signSettlementBuilder.Flag().String("bitflyer-client-id", "",
+		"tells bitflyer what the client id is during token generation").
+		Bind("bitflyer-client-id").
+		Env("BITFLYER_CLIENT_ID")
+
+	signSettlementBuilder.Flag().String("bitflyer-client-secret", "",
+		"tells bitflyer what the client secret during token generation").
+		Bind("bitflyer-client-secret").
+		Env("BITFLYER_CLIENT_SECRET")
 }
 
 // SignSettlement runs the signing of a settlement
@@ -183,7 +200,10 @@ func processSettlements(ctx context.Context, providers []string, outDir string, 
 		return err
 	}
 
-	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
+	settlementsByProviderAndWalletKey, err := divideSettlementsByWallet(ctx, antifraudSettlements)
+	if err != nil {
+		return err
+	}
 
 	logLine := logger.Info()
 	for _, provider := range providers {
@@ -236,11 +256,20 @@ func processSettlements(ctx context.Context, providers []string, outDir string, 
 	return nil
 }
 
-func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) map[string][]settlement.Transaction {
+func divideSettlementsByWallet(ctx context.Context, antifraudTxs []settlement.AntifraudTransaction) (map[string][]settlement.Transaction, error) {
 	settlementTransactionsByWallet := make(map[string][]settlement.Transaction)
 
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return settlementTransactionsByWallet, err
+	}
+
 	for _, antifraudTx := range antifraudTxs {
-		tx := antifraudTx.ToTransaction()
+		tx, err := antifraudTx.ToTransaction()
+		if err != nil {
+			logger.Warn().Err(err).Str("channel", tx.Channel).Msg("skipping transaction as it failed to validate")
+			continue
+		}
 
 		provider := tx.WalletProvider
 		wallet := tx.Type
@@ -252,15 +281,12 @@ func divideSettlementsByWallet(antifraudTxs []settlement.AntifraudTransaction) m
 		// which secret values to use to sign (paypal-default, uphold-referral, gemini-contribution)
 		walletKey := provider + "-" + wallet
 		// append to the nested structure
-		if !tx.Amount.GreaterThan(decimal.NewFromFloat(0)) {
-			continue
-		}
 		settlementTransactionsByWallet[walletKey] = append(
 			settlementTransactionsByWallet[walletKey],
 			tx,
 		)
 	}
-	return settlementTransactionsByWallet
+	return settlementTransactionsByWallet, nil
 }
 
 func createUpholdArtifact(
@@ -314,6 +340,20 @@ func createUpholdArtifact(
 	return nil
 }
 
+// NewRefreshTokenPayloadFromViper creates the payload to refresh a bitflyer token from viper
+func NewRefreshTokenPayloadFromViper() *bitflyer.TokenPayload {
+	vpr := viper.GetViper()
+	clientID := vpr.GetString("bitflyer-client-id")
+	clientSecret := vpr.GetString("bitflyer-client-secret")
+	extraClientSecret := vpr.GetString("bitflyer-extra-client-secret")
+	return &bitflyer.TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          clientID,
+		ClientSecret:      clientSecret,
+		ExtraClientSecret: extraClientSecret,
+	}
+}
+
 func createBitflyerArtifact(
 	ctx context.Context,
 	outputFile string,
@@ -321,7 +361,26 @@ func createBitflyerArtifact(
 	walletKey string,
 	bitflyerOnlySettlements []settlement.Transaction,
 ) error {
-	out, err := json.Marshal(bitflyerOnlySettlements)
+	bitflyerClient, err := bitflyer.New()
+	if err != nil {
+		return err
+	}
+	refreshTokenPayload := NewRefreshTokenPayloadFromViper()
+	_, err = bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
+	if err != nil {
+		return err
+	}
+
+	preparedTransactions, err := bitflyersettlement.PrepareRequests(
+		ctx,
+		bitflyerClient,
+		bitflyerOnlySettlements,
+		false,
+	)
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(preparedTransactions, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -360,7 +419,7 @@ func createGeminiArtifact(
 		return err
 	}
 	// serialize requests to be sent in next step
-	out, err := json.Marshal(privateRequests)
+	out, err := json.MarshalIndent(privateRequests, "", "  ")
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,8 @@ package settlement
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"time"
@@ -264,7 +266,6 @@ func BitflyerUploadSettlement(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	bulkPayoutFiles := strings.Split(inPath, ",")
 	bitflyerClient, err := bitflyer.New()
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create new bitflyer client")
@@ -281,13 +282,25 @@ func BitflyerUploadSettlement(
 		}
 	}
 
+	bytes, err := ioutil.ReadFile(inPath)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to read bulk payout file")
+		return err
+	}
+
+	var preparedTransactions bitflyersettlement.PreparedTransactions
+	err = json.Unmarshal(bytes, &preparedTransactions)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
+		return err
+	}
+
 	submittedTransactions, submitErr := bitflyersettlement.IterateRequest(
 		ctx,
 		action,
 		bitflyerClient,
-		bulkPayoutFiles,
 		sourceFrom,
-		excludeLimited,
+		preparedTransactions,
 		dryRun,
 	)
 	// write file for upload to eyeshade

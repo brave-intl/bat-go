@@ -51,12 +51,18 @@ type Transaction struct {
 	Note             string                   `json:"note"`
 }
 
-// AntifraudTransaction a transaction object that comes from antifraud
+// AntifraudTransaction is a "v2" transaction, creators only atm
 type AntifraudTransaction struct {
 	Transaction
 	BAT                decimal.Decimal `json:"bat,omitempty"`
 	PayoutReportID     string          `json:"payout_report_id,omitempty"`
 	WalletProviderInfo string          `json:"wallet_provider_id,omitempty"`
+}
+
+// AggregateTransaction is a single transaction aggregating multiple input transactions
+type AggregateTransaction struct {
+	Transaction
+	Inputs []Transaction `json:"inputs"`
 }
 
 // ProviderInfo holds information parsed from the wallet_provider_id
@@ -72,6 +78,18 @@ func (tx Transaction) TransferID() string {
 		tx.SettlementID,
 		tx.Destination,
 		tx.Channel,
+	}
+	key := strings.Join(inputs, "_")
+	bytes := sha256.Sum256([]byte(key))
+	refID := base58.Encode(bytes[:], base58.IPFSAlphabet)
+	return refID
+}
+
+// BitflyerTransferID generate the bitflier transfer id
+func (tx Transaction) BitflyerTransferID() string {
+	inputs := []string{
+		tx.SettlementID,
+		tx.ProviderID,
 	}
 	key := strings.Join(inputs, "_")
 	bytes := sha256.Sum256([]byte(key))
@@ -98,8 +116,13 @@ func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
 }
 
 // ToTransaction turns the antifraud transaction into a transaction understandable by settlement tools
-func (at AntifraudTransaction) ToTransaction() Transaction {
+func (at AntifraudTransaction) ToTransaction() (Transaction, error) {
 	t := at.Transaction
+
+	if len(at.Destination) == 0 || len(at.WalletProviderInfo) == 0 {
+		return t, errors.New("Invalid address or wallet provider info")
+	}
+
 	if at.BAT.GreaterThan(decimal.Zero) {
 		alt := altcurrency.BAT
 		providerInfo := at.ProviderInfo()
@@ -115,7 +138,12 @@ func (at AntifraudTransaction) ToTransaction() Transaction {
 	} else if at.Probi.GreaterThan(decimal.Zero) {
 		t.Amount = t.AltCurrency.FromProbi(at.Probi)
 	}
-	return t
+
+	if !t.Amount.GreaterThan(decimal.NewFromFloat(0)) {
+		return t, errors.New("Invalid amount, is not greater than 0")
+	}
+
+	return t, nil
 }
 
 // State contains the current state of the settlement, including wallet and transaction status
