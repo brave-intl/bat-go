@@ -124,11 +124,11 @@ type State struct {
 }
 
 // CheckForDuplicates in a list of transactions
-func CheckForDuplicates(transactions []Transaction) error {
+func CheckForDuplicates(transactions []AntifraudTransaction) error {
 	channelSet := map[string]bool{}
 	for _, settlementTransaction := range transactions {
 		if _, exists := channelSet[settlementTransaction.Channel]; exists {
-			return errors.New("Malformed settlement file, duplicate channel detected:" + settlementTransaction.Channel)
+			return errors.New("DO NOT PROCEED WITH PAYOUT: Malformed settlement file, duplicate payments detected!:" + settlementTransaction.Channel)
 		}
 		channelSet[settlementTransaction.Channel] = true
 	}

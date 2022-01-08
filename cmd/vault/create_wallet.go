@@ -26,7 +26,7 @@ type State struct {
 var (
 	// CreateWalletCmd transfer funds command
 	CreateWalletCmd = &cobra.Command{
-		Use:   "create-wallet",
+		Use:   "create-wallet WALLET_NAME",
 		Short: "creates a wallet on a given provider",
 		Run:   cmd.Perform("create wallet", CreateWallet),
 	}
