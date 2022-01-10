@@ -362,7 +362,7 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		}
 
 		if v.DepositID == nil {
-			return errorutils.New(fmt.Errorf("failed invalid depositID for batchID %s", batchID),
+			return errorutils.New(fmt.Errorf("failed depositID cannot be nil for batchID %s", batchID),
 				"submit batch transfer", drainCodeErrorInvalidDepositID)
 		}
 		depositID = *v.DepositID

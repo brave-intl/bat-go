@@ -209,7 +209,7 @@ func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
 		Datastore: datastore,
 	}
 
-	expected := errorutils.New(fmt.Errorf("failed invalid depositID for batchID %s", batchID),
+	expected := errorutils.New(fmt.Errorf("failed depositID cannot be nil for batchID %s", batchID),
 		"submit batch transfer", drainCodeErrorInvalidDepositID)
 
 	err := s.SubmitBatchTransfer(ctx, batchID)
