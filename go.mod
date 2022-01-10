@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
-	github.com/alicebob/miniredis/v2 v2.14.5
+	github.com/alicebob/miniredis/v2 v2.17.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/containerd/containerd v1.4.12 // indirect
