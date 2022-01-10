@@ -27,7 +27,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.11.0
-	github.com/rs/zerolog v1.23.0
+	github.com/rs/zerolog v1.26.1
 	github.com/satori/go.uuid v1.2.0
 	github.com/segmentio/kafka-go v0.4.16
 	github.com/shengdoushi/base58 v1.0.0
@@ -42,8 +42,8 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
-	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
-	golang.org/x/net v0.0.0-20210510120150-4163338589ed
+	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e
+	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
