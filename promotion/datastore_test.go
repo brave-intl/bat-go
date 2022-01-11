@@ -4,16 +4,23 @@ package promotion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/logging"
+
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/wallet"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -50,7 +57,7 @@ func (suite *PostgresTestSuite) TearDownTest() {
 }
 
 func (suite *PostgresTestSuite) CleanDB() {
-	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions"}
+	tables := []string{"claim_creds", "claims", "wallets", "issuers", "promotions", "claim_drain"}
 
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
@@ -932,7 +939,7 @@ func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 	walletID := uuid.NewV4()
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID.String(), true, "reputation-failed", "reputation-failed",
 		uuid.NewV4().String())
@@ -975,6 +982,237 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NoClaimsToProcess() 
 	actual, err := pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
 	suite.Require().NoError(err)
 	suite.Require().False(actual, "should not have attempted job run")
+}
+
+func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_SubmitBatchTransfer_Error() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx, _ := logging.SetupLogger(context.Background())
+
+	// setup wallet
+	walletID := uuid.NewV4()
+	userDepositAccountProvider := "bitflyer"
+
+	info := &walletutils.Info{
+		ID:                         walletID.String(),
+		Provider:                   "uphold",
+		ProviderID:                 uuid.NewV4().String(),
+		PublicKey:                  "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY=",
+		UserDepositAccountProvider: &userDepositAccountProvider,
+	}
+	err = walletDB.UpsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	// setup claim drain
+	batchID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total, transaction_id) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1, $6);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, false, nil, "prepared", batchID, uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	drainCodeErr := drainCodeErrorInvalidDepositID
+	drainCodeError := errorutils.New(errors.New("error-text"),
+		"error-message", drainCodeErr)
+
+	batchTransferWorker := NewMockBatchTransferWorker(ctrl)
+	batchTransferWorker.EXPECT().
+		SubmitBatchTransfer(ctx, &batchID).
+		Return(drainCodeError)
+
+	actual, actualErr := pg.RunNextBatchPaymentsJob(ctx, batchTransferWorker)
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(true, drainJob.Erred)
+	suite.Require().Equal(drainCodeErr.ErrCode, *drainJob.ErrCode)
+	suite.Require().Equal("failed", *drainJob.Status)
+
+	suite.Require().True(actual, "should have attempted job run")
+	suite.Require().Equal(drainCodeError, actualErr)
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "failed",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+	suite.Require().NoError(err, "should have updated claim drain row")
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Equal("manual-retry", *drainJob.Status)
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_WalletID() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, uuid.NewV4(), true, "some-failed-errcode", "failed",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	walletID := uuid.NewV4()
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NoRetriableJobFound() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
+
+	walletID := uuid.NewV4()
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-errcode", "complete",
+		uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_Erred() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
+
+	walletID := uuid.NewV4()
+	erred := false
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, erred, "some-failed-errcode", "failed",
+		uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_NotFound_TransactionID() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total, transaction_id) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1, $6);`
+
+	walletID := uuid.NewV4()
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "failed",
+		uuid.NewV4(), uuid.NewV4())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	err = pg.UpdateDrainJobAsRetriable(context.Background(), walletID)
+
+	expected := fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+		errorutils.ErrNotFound)
+
+	suite.Require().Error(err, expected.Error())
+}
+
+func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	randomString := func() string {
+		return uuid.NewV4().String()
+	}
+
+	credentialRedemption := cbr.CredentialRedemption{
+		Issuer:        randomString(),
+		TokenPreimage: randomString(),
+		Signature:     randomString(),
+	}
+	credentialRedemptions := make([]cbr.CredentialRedemption, 0)
+	credentialRedemptions = append(credentialRedemptions, credentialRedemption)
+
+	credentials, err := json.Marshal(credentialRedemptions)
+	suite.Require().NoError(err, "should have serialised credentials")
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, FALSE, 'some-errcode', 'manual-retry', $2, $3, FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, uuid.NewV4().String(), credentials)
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	// expected context with bypass cbr true
+	ctrl := gomock.NewController(suite.T())
+	drainWorker := NewMockDrainWorker(ctrl)
+
+	ctx := context.Background()
+
+	drainWorker.EXPECT().
+		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0)).
+		Return(&walletutils.TransactionInfo{}, nil)
+
+	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
+
+	suite.Require().NoError(err, "should have been successful attempted job")
+	suite.Require().True(attempted)
+}
+
+func isCBRBypass(ctx context.Context) gomock.Matcher {
+	return cbrBypass{ctx: ctx}
+}
+
+type cbrBypass struct {
+	ctx context.Context
+}
+
+func (c cbrBypass) Matches(arg interface{}) bool {
+	ctx := arg.(context.Context)
+	return ctx.Value(appctx.SkipRedeemCredentialsCTXKey) == true
+}
+
+func (c cbrBypass) String() string {
+	return "failed: cbr bypass is false"
 }
 
 func TestPostgresTestSuite(t *testing.T) {

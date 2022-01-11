@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,8 +28,8 @@ import (
 var (
 	// SignSettlementCmd signs a settlement file's transactions
 	SignSettlementCmd = &cobra.Command{
-		Use:   "sign-settlement",
-		Short: "sign settlement files using vault inputs",
+		Use:   "sign-settlement INPUT_FILE...",
+		Short: "sign settlement files using vault held secrets",
 		Run:   cmd.Perform("sign settlement", SignSettlement),
 	}
 	// the combination of provider + transaction type gives you the key
@@ -62,7 +63,7 @@ func init() {
 
 	// in -> the file to parse and sign according to each provider's setup. default: contributions.json
 	signSettlementBuilder.Flag().String("in", "contributions.json",
-		"input file path").
+		"( legacy compatibility ) input file path").
 		Bind("in")
 
 	providers := []string{}
@@ -83,10 +84,20 @@ func init() {
 		"the default path to a configuration file").
 		Bind("config").
 		Env("CONFIG")
+
+	signSettlementBuilder.Flag().String("out", "",
+		"the output directory for prepared files ( defaults to current working directory )").
+		Bind("out")
+
+	signSettlementBuilder.Flag().Bool("merge", false,
+		"when multiple input files are passed, merge all transactions and output one file per provider / transaction type ").
+		Bind("merge")
 }
 
 // SignSettlement runs the signing of a settlement
 func SignSettlement(command *cobra.Command, args []string) error {
+	inputFiles := args
+
 	ReadConfig(command)
 	providers, err := command.Flags().GetStringSlice("providers")
 	if err != nil {
@@ -96,26 +107,92 @@ func SignSettlement(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// append -signed to the filename
-	outputFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-signed.json"
+	if len(inputFiles) == 0 {
+		inputFiles = []string{inputFile}
+	}
+	outDir, err := command.Flags().GetString("out")
+	if err != nil {
+		return err
+	}
+	merge, err := command.Flags().GetBool("merge")
+	if err != nil {
+		return err
+	}
+
 	logger, err := appctx.GetLogger(command.Context())
 	if err != nil {
 		return err
 	}
 
-	// all settlements file
-	settlementJSON, err := ioutil.ReadFile(inputFile)
+	if len(outDir) > 0 {
+		logger.Info().Str("outDir", outDir).Msg("creating output directory")
+
+		err := os.MkdirAll(outDir, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+
+	var mergedSettlements []settlement.AntifraudTransaction
+
+	for _, inputFile := range inputFiles {
+		sublog := logger.With().Str("inputFile", inputFile).Logger()
+
+		sublog.Info().Msg("reading settlement file")
+
+		// append -signed to the filename
+		outBaseFile := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile)) + "-signed.json"
+
+		// all settlements file
+		settlementJSON, err := ioutil.ReadFile(inputFile)
+		if err != nil {
+			return err
+		}
+
+		var antifraudSettlements []settlement.AntifraudTransaction
+		err = json.Unmarshal(settlementJSON, &antifraudSettlements)
+		if err != nil {
+			return err
+		}
+
+		sublog.Info().Int("len(antifraudSettlements)", len(antifraudSettlements)).Msg("deserialized settlement file")
+
+		mergedSettlements = append(mergedSettlements, antifraudSettlements...)
+		if merge {
+			sublog.Info().Int("len(mergedSettlements)", len(mergedSettlements)).Msg("merged settlements")
+		} else {
+			return processSettlements(sublog.WithContext(command.Context()), providers, outDir, outBaseFile, antifraudSettlements)
+		}
+	}
+
+	err = settlement.CheckForDuplicates(mergedSettlements)
 	if err != nil {
 		return err
 	}
 
-	var antifraudSettlements []settlement.AntifraudTransaction
-	err = json.Unmarshal(settlementJSON, &antifraudSettlements)
+	if merge {
+		logger.Info().Int("len(mergedSettlements)", len(mergedSettlements)).Msg("processing merged settlements")
+		return processSettlements(command.Context(), providers, outDir, "merged-signed.json", mergedSettlements)
+	}
+	return nil
+}
+
+func processSettlements(ctx context.Context, providers []string, outDir string, outBaseFile string, antifraudSettlements []settlement.AntifraudTransaction) error {
+	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		return err
 	}
 
 	settlementsByProviderAndWalletKey := divideSettlementsByWallet(antifraudSettlements)
+
+	logLine := logger.Info()
+	for _, provider := range providers {
+		for _, txType := range providerTransactionTypes[provider] {
+			walletKey := provider + "-" + txType
+			logLine = logLine.Int(walletKey, len(settlementsByProviderAndWalletKey[walletKey]))
+		}
+	}
+	logLine.Msg("split settlements by provider and transaction type")
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
@@ -129,21 +206,27 @@ func SignSettlement(command *cobra.Command, args []string) error {
 			if len(settlements) == 0 {
 				continue
 			}
-			output := walletKey + "-" + outputFile
+			output := filepath.Join(outDir, walletKey+"-"+outBaseFile)
+
 			secretKey := Config.GetWalletKey(walletKey)
+
 			sublog := logger.With().
-				Str("output", output).
 				Str("provider", provider).
-				Str("secretkey", secretKey).
+				Str("txType", txType).
+				Str("output", output).
 				Int("settlements", len(settlements)).
 				Logger()
+
+			sublog.Info().Str("wallet", secretKey).Msg("attempting to sign settlements")
+
 			err := artifactGenerators[provider](
-				sublog.WithContext(command.Context()),
+				sublog.WithContext(ctx),
 				output,
 				wrappedClient,
 				secretKey,
 				settlements,
 			)
+
 			if err != nil {
 				return err
 			}

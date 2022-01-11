@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/handlers"
+
 	"github.com/brave-intl/bat-go/utils/clients"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -1525,6 +1527,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
+	suite.CleanDB()
 	// TODO: after we figure out why we are being blocked by bf enable
 	//suite.T().Skip("bitflyer side unable to settle")
 	pg, _, err := NewPostgres()
@@ -1717,7 +1720,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	// the runnextbatchpayments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().NoError(err)
+	suite.Require().EqualError(err, "over custodian transfer limit")
 
 	<-time.After(1 * time.Second)
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
@@ -2375,7 +2378,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	// the runnextbatchpayments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().NoError(err)
+	suite.Require().IsType(&clients.BitflyerError{}, err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
@@ -2788,7 +2791,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 }
 
 func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
-	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":123}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":"123"}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
 	return err
 }
 
@@ -3220,4 +3223,123 @@ func (suite *ControllersTestSuite) TestPostReportBAPEvent() {
 	}})
 	suite.Require().JSONEq(string(serializedExpected1), string(serializedActual1))
 
+}
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV4()
+
+	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total) 
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
+
+	_, err = pg.RawDB().ExecContext(context.Background(), query, walletID, true, "some-failed-errcode", "reputation-failed",
+		uuid.NewV4().String())
+	suite.Require().NoError(err, "should have inserted claim drain row")
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	data := DrainJobRequest{
+		Erred: false,
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", walletID), bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	suite.Require().Equal(http.StatusNoContent, rw.Code)
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, `SELECT * FROM claim_drain WHERE wallet_id = $1 LIMIT 1`, walletID)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	suite.Require().Equal(walletID, drainJob.WalletID)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Equal("manual-retry", *drainJob.Status)
+}
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_NotFound() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	data := DrainJobRequest{
+		Erred: false,
+	}
+
+	walletID := uuid.NewV4()
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", walletID),
+		bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	expected := handlers.AppError{
+		Cause:   nil,
+		Message: fmt.Sprintf("patch drain job: no updateable drain job found for walletId %s", walletID),
+		Code:    http.StatusNotFound,
+	}
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	suite.Require().Equal(http.StatusNotFound, rw.Code)
+	suite.Require().Equal(expected, appError)
+}
+
+func (suite *ControllersTestSuite) TestPatchDrainJobErred_ValidationError_Erred() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	service := &Service{Datastore: pg}
+
+	router := chi.NewRouter()
+	router.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", PatchDrainJobErred(service))
+
+	rw := httptest.NewRecorder()
+
+	drainJobRequest := DrainJobRequest{
+		Erred: true,
+	}
+
+	payload, err := json.Marshal(drainJobRequest)
+	suite.Require().NoError(err, "should serialize data")
+
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/drain-jobs/wallets/%s/erred", uuid.NewV4()),
+		bytes.NewReader(payload))
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, req)
+
+	expected := "invalid value true only false is supported"
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	data := appError.Data.(map[string]interface{})
+	actual := data["validationErrors"].(map[string]interface{})
+
+	suite.Require().Equal(http.StatusBadRequest, rw.Code)
+	suite.Require().Equal(http.StatusBadRequest, appError.Code)
+	suite.Require().Equal(expected, actual["erred"])
 }

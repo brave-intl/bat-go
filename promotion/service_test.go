@@ -119,7 +119,7 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 	suite.Require().NoError(err)
 
 	query := `INSERT INTO claim_drain (wallet_id, erred, errcode, status, batch_id, credentials, completed, total)
-				VALUES ($1, $2, $3, $4, $5, '[{"t":123}]', FALSE, 1);`
+				VALUES ($1, $2, $3, $4, $5, '[{"t":"123"}]', FALSE, 1);`
 
 	walletIDs := make([]uuid.UUID, 5, 5)
 	for i := 0; i < 5; i++ {

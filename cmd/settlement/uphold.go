@@ -124,11 +124,6 @@ func UpholdUpload(
 		logger.Panic().Err(err).Msg("failed to unmarshal input file")
 	}
 
-	err = settlement.CheckForDuplicates(settlementState.Transactions)
-	if err != nil {
-		logger.Panic().Err(err).Msg("failed duplicate transaction check")
-	}
-
 	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to make settlement wallet")

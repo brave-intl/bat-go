@@ -289,6 +289,13 @@ func New() (Client, error) {
 	return NewClientWithPrometheus(&HTTPClient{client}, "gemini_client"), err
 }
 
+// isB64 - check if the input string is base64
+func isB64(s string) bool {
+	// will get an error if we fail to decode
+	_, err := base64.StdEncoding.DecodeString(s)
+	return err == nil
+}
+
 func setHeaders(
 	req *http.Request,
 	APIKey string,
@@ -300,8 +307,12 @@ func setHeaders(
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("Cache-Control", "no-cache")
 	if payload != "" {
+		if !isB64(payload) {
+			// payload is not base64, so encode it before sending
+			payload = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
 		// base64 encode the payload
-		req.Header.Set("X-GEMINI-PAYLOAD", base64.StdEncoding.EncodeToString([]byte(payload)))
+		req.Header.Set("X-GEMINI-PAYLOAD", payload)
 	}
 	if submitType != "oauth" {
 		// do not send when oauth
@@ -328,8 +339,11 @@ func setPrivateRequestHeaders(
 			return errors.New("GEMINI_SUBMIT_TYPE set to 'hmac' but no signer provided")
 		}
 		signs := *signer
+		if !isB64(payload) {
+			payload = base64.StdEncoding.EncodeToString([]byte(payload))
+		}
 		// only set if sending an hmac salt
-		signature, err := signs.HMACSha384([]byte(base64.StdEncoding.EncodeToString([]byte(payload))))
+		signature, err := signs.HMACSha384([]byte(payload))
 		if err != nil {
 			return err
 		}

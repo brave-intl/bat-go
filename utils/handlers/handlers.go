@@ -110,7 +110,7 @@ func ValidationError(message string, validationErrors interface{}) *AppError {
 	}
 }
 
-// AppHandler is an http.Handler with JSON requests / reponses
+// AppHandler is an http.Handler with JSON requests / responses
 type AppHandler func(http.ResponseWriter, *http.Request) *AppError
 
 // ServeHTTP responds via the passed handler and handles returned errors

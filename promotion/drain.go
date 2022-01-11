@@ -261,6 +261,10 @@ var (
 		errors.New("attempting to claim more funds than earned"),
 		"invalid_suggestion_amount",
 	}
+	drainCodeErrorInvalidDepositID = errorutils.Codified{
+		ErrCode: "invalid_deposit_id",
+		Retry:   false,
+	}
 )
 
 // bitflyerOverTransferLimit - a error bundle "codified" implemented "data" field for error bundle
@@ -355,6 +359,11 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 				"over custodian transfer limit",
 				new(bitflyerOverTransferLimit))
 			break
+		}
+
+		if v.DepositID == nil {
+			return errorutils.New(fmt.Errorf("failed depositID cannot be nil for batchID %s", batchID),
+				"submit batch transfer", drainCodeErrorInvalidDepositID)
 		}
 		depositID = *v.DepositID
 	}
