@@ -129,6 +129,8 @@ type Datastore interface {
 	MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) error
 	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
 	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
+	// UpdateDrainJobErred - manually update drain job for retry
+	UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) error
 }
 
 // ReadOnlyDatastore includes all database methods that can be made with a read only db connection
@@ -1478,7 +1480,7 @@ limit 1`
 		return attempted, err
 	}
 
-	if job.Status != nil && *job.Status == "retry-bypass-cbr" {
+	if job.Status != nil && (*job.Status == "retry-bypass-cbr" || *job.Status == "manual-retry") {
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
@@ -1778,6 +1780,31 @@ func (pg *Postgres) GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, e
 	`, orderID)
 
 	return sum, err
+}
+
+// UpdateDrainJobAsRetriable - updates a drain job as retriable
+func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) error {
+	query := `
+				UPDATE claim_drain
+				SET erred = FALSE, status = 'manual-retry'
+				WHERE wallet_id = $1 AND erred = TRUE AND status IN ('reputation-failed', 'failed') AND transaction_id IS NULL
+			`
+	result, err := pg.ExecContext(ctx, query, walletID)
+	if err != nil {
+		return fmt.Errorf("update drain job: failed to exec update for walletID %s: %w", walletID, err)
+	}
+
+	affectedRows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update drain job: failed to get affected rows for walletID %s: %w", walletID, err)
+	}
+
+	if affectedRows != 1 {
+		return fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
+			errorutils.ErrNotFound)
+	}
+
+	return nil
 }
 
 func toUUIDs(a ...string) ([]uuid.UUID, error) {

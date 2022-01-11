@@ -627,6 +627,20 @@ func (_d DatastoreWithPrometheus) SetMintDrainPromotionTotal(ctx context.Context
 	return _d.base.SetMintDrainPromotionTotal(ctx, walletID, promotionID, total)
 }
 
+// UpdateDrainJobAsRetriable implements Datastore
+func (_d DatastoreWithPrometheus) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateDrainJobAsRetriable", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateDrainJobAsRetriable(ctx, walletID)
+}
+
 // UpdateOrder implements Datastore
 func (_d DatastoreWithPrometheus) UpdateOrder(orderID uuid.UUID, status string) (err error) {
 	_since := time.Now()

@@ -63,6 +63,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
+	r.Method("PATCH", "/drain-jobs/wallets/{walletId}/erred", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("PatchDrainJobErred", PatchDrainJobErred(service))))
 	return r
 }
 
@@ -861,4 +862,50 @@ func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
+}
+
+// DrainJobRequest holds data for drain job requests
+type DrainJobRequest struct {
+	Erred bool `json:"erred"`
+}
+
+// PatchDrainJobErred is the handler for toggling a drain job as retriable
+func PatchDrainJobErred(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		walletID, err := uuid.FromString(chi.URLParam(r, "walletId"))
+		if err != nil {
+			return handlers.ValidationError("validation error", map[string]string{
+				"walletId": "must be a valid uuid v4",
+			})
+		}
+
+		var drainJobRequest DrainJobRequest
+		err = requestutils.ReadJSON(r.Body, &drainJobRequest)
+		if err != nil {
+			return handlers.WrapError(errors.New("could not decode request body"), "patch drain job",
+				http.StatusBadRequest)
+		}
+
+		if drainJobRequest.Erred {
+			return handlers.ValidationError("validation error", map[string]string{
+				"erred": "invalid value true only false is supported",
+			})
+		}
+
+		err = service.Datastore.UpdateDrainJobAsRetriable(r.Context(), walletID)
+		if err != nil {
+			logging.FromContext(r.Context()).Err(err).Msg("patch drain job")
+			switch {
+			case errors.Is(err, errorutils.ErrNotFound):
+				return handlers.WrapError(fmt.Errorf("no updateable drain job found for walletId %s", walletID),
+					"patch drain job", http.StatusNotFound)
+			default:
+				return handlers.WrapError(fmt.Errorf("error updating drain job for walletdId %s", walletID),
+					"patch drain job", http.StatusInternalServerError)
+			}
+		}
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusNoContent)
+	}
 }

@@ -665,6 +665,20 @@ func (mr *MockDatastoreMockRecorder) SetMintDrainPromotionTotal(ctx, walletID, p
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMintDrainPromotionTotal", reflect.TypeOf((*MockDatastore)(nil).SetMintDrainPromotionTotal), ctx, walletID, promotionID, total)
 }
 
+// UpdateDrainJobAsRetriable mocks base method.
+func (m *MockDatastore) UpdateDrainJobAsRetriable(ctx context.Context, walletID go_uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDrainJobAsRetriable", ctx, walletID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateDrainJobAsRetriable indicates an expected call of UpdateDrainJobAsRetriable.
+func (mr *MockDatastoreMockRecorder) UpdateDrainJobAsRetriable(ctx, walletID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDrainJobAsRetriable", reflect.TypeOf((*MockDatastore)(nil).UpdateDrainJobAsRetriable), ctx, walletID)
+}
+
 // UpdateOrder mocks base method.
 func (m *MockDatastore) UpdateOrder(orderID go_uuid.UUID, status string) error {
 	m.ctrl.T.Helper()
