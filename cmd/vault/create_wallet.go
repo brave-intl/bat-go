@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
@@ -28,7 +26,7 @@ type State struct {
 var (
 	// CreateWalletCmd transfer funds command
 	CreateWalletCmd = &cobra.Command{
-		Use:   "create-wallet",
+		Use:   "create-wallet WALLET_NAME",
 		Short: "creates a wallet on a given provider",
 		Run:   cmd.Perform("create wallet", CreateWallet),
 	}
@@ -44,10 +42,6 @@ func init() {
 	createWalletBuilder.Flag().Bool("offline", false,
 		"operate in multi-step offline mode").
 		Bind("offline")
-
-	createWalletBuilder.Flag().Bool("debug", false,
-		"debug logging").
-		Bind("debug")
 }
 
 // CreateWallet creates a wallet
@@ -58,17 +52,6 @@ func CreateWallet(command *cobra.Command, args []string) error {
 	offline, err := command.Flags().GetBool("offline")
 	if err != nil {
 		return err
-	}
-
-	debug, err := command.Flags().GetBool("debug")
-	if err != nil {
-		return err
-	}
-	if debug {
-		// setup debug for client
-		ctx = context.WithValue(ctx, appctx.DebugLoggingCTXKey, true)
-		// setup debug log level
-		ctx = context.WithValue(ctx, appctx.LogLevelCTXKey, "debug")
 	}
 
 	// setup a new logger, add to context as well

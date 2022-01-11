@@ -157,15 +157,20 @@ func SignSettlement(command *cobra.Command, args []string) error {
 
 		sublog.Info().Int("len(antifraudSettlements)", len(antifraudSettlements)).Msg("deserialized settlement file")
 
+		mergedSettlements = append(mergedSettlements, antifraudSettlements...)
 		if merge {
-			mergedSettlements = append(mergedSettlements, antifraudSettlements...)
 			sublog.Info().Int("len(mergedSettlements)", len(mergedSettlements)).Msg("merged settlements")
 		} else {
 			return processSettlements(sublog.WithContext(command.Context()), providers, outDir, outBaseFile, antifraudSettlements)
 		}
 	}
 
-	if len(mergedSettlements) > 0 {
+	err = settlement.CheckForDuplicates(mergedSettlements)
+	if err != nil {
+		return err
+	}
+
+	if merge {
 		logger.Info().Int("len(mergedSettlements)", len(mergedSettlements)).Msg("processing merged settlements")
 		return processSettlements(command.Context(), providers, outDir, "merged-signed.json", mergedSettlements)
 	}

@@ -20,7 +20,6 @@ const (
 	dateFormat = "2006-01-02T15:04:05-0700"
 )
 
-// var verbose = flag.Bool("v", false, "verbose output")
 // var csvOut = flag.Bool("csv", false, "csv output")
 // var limit = flag.Int("limit", 50, "limit number of transactions returned")
 // var startDateStr = flag.String("start-date", "none", "only include transactions after this datetime  [ISO 8601]")
@@ -40,10 +39,6 @@ func init() {
 	WalletsCmd.AddCommand(ListTransactionsCmd)
 
 	listTransactionsBuilder := cmd.NewFlagBuilder(ListTransactionsCmd)
-
-	listTransactionsBuilder.Flag().Bool("verbose", false,
-		"how verbose logging should be").
-		Bind("verbose")
 
 	listTransactionsBuilder.Flag().Bool("csv", false,
 		"the output file should be csv").
@@ -73,10 +68,6 @@ func init() {
 
 // RunListTransactions runs the list transactions command
 func RunListTransactions(cmd *cobra.Command, args []string) error {
-	verbose, err := cmd.Flags().GetBool("verbose")
-	if err != nil {
-		return err
-	}
 	csvOut, err := cmd.Flags().GetBool("csv")
 	if err != nil {
 		return err
@@ -100,7 +91,6 @@ func RunListTransactions(cmd *cobra.Command, args []string) error {
 	return ListTransactions(
 		cmd.Context(),
 		args,
-		verbose,
 		csvOut,
 		signed,
 		limit,
@@ -113,7 +103,6 @@ func RunListTransactions(cmd *cobra.Command, args []string) error {
 func ListTransactions(
 	ctx context.Context,
 	args []string,
-	verbose bool,
 	csvOut bool,
 	signed bool,
 	limit int,

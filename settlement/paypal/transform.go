@@ -12,11 +12,6 @@ import (
 
 // CalculateTransactionAmounts calculates the amount for each payout given a currency and rate
 func CalculateTransactionAmounts(currency string, rate decimal.Decimal, payouts *[]settlement.Transaction) (*[]settlement.Transaction, error) {
-	err := settlement.CheckForDuplicates(*payouts)
-	if err != nil {
-		return nil, err
-	}
-
 	txs := make([]settlement.Transaction, 0)
 	for _, tx := range *payouts {
 		if tx.WalletProvider != "paypal" {
