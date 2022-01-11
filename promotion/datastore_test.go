@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
