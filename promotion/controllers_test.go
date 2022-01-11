@@ -1525,6 +1525,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
+	suite.CleanDB()
 	// TODO: after we figure out why we are being blocked by bf enable
 	//suite.T().Skip("bitflyer side unable to settle")
 	pg, _, err := NewPostgres()
@@ -1717,7 +1718,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	// the runnextbatchpayments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().NoError(err)
+	suite.Require().EqualError(err, "over custodian transfer limit")
 
 	<-time.After(1 * time.Second)
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
@@ -2375,7 +2376,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	// the runnextbatchpayments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().NoError(err)
+	suite.Require().IsType(&clients.BitflyerError{}, err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
