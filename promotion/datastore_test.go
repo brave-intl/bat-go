@@ -1189,7 +1189,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 	ctx := context.Background()
 
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0)).
+		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, gomock.Any()).
 		Return(&walletutils.TransactionInfo{}, nil)
 
 	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
