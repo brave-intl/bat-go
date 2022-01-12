@@ -430,7 +430,10 @@ func (v *ValidateAccountReq) GenerateQueryString() (url.Values, error) {
 // ValidateAccountRes - request structure for inputs to validate account client call
 type ValidateAccountRes struct {
 	ID string `json:"id"`
+	CountryCode string `json:"countryCode"`
 }
+
+var ErrInvalidCountry = errors.New("invalid country")
 
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
@@ -453,6 +456,16 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	if err != nil {
 		return "", err
 	}
+
+	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodes).([]string); ok {
+		// check country code
+		for _, v := range blacklist {
+			if strings.Lower(res.CountryCode) == strings.Lower(v) {
+				return "", ErrInvalidCountry
+			}
+		}
+	}
+
 	return res.ID, nil
 }
 
