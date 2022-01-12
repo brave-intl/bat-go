@@ -906,6 +906,7 @@ func PatchDrainJobErred(service *Service) handlers.AppHandler {
 			}
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusNoContent)
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	}
 }
