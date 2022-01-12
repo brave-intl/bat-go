@@ -64,6 +64,11 @@ func init() {
 		Bind("skus-whitelist").
 		Env("SKUS_WHITELIST")
 
+	flagBuilder.Flag().StringSlice("country-blacklist", []string{""},
+		"the blacklist of countries for wallet linking").
+		Bind("country-blacklist").
+		Env("COUNTRY_BLACKLIST")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
@@ -396,6 +401,9 @@ func GrantServer(
 
 	// whitelisted skus
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
+
+	// blacklisted countries
+	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))

@@ -120,6 +120,8 @@ const (
 	CoingeckoVsCurrencyLimitCTXKey CTXKey = "coingecko_vs_currency_limit"
 	// RatiosRedisAddrCTXKey - the context key for getting the ratios redis address
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
+	// BlacklistedCountryCodesCTXKey - the context key for getting the ratios redis address
+	BlacklistedCountryCodesCTXKey CTXKey = "blacklisted_country_codes"
 )
 
 var (
