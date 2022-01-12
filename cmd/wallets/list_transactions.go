@@ -3,7 +3,6 @@ package wallets
 import (
 	"context"
 	"encoding/csv"
-	"flag"
 	"fmt"
 	"os"
 	"sort"
@@ -43,6 +42,11 @@ func init() {
 	listTransactionsBuilder.Flag().Bool("csv", false,
 		"the output file should be csv").
 		Bind("csv").
+		Require()
+
+	listTransactionsBuilder.Flag().String("provider-id", "none",
+		"the provider id for which transactions will be fetched").
+		Bind("provider-id").
 		Require()
 
 	listTransactionsBuilder.Flag().Bool("signed", false,
@@ -88,6 +92,10 @@ func RunListTransactions(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	providerId, err := cmd.Flags().GetString("provider-id")
+	if err != nil {
+		return err
+	}
 	return ListTransactions(
 		cmd.Context(),
 		args,
@@ -96,6 +104,7 @@ func RunListTransactions(cmd *cobra.Command, args []string) error {
 		limit,
 		startDateStr,
 		provider,
+		providerId,
 	)
 }
 
@@ -108,6 +117,7 @@ func ListTransactions(
 	limit int,
 	startDateStr string,
 	walletProvider string,
+	walletProviderID string,
 ) error {
 	var err error
 	startDate := time.Unix(0, 0)
@@ -121,7 +131,7 @@ func ListTransactions(
 	walletc := altcurrency.BAT
 	info := wallet.Info{
 		Provider:    walletProvider,
-		ProviderID:  flag.Args()[0],
+		ProviderID:  walletProviderID,
 		AltCurrency: &walletc,
 	}
 	w, err := provider.GetWallet(ctx, info)
