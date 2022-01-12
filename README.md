@@ -47,7 +47,7 @@ some auxiliary binaries.
 ### Testing
 
 ## Default Testing Behavior
-You can run the unit and integration tests via `make docker-test`. (Accurate?)
+You can run all the unit and integration tests by setting the env `TEST_TAGS=integration`(see `.env.example` file for example) and running `make docker-test`
 
 ## In Docker Container
 `make docker-dev` 
