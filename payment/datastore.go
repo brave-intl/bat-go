@@ -42,6 +42,8 @@ type Datastore interface {
 	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// UpdateTransactionStatus updates a transaction status
+	UpdateTransactionStatus(externalTransactionID string, status string) error
 	// GetTransaction returns a transaction given an external transaction id
 	GetTransaction(externalTransactionID string) (*Transaction, error)
 	// GetTransactions returns all the transactions for a specific order
@@ -400,6 +402,25 @@ func (pg *Postgres) GetPagedMerchantTransactions(
 	}
 
 	return &transactions, total, nil
+}
+
+// UpdateTransactionStatus updates a transaction status
+func (pg *Postgres) UpdateTransactionStatus(externalTransactionID string, status string) error {
+	// create tx
+	tx, err := pg.RawDB().BeginTxx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer pg.RollbackTx(tx)
+
+	_, err = tx.Exec(`UPDATE transactions set status = $1, updated_at = CURRENT_TIMESTAMP where external_transaction_id = $2`, status, externalTransactionID)
+
+	if err != nil {
+		return err
+	}
+
+	// commit the tx
+	return tx.Commit()
 }
 
 // GetTransactions returns the list of transactions given an orderID

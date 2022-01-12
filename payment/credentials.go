@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -137,6 +138,62 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 	order, err := service.Datastore.GetOrder(orderID)
 	if err != nil {
 		return errorutils.Wrap(err, "error finding order")
+	}
+
+	// it is possible to have an order in processing/pending, lets validate with the custodian
+	if strings.EqualFold(order.Status, "processing") || strings.EqualFold(order.Status, "pending") {
+		// get the transaction for the order
+		txs, err := service.Datastore.GetTransactions(orderID)
+		if err != nil {
+			return errorutils.Wrap(err, "error finding order transactions")
+		}
+		// attempt to get the status
+	OUTER:
+		for _, v := range *txs {
+			var (
+				status         string
+				err            error
+				getCustodialTx getCustodialTxFn
+			)
+			switch v.Kind {
+			case "uphold":
+				getCustodialTx = getUpholdCustodialTx
+			case "gemini":
+				getCustodialTx = getGeminiCustodialTx
+			default:
+				break OUTER
+			}
+			_, status, _, _, err = getCustodialTx(ctx, v.ExternalTransactionID)
+			if err != nil {
+				return errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
+			}
+			if !strings.EqualFold(status, "processing") && !strings.EqualFold(status, "pending") {
+				err := service.Datastore.UpdateTransactionStatus(v.ExternalTransactionID, status)
+				if err != nil {
+					return errorutils.Wrap(err, fmt.Sprintf("failed to update transaction status: %s", err.Error()))
+				}
+			}
+		}
+
+		// at this point the order should be paid
+		// need to update the order if the status changed
+		isPaid, err := service.IsOrderPaid(orderID)
+		if err != nil {
+			return errorutils.Wrap(err, fmt.Sprintf("failed to check paid status for order: %s", err.Error()))
+		}
+
+		// if the paid status is set we need to update the order
+		if isPaid {
+			err = service.Datastore.UpdateOrder(orderID, "paid")
+			if err != nil {
+				return errorutils.Wrap(err, "error updating order status")
+			}
+			// we should re-get the order to get the updated status on it
+			order, err = service.Datastore.GetOrder(orderID)
+			if err != nil {
+				return errorutils.Wrap(err, "error finding order")
+			}
+		}
 	}
 
 	if !order.IsPaid() {
