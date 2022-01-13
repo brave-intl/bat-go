@@ -108,6 +108,10 @@ func (uhErr upholdError) InvalidSignature() bool {
 	return uhErr.ValidationError() && len(uhErr.ValidationErrors.SignatureError) > 0
 }
 
+func (uhErr upholdError) ForbiddenError() bool {
+	return uhErr.Code == "forbidden"
+}
+
 func (uhErr upholdError) String() string {
 	if uhErr.InsufficientBalance() {
 		for _, ae := range uhErr.ValidationErrors.DenominationErrors.ValidationErrors.AmountError {
