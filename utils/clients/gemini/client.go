@@ -78,15 +78,17 @@ func WatchGeminiBalance(ctx context.Context) error {
 					}
 				}()
 				result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
-				// dont care about float downsampling from decimal errs
-				if result == nil || len(*result) < 1 {
-					logger.Error().Msg("gemini result is empty")
-				}
-				b := *result
-				available, _ := b[0].Available.Float64()
-				balanceGauge.Set(available)
 				if err != nil {
 					logger.Error().Err(err).Msg("failed to fetch gemini balance")
+				} else {
+					// dont care about float downsampling from decimal errs
+					if result == nil || len(*result) < 1 {
+						logger.Error().Msg("gemini result is empty")
+					} else {
+						b := *result
+						available, _ := b[0].Available.Float64()
+						balanceGauge.Set(available)
+					}
 				}
 			}()
 		}
