@@ -2,6 +2,7 @@
 package wallet
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -70,18 +71,18 @@ type Balance struct {
 type Wallet interface {
 	GetWalletInfo() Info
 	// Transfer moves funds out of the associated wallet and to the specific destination
-	Transfer(altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*TransactionInfo, error)
+	Transfer(ctx context.Context, altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*TransactionInfo, error)
 	// VerifyTransaction verifies that the base64 encoded transaction is valid
 	// NOTE VerifyTransaction must guard against transactions that seek to exploit parser differences
 	// such as including additional fields that are not understood by local implementation but may
 	// be understood by the upstream wallet provider.
-	VerifyTransaction(transactionB64 string) (*TransactionInfo, error)
+	VerifyTransaction(ctx context.Context, transactionB64 string) (*TransactionInfo, error)
 	// SubmitTransaction submits the base64 encoded transaction for verification but does not move funds
-	SubmitTransaction(transactionB64 string, confirm bool) (*TransactionInfo, error)
+	SubmitTransaction(ctx context.Context, transactionB64 string, confirm bool) (*TransactionInfo, error)
 	// ConfirmTransaction confirms a previously submitted transaction, moving funds
-	ConfirmTransaction(id string) (*TransactionInfo, error)
+	ConfirmTransaction(ctx context.Context, id string) (*TransactionInfo, error)
 	// GetBalance returns the last known balance, if refresh is true then the current balance is fetched
-	GetBalance(refresh bool) (*Balance, error)
+	GetBalance(ctx context.Context, refresh bool) (*Balance, error)
 	// ListTransactions for this wallet, limit number of transactions returned
-	ListTransactions(limit int, startDate time.Time) ([]TransactionInfo, error)
+	ListTransactions(ctx context.Context, limit int, startDate time.Time) ([]TransactionInfo, error)
 }

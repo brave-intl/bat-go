@@ -91,13 +91,13 @@ func (service *Service) SubmitCommitableAnonCardTransaction(
 	}
 
 	// FIXME needs to require the idempotency key
-	_, err = anonCard.VerifyAnonCardTransaction(transaction, destination)
+	_, err = anonCard.VerifyAnonCardTransaction(ctx, transaction, destination)
 	if err != nil {
 		return nil, err
 	}
 
 	// Submit and confirm since we are requiring the idempotency key
-	return anonCard.SubmitTransaction(transaction, confirm)
+	return anonCard.SubmitTransaction(ctx, transaction, confirm)
 }
 
 // UnlinkWallet - unlink this wallet from the custodian
@@ -210,7 +210,7 @@ func (service *Service) LinkWallet(
 		probi           decimal.Decimal
 	)
 
-	transactionInfo, err := wallet.VerifyTransaction(transaction)
+	transactionInfo, err := wallet.VerifyTransaction(ctx, transaction)
 	if err != nil {
 		return handlers.WrapError(
 			errors.New("failed to verify transaction"), "transaction verification failure",

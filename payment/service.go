@@ -27,7 +27,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 	stripe "github.com/stripe/stripe-go/v71"
 
@@ -394,7 +394,7 @@ type getCustodialTxFn func(context.Context, string) (*decimal.Decimal, string, s
 // get the uphold tx based on txRef
 func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	var wallet uphold.Wallet
-	upholdTransaction, err := wallet.GetTransaction(txRef)
+	upholdTransaction, err := wallet.GetTransaction(ctx, txRef)
 
 	if err != nil {
 		return nil, "", "", "", err
@@ -618,7 +618,7 @@ func (s *Service) waitForUpholdTxStatus(ctx context.Context, walletID uuid.UUID,
 		case <-ctx.Done():
 			return nil, errors.New("timeout waiting for correct status")
 		default:
-			txInfo, err = upholdWallet.GetTransaction(txInfo.ID)
+			txInfo, err = upholdWallet.GetTransaction(ctx, txInfo.ID)
 			if err != nil {
 				return nil, errorutils.Wrap(err, "error getting transaction")
 			}

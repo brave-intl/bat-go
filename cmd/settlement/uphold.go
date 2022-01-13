@@ -124,7 +124,7 @@ func UpholdUpload(
 		logger.Panic().Err(err).Msg("failed to unmarshal input file")
 	}
 
-	settlementWallet, err := uphold.FromWalletInfo(context.Background(), settlementState.WalletInfo)
+	settlementWallet, err := uphold.FromWalletInfo(ctx, settlementState.WalletInfo)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to make settlement wallet")
 	}
@@ -155,7 +155,7 @@ func UpholdUpload(
 			continue
 		}
 
-		err = settlement.SubmitPreparedTransaction(settlementWallet, settlementTransaction)
+		err = settlement.SubmitPreparedTransaction(ctx, settlementWallet, settlementTransaction)
 		if err != nil {
 			logger.Error().Err(err).Msg("unanticipated error")
 			allFinalized = false
@@ -178,7 +178,7 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to sync output log to disk")
 		}
 
-		err = settlement.ConfirmPreparedTransaction(settlementWallet, settlementTransaction)
+		err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction)
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
 		}
