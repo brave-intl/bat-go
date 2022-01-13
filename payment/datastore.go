@@ -945,7 +945,7 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	jobs := []SigningJob{}
 	err = tx.Select(&jobs, statement)
 	if err != nil {
-		return attempted, err
+		return attempted, fmt.Errorf("order job: failed to retrieve jobs: %w", err)
 	}
 
 	if len(jobs) != 1 {
@@ -958,17 +958,21 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
 		// FIXME certain errors are not recoverable
-		return attempted, err
+		return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
+			job.ID, job.OrderID, err)
 	}
 
-	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
+		creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
-		return attempted, err
+		return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
+			job.ID, job.OrderID, err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return attempted, err
+		return attempted, fmt.Errorf("order job: failed to commit update for jobID %s orderID %s: %w",
+			job.ID, job.OrderID, err)
 	}
 
 	return attempted, nil
