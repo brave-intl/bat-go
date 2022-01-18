@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -61,8 +62,11 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+
 	return GeminiUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"upload",
 		input,
 		sig,
@@ -92,8 +96,10 @@ func CheckStatusGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
 	return GeminiUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"checkstatus",
 		input,
 		sig,

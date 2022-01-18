@@ -385,7 +385,19 @@ func (c *HTTPClient) CheckTxStatus(
 	}
 
 	var body PayoutResult
-	_, err = c.client.Do(ctx, req, &body)
+	var response *http.Response
+	response, err = c.client.Do(ctx, req, &body)
+
+	if response.StatusCode == 404 {
+		notFoundReason := "404 From Gemini"
+		body = PayoutResult{
+			Result: "Error",
+			Reason: &notFoundReason,
+			TxRef:  txRef,
+		}
+		return &body, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}
