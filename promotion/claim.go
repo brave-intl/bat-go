@@ -3,6 +3,7 @@ package promotion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -117,13 +118,13 @@ func (service *Service) ClaimPromotionForWallet(
 	if claim != nil {
 		// get the claim credentials to check if these blinded creds were used before
 		claimCreds, err := service.Datastore.GetClaimCreds(claim.ID)
-		if err != nil {
-			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
+		if err != nil || claimCreds == nil {
+			return nil, errorutils.Wrap(err, fmt.Sprintf("error checking claim credentials for claimsID %s", claim.ID))
 		}
 
 		// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
 		// and the claim blinded tokens are the same
-		if claim.Redeemed && blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+		if claim.Redeemed && blindCredsEq(claimCreds.BlindedCreds, blindedCreds) {
 			return &claim.ID, nil
 		}
 
