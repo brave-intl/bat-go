@@ -79,15 +79,16 @@ func noUUID() *uuid.UUID {
 }
 
 func (suite *WalletControllersTestSuite) FundWallet(w *uphold.Wallet, probi decimal.Decimal) decimal.Decimal {
-	balanceBefore, err := w.GetBalance(true)
-	total, err := uphold.FundWallet(w, probi)
+	ctx := context.Background()
+	balanceBefore, err := w.GetBalance(ctx, true)
+	total, err := uphold.FundWallet(ctx, w, probi)
 	suite.Require().NoError(err, "an error should not be generated from funding the wallet")
 	suite.Require().True(total.GreaterThan(balanceBefore.TotalProbi), "submit with confirm should result in an increased balance")
 	return total
 }
 
 func (suite *WalletControllersTestSuite) CheckBalance(w *uphold.Wallet, expect decimal.Decimal) {
-	balances, err := w.GetBalance(true)
+	balances, err := w.GetBalance(context.Background(), true)
 	suite.Require().NoError(err, "an error should not be generated from checking the wallet balance")
 	totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
 	errMessage := fmt.Sprintf("got an unexpected balance. expected: %s, got %s", expect.String(), totalProbi.String())
@@ -155,6 +156,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 }
 
 func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
+	ctx := context.Background()
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
@@ -179,23 +181,23 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 	suite.FundWallet(w4, bat1)
 	suite.FundWallet(w5, bat1)
 
-	anonCard1ID, err := w1.CreateCardAddress("anonymous")
+	anonCard1ID, err := w1.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
 
-	anonCard2ID, err := w2.CreateCardAddress("anonymous")
+	anonCard2ID, err := w2.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
 
-	anonCard3ID, err := w3.CreateCardAddress("anonymous")
+	anonCard3ID, err := w3.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
 
-	anonCard4ID, err := w4.CreateCardAddress("anonymous")
+	anonCard4ID, err := w4.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard4UUID := uuid.Must(uuid.FromString(anonCard4ID))
 
-	anonCard5ID, err := w5.CreateCardAddress("anonymous")
+	anonCard5ID, err := w5.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard5UUID := uuid.Must(uuid.FromString(anonCard5ID))
 
@@ -253,6 +255,8 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 }
 
 func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres connection")
 
@@ -275,15 +279,15 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	suite.FundWallet(w3, bat1)
 	suite.FundWallet(w4, bat1)
 
-	anonCard1ID, err := w1.CreateCardAddress("anonymous")
+	anonCard1ID, err := w1.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard1UUID := uuid.Must(uuid.FromString(anonCard1ID))
 
-	anonCard2ID, err := w2.CreateCardAddress("anonymous")
+	anonCard2ID, err := w2.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard2UUID := uuid.Must(uuid.FromString(anonCard2ID))
 
-	anonCard3ID, err := w3.CreateCardAddress("anonymous")
+	anonCard3ID, err := w3.CreateCardAddress(ctx, "anonymous")
 	suite.Require().NoError(err, "create anon card must not fail")
 	anonCard3UUID := uuid.Must(uuid.FromString(anonCard3ID))
 

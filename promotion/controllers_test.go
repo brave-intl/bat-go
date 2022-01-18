@@ -2568,6 +2568,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2631,7 +2633,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
@@ -2796,6 +2798,8 @@ func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2858,7 +2862,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
