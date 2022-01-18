@@ -2598,7 +2598,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2740,7 +2740,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	<-time.After(1 * time.Second)
 
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// pull out drain id, and check the datastore has completed state
@@ -2826,7 +2826,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2959,7 +2959,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	<-time.After(1 * time.Second)
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// testing out the drain info handler

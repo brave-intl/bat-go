@@ -521,17 +521,17 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
-	_, err = uphold.FundWallet(&w, altcurrency.BAT.ToProbi(orderAmount))
+	_, err = uphold.FundWallet(ctx, &w, altcurrency.BAT.ToProbi(orderAmount))
 	suite.Require().NoError(err, "Failed to fund wallet")
 
 	<-time.After(1 * time.Second)
 
 	// pay the transaction
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	tInfo, err := w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
+	tInfo, err := w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	createRequest := &CreateTransactionRequest{
@@ -668,7 +668,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
-func generateWallet(t *testing.T) *uphold.Wallet {
+func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 	var info walletutils.Info
 	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
@@ -684,7 +684,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	}
 	info.PublicKey = hex.EncodeToString(publicKey)
 	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
-	err = newWallet.Register("bat-go test card")
+	err = newWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -930,20 +930,20 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = json.Unmarshal([]byte(rr.Body.String()), &order)
 	suite.Require().NoError(err)
 
-	userWallet := generateWallet(suite.T())
+	userWallet := generateWallet(ctx, suite.T())
 	err = suite.service.wallet.Datastore.UpsertWallet(ctx, &userWallet.Info)
 	suite.Require().NoError(err)
 
-	balanceBefore, err := userWallet.GetBalance(true)
+	balanceBefore, err := userWallet.GetBalance(ctx, true)
 	suite.Require().NoError(err)
-	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	balanceAfter, err := uphold.FundWallet(ctx, userWallet, order.TotalPrice)
 	suite.Require().NoError(err)
 
 	// wait for balance to become available
 	for i := 0; i < 5; i++ {
 		select {
 		case <-time.After(500 * time.Millisecond):
-			balances, err := userWallet.GetBalance(true)
+			balances, err := userWallet.GetBalance(ctx, true)
 			suite.Require().NoError(err)
 			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
 			if totalProbi.GreaterThan(decimal.Zero) {
