@@ -423,6 +423,14 @@ type denomination struct {
 
 // Beneficiary includes information about the recipient of the transaction
 type Beneficiary struct {
+	Address struct {
+		City    string `json:"city"`
+		Country string `json:"country"`
+		Line1   string `json:"line1"`
+		State   string `json:"state"`
+		ZipCode string `json:"zipCode"`
+	} `json:"address,omitempty"`
+	Name         string `json:"name,omitempty"`
 	Relationship string `json:"relationship"`
 }
 
