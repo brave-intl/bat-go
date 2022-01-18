@@ -18,6 +18,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
+	github.com/google/uuid v1.1.2 // indirect
 	github.com/hashicorp/vault v1.8.5
 	github.com/hashicorp/vault/api v1.1.2-0.20210713235431-1fc8af4c041f
 	github.com/hashicorp/vault/sdk v0.2.2-0.20211101151547-6654f4b913f9
