@@ -2690,7 +2690,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -2919,7 +2919,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
