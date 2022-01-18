@@ -129,7 +129,7 @@ func ListTransactions(
 		return err
 	}
 
-	txns, err := w.ListTransactions(limit, startDate)
+	txns, err := w.ListTransactions(ctx, limit, startDate)
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,8 @@ import (
 )
 
 func TestGetCardDetails(t *testing.T) {
+	ctx := context.Background()
+
 	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
 	}
@@ -35,17 +37,19 @@ func TestGetCardDetails(t *testing.T) {
 		info.AltCurrency = &tmp
 	}
 
-	wallet, err := FromWalletInfo(context.Background(), info)
+	wallet, err := FromWalletInfo(ctx, info)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = wallet.GetBalance(true)
+	_, err = wallet.GetBalance(ctx, true)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
 func TestRegister(t *testing.T) {
+	ctx := context.Background()
+
 	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
 	}
@@ -64,7 +68,7 @@ func TestRegister(t *testing.T) {
 	}
 
 	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
-	err = destWallet.Register("bat-go test card")
+	err = destWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Error(err)
 	}
@@ -124,6 +128,8 @@ func TestVerifyTransaction(t *testing.T) {
 }
 
 func TestTransactions(t *testing.T) {
+	ctx := context.Background()
+
 	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
 	}
@@ -173,7 +179,7 @@ func TestTransactions(t *testing.T) {
 	}
 
 	destWallet := &Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
-	err = destWallet.Register("bat-go test transaction card")
+	err = destWallet.Register(ctx, "bat-go test transaction card")
 	if err != nil {
 		t.Error(err)
 	}
@@ -195,12 +201,12 @@ func TestTransactions(t *testing.T) {
 		t.Error(err)
 	}
 
-	submitInfo, err := donorWallet.SubmitTransaction(tx, false)
+	submitInfo, err := donorWallet.SubmitTransaction(ctx, tx, false)
 	if err != nil {
 		t.Error(err)
 	}
 
-	balance, err := destWallet.GetBalance(true)
+	balance, err := destWallet.GetBalance(ctx, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -210,7 +216,7 @@ func TestTransactions(t *testing.T) {
 	}
 
 	// Submitted but unconfirmed transactions cannot be retrieved via GetTransaction
-	_, err = donorWallet.GetTransaction(submitInfo.ID)
+	_, err = donorWallet.GetTransaction(ctx, submitInfo.ID)
 	if err == nil {
 		t.Error("Expected error retrieving unconfirmed transaction")
 	}
@@ -218,7 +224,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Expected \"missing\" transaction as error cause")
 	}
 
-	commitInfo, err := donorWallet.ConfirmTransaction(submitInfo.ID)
+	commitInfo, err := donorWallet.ConfirmTransaction(ctx, submitInfo.ID)
 	if err != nil {
 		t.Error(err)
 	}
@@ -235,7 +241,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Transaction probi mismatch!")
 	}
 
-	getInfo, err := donorWallet.GetTransaction(submitInfo.ID)
+	getInfo, err := donorWallet.GetTransaction(ctx, submitInfo.ID)
 	if err != nil {
 		t.Error(err)
 	}
@@ -252,7 +258,7 @@ func TestTransactions(t *testing.T) {
 		t.Error("Transaction probi mismatch!")
 	}
 
-	balance, err = destWallet.GetBalance(true)
+	balance, err = destWallet.GetBalance(ctx, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -263,12 +269,12 @@ func TestTransactions(t *testing.T) {
 
 	// wait for funds to be available
 	<-time.After(1 * time.Second)
-	txInfo, err := destWallet.Transfer(altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
+	txInfo, err := destWallet.Transfer(ctx, altcurrency.BAT, submitInfo.Probi, donorWallet.ProviderID)
 	if err != nil {
 		t.Error(err)
 	}
 
-	balance, err = destWallet.GetBalance(true)
+	balance, err = destWallet.GetBalance(ctx, true)
 	if err != nil {
 		t.Error(err)
 	}

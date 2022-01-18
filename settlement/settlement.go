@@ -4,6 +4,7 @@ package settlement
 //      due to transient network errors (if retries are enabled)
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -180,13 +181,13 @@ func checkTransactionAgainstSettlement(settlement *Transaction, txInfo *wallet.T
 }
 
 // CheckPreparedTransactions performs sanity checks on an array of signed settlements
-func CheckPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Transaction) error {
+func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []Transaction) error {
 	sumProbi := decimal.Zero
 	for i := 0; i < len(settlements); i++ {
 		settlement := &settlements[i]
 
 		// make sure the signed transaction is well formed and the signature is valid
-		txInfo, err := settlementWallet.VerifyTransaction(settlement.SignedTx)
+		txInfo, err := settlementWallet.VerifyTransaction(ctx, settlement.SignedTx)
 		if err != nil {
 			return err
 		}
@@ -200,7 +201,7 @@ func CheckPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Tr
 	}
 
 	// check balance before starting payout
-	balance, err := settlementWallet.GetBalance(true)
+	balance, err := settlementWallet.GetBalance(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -214,7 +215,7 @@ func CheckPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Tr
 // SubmitPreparedTransaction submits a single settlement transaction to uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
-func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Transaction) error {
+func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
 	if settlement.IsComplete() {
 		fmt.Printf("already complete, skipping submit for channel %s\n", settlement.Channel)
 		return nil
@@ -226,7 +227,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 
 	if len(settlement.ProviderID) > 0 {
 		// first check if the transaction has already been confirmed
-		upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
+		upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 		if err == nil {
 			settlement.Status = upholdInfo.Status
 			settlement.Currency = upholdInfo.DestCurrency
@@ -250,7 +251,7 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 	}
 
 	// post the settlement to uphold but do not confirm it
-	submitInfo, err := settlementWallet.SubmitTransaction(settlement.SignedTx, false)
+	submitInfo, err := settlementWallet.SubmitTransaction(ctx, settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
 		fmt.Printf("invalid destination, skipping\n")
 		settlement.Status = "failed"
@@ -279,14 +280,14 @@ func SubmitPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tran
 // SubmitPreparedTransactions by submitting them to uphold after performing sanity checks
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
-func SubmitPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Transaction) error {
-	err := CheckPreparedTransactions(settlementWallet, settlements)
+func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []Transaction) error {
+	err := CheckPreparedTransactions(ctx, settlementWallet, settlements)
 	if err != nil {
 		return err
 	}
 
 	for i := 0; i < len(settlements); i++ {
-		err = SubmitPreparedTransaction(settlementWallet, &settlements[i])
+		err = SubmitPreparedTransaction(ctx, settlementWallet, &settlements[i])
 		if err != nil {
 			return err
 		}
@@ -298,7 +299,7 @@ func SubmitPreparedTransactions(settlementWallet *uphold.Wallet, settlements []T
 // ConfirmPreparedTransaction confirms a single settlement transaction with uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be submitted in subsequent runs.
-func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Transaction) error {
+func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries: %+v"
@@ -323,7 +324,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 		}
 
 		// first check if the transaction has already been confirmed
-		upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
+		upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 		if err == nil {
 			settlement.Status = upholdInfo.Status
 			settlement.Currency = upholdInfo.DestCurrency
@@ -344,7 +345,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 			}
 
 			var settlementInfo *wallet.TransactionInfo
-			settlementInfo, err = settlementWallet.ConfirmTransaction(settlement.ProviderID)
+			settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
 			if err == nil {
 				settlement.Status = settlementInfo.Status
 				settlement.Currency = settlementInfo.DestCurrency
@@ -365,7 +366,7 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 				return nil
 			} else if errorutils.IsErrAlreadyExists(err) {
 				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
-				upholdInfo, err := settlementWallet.GetTransaction(settlement.ProviderID)
+				upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 				if err == nil {
 					settlement.Status = upholdInfo.Status
 					settlement.Currency = upholdInfo.DestCurrency
@@ -392,9 +393,9 @@ func ConfirmPreparedTransaction(settlementWallet *uphold.Wallet, settlement *Tra
 // ConfirmPreparedTransactions confirms settlement transactions that have already been submitted to uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be confirmed in subsequent runs.
-func ConfirmPreparedTransactions(settlementWallet *uphold.Wallet, settlements []Transaction) error {
+func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []Transaction) error {
 	for i := 0; i < len(settlements); i++ {
-		err := ConfirmPreparedTransaction(settlementWallet, &settlements[i])
+		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i])
 		if err != nil {
 			return err
 		}

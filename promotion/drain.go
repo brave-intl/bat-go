@@ -518,7 +518,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
-		tx, err := service.hotWallet.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
+		tx, err := service.hotWallet.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transfer funds: %w", err)
 		}

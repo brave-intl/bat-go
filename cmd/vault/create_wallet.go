@@ -139,7 +139,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 
 		wallet := uphold.Wallet{Logger: logger, Info: state.WalletInfo, PrivKey: ed25519.PrivateKey{}, PubKey: publicKey}
 
-		err = wallet.SubmitRegistration(state.Registration)
+		err = wallet.SubmitRegistration(ctx, state.Registration)
 		if err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func CreateWallet(command *cobra.Command, args []string) error {
 			Msg("uphold")
 		state.WalletInfo.ProviderID = wallet.Info.ProviderID
 
-		depositAddr, err := wallet.CreateCardAddress("ethereum")
+		depositAddr, err := wallet.CreateCardAddress(ctx, "ethereum")
 		if err != nil {
 			return err
 		}
