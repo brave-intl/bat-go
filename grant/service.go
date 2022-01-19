@@ -11,6 +11,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -123,7 +124,10 @@ func (s *Service) Describe(ch chan<- *prometheus.Desc) {
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (s *Service) Collect(ch chan<- prometheus.Metric) {
-	balance, err := grantWallet.GetBalance(s.baseCtx, true)
+
+	ctx, _ := loggingutils.SetupLogger(s.baseCtx)
+
+	balance, err := grantWallet.GetBalance(ctx, true)
 	if err != nil {
 		sentry.CaptureException(err)
 		balance = grantWallet.LastBalance
