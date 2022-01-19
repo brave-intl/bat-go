@@ -8,6 +8,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -72,12 +73,13 @@ func NewTransaction(ctx context.Context, idempotencyKey, destination, source *uu
 // Custodian - interface defining what a custodian is
 type Custodian interface {
 	SubmitTransactions(context.Context, ...Transaction) error
-	GetTransactionStatus(context.Context, Transaction) (TransactionStatus, error)
+	GetTransactionsStatus(context.Context, ...Transaction) (map[string]TransactionStatus, error)
 }
 
 // CustodianConfig - configurations for each custodian
 type CustodianConfig struct {
-	provider string `valid:in(uphold,gemini,bitflyer)`
+	provider string `valid:"in(uphold,gemini,bitflyer)"`
+	config   map[appctx.CTXKey]interface{}
 }
 
 // String - implement stringer
@@ -101,8 +103,8 @@ func New(ctx context.Context, conf CustodianConfig) (Custodian, error) {
 	logger.Debug().Msg("about to validate custodian config")
 	_, err := govalidator.ValidateStruct(conf)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to validate custodian config")
-		return nil, fmt.Errorf("%w: %s", ErrConfigValidation, err.Error())
+		return nil, loggingutils.LogAndError(
+			&logger, ErrConfigValidation.Error(), fmt.Errorf("%w: %s", ErrConfigValidation, err.Error()))
 	}
 	switch conf.provider {
 	case "uphold":
@@ -115,9 +117,10 @@ func New(ctx context.Context, conf CustodianConfig) (Custodian, error) {
 		logger.Debug().Msg("creating bitflyer custodian")
 		return newBitflyerCustodian(ctx, conf)
 	default:
-		logger.Error().Err(ErrConfigValidation).Msg("invalid provider")
-		return nil, fmt.Errorf(
-			"%w: invalid provider \"%s\" not in (uphold,gemini,bitflyer)",
-			ErrConfigValidation, conf.provider)
+		msg := "invalid provider"
+		return nil, loggingutils.LogAndError(
+			&logger, msg, fmt.Errorf(
+				"%w: invalid provider \"%s\" not in (uphold,gemini,bitflyer)",
+				ErrConfigValidation, conf.provider))
 	}
 }

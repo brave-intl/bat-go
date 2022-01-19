@@ -19,7 +19,7 @@ func (uc *upholdCustodian) SubmitTransactions(ctx context.Context, txs ...Transa
 	return errorutils.ErrNotImplemented
 }
 
-// GetTransactionStatus - implement Custodian interface
-func (uc *upholdCustodian) GetTransactionStatus(ctx context.Context, tx Transaction) (TransactionStatus, error) {
+// GetTransactionsStatus - implement Custodian interface
+func (uc *upholdCustodian) GetTransactionsStatus(ctx context.Context, tx ...Transaction) (map[string]TransactionStatus, error) {
 	return nil, errorutils.ErrNotImplemented
 }

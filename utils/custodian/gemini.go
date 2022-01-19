@@ -2,16 +2,33 @@ package custodian
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 )
 
 // geminiCustodian - implementation of the gemini custodian
-type geminiCustodian struct{}
+type geminiCustodian struct {
+	client gemini.Client
+}
 
 // newGeminiCustodian - create a new gemini custodian with configuration
 func newGeminiCustodian(ctx context.Context, conf CustodianConfig) (*geminiCustodian, error) {
-	return &geminiCustodian{}, errorutils.ErrNotImplemented
+	logger := loggingutils.Logger(ctx, "custodian.newGeminiCustodian").With().Str("conf", conf.String()).Logger()
+
+	// import config to context if not already set, and create bitflyer client
+	geminiClient, err := gemini.NewWithContext(appctx.MapToContext(ctx, conf.config))
+	if err != nil {
+		msg := "failed to create client"
+		return nil, loggingutils.LogAndError(&logger, msg, fmt.Errorf("%s: %w", msg, err))
+	}
+
+	return &geminiCustodian{
+		client: geminiClient,
+	}, nil
 }
 
 // SubmitTransactions - implement Custodian interface
@@ -19,7 +36,7 @@ func (uc *geminiCustodian) SubmitTransactions(ctx context.Context, txs ...Transa
 	return errorutils.ErrNotImplemented
 }
 
-// GetTransactionStatus - implement Custodian interface
-func (uc *geminiCustodian) GetTransactionStatus(ctx context.Context, tx Transaction) (TransactionStatus, error) {
+// GetTransactionsStatus - implement Custodian interface
+func (uc *geminiCustodian) GetTransactionsStatus(ctx context.Context, txs ...Transaction) (map[string]TransactionStatus, error) {
 	return nil, errorutils.ErrNotImplemented
 }

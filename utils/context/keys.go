@@ -49,6 +49,7 @@ const (
 	BuildTimeCTXKey CTXKey = "build_time"
 	// ReputationClientCTXKey - context key for the build time of code
 	ReputationClientCTXKey CTXKey = "reputation_client"
+
 	// GeminiClientCTXKey - context key for the build time of code
 	GeminiClientCTXKey CTXKey = "gemini_client"
 	// GeminiBrowserClientIDCTXKey - context key for the gemini browser client id
@@ -63,6 +64,13 @@ const (
 	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
+	// GeminiServerURLCTXKey - context key for gemini server url
+	GeminiServerURLCTXKey CTXKey = "gemini_server_url"
+	// GeminiProxyURLCTXKey - context key for gemini proxy url
+	GeminiProxyURLCTXKey CTXKey = "gemini_proxy_url"
+	// GeminiTokenCTXKey - context key for gemini token
+	GeminiTokenCTXKey CTXKey = "gemini_token_url"
+
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code
@@ -73,6 +81,9 @@ const (
 	WalletOnPlatformPriorToCTXKey CTXKey = "wallet_on_platform_prior_to"
 	// LogLevelCTXKey - context key for application logging level
 	LogLevelCTXKey CTXKey = "log_level"
+
+	// Bitflyer Keys
+
 	// BitFlyerJWTKeyCTXKey - context key for the bitflyer jwt key
 	BitFlyerJWTKeyCTXKey CTXKey = "bitflyer_jwt_key"
 	// BitflyerExtraClientSecretCTXKey - context key for the extra client secret
@@ -81,6 +92,13 @@ const (
 	BitflyerClientSecretCTXKey CTXKey = "bitflyer_client_secret"
 	// BitflyerClientIDCTXKey - context key for the client secret
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
+	// BitflyerServerURLCTXKey - the service ctx key
+	BitflyerServerURLCTXKey CTXKey = "bitflyer_server_url"
+	// BitflyerProxyURLCTXKey - the service proxy ctx key
+	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy_url"
+	// BitflyerTokenCTXKey - the service token ctx key
+	BitflyerTokenCTXKey CTXKey = "bitflyer_token_url"
+
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
 	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials
