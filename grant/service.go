@@ -124,7 +124,7 @@ func (s *Service) Describe(ch chan<- *prometheus.Desc) {
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (s *Service) Collect(ch chan<- prometheus.Metric) {
-	balance, err := grantWallet.GetBalance(ctx, true)
+	balance, err := grantWallet.GetBalance(s.baseCtx, true)
 	if err != nil {
 		sentry.CaptureException(err)
 		balance = grantWallet.LastBalance
