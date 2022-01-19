@@ -98,6 +98,8 @@ const (
 	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy_url"
 	// BitflyerTokenCTXKey - the service token ctx key
 	BitflyerTokenCTXKey CTXKey = "bitflyer_token_url"
+	// BitflyerSourceFromCTXKey - the source from for payouts
+	BitflyerSourceFromCTXKey CTXKey = "bitflyer_source_from"
 
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
