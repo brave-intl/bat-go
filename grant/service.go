@@ -54,6 +54,7 @@ func InitService(
 	promotionService *promotion.Service,
 ) (*Service, error) {
 	gs := &Service{
+		baseCtx:     ctx,
 		Datastore:   datastore,
 		RoDatastore: roDatastore,
 		wallet:      walletService,
