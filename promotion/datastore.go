@@ -18,7 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
@@ -101,12 +101,12 @@ type Datastore interface {
 	RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
-
 	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
 	SetMintDrainPromotionTotal(ctx context.Context, walletID, promotionID uuid.UUID, total decimal.Decimal) error
-
 	// RunNextMintDrainJob to create new grants from the mint queue
 	RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error)
+	// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
+	RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error)
 
 	// Remove once this is completed https://github.com/brave-intl/bat-go/issues/263
 
@@ -1427,6 +1427,11 @@ type DrainJob struct {
 	DepositDestination *string         `db:"deposit_destination"`
 }
 
+var txStatusToStatus = map[string]string{
+	"bitflyer-consolidate": "prepared",
+	txnStatusGeminiPending: txnStatusGeminiPending,
+}
+
 // RunNextDrainJob to process deposits if there is one waiting
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
 
@@ -1503,12 +1508,14 @@ limit 1`
 		}
 		return attempted, err
 	}
-	if txn.Status == "bitflyer-consolidate" {
+
+	// if the txn cannot be set as complete immediately then get the status code and update the job
+	if status, ok := txStatusToStatus[txn.Status]; ok {
 		_, err = tx.Exec(`
 			update claim_drain set
 				transaction_id = $1,
-				status = 'prepared'
-			where id = $2`, txn.ID, job.ID)
+				status = $2
+			where id = $3`, txn.ID, status, job.ID)
 		if err != nil {
 			return attempted, err
 		}
@@ -1805,6 +1812,54 @@ func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid
 	}
 
 	return nil
+}
+
+// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
+func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error) {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return false, fmt.Errorf("gemini check status job: failed to begin transaction: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	var drainJob DrainJob
+	err = tx.Get(&drainJob, `
+									select * from claim_drain 
+									where status = $1 and transaction_id is not null
+									for update skip locked limit 1
+									    `, txnStatusGeminiPending)
+	if err != nil {
+		// no drains to process
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("gemini check status job: sql error %w", err)
+	}
+
+	status, err := worker.GetGeminiTxnStatus(ctx, *drainJob.TransactionID)
+	if err != nil || status == nil {
+		return true, fmt.Errorf("failed to get status for txn %s: %w", *drainJob.TransactionID, err)
+	}
+
+	switch strings.ToLower(*status) {
+	case "completed":
+		query := `update claim_drain set status = 'complete' where id = $1`
+		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
+			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
+		}
+	case "failed":
+		query := `update claim_drain set status = 'failed', erred = true, errcode = 'gemini-failure' where id = $1`
+		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
+			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
+	}
+
+	return true, nil
 }
 
 func toUUIDs(a ...string) ([]uuid.UUID, error) {

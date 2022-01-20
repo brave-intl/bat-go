@@ -22,11 +22,15 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	txnStatusGeminiPending string = "gemini-pending"
 )
 
 var (
@@ -237,6 +241,11 @@ type BatchTransferWorker interface {
 	SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error
 }
 
+// GeminiTxnStatusWorker this worker retrieves the status for a given gemini transaction
+type GeminiTxnStatusWorker interface {
+	GetGeminiTxnStatus(ctx context.Context, transactionID string) (*string, error)
+}
+
 // drainClaimErred - a codified err type for draind
 type drainClaimErred struct {
 	error
@@ -441,14 +450,12 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to get wallet")
 		return nil, err
 	}
-
 	// no wallet on record
 	if wallet == nil {
 		logger.Error().Err(errorutils.ErrMissingWallet).
 			Msg("RedeemAndTransferFunds: missing wallet")
 		return nil, errorutils.ErrMissingWallet
 	}
-
 	// wallet not linked to deposit destination, if absent fail redeem and transfer
 	if wallet.UserDepositDestination == "" {
 		logger.Error().Err(errorutils.ErrNoDepositProviderDestination).
@@ -459,7 +466,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
-
 	// check to see if we skip the cbr redemption case
 	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
 		// failed to redeem credentials
@@ -532,7 +538,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
-
 		promoTotal := map[string]decimal.Decimal{}
 		// iterate through the credentials
 		// get a total count per promotion
@@ -612,18 +617,19 @@ func redeemAndTransferGeminiFunds(
 	transferID := uuid.NewV4().String()
 
 	tx := new(walletutils.TransactionInfo)
-
 	tx.ID = transferID
 	tx.Destination = wallet.UserDepositDestination
 	tx.DestAmount = total
+	tx.Status = txnStatusGeminiPending
 
-	account := "primary" // the account we want to drain from
 	settlementTx := settlement.Transaction{
 		SettlementID: transferID,
 		Type:         txType,
 		Destination:  wallet.UserDepositDestination,
 		Channel:      channel,
 	}
+
+	account := "primary" // the account we want to drain from
 	payouts := []gemini.PayoutPayload{
 		{
 			TxRef:       gemini.GenerateTxRef(&settlementTx),
@@ -686,10 +692,11 @@ func redeemAndTransferGeminiFunds(
 		}
 	}
 
-	// check if we have a drainChannel defined on our service
+	// used for testing only
 	if service.drainChannel != nil {
 		service.drainChannel <- tx
 	}
+
 	return tx, err
 }
 
@@ -766,4 +773,32 @@ func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uui
 	}
 
 	return &walletID, nil
+}
+
+// GetGeminiTxnStatus retrieves the status for a given gemini transaction
+func (service *Service) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*string, error) {
+	apiKey, ok := ctx.Value(appctx.GeminiAPIKeyCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	clientID, ok := ctx.Value(appctx.GeminiClientIDCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, transactionID)
+	if err != nil || response == nil {
+		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", transactionID, err)
+	}
+
+	if response.Result == "Error" {
+		reason := "response error"
+		if response.Reason != nil {
+			reason = *response.Reason
+		}
+		return nil, fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, reason)
+	}
+
+	return response.Status, nil
 }

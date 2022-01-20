@@ -9,6 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/ptr"
+
+	testutils "github.com/brave-intl/bat-go/utils/test"
+
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	mock_gemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	mock_bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -173,7 +181,7 @@ func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -187,13 +195,13 @@ func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
 	drainTransfers := make([]DrainTransfer, 5)
 
 	for i := 0; i < len(drainTransfers); i++ {
-		depositID := stringToPointer(uuid.NewV4().String())
+		depositID := ptr.FromString(uuid.NewV4().String())
 		// set invalid deposit id
 		if i == 3 {
 			depositID = nil
 		}
 		drainTransfers[i] = DrainTransfer{
-			ID:        uuidToPointer(uuid.NewV4()),
+			ID:        ptr.FromUUID(uuid.NewV4()),
 			Total:     decimal.NewFromFloat(1),
 			DepositID: depositID,
 		}
@@ -216,12 +224,135 @@ func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
 	assert.Equal(t, expected, err)
 }
 
-func stringToPointer(s string) *string {
-	return &s
+func TestGetGeminiTxnStatus_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	transactionID := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Ok",
+		Status: ptr.FromString(testutils.RandomString()),
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, transactionID).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, transactionID)
+
+	assert.Nil(t, err)
+	assert.Equal(t, response.Status, actual)
 }
 
-func uuidToPointer(u uuid.UUID) *uuid.UUID {
-	return &u
+func TestGetGeminiTxnStatus_ClientError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	transactionID := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	clientError := fmt.Errorf(testutils.RandomString())
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, transactionID).
+		Return(nil, clientError)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	expected := fmt.Errorf("failed to check gemini txn status for %s: %w", transactionID, clientError)
+
+	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
+
+	assert.Nil(t, status)
+	assert.Equal(t, expected, actual)
+}
+
+func TestGetGeminiTxnStatus_ResponseError_Reason(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	transactionID := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Error",
+		Reason: ptr.FromString(testutils.RandomString()),
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, transactionID).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	expected := fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, *response.Reason)
+
+	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
+
+	assert.Nil(t, status)
+	assert.Equal(t, expected, actual)
+}
+
+func TestGetGeminiTxnStatus_ResponseError_Nil(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	transactionID := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Error",
+		Reason: nil,
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, transactionID).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	expected := fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, "response error")
+
+	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
+
+	assert.Nil(t, status)
+	assert.Equal(t, expected, actual)
 }
 
 func makeMsg() AdminAttestationEvent {
