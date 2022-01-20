@@ -93,11 +93,11 @@ const (
 	// BitflyerClientIDCTXKey - context key for the client secret
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
 	// BitflyerServerURLCTXKey - the service ctx key
-	BitflyerServerURLCTXKey CTXKey = "bitflyer_server_url"
+	BitflyerServerURLCTXKey CTXKey = "bitflyer_server"
 	// BitflyerProxyURLCTXKey - the service proxy ctx key
-	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy_url"
+	BitflyerProxyURLCTXKey CTXKey = "bitflyer_proxy"
 	// BitflyerTokenCTXKey - the service token ctx key
-	BitflyerTokenCTXKey CTXKey = "bitflyer_token_url"
+	BitflyerTokenCTXKey CTXKey = "bitflyer_token"
 	// BitflyerSourceFromCTXKey - the source from for payouts
 	BitflyerSourceFromCTXKey CTXKey = "bitflyer_source_from"
 
