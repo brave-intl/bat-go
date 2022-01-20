@@ -14,6 +14,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// TransactionStatus - stringer repr of transaction status
 type TransactionStatus fmt.Stringer
 
 // Transaction - interface defining what a transaction is
@@ -27,46 +28,46 @@ type Transaction interface {
 
 // implementation of Transaction
 type transaction struct {
-	idempotencyKey *uuid.UUID              `json:"idempotencyKey,omitempty"`
-	amount         decimal.Decimal         `json:"amount,omitempty"`
-	currency       altcurrency.AltCurrency `json:"currency,omitempty"`
-	destination    *uuid.UUID              `json:"destination,omitempty"`
-	source         *uuid.UUID              `json:"source,omitempty"`
+	IdempotencyKey *uuid.UUID              `json:"idempotencyKey,omitempty"`
+	Amount         decimal.Decimal         `json:"amount,omitempty"`
+	Currency       altcurrency.AltCurrency `json:"currency,omitempty"`
+	Destination    *uuid.UUID              `json:"destination,omitempty"`
+	Source         *uuid.UUID              `json:"source,omitempty"`
 }
 
 // GetItempotencyKey - implement transaction
 func (t *transaction) GetIdempotencyKey(context.Context) (fmt.Stringer, error) {
-	return t.idempotencyKey, nil
+	return t.IdempotencyKey, nil
 }
 
 // GetDestination - implement transaction
 func (t *transaction) GetDestination(context.Context) (fmt.Stringer, error) {
-	return t.destination, nil
+	return t.Destination, nil
 }
 
 // GetSource - implement transaction
 func (t *transaction) GetSource(context.Context) (fmt.Stringer, error) {
-	return t.source, nil
+	return t.Source, nil
 }
 
 // GetAmount - implement transaction
 func (t *transaction) GetAmount(context.Context) (decimal.Decimal, error) {
-	return t.amount, nil
+	return t.Amount, nil
 }
 
 // GetCurrency - implement transaction
 func (t *transaction) GetCurrency(context.Context) (altcurrency.AltCurrency, error) {
-	return t.currency, nil
+	return t.Currency, nil
 }
 
 // NewTransaction - create a new transaction
 func NewTransaction(ctx context.Context, idempotencyKey, destination, source *uuid.UUID, currency altcurrency.AltCurrency, amount decimal.Decimal) (Transaction, error) {
 	return &transaction{
-		idempotencyKey: idempotencyKey,
-		destination:    destination,
-		source:         source,
-		currency:       currency,
-		amount:         amount,
+		IdempotencyKey: idempotencyKey,
+		Destination:    destination,
+		Source:         source,
+		Currency:       currency,
+		Amount:         amount,
 	}, nil
 }
 
@@ -76,28 +77,29 @@ type Custodian interface {
 	GetTransactionsStatus(context.Context, ...Transaction) (map[string]TransactionStatus, error)
 }
 
-// CustodianConfig - configurations for each custodian
-type CustodianConfig struct {
-	provider string `valid:"in(uphold,gemini,bitflyer)"`
-	config   map[appctx.CTXKey]interface{}
+// Config - configurations for each custodian
+type Config struct {
+	Provider string `valid:"in(uphold,gemini,bitflyer)"`
+	Config   map[appctx.CTXKey]interface{}
 }
 
 // String - implement stringer
-func (cc *CustodianConfig) String() string {
+func (cc *Config) String() string {
 	// convert to json
 	b, err := json.Marshal(cc)
 	if err != nil {
-		return fmt.Sprintf("failed to marshal CustodianConfig: %s", err.Error())
+		return fmt.Sprintf("failed to marshal Config: %s", err.Error())
 	}
 	return string(b)
 }
 
 var (
+	// ErrConfigValidation - error for validation config
 	ErrConfigValidation = errors.New("failed to validate custodian configuration")
 )
 
 // New - create new custodian
-func New(ctx context.Context, conf CustodianConfig) (Custodian, error) {
+func New(ctx context.Context, conf Config) (Custodian, error) {
 	logger := loggingutils.Logger(ctx, "custodian.New").With().Str("conf", conf.String()).Logger()
 	// validate the configuration
 	logger.Debug().Msg("about to validate custodian config")
@@ -106,7 +108,7 @@ func New(ctx context.Context, conf CustodianConfig) (Custodian, error) {
 		return nil, loggingutils.LogAndError(
 			&logger, ErrConfigValidation.Error(), fmt.Errorf("%w: %s", ErrConfigValidation, err.Error()))
 	}
-	switch conf.provider {
+	switch conf.Provider {
 	case "uphold":
 		logger.Debug().Msg("creating uphold custodian")
 		return newUpholdCustodian(ctx, conf)
@@ -121,6 +123,6 @@ func New(ctx context.Context, conf CustodianConfig) (Custodian, error) {
 		return nil, loggingutils.LogAndError(
 			&logger, msg, fmt.Errorf(
 				"%w: invalid provider \"%s\" not in (uphold,gemini,bitflyer)",
-				ErrConfigValidation, conf.provider))
+				ErrConfigValidation, conf.Provider))
 	}
 }

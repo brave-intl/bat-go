@@ -10,7 +10,7 @@ import (
 type upholdCustodian struct{}
 
 // newUpholdCustodian - create a new uphold custodian with configuration
-func newUpholdCustodian(ctx context.Context, conf CustodianConfig) (*upholdCustodian, error) {
+func newUpholdCustodian(ctx context.Context, conf Config) (*upholdCustodian, error) {
 	return &upholdCustodian{}, errorutils.ErrNotImplemented
 }
 

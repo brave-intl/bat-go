@@ -18,7 +18,8 @@ import (
 var (
 	// BitflyerTransferIDNamespace uuidv5 namespace for bitflyer transfer id creation
 	BitflyerTransferIDNamespace = uuid.Must(uuid.FromString("5b208c1d-e1c4-4799-bcc2-0b08b9c660f5"))
-	ErrInvalidSource            = errors.New("invalid source for bitflyer")
+	// ErrInvalidSource - invalid source for bitflyer
+	ErrInvalidSource = errors.New("invalid source for bitflyer")
 )
 
 // bitflyerCustodian - implementation of the bitflyer custodian
@@ -27,11 +28,11 @@ type bitflyerCustodian struct {
 }
 
 // newBitflyerCustodian - create a new bitflyer custodian with configuration
-func newBitflyerCustodian(ctx context.Context, conf CustodianConfig) (*bitflyerCustodian, error) {
+func newBitflyerCustodian(ctx context.Context, conf Config) (*bitflyerCustodian, error) {
 	logger := loggingutils.Logger(ctx, "custodian.newBitflyerCustodian").With().Str("conf", conf.String()).Logger()
 
 	// import config to context if not already set, and create bitflyer client
-	bfClient, err := bitflyer.NewWithContext(appctx.MapToContext(ctx, conf.config))
+	bfClient, err := bitflyer.NewWithContext(appctx.MapToContext(ctx, conf.Config))
 	if err != nil {
 		msg := "failed to create client"
 		return nil, loggingutils.LogAndError(&logger, msg, fmt.Errorf("%s: %w", msg, err))
@@ -66,7 +67,7 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 		currencies = map[string]decimal.Decimal{}
 	)
 
-	for i, _ := range txs {
+	for i := range txs {
 		// add the currency to the list of all currencies we need rates for
 		currency, err := txs[i].GetCurrency(ctx)
 		if err != nil {
@@ -88,7 +89,7 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 	}
 
 	// get all the quotes for each of the currencies
-	for k, _ := range currencies {
+	for k := range currencies {
 		quote, err := bc.client.FetchQuote(ctx, fmt.Sprintf("%s_JPY", k), false)
 		if err != nil {
 			if isBitflyerErrorUnauthorized(ctx, err) {
@@ -105,10 +106,11 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 					msg := "failed to fetch bitflyer quote"
 					return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
 				}
+			} else {
+				// non-recoverable error fetching quote
+				msg := "failed to fetch bitflyer quote"
+				return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
 			}
-			// non-recoverable error fetching quote
-			msg := "failed to fetch bitflyer quote"
-			return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
 		}
 
 		// set the rate for the currency
@@ -213,11 +215,11 @@ type bitflyerTransactionStatus struct {
 }
 
 func (bts *bitflyerTransactionStatus) String() string {
-	return fmt.Sprintf("%s", bts.Status)
+	return bts.Status
 }
 
 // GetTransactionsStatus - implement Custodian interface
-func (uc *bitflyerCustodian) GetTransactionsStatus(ctx context.Context, txs ...Transaction) (map[string]TransactionStatus, error) {
+func (bc *bitflyerCustodian) GetTransactionsStatus(ctx context.Context, txs ...Transaction) (map[string]TransactionStatus, error) {
 	logger := loggingutils.Logger(ctx, "bitflyerCustodian.GetTransactionsStatus")
 
 	var transferIDs = []string{}
@@ -232,7 +234,7 @@ func (uc *bitflyerCustodian) GetTransactionsStatus(ctx context.Context, txs ...T
 		}
 	}
 
-	resp, err := uc.client.CheckPayoutStatus(ctx, bitflyer.TransferIDsToBulkStatus(transferIDs))
+	resp, err := bc.client.CheckPayoutStatus(ctx, bitflyer.TransferIDsToBulkStatus(transferIDs))
 	if err != nil {
 		msg := "failed to perform bitflyer.CheckPayoutStatus"
 		return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))

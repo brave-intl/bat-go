@@ -227,8 +227,10 @@ type HTTPClient struct {
 }
 
 var (
+	// ErrInvalidServerURL - invalid server url
 	ErrInvalidServerURL = errors.New("invalid bitflyer server url")
-	ErrInvalidToken     = errors.New("invalid bitflyer token")
+	// ErrInvalidToken - invalid server token
+	ErrInvalidToken = errors.New("invalid bitflyer token")
 )
 
 // NewWithContext returns a new HTTPClient, retrieving the base URL from the ctx

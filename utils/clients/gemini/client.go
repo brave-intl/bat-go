@@ -277,8 +277,10 @@ type Conf struct {
 }
 
 var (
+	// ErrInvalidServerURL - invalid server url error
 	ErrInvalidServerURL = errors.New("invalid gemini server url")
-	ErrInvalidToken     = errors.New("invalid gemini token")
+	// ErrInvalidToken - invalid token error
+	ErrInvalidToken = errors.New("invalid gemini token")
 )
 
 // NewWithContext returns a new HTTPClient, retrieving the base URL from the context

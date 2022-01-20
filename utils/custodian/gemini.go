@@ -16,11 +16,11 @@ type geminiCustodian struct {
 }
 
 // newGeminiCustodian - create a new gemini custodian with configuration
-func newGeminiCustodian(ctx context.Context, conf CustodianConfig) (*geminiCustodian, error) {
+func newGeminiCustodian(ctx context.Context, conf Config) (*geminiCustodian, error) {
 	logger := loggingutils.Logger(ctx, "custodian.newGeminiCustodian").With().Str("conf", conf.String()).Logger()
 
 	// import config to context if not already set, and create bitflyer client
-	geminiClient, err := gemini.NewWithContext(appctx.MapToContext(ctx, conf.config))
+	geminiClient, err := gemini.NewWithContext(appctx.MapToContext(ctx, conf.Config))
 	if err != nil {
 		msg := "failed to create client"
 		return nil, loggingutils.LogAndError(&logger, msg, fmt.Errorf("%s: %w", msg, err))
