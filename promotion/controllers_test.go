@@ -40,10 +40,9 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
-	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
@@ -280,15 +279,9 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) ClaimGrant(
-	service *Service,
-	w walletutils.Info,
-	privKey crypto.Signer,
-	promotion *Promotion,
-	blindedCreds []string,
-	claimStatus int,
-	// promoActive bool,
-) *uuid.UUID {
+func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
+	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
+
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
 	walletID, err := uuid.FromString(w.ID)
@@ -431,7 +424,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -611,7 +604,7 @@ func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -758,7 +751,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1338,7 +1331,7 @@ func (suite *ControllersTestSuite) TestClaimCompatibility() {
 			}
 		}
 
-		claimID := suite.ClaimGrant(
+		claimID := suite.ClaimPromotion(
 			service,
 			info,
 			privKey,
@@ -1469,7 +1462,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1653,7 +1646,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1823,7 +1816,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainSkipCBRDupRedeem() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	/* cb should not be called, we are using the bypass redeem credentials feature
@@ -2012,7 +2005,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2135,7 +2128,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID = suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID = suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2319,7 +2312,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2503,7 +2496,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2673,7 +2666,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	// calling claim promotion will trigger a RunNextClaimJob
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2754,53 +2748,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	// pull out drain id, and check the datastore has completed state
 	drainPoll, err := service.Datastore.GetDrainPoll(dsv2r.DrainID)
 	suite.Require().NoError(err, "Failed to get drain poll response")
-
 	suite.Require().True(drainPoll.Status == "complete")
-
-	// test other conditions
-	delayedID := uuid.NewV4()
-	pendingID := uuid.NewV4()
-	inprogressID := uuid.NewV4()
-
-	err = claimDrainFixtures(pg.RawDB(), delayedID, walletID, false, true)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), pendingID, walletID, false, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, true, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, false, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-
-	// there is an error in one of the drainings
-	drainPoll, err = service.Datastore.GetDrainPoll(&delayedID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "delayed")
-
-	// at least one drain poll batch has started, but all are not complete
-	drainPoll, err = service.Datastore.GetDrainPoll(&pendingID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "pending")
-
-	// none of the drain poll batches have started
-	drainPoll, err = service.Datastore.GetDrainPoll(&inprogressID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "in_progress")
-
-	// unknown batch_id
-	unknownID := uuid.NewV4()
-	drainPoll, err = service.Datastore.GetDrainPoll(&unknownID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "unknown")
-
-}
-
-func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
-	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":"123"}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
-	return err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
@@ -2902,7 +2850,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -3106,7 +3054,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)

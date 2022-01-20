@@ -323,6 +323,11 @@ func InitService(
 			Cadence: time.Second,
 			Workers: 1,
 		},
+		{
+			Func:    service.RunNextGeminiCheckStatus,
+			Cadence: time.Second,
+			Workers: 1,
+		},
 	}
 
 	// toggle for drain  retry job
@@ -425,4 +430,9 @@ func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, erro
 		}
 	}
 	return true, nil
+}
+
+// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
+func (s *Service) RunNextGeminiCheckStatus(ctx context.Context) (bool, error) {
+	return s.Datastore.RunNextGeminiCheckStatus(ctx, s)
 }
