@@ -99,6 +99,60 @@ func (me *MultiError) Count() int {
 	return len(me.Errs)
 }
 
+type wtfErrs struct {
+	err   error
+	cause error
+}
+
+func (we *wtfErrs) Cause(err error) {
+	we.cause = err
+}
+
+func (we *wtfErrs) Error() string {
+	var result string
+	if we.err != nil {
+		result = we.err.Error()
+	}
+	if we.cause != nil {
+		result += ": " + we.cause.Error()
+	}
+	return result
+}
+
+func (we *wtfErrs) Unwrap() error {
+	fmt.Println("unwrapping: ", we.cause)
+	return we.cause
+}
+
+// Unwrap - implement Unwrap for unwrapping sub errors
+func (me *MultiError) Unwrap() error {
+	// need to put all these errs together, unwrap all errs
+	var errs []error
+	for _, v := range me.Errs {
+		vv := v
+		for {
+			errs = append(errs, vv)
+			// unwrap until cant
+			err := errors.Unwrap(vv)
+			if err == nil {
+				break
+			}
+			vv = err
+		}
+	}
+
+	var wrappedErr error
+	for _, v := range errs {
+		if v != nil {
+			fmt.Println("v: ", v)
+			wrappedErr = &wtfErrs{err: v, cause: wrappedErr}
+		}
+	}
+
+	fmt.Println("!!! wrappedErr: ", wrappedErr)
+	return wrappedErr
+}
+
 // Error - implement Error interface
 func (me *MultiError) Error() string {
 	var errText string
