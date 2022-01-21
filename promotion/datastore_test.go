@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"testing"
 	"time"
 
@@ -1239,11 +1241,22 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Complete() {
 
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	txnStatus := &walletutils.TransactionInfo{Status: "complete"}
+
 	ctrl := gomock.NewController(suite.T())
 	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
 	geminiTxnStatusWorker.EXPECT().
-		GetGeminiTxnStatus(ctx, *drainJob.TransactionID).
-		Return(ptr.FromString("completed"), nil)
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(txnStatus, nil)
 
 	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
 	suite.Require().NoError(err, "should be no error")
@@ -1267,11 +1280,23 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {
 
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	note := testutils.RandomString()
+	txnStatus := &walletutils.TransactionInfo{Status: "failed", Note: note}
+
 	ctrl := gomock.NewController(suite.T())
 	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
 	geminiTxnStatusWorker.EXPECT().
-		GetGeminiTxnStatus(ctx, *drainJob.TransactionID).
-		Return(ptr.FromString("failed"), nil)
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(txnStatus, nil)
 
 	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
 	suite.Require().NoError(err, "should be no error")
@@ -1282,7 +1307,7 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {
 
 	suite.Require().Equal("failed", *drainJob.Status)
 	suite.Require().Equal(true, drainJob.Erred)
-	suite.Require().Equal("gemini-failure", *drainJob.ErrCode)
+	suite.Require().Equal(note, *drainJob.ErrCode)
 }
 
 func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_GetGeminiTxnStatus_Error() {
@@ -1296,12 +1321,21 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_GetGeminiTxnStatus_
 
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
 	getGeminiTxnStatusError := fmt.Errorf(testutils.RandomString())
 
 	ctrl := gomock.NewController(suite.T())
 	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
 	geminiTxnStatusWorker.EXPECT().
-		GetGeminiTxnStatus(ctx, *drainJob.TransactionID).
+		GetGeminiTxnStatus(ctx, txRef).
 		Return(nil, getGeminiTxnStatusError)
 
 	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)

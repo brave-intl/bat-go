@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/utils/ptr"
 	"net/http"
 	"os"
 	"strings"
@@ -243,7 +244,7 @@ type BatchTransferWorker interface {
 
 // GeminiTxnStatusWorker this worker retrieves the status for a given gemini transaction
 type GeminiTxnStatusWorker interface {
-	GetGeminiTxnStatus(ctx context.Context, transactionID string) (*string, error)
+	GetGeminiTxnStatus(ctx context.Context, transactionID string) (*walletutils.TransactionInfo, error)
 }
 
 // drainClaimErred - a codified err type for draind
@@ -776,7 +777,7 @@ func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uui
 }
 
 // GetGeminiTxnStatus retrieves the status for a given gemini transaction
-func (service *Service) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*string, error) {
+func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*walletutils.TransactionInfo, error) {
 	apiKey, ok := ctx.Value(appctx.GeminiAPIKeyCTXKey).(string)
 	if !ok {
 		return nil, fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
@@ -787,18 +788,24 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, transactionID st
 		return nil, fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
 	}
 
-	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, transactionID)
+	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
 	if err != nil || response == nil {
-		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", transactionID, err)
+		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
 
 	if response.Result == "Error" {
-		reason := "response error"
-		if response.Reason != nil {
-			reason = *response.Reason
-		}
-		return nil, fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, reason)
+		return nil, fmt.Errorf("failed to get gemini txn status for %s", txRef)
 	}
 
-	return response.Status, nil
+	switch ptr.String(response.Status) {
+	case "Completed":
+		return &walletutils.TransactionInfo{Status: "complete"}, nil
+	case "Pending":
+		return &walletutils.TransactionInfo{Status: "pending"}, nil
+	case "Failed":
+		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(response.Reason)}, nil
+	}
+
+	return nil, fmt.Errorf("failed to get txn status for %s: unknown status %s",
+		txRef, ptr.String(response.Status))
 }
