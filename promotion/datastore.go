@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/ptr"
 	"os"
 	"strings"
 	"time"
@@ -1453,7 +1456,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
-and (status is null or status not in ('complete', 'reputation-failed', 'failed'))
+and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending'))
 for update skip locked
 limit 1`
 
@@ -1836,20 +1839,28 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 		return false, fmt.Errorf("gemini check status job: sql error %w", err)
 	}
 
-	status, err := worker.GetGeminiTxnStatus(ctx, *drainJob.TransactionID)
-	if err != nil || status == nil {
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	txStatus, err := worker.GetGeminiTxnStatus(ctx, txRef)
+	if err != nil || txStatus == nil {
 		return true, fmt.Errorf("failed to get status for txn %s: %w", *drainJob.TransactionID, err)
 	}
 
-	switch strings.ToLower(*status) {
-	case "completed":
+	switch txStatus.Status {
+	case "complete":
 		query := `update claim_drain set status = 'complete' where id = $1`
 		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 	case "failed":
-		query := `update claim_drain set status = 'failed', erred = true, errcode = 'gemini-failure' where id = $1`
-		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
+		query := `update claim_drain set status = 'failed', erred = true, errcode = $1 where id = $2`
+		if _, err := tx.ExecContext(ctx, query, txStatus.Note, drainJob.ID); err != nil {
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 	}

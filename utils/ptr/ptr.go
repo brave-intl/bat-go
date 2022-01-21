@@ -11,3 +11,16 @@ func FromUUID(u uuid.UUID) *uuid.UUID {
 func FromString(s string) *string {
 	return &s
 }
+
+// String returns value of pointer or empty string
+func String(s *string) string {
+	return StringOr(s, "")
+}
+
+// StringOr returns value of pointer or alternative value
+func StringOr(s *string, or string) string {
+	if s == nil {
+		return or
+	}
+	return *s
+}

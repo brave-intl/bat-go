@@ -194,10 +194,10 @@ func (m *MockGeminiTxnStatusWorker) EXPECT() *MockGeminiTxnStatusWorkerMockRecor
 }
 
 // GetGeminiTxnStatus mocks base method.
-func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*string, error) {
+func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetGeminiTxnStatus", ctx, transactionID)
-	ret0, _ := ret[0].(*string)
+	ret0, _ := ret[0].(*wallet.TransactionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
