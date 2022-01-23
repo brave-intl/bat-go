@@ -1266,7 +1266,48 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Complete() {
 	suite.Require().NoError(err)
 
 	suite.Require().Equal("complete", *drainJob.Status)
-	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().True(drainJob.Completed)
+	suite.Require().False(drainJob.Erred)
+}
+
+func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Pending() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	txnStatus := &walletutils.TransactionInfo{Status: "pending"}
+
+	ctrl := gomock.NewController(suite.T())
+	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
+	geminiTxnStatusWorker.EXPECT().
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(txnStatus, nil)
+
+	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+	suite.Require().NoError(err, "should be no error")
+	suite.Require().True(attempted)
+
+	err = pg.RawDB().Get(&drainJob, "select * from claim_drain where id = $1", drainJob.ID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(txnStatusGeminiPending, *drainJob.Status)
+	suite.Require().False(drainJob.Completed)
+	suite.Require().False(drainJob.Erred)
 }
 
 func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {

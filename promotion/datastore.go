@@ -1829,6 +1829,7 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 	err = tx.Get(&drainJob, `
 									select * from claim_drain 
 									where status = $1 and transaction_id is not null
+									order by updated_at desc
 									for update skip locked limit 1
 									    `, txnStatusGeminiPending)
 	if err != nil {
@@ -1854,8 +1855,13 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 
 	switch txStatus.Status {
 	case "complete":
-		query := `update claim_drain set status = 'complete' where id = $1`
+		query := `update claim_drain set completed = true, completed_at = now(), status = 'complete' where id = $1`
 		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
+			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
+		}
+	case "pending":
+		query := `update claim_drain set status = $1, updated_at = now() where id = $2`
+		if _, err := tx.ExecContext(ctx, query, txnStatusGeminiPending, drainJob.ID); err != nil {
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 	case "failed":
