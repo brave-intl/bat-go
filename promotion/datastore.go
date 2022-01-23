@@ -1829,7 +1829,7 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 	err = tx.Get(&drainJob, `
 									select * from claim_drain 
 									where status = $1 and transaction_id is not null
-									order by updated_at desc
+									order by updated_at asc
 									for update skip locked limit 1
 									    `, txnStatusGeminiPending)
 	if err != nil {
