@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 
 	"github.com/jmoiron/sqlx"
 
