@@ -1869,6 +1869,9 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 		if _, err := tx.ExecContext(ctx, query, txStatus.Note, drainJob.ID); err != nil {
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
+	default:
+		return true, fmt.Errorf("failed to update status for txn %s: unknown status %s",
+			*drainJob.TransactionID, txStatus.Status)
 	}
 
 	err = tx.Commit()
