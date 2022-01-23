@@ -1298,6 +1298,12 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Pending() {
 		GetGeminiTxnStatus(ctx, txRef).
 		Return(txnStatus, nil)
 
+	// insert more transactions
+	// we should process the oldest txn defined above first
+	for i := 0; i < 5; i++ {
+		suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+	}
+
 	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
 	suite.Require().NoError(err, "should be no error")
 	suite.Require().True(attempted)
@@ -1473,8 +1479,8 @@ func (suite *PostgresTestSuite) insertClaimDrainWithStatus(pg Datastore, status 
 	credentials, err := json.Marshal(credentialRedemptions)
 	suite.Require().NoError(err, "should have serialized credentials")
 
-	query := `INSERT INTO claim_drain (credentials, wallet_id, total, transaction_id, erred, status, completed) 
-				VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;`
+	query := `INSERT INTO claim_drain (credentials, wallet_id, total, transaction_id, erred, status, completed, updated_at) 
+				VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING *;`
 
 	var drainJob DrainJob
 	err = pg.RawDB().Get(&drainJob, query, credentials, walletID, 1, transactionID, false, status, false)
