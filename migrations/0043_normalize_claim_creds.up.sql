@@ -11,6 +11,6 @@ create view claim_creds_redshift_staging as (
     public_key,
     issuer_id,
     COALESCE(claim_creds.created_at, '2021-12-01'::date::timestamp without time zone) AS created_at,
-    COALESCE(claim_creds.updated_at, '2021-12-01'::date::timestamp without time zone) AS updated_at
+    COALESCE(claim_creds.updated_at, '2022-01-25'::date::timestamp without time zone) AS updated_at
   from claim_creds
 );
