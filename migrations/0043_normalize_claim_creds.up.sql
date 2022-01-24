@@ -1,7 +1,7 @@
 ALTER TABLE public.claim_creds ADD COLUMN created_at timestamp without time zone;
 ALTER TABLE public.claim_creds ADD COLUMN updated_at timestamp without time zone;
 
-create view normalized_claim_creds as (
+create view claim_creds_redshift_staging as (
   select
     claim_id,
     blinded_creds,
