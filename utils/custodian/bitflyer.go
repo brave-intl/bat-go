@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/gofrs/uuid"
 	"github.com/shopspring/decimal"
@@ -48,6 +50,12 @@ func isBitflyerErrorUnauthorized(ctx context.Context, err error) bool {
 	if errors.As(err, &bfe) {
 		return bfe.HTTPStatusCode == http.StatusUnauthorized
 	}
+	var bundleErr *errorutils.ErrorBundle
+	if errors.As(err, &bundleErr) {
+		if state, ok := bundleErr.Data().(clients.HTTPState); ok {
+			return state.Status == http.StatusUnauthorized
+		}
+	}
 	return false
 }
 
@@ -59,7 +67,6 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 	// we need to check the limit total for all txs that they do not exceed a limit JPY
 	var (
 		JPYLimit         = decimal.NewFromFloat(100000)
-		totalF64         float64
 		totalJPYTransfer = decimal.Zero
 		// collapsed transactions per destination
 		destTxs = map[string][]Transaction{}
@@ -124,9 +131,12 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 	for destination, txs := range destTxs {
 		// to make a combined idempotency key
 		var (
-			transferIDs = []string{}
-			c           string
+			transferIDs  = []string{}
+			c            string
+			totalF64     float64 = 0.0
+			limitReached bool
 		)
+
 		for _, tx := range txs {
 			idempotencyKey, err := tx.GetIdempotencyKey(ctx)
 			if err != nil {
@@ -136,41 +146,42 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 			}
 			transferIDs = append(transferIDs, idempotencyKey.String())
 
-			// get the amount of the tx
-			amount, err := tx.GetAmount(ctx)
-			if err != nil {
-				// non-recoverable error getting tx amount
-				msg := "failed to get amount from transaction"
-				return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
-			}
+			if !limitReached {
+				// get the amount of the tx
+				amount, err := tx.GetAmount(ctx)
+				if err != nil {
+					// non-recoverable error getting tx amount
+					msg := "failed to get amount from transaction"
+					return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+				}
 
-			t, _ := amount.Float64()
-			// we cap at the total if we exceed...
-			totalF64 += t
+				t, _ := amount.Float64()
+				// we cap at the total if we exceed...
+				totalF64 += t
 
-			// lookup the currency string of this TX so we can figure out if we are over
-			currency, err := tx.GetCurrency(ctx)
-			if err != nil {
-				// non-recoverable error getting tx currency
-				msg := "failed to get currency from transaction"
-				return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
-			}
+				// lookup the currency string of this TX so we can figure out if we are over
+				currency, err := tx.GetCurrency(ctx)
+				if err != nil {
+					// non-recoverable error getting tx currency
+					msg := "failed to get currency from transaction"
+					return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+				}
 
-			c = currency.String()
+				c = currency.String()
 
-			totalJPYTransfer = totalJPYTransfer.Add(amount.Mul(currencies[currency.String()]))
+				totalJPYTransfer = totalJPYTransfer.Add(amount.Mul(currencies[currency.String()]))
 
-			if totalJPYTransfer.GreaterThan(JPYLimit) {
-				over := JPYLimit.Sub(totalJPYTransfer).String()
-				totalF64, _ = JPYLimit.Div(currencies[currency.String()]).Floor().Float64()
+				if totalJPYTransfer.GreaterThan(JPYLimit) {
+					over := JPYLimit.Sub(totalJPYTransfer).String()
+					totalF64, _ = JPYLimit.Div(currencies[currency.String()]).Floor().Float64()
 
-				overLimitErr := fmt.Errorf(
-					"over custodian transfer limit - JPY by %s; %s_JPY rate: %v; BAT: %v",
-					over, currency.String(), currencies[currency.String()], totalJPYTransfer)
+					overLimitErr := fmt.Errorf(
+						"over custodian transfer limit - JPY by %s; %s_JPY rate: %v; BAT: %v",
+						over, currency.String(), currencies[currency.String()], totalJPYTransfer)
 
-				logger.Warn().Err(overLimitErr).Msg("destination exceeds jpy limit")
-				// done with txs for this destination
-				break
+					logger.Warn().Err(overLimitErr).Msg("destination exceeds jpy limit")
+					limitReached = true
+				}
 			}
 		}
 
@@ -180,6 +191,9 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 			msg := "failed to get source from context"
 			return loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, ErrInvalidSource))
 		}
+
+		// sort the transferIDs so we can recalculate the transfer_id for this batch of txs
+		sort.Strings(transferIDs)
 
 		// set up a client payload
 		destConsolidatedTxs = append(destConsolidatedTxs, bitflyer.WithdrawToDepositIDPayload{
@@ -218,26 +232,72 @@ func (bts *bitflyerTransactionStatus) String() string {
 	return bts.Status
 }
 
-// GetTransactionsStatus - implement Custodian interface
+// GetTransactionsStatus - implement Custodian interface.  within this implementation
+// a business requirement of the transaction submission is to collapse all txs per destination
+// into one transfer.  To do this we take all of the txs in the passed in batch, organize by
+// destination, then collapse a sorted list of idempotency keys into an array which is used
+// to create a unified batch transfer_id
 func (bc *bitflyerCustodian) GetTransactionsStatus(ctx context.Context, txs ...Transaction) (map[string]TransactionStatus, error) {
 	logger := loggingutils.Logger(ctx, "bitflyerCustodian.GetTransactionsStatus")
+	var (
+		transferIDs = []string{}
+		destTxs     = map[string][]Transaction{}
+	)
 
-	var transferIDs = []string{}
-	for _, tx := range txs {
-		transferID, err := tx.GetIdempotencyKey(ctx)
+	// collapse by deposit destination
+	for i := range txs {
+		// collapse down based on deposit id
+		destination, err := txs[i].GetDestination(ctx)
 		if err != nil {
-			msg := "failed to get idempotency key for transaction"
+			msg := "failed to get tx destination"
 			return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
 		}
-		if transferID != nil {
-			transferIDs = append(transferIDs, transferID.String())
+
+		destTxs[destination.String()] = append(destTxs[destination.String()], txs[i])
+	}
+
+	for _, txs := range destTxs {
+		// to make a combined idempotency key
+		var (
+			idempotencyKeys = []string{}
+		)
+		for _, tx := range txs {
+			idempotencyKey, err := tx.GetIdempotencyKey(ctx)
+			if err != nil {
+				// non-recoverable error getting tx amount
+				msg := "failed to get idempotency key from transaction"
+				return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+			}
+			// add to transferIDs
+			idempotencyKeys = append(idempotencyKeys, idempotencyKey.String())
 		}
+		// sort the idempotency keys so we can recalculate the transfer_id for this batch of txs
+		sort.Strings(idempotencyKeys)
+
+		transferIDs = append(transferIDs, uuid.NewV5(BitflyerTransferIDNamespace, strings.Join(idempotencyKeys, ",")).String())
 	}
 
 	resp, err := bc.client.CheckPayoutStatus(ctx, bitflyer.TransferIDsToBulkStatus(transferIDs))
 	if err != nil {
-		msg := "failed to perform bitflyer.CheckPayoutStatus"
-		return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+		if isBitflyerErrorUnauthorized(ctx, err) {
+			// if this was a bitflyer error and the error is due to a 401 response, refresh the token
+			logger.Debug().Msg("attempting to refresh the bf token")
+			_, err = bc.client.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
+			if err != nil {
+				msg := "failed to get token from bitflyer.RefreshToken"
+				return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+			}
+			// redo the request after token refresh
+			resp, err = bc.client.CheckPayoutStatus(ctx, bitflyer.TransferIDsToBulkStatus(transferIDs))
+			if err != nil {
+				msg := "failed to fetch bitflyer transaction status"
+				return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+			}
+		} else {
+			// non-recoverable error fetching quote
+			msg := "failed to fetch bitflyer transaction status"
+			return nil, loggingutils.LogAndError(logger, msg, fmt.Errorf("%s: %w", msg, err))
+		}
 	}
 	logger.Debug().Str("resp", fmt.Sprintf("%+v", resp)).Msg("response from check payout status")
 

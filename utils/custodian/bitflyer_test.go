@@ -4,6 +4,7 @@ package custodian_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -88,5 +89,39 @@ func (suite *BitflyerCustodianTestSuite) TestSubmitAndGetTransactions() {
 	statusMap, err := suite.custodian.GetTransactionsStatus(suite.ctx, txs...)
 	suite.Require().NoError(err, "should be able to get transactions status")
 
+	suite.Require().True(len(statusMap) == 1, "status map should have collapsed transaction statuses")
+}
+
+func (suite *BitflyerCustodianTestSuite) TestSubmitAndGetTransactionsOneOff() {
+	var (
+		// source is settlement wallet and in bf case there is no source
+		source = uuid.New()
+
+		// dest is destination wallet
+		dest1 = uuid.MustParse("31987fe9-51c2-48d4-8106-76ee5f613da7")
+		dest2 = uuid.MustParse("31987fe9-51c2-48d4-8106-76ee5f613da8")
+	)
+
+	// txs
+	ik1 := uuid.New()
+	ik2 := uuid.New()
+
+	fiveBAT, err := decimal.NewFromString("5")
+
+	tx1, err := custodian.NewTransaction(suite.ctx, &ik1, &dest1, &source, altcurrency.BAT, fiveBAT)
+	suite.Require().NoError(err, "should be able to create transactions")
+
+	tx2, err := custodian.NewTransaction(suite.ctx, &ik2, &dest2, &source, altcurrency.BAT, fiveBAT)
+	suite.Require().NoError(err, "should be able to create transactions")
+
+	txs := []custodian.Transaction{tx1, tx2}
+
+	err = suite.custodian.SubmitTransactions(suite.ctx, txs...)
+	suite.Require().NoError(err, "should be able to submit transactions")
+
+	statusMap, err := suite.custodian.GetTransactionsStatus(suite.ctx, txs...)
+	suite.Require().NoError(err, "should be able to get transactions status")
+
+	fmt.Println(statusMap)
 	suite.Require().True(len(statusMap) == 1, "status map should have collapsed transaction statuses")
 }

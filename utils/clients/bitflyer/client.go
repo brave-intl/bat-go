@@ -250,7 +250,7 @@ func NewWithContext(ctx context.Context) (Client, error) {
 	// get the token
 	token, ok := ctx.Value(appctx.BitflyerTokenCTXKey).(string)
 	if !ok || len(token) == 0 {
-		return nil, ErrInvalidToken
+		token = ""
 	}
 
 	// create the client

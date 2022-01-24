@@ -79,7 +79,7 @@ type Custodian interface {
 
 // Config - configurations for each custodian
 type Config struct {
-	Provider string `valid:"in(uphold,gemini,bitflyer)"`
+	Provider string
 	Config   map[appctx.CTXKey]interface{}
 }
 
