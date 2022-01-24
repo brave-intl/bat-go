@@ -51,6 +51,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r.Get("/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}", middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)).ServeHTTP)
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
+	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {
