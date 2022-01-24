@@ -78,7 +78,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		PrivKey: ed25519.PrivateKey{},
 		PubKey:  httpsignature.Ed25519PubKey([]byte(publicKey)),
 	}
-	if err := uwallet.SubmitRegistration(ucReq.SignedCreationRequest); err != nil {
+	if err := uwallet.SubmitRegistration(ctx, ucReq.SignedCreationRequest); err != nil {
 		return handlers.WrapError(
 			errors.New("unable to create uphold wallet"),
 			"failed to register wallet with uphold", http.StatusServiceUnavailable)
@@ -511,7 +511,7 @@ func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.
 	}
 
 	// get the wallet balance
-	result, err := uwallet.GetBalance(true)
+	result, err := uwallet.GetBalance(ctx, true)
 	if err != nil {
 		logger.Info().Err(err).Str("id", id.String()).Msg("error getting balance from uphold")
 		return handlers.WrapError(err, "failed to get balance from uphold", http.StatusInternalServerError)

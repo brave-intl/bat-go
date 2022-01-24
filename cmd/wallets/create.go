@@ -92,7 +92,7 @@ func CreateOnUphold(ctx context.Context, name string) error {
 
 	wallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
 
-	err = wallet.Register(name)
+	err = wallet.Register(ctx, name)
 	if err != nil {
 		return err
 	}

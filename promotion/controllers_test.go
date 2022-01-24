@@ -2568,6 +2568,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2598,7 +2600,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2631,7 +2633,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
@@ -2688,7 +2690,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -2740,7 +2742,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	<-time.After(1 * time.Second)
 
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// pull out drain id, and check the datastore has completed state
@@ -2796,6 +2798,8 @@ func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2826,7 +2830,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2858,7 +2862,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
@@ -2915,7 +2919,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -2959,7 +2963,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	<-time.After(1 * time.Second)
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// testing out the drain info handler
