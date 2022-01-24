@@ -6,11 +6,11 @@ create view normalized_claim_creds as (
     claim_id,
     blinded_creds,
     signed_creds,
-    json_array_length(signed_creds_length),
+    json_array_length(signed_creds),
     batch_proof,
     public_key,
     issuer_id,
     COALESCE(claim_creds.created_at, '2021-12-01'::date::timestamp without time zone) AS created_at,
-    COALESCE(claim_creds.updated_at, '2021-12-01'::date::timestamp without time zone) AS updated_at,
+    COALESCE(claim_creds.updated_at, '2021-12-01'::date::timestamp without time zone) AS updated_at
   from claim_creds
 );
