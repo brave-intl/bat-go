@@ -1799,7 +1799,7 @@ func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid
 		return fmt.Errorf("update drain job: failed to get affected rows for walletID %s: %w", walletID, err)
 	}
 
-	if affectedRows != 1 {
+	if affectedRows == 0 {
 		return fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
 			errorutils.ErrNotFound)
 	}
