@@ -166,3 +166,26 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 		return handlers.RenderContent(ctx, rates, w, http.StatusOK)
 	})
 }
+
+//MappingResponse - the response structure for the current mappings
+type MappingResponse struct {
+	IDToSymbol            map[string]string `json:"idToSymbol"`
+	SymbolToID            map[string]string `json:"symbolToId"`
+	ContractToID          map[string]string `json:"contractToId"`
+	SupportedVsCurrencies map[string]bool   `json:"supportedVsCurrencies"`
+}
+
+// GetMappingHandler - handler to get current coin / currency mappings
+func GetMappingHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		resp := MappingResponse{}
+
+		resp.IDToSymbol = ctx.Value(appctx.CoingeckoIDToSymbolCTXKey).(map[string]string)
+		resp.SymbolToID = ctx.Value(appctx.CoingeckoSymbolToIDCTXKey).(map[string]string)
+		resp.ContractToID = ctx.Value(appctx.CoingeckoContractToIDCTXKey).(map[string]string)
+		resp.SupportedVsCurrencies = ctx.Value(appctx.CoingeckoSupportedVsCurrenciesCTXKey).(map[string]bool)
+
+		return handlers.RenderContent(ctx, resp, w, http.StatusOK)
+	})
+}
