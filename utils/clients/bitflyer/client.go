@@ -284,7 +284,7 @@ func (c *HTTPClient) FetchQuote(
 			})
 		}
 	}
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 // PriceTokenInfo holds info from the price token
@@ -358,7 +358,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
@@ -379,7 +379,7 @@ func (c *HTTPClient) CheckPayoutStatus(
 	c.setupRequestHeaders(req)
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 // RefreshToken gets a new token from bitflyer
@@ -405,7 +405,7 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 
 	c.SetAuthToken(body.AccessToken)
 
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
@@ -413,12 +413,12 @@ func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
 	req.Header.Set("content-type", "application/json")
 }
 
-func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
+func handleBitflyerError(e error, resp *http.Response) error {
 	if resp == nil {
 		return e
 	}
 
-	// if this is is not an error just return err passed in
+	// if this is not an error just return err passed in
 	if resp.StatusCode > 299 {
 		return e
 	}
