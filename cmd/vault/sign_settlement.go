@@ -109,6 +109,10 @@ func init() {
 		"tells bitflyer what the client secret during token generation").
 		Bind("bitflyer-client-secret").
 		Env("BITFLYER_CLIENT_SECRET")
+
+	signSettlementBuilder.Flag().Bool("exclude-limited", false,
+		"in order to avoid not knowing what the payout amount will be because of transfer limits").
+		Bind("exclude-limited")
 }
 
 // SignSettlement runs the signing of a settlement
@@ -371,11 +375,14 @@ func createBitflyerArtifact(
 		return err
 	}
 
+	vpr := viper.GetViper()
+	exclude := vpr.GetString("exclude-limited")
+
 	preparedTransactions, err := bitflyersettlement.PrepareRequests(
 		ctx,
 		bitflyerClient,
 		bitflyerOnlySettlements,
-		false,
+		exclude,
 	)
 	if err != nil {
 		return err
