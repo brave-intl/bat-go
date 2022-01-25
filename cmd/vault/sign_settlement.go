@@ -376,7 +376,7 @@ func createBitflyerArtifact(
 	}
 
 	vpr := viper.GetViper()
-	exclude := vpr.GetString("exclude-limited")
+	exclude := vpr.GetBool("exclude-limited")
 
 	preparedTransactions, err := bitflyersettlement.PrepareRequests(
 		ctx,
