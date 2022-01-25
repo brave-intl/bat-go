@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -242,9 +243,7 @@ func New() (Client, error) {
 }
 
 // SetAuthToken sets the auth token
-func (c *HTTPClient) SetAuthToken(
-	authToken string,
-) {
+func (c *HTTPClient) SetAuthToken(authToken string) {
 	c.client.AuthToken = authToken
 }
 
@@ -384,39 +383,28 @@ func (c *HTTPClient) CheckPayoutStatus(
 }
 
 // RefreshToken gets a new token from bitflyer
-func (c *HTTPClient) RefreshToken(
-	ctx context.Context,
-	payload TokenPayload,
-) (*TokenResponse, error) {
-
-	logger := logging.Logger(ctx, "RefreshToken")
+func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to refresh bitflyer token")
+			logging.FromContext(ctx).Error().
+				Str("panic", fmt.Sprintf("%+v", r)).
+				Str("stacktrace", string(debug.Stack())).
+				Msg("failed to get bitflyer refresh token")
 		}
 	}()
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-	logger.Info().
-		Str("client_id", payload.ClientID).
-		Str("client_secret", payload.ClientSecret).
-		Str("extra_client_secret", payload.ExtraClientSecret).
-		Str("grant_type", payload.GrantType).
-		Msg("payload values")
+
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	logger.Info().
-		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
+
 	c.SetAuthToken(body.AccessToken)
+
 	return &body, handleBitflyerError(err, req, resp)
 }
 
