@@ -344,6 +344,15 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	)
 
 	for _, v := range transfers {
+
+		if v.DepositID == nil {
+			return errorutils.New(fmt.Errorf("failed depositID cannot be nil for batchID %s", batchID),
+				"submit batch transfer", drainCodeErrorInvalidDepositID)
+		}
+
+		// set deposit id for the transfer
+		depositID = *v.DepositID
+
 		t, _ := v.Total.Float64()
 		totalF64 += t
 
@@ -360,12 +369,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 				new(bitflyerOverTransferLimit))
 			break
 		}
-
-		if v.DepositID == nil {
-			return errorutils.New(fmt.Errorf("failed depositID cannot be nil for batchID %s", batchID),
-				"submit batch transfer", drainCodeErrorInvalidDepositID)
-		}
-		depositID = *v.DepositID
 	}
 
 	// collapse into one transaction, not multiples in a bulk upload
