@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package bitflyersettlement
@@ -116,18 +117,20 @@ func transactionSubmitted(status string, tx settlement.Transaction, note string)
 func (suite *BitflyerSuite) TestFailures() {
 	ctx := context.Background()
 	settlementTx0 := settlementTransaction("1.9", uuid.NewV4().String())
-	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx0,
-	})
-	defer func() { _ = os.Remove(tmpFile0.Name()) }()
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx0},
+		false,
+	)
 
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -156,9 +159,8 @@ func (suite *BitflyerSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil, // dry run first
 	)
 	suite.client.SetAuthToken(suite.token)
@@ -190,10 +192,13 @@ func (suite *BitflyerSuite) TestFormData() {
 	}
 
 	settlementTx1 := settlementTransaction("1.9", address)
-	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx1,
-	})
-	defer func() { _ = os.Remove(tmpFile1.Name()) }()
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx1},
+		false,
+	)
 	/*
 		resultIteration := make(map[string]int)
 
@@ -225,9 +230,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		dryRunOptions, // dry run first
 	)
 	suite.Require().NoError(err)
@@ -252,9 +256,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -282,9 +285,8 @@ func (suite *BitflyerSuite) TestFormData() {
 			ctx,
 			"checkstatus",
 			suite.client,
-			[]string{tmpFile1.Name()},
 			sourceFrom,
-			false,
+			*preparedTransactions,
 			nil,
 		)
 		suite.Require().NoError(err)
@@ -319,9 +321,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile2.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -365,12 +366,13 @@ func (suite *BitflyerSuite) TestPrepareRequests() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[settlementTx1, settlementTx2, settlementTx3, settlementTx4],
+		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		false,
 	)
+	suite.Require().NoError(err)
 
-	totalTxns := 0;
-	for _, batches := range(preparedTransactions.AggregateTransactionBatches) {
+	totalTxns := 0
+	for _, batches := range preparedTransactions.AggregateTransactionBatches {
 		totalTxns += len(batches)
 	}
 
@@ -380,19 +382,19 @@ func (suite *BitflyerSuite) TestPrepareRequests() {
 	preparedTransactions, err = PrepareRequests(
 		ctx,
 		suite.client,
-		[settlementTx1, settlementTx2, settlementTx3, settlementTx4],
+		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		true,
 	)
+	suite.Require().NoError(err)
 
-	totalTxns = 0;
-	for _, batches := range(preparedTransactions.AggregateTransactionBatches) {
+	totalTxns = 0
+	for _, batches := range preparedTransactions.AggregateTransactionBatches {
 		totalTxns += len(batches)
 	}
 	suite.Require().Len(totalTxns, 2, "two transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
 
 }
-
 
 func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
 	tmpDir := os.TempDir()
@@ -408,4 +410,3 @@ func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (
 	suite.Require().NoError(err)
 	return tmpFile
 }
-

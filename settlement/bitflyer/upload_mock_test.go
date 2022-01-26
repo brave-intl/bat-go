@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package bitflyersettlement
@@ -68,10 +69,16 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
 	sourceFrom := "tipping"
 
-	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx0,
-	})
-	defer func() { _ = os.Remove(tmpFile0.Name()) }()
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx0},
+		false,
+	)
+
+	suite.Require().NoError(err)
+
+	fmt.Println("#v", preparedTransactions)
 
 	suite.client.EXPECT().
 		FetchQuote(ctx, currencyCode, true).
@@ -111,9 +118,8 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -175,9 +181,8 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil, // dry run first
 	)
 	suite.client.EXPECT().SetAuthToken(suite.token)
@@ -218,36 +223,14 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	}
 
 	settlementTx1 := settlementTransaction(amount.String(), address)
-	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx1,
-	})
-	defer func() { _ = os.Remove(tmpFile1.Name()) }()
-	/*
-		resultIteration := make(map[string]int)
 
-		var payoutFiles *map[string][]settlement.Transaction
-		for i := 0; i < 2; i++ {
-			<-time.After(2 * time.Second)
-			results, err := IterateRequest(
-				ctx,
-				"upload",
-				suite.client,
-				[]string{tmpFile1.Name()},
-				sourceFrom,
-				false,
-				dryRunOptions, // dry run first
-			)
-			suite.Require().NoError(err)
-			for key, items := range *results {
-				resultIteration[key] += len(items)
-			}
-			payoutFiles = results
-		}
-		suite.Require().Equal(map[string]int{
-			"pending":  1,
-			"complete": 1,
-		}, resultIteration)
-	*/
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx1},
+		false,
+	)
+	suite.Require().NoError(err)
 
 	suite.client.EXPECT().
 		FetchQuote(ctx, currencyCode, true).
@@ -289,11 +272,11 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		dryRunOptions, // dry run first
 	)
+
 	suite.Require().NoError(err)
 	completedDryRunTxs := payoutFiles["complete"]
 	suite.Require().Len(completedDryRunTxs, 1, "one transaction should be created")
@@ -351,9 +334,8 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -413,9 +395,8 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			ctx,
 			"checkstatus",
 			suite.client,
-			[]string{tmpFile1.Name()},
 			sourceFrom,
-			false,
+			*preparedTransactions,
 			nil,
 		)
 		suite.Require().NoError(err)
@@ -445,10 +426,12 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
 	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
 
-	tmpFile2 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx2,
-	})
-	defer func() { _ = os.Remove(tmpFile2.Name()) }()
+	preparedTransactions, err = PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx2},
+		false,
+	)
 
 	suite.client.EXPECT().
 		FetchQuote(ctx, currencyCode, true).
@@ -490,9 +473,8 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile2.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
