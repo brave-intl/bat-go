@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -313,10 +312,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
 	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
-	tmpFile2 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx2,
-	})
-	defer func() { _ = os.Remove(tmpFile2.Name()) }()
+
 	payoutFiles, err = IterateRequest(
 		ctx,
 		"upload",
@@ -349,19 +345,4 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(idempotencyFailCompleteExpected),
 		string(idempotencyFailCompleteActual),
 	)
-}
-
-func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
-	tmpDir := os.TempDir()
-	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
-	suite.Require().NoError(err)
-
-	json, err := json.Marshal(txs)
-	suite.Require().NoError(err)
-
-	_, err = tmpFile.Write([]byte(json))
-	suite.Require().NoError(err)
-	err = tmpFile.Close()
-	suite.Require().NoError(err)
-	return tmpFile
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -535,17 +534,33 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	// )
 }
 
-func (suite *BitflyerSuite) TestPrepareRequests() {
+func (suite *BitflyerMockSuite) TestPrepareRequests() {
+	priceToken := uuid.NewV4()
+	JPY := "JPY"
+	BAT := "BAT"
+	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
+	price := decimal.NewFromFloat(0.25)
+
 	ctx := context.Background()
 
-	address1 := "ff3a0ead-c945-4c52-bcf7-9309319573de"
-	address2 := "16552ae2-993e-4aa7-8e39-48d77cb62666"
-	address3 := "7fd7b841-087c-46b9-8a6a-a5edbd684ed5"
+	address1 := uuid.NewV4()
+	address2 := uuid.NewV4()
+	address3 := uuid.NewV4()
 
-	settlementTx1 := settlementTransaction("1.9", address1)
-	settlementTx2 := settlementTransaction("1.3", address1)
-	settlementTx3 := settlementTransaction("1.1", address2)
-	settlementTx4 := settlementTransaction("9999999999999", address3)
+	settlementTx1 := settlementTransaction("1.9", address1.String())
+	settlementTx2 := settlementTransaction("1.3", address1.String())
+	settlementTx3 := settlementTransaction("1.1", address2.String())
+	settlementTx4 := settlementTransaction("9999999999999", address3.String())
+
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode, true).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
 
 	preparedTransactions, err := PrepareRequests(
 		ctx,
@@ -560,7 +575,7 @@ func (suite *BitflyerSuite) TestPrepareRequests() {
 		totalTxns += len(batches)
 	}
 
-	suite.Require().Len(totalTxns, 3, "three transaction should be aggregated")
+	suite.Require().Equal(3, totalTxns, "three transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
 
 	preparedTransactions, err = PrepareRequests(
@@ -575,22 +590,7 @@ func (suite *BitflyerSuite) TestPrepareRequests() {
 	for _, batches := range preparedTransactions.AggregateTransactionBatches {
 		totalTxns += len(batches)
 	}
-	suite.Require().Len(totalTxns, 2, "two transaction should be aggregated")
+	suite.Require().Equal(2, totalTxns, "two transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
 
-}
-
-func (suite *BitflyerMockSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
-	tmpDir := os.TempDir()
-	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
-	suite.Require().NoError(err)
-
-	json, err := json.Marshal(txs)
-	suite.Require().NoError(err)
-
-	_, err = tmpFile.Write([]byte(json))
-	suite.Require().NoError(err)
-	err = tmpFile.Close()
-	suite.Require().NoError(err)
-	return tmpFile
 }
