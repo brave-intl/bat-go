@@ -453,6 +453,65 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_NoRetry(t *t
 	assert.Errorf(t, err, "failed to get token from bf: %s", refreshTokenError.Error())
 }
 
+func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_NoWithdrawals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bfClient := mock_bitflyer.NewMockClient(ctrl)
+	bfClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 1)
+	drainTransfers[0] = DrainTransfer{
+		ID:        uuidToPointer(uuid.NewV4()),
+		Total:     decimal.NewFromFloat(1),
+		DepositID: stringToPointer(uuid.NewV4().String()),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	var bitflyerError = new(clients.BitflyerError)
+	bitflyerError.HTTPStatusCode = http.StatusUnauthorized
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(nil, bitflyerError)
+
+	bfClient.EXPECT().
+		RefreshToken(ctx, gomock.Any()).
+		Return(nil, nil)
+
+	// no withdraws
+	withdrawToDepositIDBulkResponse := bitflyer.WithdrawToDepositIDBulkResponse{
+		DryRun:      false,
+		Withdrawals: []bitflyer.WithdrawToDepositIDResponse{},
+	}
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(&withdrawToDepositIDBulkResponse, nil)
+
+	s := Service{
+		bfClient:  bfClient,
+		Datastore: datastore,
+	}
+
+	err := s.SubmitBatchTransfer(ctx, batchID)
+
+	assert.Errorf(t, err, "submit batch transfer error: response cannot be nil for batchID %s", batchID)
+}
+
 func stringToPointer(s string) *string {
 	return &s
 }
