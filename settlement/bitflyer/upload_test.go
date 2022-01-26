@@ -369,17 +369,26 @@ func (suite *BitflyerSuite) TestPrepareRequests() {
 		false,
 	)
 
-	suite.Require().Len(preparedTransactions.AggregateTransactionBatches, 3, "three transaction should be aggregated")
+	totalTxns := 0;
+	for _, batches := range(preparedTransactions.AggregateTransactionBatches) {
+		totalTxns += len(batches)
+	}
+
+	suite.Require().Len(totalTxns, 3, "three transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
 
-	preparedTransactions, err := PrepareRequests(
+	preparedTransactions, err = PrepareRequests(
 		ctx,
 		suite.client,
 		[settlementTx1, settlementTx2, settlementTx3, settlementTx4],
 		true,
 	)
 
-	suite.Require().Len(preparedTransactions.AggregateTransactionBatches, 2, "two transaction should be aggregated")
+	totalTxns = 0;
+	for _, batches := range(preparedTransactions.AggregateTransactionBatches) {
+		totalTxns += len(batches)
+	}
+	suite.Require().Len(totalTxns, 2, "two transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
 
 }
