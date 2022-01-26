@@ -59,6 +59,7 @@ func CategorizeResponse(
 		tmp := altcurrency.BAT
 		tx.AltCurrency = &tmp
 		tx.Currency = tmp.String()
+		tx.Status = key
 		currentTx.Inputs[i] = tx
 	}
 	return currentTx.Inputs, key
@@ -73,7 +74,7 @@ func CategorizeResponses(
 	batchByTransferID := make(map[string]settlement.AggregateTransaction)
 
 	for _, tx := range batch {
-		batchByTransferID[tx.BitflyerTransferID()] = tx
+		batchByTransferID[tx.TransferID()] = tx
 	}
 
 	for _, payout := range *response {

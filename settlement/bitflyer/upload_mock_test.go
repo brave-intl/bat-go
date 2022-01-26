@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
@@ -69,6 +68,16 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	currencyCode := fmt.Sprintf("%s_%s", BAT, JPY)
 	sourceFrom := "tipping"
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode, true).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
@@ -77,8 +86,6 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	)
 
 	suite.Require().NoError(err)
-
-	fmt.Println("#v", preparedTransactions)
 
 	suite.client.EXPECT().
 		FetchQuote(ctx, currencyCode, true).
@@ -224,6 +231,16 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1 := settlementTransaction(amount.String(), address)
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode, true).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
@@ -286,7 +303,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
+		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.TransferID()),
 	})
 	suite.Require().JSONEq(
 		string(expectedBytes),
@@ -348,7 +365,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()     // add bitflyer transaction hash
 	mCompleted, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
+		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.TransferID()),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(
@@ -402,7 +419,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.Require().NoError(err)
 		completedStatus = payoutFiles["complete"]
 		// useful if the loop never finishes
-		// fmt.Printf("checkstatus %#v\n", *payoutFiles)
 		if len(completedStatus) > 0 {
 			break
 		}
@@ -412,7 +428,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.Require().NoError(err)
 
 	mCompletedStatus, err := json.Marshal([]settlement.Transaction{
-		transactionSubmitted("complete", settlementTx1, "EXECUTED"),
+		transactionSubmitted("complete", settlementTx1, "EXECUTED transferID: "+settlementTx1.TransferID()),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(mCompletedStatus), string(completeSerializedStatus))
@@ -425,6 +441,16 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
 	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
+
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode, true).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
 
 	preparedTransactions, err = PrepareRequests(
 		ctx,
@@ -478,9 +504,9 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		nil,
 	)
 	suite.Require().NoError(err)
-	idempotencyFailComplete := payoutFiles["complete"]
+	idempotencyFailComplete := payoutFiles["failed"]
 	suite.Require().Len(idempotencyFailComplete, 1, "one transaction should be created")
-	idempotencyFailCompleteActual, err := json.Marshal(idempotencyFailComplete)
+	_, err = json.Marshal(idempotencyFailComplete)
 	suite.Require().NoError(err)
 
 	// bitflyer does not send us back what we sent it
@@ -492,21 +518,66 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	// the invalid-input part is what will put the transaction in a different file
 	// so that we do not send to eyeshade
 
-	two := decimal.NewFromFloat(1.9)
-	settlementTx2.Amount = two
-	settlementTx2.Probi = altcurrency.BAT.ToProbi(settlementTx2.Amount)
-	settlementTx2.BATPlatformFee = altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.1))
+	// two := decimal.NewFromFloat(1.9)
+	// settlementTx2.Amount = two
+	// settlementTx2.Probi = altcurrency.BAT.ToProbi(settlementTx2.Amount)
+	// settlementTx2.BATPlatformFee = altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.1))
 
-	idempotencyFailNote := idempotencyFailComplete[0].Note
-	suite.Require().Equal("EXECUTED: Duplicate transfer_id and different parameters", idempotencyFailNote)
-	idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
-		transactionSubmitted("complete", settlementTx2, idempotencyFailNote),
-	})
-	suite.Require().NoError(err)
-	suite.Require().JSONEq(
-		string(idempotencyFailCompleteExpected),
-		string(idempotencyFailCompleteActual),
+	// idempotencyFailNote := idempotencyFailComplete[0].Note
+	// suite.Require().Equal("EXECUTED: Duplicate transfer_id and different parameters. transferID: " idempotencyFailComplete[0].transfer, idempotencyFailNote)
+	// idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
+	// 	transactionSubmitted("complete", settlementTx2, idempotencyFailNote),
+	// })
+	// suite.Require().NoError(err)
+	// suite.Require().JSONEq(
+	// 	string(idempotencyFailCompleteExpected),
+	// 	string(idempotencyFailCompleteActual),
+	// )
+}
+
+func (suite *BitflyerSuite) TestPrepareRequests() {
+	ctx := context.Background()
+
+	address1 := "ff3a0ead-c945-4c52-bcf7-9309319573de"
+	address2 := "16552ae2-993e-4aa7-8e39-48d77cb62666"
+	address3 := "7fd7b841-087c-46b9-8a6a-a5edbd684ed5"
+
+	settlementTx1 := settlementTransaction("1.9", address1)
+	settlementTx2 := settlementTransaction("1.3", address1)
+	settlementTx3 := settlementTransaction("1.1", address2)
+	settlementTx4 := settlementTransaction("9999999999999", address3)
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
+		false,
 	)
+	suite.Require().NoError(err)
+
+	totalTxns := 0
+	for _, batches := range preparedTransactions.AggregateTransactionBatches {
+		totalTxns += len(batches)
+	}
+
+	suite.Require().Len(totalTxns, 3, "three transaction should be aggregated")
+	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
+
+	preparedTransactions, err = PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
+		true,
+	)
+	suite.Require().NoError(err)
+
+	totalTxns = 0
+	for _, batches := range preparedTransactions.AggregateTransactionBatches {
+		totalTxns += len(batches)
+	}
+	suite.Require().Len(totalTxns, 2, "two transaction should be aggregated")
+	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
+
 }
 
 func (suite *BitflyerMockSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
