@@ -40,14 +40,13 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.CoingeckoCoinLimitCTXKey, viper.GetInt("coingecko-coin-limit"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, viper.GetInt("coingecko-vs-currency-limit"))
 	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
+	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, viper.GetInt("rate-limit-per-min"))
 
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initalize ratios service")
 	}
-
-	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, int(50))
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
