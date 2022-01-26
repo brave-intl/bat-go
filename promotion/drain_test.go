@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/utils/clients"
 	"math/rand"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/clients"
 
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	mock_bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
