@@ -47,7 +47,7 @@ func RestRun(command *cobra.Command, args []string) {
 		logger.Fatal().Err(err).Msg("failed to initalize ratios service")
 	}
 
-	ctx = context.WithValue(command.Context(), appctx.RateLimitPerMinuteCTXKey, int(50))
+	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, int(50))
 
 	// do rest endpoints
 	r := cmd.SetupRouter(ctx)
