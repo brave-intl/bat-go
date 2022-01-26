@@ -96,10 +96,7 @@ func SubmitBulkPayoutTransactions(
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 	logging.SubmitProgress(ctx, blockProgress, total)
 
 	logger.Debug().
@@ -137,10 +134,7 @@ func CheckPayoutTransactionsStatus(
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 
 	result, err := bitflyerClient.CheckPayoutStatus(
 		ctx,
@@ -310,10 +304,7 @@ func PrepareRequests(
 	txs []settlement.Transaction,
 	excludeLimited bool,
 ) (*PreparedTransactions, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		return nil, err
-	}
+	logger := logging.FromContext(ctx)
 
 	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
 	if err != nil {
