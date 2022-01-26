@@ -357,7 +357,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		totalF64 += t
 
 		totalJPYTransfer = totalJPYTransfer.Add(v.Total.Mul(quote.Rate))
-
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()
 			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
@@ -419,14 +418,19 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 
 	// check the txn for errors
 	for _, withdrawal := range withdrawToDepositIDBulkResponse.Withdrawals {
-		if withdrawal.Status == "NO_INV" {
+		if withdrawal.CategorizeStatus() == "failed" {
 
 			err = fmt.Errorf("submit batch transfer error: bitflyer %s error for batchID %s",
 				withdrawal.Status, withdrawal.TransferID)
 
+			retry := false
+			if withdrawal.Status == "NO_INV" {
+				retry = false
+			}
+
 			codified := errorutils.Codified{
-				ErrCode: "bitflyer_no_inv",
-				Retry:   false,
+				ErrCode: fmt.Sprintf("bitflyer_%s", strings.ToLower(withdrawal.Status)),
+				Retry:   retry,
 			}
 
 			return errorutils.New(err, "submit batch transfer", codified)

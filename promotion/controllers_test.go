@@ -1570,7 +1570,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 			DryRun: false,
 			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
 				CurrencyCode: BAT,
-				Status:       "NOT_FOUND",
+				Status:       "SUCCESS",
 				TransferID:   "transferid",
 			}},
 		}, nil)
