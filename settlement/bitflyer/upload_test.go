@@ -350,6 +350,41 @@ func (suite *BitflyerSuite) TestFormData() {
 	)
 }
 
+func (suite *BitflyerSuite) TestPrepareRequests() {
+	ctx := context.Background()
+
+	address1 := "ff3a0ead-c945-4c52-bcf7-9309319573de"
+	address2 := "16552ae2-993e-4aa7-8e39-48d77cb62666"
+	address3 := "7fd7b841-087c-46b9-8a6a-a5edbd684ed5"
+
+	settlementTx1 := settlementTransaction("1.9", address1)
+	settlementTx2 := settlementTransaction("1.3", address1)
+	settlementTx3 := settlementTransaction("1.1", address2)
+	settlementTx4 := settlementTransaction("9999999999999", address3)
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[settlementTx1, settlementTx2, settlementTx3, settlementTx4],
+		false,
+	)
+
+	suite.Require().Len(preparedTransactions.AggregateTransactionBatches, 3, "three transaction should be aggregated")
+	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[settlementTx1, settlementTx2, settlementTx3, settlementTx4],
+		true,
+	)
+
+	suite.Require().Len(preparedTransactions.AggregateTransactionBatches, 2, "two transaction should be aggregated")
+	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
+
+}
+
+
 func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
 	tmpDir := os.TempDir()
 	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
@@ -364,3 +399,4 @@ func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (
 	suite.Require().NoError(err)
 	return tmpFile
 }
+
