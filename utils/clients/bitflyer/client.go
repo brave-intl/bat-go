@@ -347,38 +347,31 @@ func readQuoteFromFile() (*SavedQuote, error) {
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
-func (c *HTTPClient) UploadBulkPayout(
-	ctx context.Context,
-	payload WithdrawToDepositIDBulkPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
+func (c *HTTPClient) UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
-	var body WithdrawToDepositIDBulkResponse
-	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, resp)
+
+	var withdrawToDepositIDBulkResponse WithdrawToDepositIDBulkResponse
+	resp, err := c.client.Do(ctx, req, &withdrawToDepositIDBulkResponse)
+
+	return &withdrawToDepositIDBulkResponse, handleBitflyerError(err, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
-func (c *HTTPClient) CheckPayoutStatus(
-	ctx context.Context,
-	payload CheckBulkStatusPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(
-		ctx,
-		http.MethodPost,
-		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-		payload,
-		nil,
-	)
+func (c *HTTPClient) CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error) {
+
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
+
 	return &body, handleBitflyerError(err, resp)
 }
 
@@ -402,7 +395,9 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
-
+	if err != nil {
+		return &body, err
+	}
 	c.SetAuthToken(body.AccessToken)
 
 	return &body, handleBitflyerError(err, resp)
@@ -418,7 +413,7 @@ func handleBitflyerError(e error, resp *http.Response) error {
 		return e
 	}
 
-	// if this is not an error just return err passed in
+	// if this is not a bitflyer error just return err passed in
 	if resp.StatusCode > 299 {
 		return e
 	}

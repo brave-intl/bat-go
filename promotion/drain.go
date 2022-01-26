@@ -385,37 +385,52 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	payload := bitflyer.WithdrawToDepositIDBulkPayload{
 		Withdrawals: withdraws,
 	}
-	// upload
-	_, err = service.bfClient.UploadBulkPayout(ctx, payload)
+
+	withdrawToDepositIDBulkResponse, err := service.bfClient.UploadBulkPayout(ctx, payload)
 	if err != nil {
-		// if this was a bitflyer error and the error is due to a 401 response, refresh the token
-		var bfe *clients.BitflyerError
-		if errors.As(err, &bfe) {
-			if bfe.HTTPStatusCode == http.StatusUnauthorized {
-				// try to refresh the token and go again
+		var bitflyerError *clients.BitflyerError
+
+		switch {
+		case errors.As(err, &bitflyerError):
+
+			// if this was a bitflyer 401 response refresh the token and retry upload otherwise return bitflyer error
+			if bitflyerError.HTTPStatusCode == http.StatusUnauthorized {
 				logger.Warn().Msg("attempting to refresh the bf token")
 				_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
 				if err != nil {
 					return fmt.Errorf("failed to get token from bf: %w", err)
 				}
-				// redo the request after token refresh
-				_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+				withdrawToDepositIDBulkResponse, err = service.bfClient.UploadBulkPayout(ctx, payload)
 				if err != nil {
 					return fmt.Errorf("failed to transfer funds: %w", err)
 				}
+			} else {
+				return bitflyerError
 			}
 
-			for _, v := range bfe.ErrorIDs {
-				// non-retry errors, report to sentry
-				if v == "NO_INV" {
-					logger.Error().Err(bfe).Msg("no bitflyer inventory")
-					sentry.CaptureException(bfe)
-				}
-			}
-			// runner has ability to read ErrorIDs from bfe and code it
-			return bfe
+		default:
+			return fmt.Errorf("failed to transfer funds: %w", err)
 		}
-		return fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if withdrawToDepositIDBulkResponse == nil || len(withdrawToDepositIDBulkResponse.Withdrawals) == 0 {
+		return fmt.Errorf("submit batch transfer error: response cannot be nil for batchID %s", batchID)
+	}
+
+	// check the txn for errors
+	for _, withdrawal := range withdrawToDepositIDBulkResponse.Withdrawals {
+		if withdrawal.Status == "NO_INV" {
+
+			err = fmt.Errorf("submit batch transfer error: bitflyer %s error for batchID %s",
+				withdrawal.Status, withdrawal.TransferID)
+
+			codified := errorutils.Codified{
+				ErrCode: "bitflyer_no_inv",
+				Retry:   false,
+			}
+
+			return errorutils.New(err, "submit batch transfer", codified)
+		}
 	}
 
 	if err := service.Datastore.MarkBatchTransferSubmitted(ctx, batchID); err != nil {

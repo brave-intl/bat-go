@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/utils/clients"
 	"math/rand"
+	"net/http"
 	"testing"
 	"time"
 
@@ -214,6 +216,241 @@ func TestSubmitBatchTransfer_Nil_DepositDestination(t *testing.T) {
 
 	err := s.SubmitBatchTransfer(ctx, batchID)
 	assert.Equal(t, expected, err)
+}
+
+func TestSubmitBatchTransfer_UploadBulkPayout_NOINV(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bfClient := mock_bitflyer.NewMockClient(ctrl)
+	bfClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 1)
+	drainTransfers[0] = DrainTransfer{
+		ID:        uuidToPointer(uuid.NewV4()),
+		Total:     decimal.NewFromFloat(1),
+		DepositID: stringToPointer(uuid.NewV4().String()),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	var bitflyerError = new(clients.BitflyerError)
+	bitflyerError.HTTPStatusCode = http.StatusUnauthorized
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(nil, bitflyerError)
+
+	bfClient.EXPECT().
+		RefreshToken(ctx, gomock.Any()).
+		Return(nil, nil)
+
+	withdrawal := bitflyer.WithdrawToDepositIDResponse{
+		Status: "NO_INV",
+	}
+
+	withdrawToDepositIDBulkResponse := bitflyer.WithdrawToDepositIDBulkResponse{
+		DryRun: false,
+		Withdrawals: []bitflyer.WithdrawToDepositIDResponse{
+			withdrawal,
+		},
+	}
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(&withdrawToDepositIDBulkResponse, nil)
+
+	s := Service{
+		bfClient:  bfClient,
+		Datastore: datastore,
+	}
+
+	err := fmt.Errorf("submit batch transfer error: bitflyer %s error for batchID %s",
+		withdrawal.Status, withdrawal.TransferID)
+
+	codified := errorutils.Codified{
+		ErrCode: "bitflyer_no_inv",
+		Retry:   false,
+	}
+
+	expected := errorutils.New(err, "submit batch transfer", codified)
+	actual := s.SubmitBatchTransfer(ctx, batchID)
+
+	assert.Equal(t, expected, actual)
+}
+
+func TestSubmitBatchTransfer_UploadBulkPayout_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bfClient := mock_bitflyer.NewMockClient(ctrl)
+	bfClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 1)
+	drainTransfers[0] = DrainTransfer{
+		ID:        uuidToPointer(uuid.NewV4()),
+		Total:     decimal.NewFromFloat(1),
+		DepositID: stringToPointer(uuid.NewV4().String()),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	var bitflyerError = new(clients.BitflyerError)
+	bitflyerError.HTTPStatusCode = http.StatusUnauthorized
+
+	err := errors.New("some error")
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(nil, err)
+
+	s := Service{
+		bfClient:  bfClient,
+		Datastore: datastore,
+	}
+
+	actual := s.SubmitBatchTransfer(ctx, batchID)
+
+	assert.Errorf(t, actual, "failed to transfer funds: %s", err.Error())
+}
+
+func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bfClient := mock_bitflyer.NewMockClient(ctrl)
+	bfClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 1)
+	drainTransfers[0] = DrainTransfer{
+		ID:        uuidToPointer(uuid.NewV4()),
+		Total:     decimal.NewFromFloat(1),
+		DepositID: stringToPointer(uuid.NewV4().String()),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	var bitflyerError = new(clients.BitflyerError)
+	bitflyerError.HTTPStatusCode = http.StatusUnauthorized
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(nil, bitflyerError)
+
+	bfClient.EXPECT().
+		RefreshToken(ctx, gomock.Any()).
+		Return(nil, nil)
+
+	withdrawToDepositIDBulkResponse := bitflyer.WithdrawToDepositIDBulkResponse{
+		DryRun: false,
+		Withdrawals: []bitflyer.WithdrawToDepositIDResponse{
+			{
+				Status: "SUCCESS",
+			},
+		},
+	}
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(&withdrawToDepositIDBulkResponse, nil)
+
+	datastore.EXPECT().
+		MarkBatchTransferSubmitted(ctx, batchID).
+		Return(nil)
+
+	s := Service{
+		bfClient:  bfClient,
+		Datastore: datastore,
+	}
+
+	err := s.SubmitBatchTransfer(ctx, batchID)
+	assert.Nil(t, err)
+}
+
+func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_NoRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, _ := logging.SetupLogger(context.Background())
+	batchID := uuidToPointer(uuid.NewV4())
+
+	quote := bitflyer.Quote{
+		Rate: decimal.New(1, 1),
+	}
+
+	bfClient := mock_bitflyer.NewMockClient(ctrl)
+	bfClient.EXPECT().
+		FetchQuote(ctx, "BAT_JPY", false).
+		Return(&quote, nil)
+
+	drainTransfers := make([]DrainTransfer, 1)
+	drainTransfers[0] = DrainTransfer{
+		ID:        uuidToPointer(uuid.NewV4()),
+		Total:     decimal.NewFromFloat(1),
+		DepositID: stringToPointer(uuid.NewV4().String()),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetDrainsByBatchID(ctx, batchID).
+		Return(drainTransfers, nil)
+
+	var bitflyerError = new(clients.BitflyerError)
+	bitflyerError.HTTPStatusCode = http.StatusUnauthorized
+
+	bfClient.EXPECT().
+		UploadBulkPayout(ctx, gomock.Any()).
+		Return(nil, bitflyerError)
+
+	refreshTokenError := errors.New("some error")
+	bfClient.EXPECT().
+		RefreshToken(ctx, gomock.Any()).
+		Return(nil, refreshTokenError)
+
+	s := Service{
+		bfClient:  bfClient,
+		Datastore: datastore,
+	}
+
+	err := s.SubmitBatchTransfer(ctx, batchID)
+
+	assert.Errorf(t, err, "failed to get token from bf: %s", refreshTokenError.Error())
 }
 
 func stringToPointer(s string) *string {
