@@ -423,7 +423,7 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 			err = fmt.Errorf("submit batch transfer error: bitflyer %s error for batchID %s",
 				withdrawal.Status, withdrawal.TransferID)
 
-			retry := false
+			retry := true
 			if withdrawal.Status == "NO_INV" {
 				retry = false
 			}
