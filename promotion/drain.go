@@ -811,11 +811,11 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 	}
 
 	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
-	if err != nil || response == nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
 
-	if response.Result == "Error" {
+	if response == nil || response.Result == "Error" {
 		return nil, fmt.Errorf("failed to get gemini txn status for %s", txRef)
 	}
 

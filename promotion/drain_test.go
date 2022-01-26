@@ -6,10 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	mock_gemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
+
+	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/ptr"
+	testutils "github.com/brave-intl/bat-go/utils/test"
 
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	mock_bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
@@ -250,104 +257,6 @@ func TestGetGeminiTxnStatus_Completed(t *testing.T) {
 	assert.Equal(t, "complete", actual.Status)
 	assert.Equal(t, "", actual.Note)
 }
-func TestGetGeminiTxnStatus_ClientError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	apiKey := testutils.RandomString()
-	clientID := testutils.RandomString()
-	transactionID := testutils.RandomString()
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
-	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
-
-	clientError := fmt.Errorf(testutils.RandomString())
-
-	geminiClient := mock_gemini.NewMockClient(ctrl)
-	geminiClient.EXPECT().
-		CheckTxStatus(ctx, apiKey, clientID, transactionID).
-		Return(nil, clientError)
-
-	service := Service{
-		geminiClient: geminiClient,
-	}
-
-	expected := fmt.Errorf("failed to check gemini txn status for %s: %w", transactionID, clientError)
-
-	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
-
-	assert.Nil(t, status)
-	assert.Equal(t, expected, actual)
-}
-
-func TestGetGeminiTxnStatus_ResponseError_Reason(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	apiKey := testutils.RandomString()
-	clientID := testutils.RandomString()
-	transactionID := testutils.RandomString()
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
-	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
-
-	response := &gemini.PayoutResult{
-		Result: "Error",
-		Reason: ptr.FromString(testutils.RandomString()),
-	}
-
-	geminiClient := mock_gemini.NewMockClient(ctrl)
-	geminiClient.EXPECT().
-		CheckTxStatus(ctx, apiKey, clientID, transactionID).
-		Return(response, nil)
-
-	service := Service{
-		geminiClient: geminiClient,
-	}
-
-	expected := fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, *response.Reason)
-
-	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
-
-	assert.Nil(t, status)
-	assert.Equal(t, expected, actual)
-}
-
-func TestGetGeminiTxnStatus_ResponseError_Nil(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	apiKey := testutils.RandomString()
-	clientID := testutils.RandomString()
-	transactionID := testutils.RandomString()
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
-	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
-
-	response := &gemini.PayoutResult{
-		Result: "Error",
-		Reason: nil,
-	}
-
-	geminiClient := mock_gemini.NewMockClient(ctrl)
-	geminiClient.EXPECT().
-		CheckTxStatus(ctx, apiKey, clientID, transactionID).
-		Return(response, nil)
-
-	service := Service{
-		geminiClient: geminiClient,
-	}
-
-	expected := fmt.Errorf("failed to get gemini txn status for %s: %s", transactionID, "response error")
-
-	status, actual := service.GetGeminiTxnStatus(ctx, transactionID)
-
-	assert.Nil(t, status)
-	assert.Equal(t, expected, actual)
-}
 
 func TestGetGeminiTxnStatus_Pending(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -449,6 +358,62 @@ func TestGetGeminiTxnStatus_Unknown(t *testing.T) {
 		txRef, ptr.String(response.Status)).Error())
 }
 
+func TestGetGeminiTxnStatus_Response_Nil(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(nil, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, txStatus)
+	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s", txRef).Error())
+}
+
+func TestGetGeminiTxnStatus_CheckStatus_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	clientError := errors.New(testutils.RandomString())
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(nil, clientError)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, txStatus)
+	assert.EqualError(t, err, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, clientError).Error())
+}
+
 func TestGetGeminiTxnStatus_ResponseError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -477,7 +442,7 @@ func TestGetGeminiTxnStatus_ResponseError(t *testing.T) {
 	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
 
 	assert.Nil(t, txStatus)
-	assert.Errorf(t, err, fmt.Errorf("failed to get gemini txn status for %s", txRef).Error())
+	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s", txRef).Error())
 }
 
 func TestSubmitBatchTransfer_UploadBulkPayout_NOINV(t *testing.T) {
@@ -485,7 +450,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_NOINV(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -498,9 +463,9 @@ func TestSubmitBatchTransfer_UploadBulkPayout_NOINV(t *testing.T) {
 
 	drainTransfers := make([]DrainTransfer, 1)
 	drainTransfers[0] = DrainTransfer{
-		ID:        uuidToPointer(uuid.NewV4()),
+		ID:        ptr.FromUUID(uuid.NewV4()),
 		Total:     decimal.NewFromFloat(1),
-		DepositID: stringToPointer(uuid.NewV4().String()),
+		DepositID: ptr.FromString(uuid.NewV4().String()),
 	}
 
 	datastore := NewMockDatastore(ctrl)
@@ -558,7 +523,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -571,9 +536,9 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Error(t *testing.T) {
 
 	drainTransfers := make([]DrainTransfer, 1)
 	drainTransfers[0] = DrainTransfer{
-		ID:        uuidToPointer(uuid.NewV4()),
+		ID:        ptr.FromUUID(uuid.NewV4()),
 		Total:     decimal.NewFromFloat(1),
-		DepositID: stringToPointer(uuid.NewV4().String()),
+		DepositID: ptr.FromString(uuid.NewV4().String()),
 	}
 
 	datastore := NewMockDatastore(ctrl)
@@ -597,7 +562,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Error(t *testing.T) {
 
 	actual := s.SubmitBatchTransfer(ctx, batchID)
 
-	assert.Errorf(t, actual, "failed to transfer funds: %s", err.Error())
+	assert.EqualError(t, actual, fmt.Sprintf("failed to transfer funds: %s", err.Error()))
 }
 
 func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *testing.T) {
@@ -605,7 +570,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *tes
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -618,9 +583,9 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *tes
 
 	drainTransfers := make([]DrainTransfer, 1)
 	drainTransfers[0] = DrainTransfer{
-		ID:        uuidToPointer(uuid.NewV4()),
+		ID:        ptr.FromUUID(uuid.NewV4()),
 		Total:     decimal.NewFromFloat(1),
-		DepositID: stringToPointer(uuid.NewV4().String()),
+		DepositID: ptr.FromString(uuid.NewV4().String()),
 	}
 
 	datastore := NewMockDatastore(ctrl)
@@ -670,7 +635,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_NoRetry(t *t
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -683,9 +648,9 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_NoRetry(t *t
 
 	drainTransfers := make([]DrainTransfer, 1)
 	drainTransfers[0] = DrainTransfer{
-		ID:        uuidToPointer(uuid.NewV4()),
+		ID:        ptr.FromUUID(uuid.NewV4()),
 		Total:     decimal.NewFromFloat(1),
-		DepositID: stringToPointer(uuid.NewV4().String()),
+		DepositID: ptr.FromString(uuid.NewV4().String()),
 	}
 
 	datastore := NewMockDatastore(ctrl)
@@ -712,7 +677,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_NoRetry(t *t
 
 	err := s.SubmitBatchTransfer(ctx, batchID)
 
-	assert.Errorf(t, err, "failed to get token from bf: %s", refreshTokenError.Error())
+	assert.EqualError(t, err, fmt.Errorf("failed to get token from bf: %w", refreshTokenError).Error())
 }
 
 func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_NoWithdrawals(t *testing.T) {
@@ -720,7 +685,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_NoWithdrawals(t *testing.
 	defer ctrl.Finish()
 
 	ctx, _ := logging.SetupLogger(context.Background())
-	batchID := uuidToPointer(uuid.NewV4())
+	batchID := ptr.FromUUID(uuid.NewV4())
 
 	quote := bitflyer.Quote{
 		Rate: decimal.New(1, 1),
@@ -733,9 +698,9 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_NoWithdrawals(t *testing.
 
 	drainTransfers := make([]DrainTransfer, 1)
 	drainTransfers[0] = DrainTransfer{
-		ID:        uuidToPointer(uuid.NewV4()),
+		ID:        ptr.FromUUID(uuid.NewV4()),
 		Total:     decimal.NewFromFloat(1),
-		DepositID: stringToPointer(uuid.NewV4().String()),
+		DepositID: ptr.FromString(uuid.NewV4().String()),
 	}
 
 	datastore := NewMockDatastore(ctrl)
@@ -771,15 +736,7 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_NoWithdrawals(t *testing.
 
 	err := s.SubmitBatchTransfer(ctx, batchID)
 
-	assert.Errorf(t, err, "submit batch transfer error: response cannot be nil for batchID %s", batchID)
-}
-
-func stringToPointer(s string) *string {
-	return &s
-}
-
-func uuidToPointer(u uuid.UUID) *uuid.UUID {
-	return &u
+	assert.EqualError(t, err, fmt.Sprintf("submit batch transfer error: response cannot be nil for batchID %s", batchID))
 }
 
 func makeMsg() AdminAttestationEvent {
