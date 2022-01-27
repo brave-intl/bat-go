@@ -273,8 +273,13 @@ func TestUnmarshalTransaction(t *testing.T) {
 	}
 
 	var settlements []Transaction
-	for _, txn := range afTransactions {
-		settlements = append(settlements, txn.ToTransaction())
+	for _, afTxn := range afTransactions {
+		txn, err := afTxn.ToTransaction()
+		if err != nil {
+
+			t.Fatal(err)
+		}
+		settlements = append(settlements, txn)
 	}
 
 	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
@@ -317,8 +322,12 @@ func TestUnmarshalCreatorsTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	txn, err := settlement.ToTransaction()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	out, err := json.MarshalIndent(settlement.ToTransaction(), "", "    ")
+	out, err := json.MarshalIndent(txn, "", "    ")
 	if err != nil {
 		t.Fatal(err)
 	}
