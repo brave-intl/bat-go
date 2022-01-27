@@ -332,10 +332,46 @@ func PrepareRequests(
 	jpyBATRate, _ := rate.Float64()
 	logger.Info().Float64("JPY/BAT", jpyBATRate).Int("batches", len(transactionBatches)).Int("ignored", len(notSubmittedTransactions)).Int("reduced", numReduced).Msg("prepared bf transactions")
 
-	return &PreparedTransactions{
-		AggregateTransactionBatches: transactionBatches,
-		NotSubmittedTransactions:    notSubmittedTransactions,
-	}, err
+	ptnx := breakOutTransactions(
+		ctx,
+		&PreparedTransactions{
+			AggregateTransactionBatches: transactionBatches,
+			NotSubmittedTransactions:    notSubmittedTransactions,
+		})
+	return ptnx, err
+}
+
+func breakOutTransactions(
+	ctx context.Context,
+	ptnx *PreparedTransactions,
+) *PreparedTransactions {
+	logger := logging.FromContext(ctx)
+	var total []settlement.AggregateTransaction
+	var chuncked [][]settlement.AggregateTransaction
+
+	for i, _ := range ptnx.AggregateTransactionBatches {
+		total = append(total, ptnx.AggregateTransactionBatches[i]...)
+	}
+
+	length := len(total)
+	logger.Info().Int("Total Length", length).Msg("Chucnking transactions")
+	chunkSize := 10
+	for i := 0; i < length/chunkSize; i += 1 {
+		start := i * chunkSize
+		if start > length {
+			break
+		}
+		end := start + chunkSize
+		if end > length {
+			end = length
+		}
+		currentChunk := total[start:end]
+		chuncked = append(chuncked, currentChunk)
+	}
+
+	logger.Info().Int("Chunks count", len(chuncked)).Msg("Chucnked transactions")
+	ptnx.AggregateTransactionBatches = chuncked
+	return ptnx
 }
 
 type PreparedTransactions struct {
