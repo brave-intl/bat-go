@@ -522,7 +522,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	// settlementTx2.BATPlatformFee = altcurrency.BAT.ToProbi(decimal.NewFromFloat(0.1))
 
 	// idempotencyFailNote := idempotencyFailComplete[0].Note
-	// suite.Require().Equal("EXECUTED: Duplicate transfer_id and different parameters. transferID: " idempotencyFailComplete[0].transfer, idempotencyFailNote)
+	// suite.Require().Equal("OTHER_ERROR: Duplicate transfer_id and different parameters. transferID: "+idempotencyFailComplete[0].BitflyerTransferID(), idempotencyFailNote)
 	// idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
 	// 	transactionSubmitted("complete", settlementTx2, idempotencyFailNote),
 	// })
