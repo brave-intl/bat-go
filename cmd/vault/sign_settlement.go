@@ -113,6 +113,10 @@ func init() {
 	signSettlementBuilder.Flag().Bool("exclude-limited", false,
 		"in order to avoid not knowing what the payout amount will be because of transfer limits").
 		Bind("exclude-limited")
+
+	signSettlementBuilder.Flag().Int("chunk-size", 10,
+		"in order to avoid not knowing what the payout amount will be because of transfer limits").
+		Bind("chunk-size")
 }
 
 // SignSettlement runs the signing of a settlement

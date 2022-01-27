@@ -12,6 +12,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -345,6 +346,8 @@ func breakOutTransactions(
 	ctx context.Context,
 	ptnx *PreparedTransactions,
 ) *PreparedTransactions {
+	vpr := viper.GetViper()
+	chunkSize := vpr.GetInt("chunk-size")
 	logger := logging.FromContext(ctx)
 	total := []settlement.AggregateTransaction{}
 	chuncked := [][]settlement.AggregateTransaction{}
@@ -355,7 +358,7 @@ func breakOutTransactions(
 
 	length := len(total)
 	logger.Info().Int("Total", length).Msg("Chunking transactions")
-	chunkSize := 10
+
 	for i := 0; i < length/chunkSize; i += 1 {
 		start := i * chunkSize
 		if start > length {
