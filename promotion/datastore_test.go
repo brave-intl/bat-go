@@ -1320,23 +1320,17 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Pending() {
 		suite.Require().False(drainJobs[i].Erred)
 	}
 
-	// after all claim drain have been processed once and still pending check we loop again earliest to latest date
-	settlementTx := settlement.Transaction{
-		SettlementID: ptr.String(drainJobs[0].TransactionID),
-		Type:         "drain",
-		Destination:  ptr.String(drainJobs[0].DepositDestination),
-		Channel:      "wallet",
-	}
-	txRef := gemini.GenerateTxRef(&settlementTx)
-
-	geminiTxnStatusWorker.EXPECT().
-		GetGeminiTxnStatus(ctx, txRef).
-		Return(txnStatus, nil).
-		Times(1)
-
+	// should return no jobs as we wait 10 mins before retrying
 	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
 	suite.Require().NoError(err, "should be no error")
-	suite.Require().True(attempted)
+	suite.Require().False(attempted)
+
+	// retrieve next job to run this should be the first inserted job in the cycle
+	var nextDrainJob DrainJob
+	err = pg.RawDB().Get(&nextDrainJob, "select * from claim_drain order by updated_at asc limit 1")
+
+	suite.Require().NoError(err)
+	suite.Require().Equal(drainJobs[0].ID, nextDrainJob.ID, "should have been first job we inserted")
 }
 
 func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {
@@ -1503,7 +1497,7 @@ func (suite *PostgresTestSuite) insertClaimDrainWithStatus(pg Datastore, status 
 	suite.Require().NoError(err, "should have serialized credentials")
 
 	query := `INSERT INTO claim_drain (credentials, wallet_id, total, transaction_id, erred, status, completed, updated_at) 
-				VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING *;`
+				VALUES ($1, $2, $3, $4, $5, $6, $7, now() - (interval '11 MINUTE')) RETURNING *;`
 
 	var drainJob DrainJob
 	err = pg.RawDB().Get(&drainJob, query, credentials, walletID, 1, transactionID, false, status, false)
