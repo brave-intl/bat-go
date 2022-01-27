@@ -366,7 +366,8 @@ func breakOutTransactions(
 			end = length
 		}
 		currentChunk := total[start:end]
-		chuncked = append(chuncked, currentChunk)
+		chuncked[i] = make([]settlement.AggregateTransaction, len(currentChunk))
+		chuncked[i] = currentChunk
 	}
 
 	logger.Info().Int("Chunks count", len(chuncked)).Msg("Chucnked transactions")
