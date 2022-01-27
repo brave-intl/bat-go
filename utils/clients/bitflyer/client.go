@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -242,9 +243,7 @@ func New() (Client, error) {
 }
 
 // SetAuthToken sets the auth token
-func (c *HTTPClient) SetAuthToken(
-	authToken string,
-) {
+func (c *HTTPClient) SetAuthToken(authToken string) {
 	c.client.AuthToken = authToken
 }
 
@@ -285,7 +284,7 @@ func (c *HTTPClient) FetchQuote(
 			})
 		}
 	}
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 // PriceTokenInfo holds info from the price token
@@ -348,76 +347,60 @@ func readQuoteFromFile() (*SavedQuote, error) {
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
-func (c *HTTPClient) UploadBulkPayout(
-	ctx context.Context,
-	payload WithdrawToDepositIDBulkPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
+func (c *HTTPClient) UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
-	var body WithdrawToDepositIDBulkResponse
-	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+
+	var withdrawToDepositIDBulkResponse WithdrawToDepositIDBulkResponse
+	resp, err := c.client.Do(ctx, req, &withdrawToDepositIDBulkResponse)
+
+	return &withdrawToDepositIDBulkResponse, handleBitflyerError(err, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
-func (c *HTTPClient) CheckPayoutStatus(
-	ctx context.Context,
-	payload CheckBulkStatusPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(
-		ctx,
-		http.MethodPost,
-		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-		payload,
-		nil,
-	)
+func (c *HTTPClient) CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error) {
+
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+
+	return &body, handleBitflyerError(err, resp)
 }
 
 // RefreshToken gets a new token from bitflyer
-func (c *HTTPClient) RefreshToken(
-	ctx context.Context,
-	payload TokenPayload,
-) (*TokenResponse, error) {
-
-	logger := logging.Logger(ctx, "RefreshToken")
+func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to refresh bitflyer token")
+			logging.FromContext(ctx).Error().
+				Str("panic", fmt.Sprintf("%+v", r)).
+				Str("stacktrace", string(debug.Stack())).
+				Msg("failed to get bitflyer refresh token")
 		}
 	}()
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-	logger.Info().
-		Str("client_id", payload.ClientID).
-		Str("client_secret", payload.ClientSecret).
-		Str("extra_client_secret", payload.ExtraClientSecret).
-		Str("grant_type", payload.GrantType).
-		Msg("payload values")
+
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	logger.Info().
-		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
+	if err != nil {
+		return &body, err
+	}
 	c.SetAuthToken(body.AccessToken)
-	return &body, handleBitflyerError(err, req, resp)
+
+	return &body, handleBitflyerError(err, resp)
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
@@ -425,12 +408,12 @@ func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
 	req.Header.Set("content-type", "application/json")
 }
 
-func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
+func handleBitflyerError(e error, resp *http.Response) error {
 	if resp == nil {
 		return e
 	}
 
-	// if this is is not an error just return err passed in
+	// if this is not a bitflyer error just return err passed in
 	if resp.StatusCode > 299 {
 		return e
 	}

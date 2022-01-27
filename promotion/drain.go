@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/ptr"
+
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -22,11 +24,15 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	txnStatusGeminiPending string = "gemini-pending"
 )
 
 var (
@@ -237,6 +243,11 @@ type BatchTransferWorker interface {
 	SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error
 }
 
+// GeminiTxnStatusWorker this worker retrieves the status for a given gemini transaction
+type GeminiTxnStatusWorker interface {
+	GetGeminiTxnStatus(ctx context.Context, transactionID string) (*walletutils.TransactionInfo, error)
+}
+
 // drainClaimErred - a codified err type for draind
 type drainClaimErred struct {
 	error
@@ -357,7 +368,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		totalF64 += t
 
 		totalJPYTransfer = totalJPYTransfer.Add(v.Total.Mul(quote.Rate))
-
 		if totalJPYTransfer.GreaterThan(JPYLimit) {
 			over := JPYLimit.Sub(totalJPYTransfer).String()
 			totalF64, _ = JPYLimit.Div(quote.Rate).Floor().Float64()
@@ -385,37 +395,57 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 	payload := bitflyer.WithdrawToDepositIDBulkPayload{
 		Withdrawals: withdraws,
 	}
-	// upload
-	_, err = service.bfClient.UploadBulkPayout(ctx, payload)
+
+	withdrawToDepositIDBulkResponse, err := service.bfClient.UploadBulkPayout(ctx, payload)
 	if err != nil {
-		// if this was a bitflyer error and the error is due to a 401 response, refresh the token
-		var bfe *clients.BitflyerError
-		if errors.As(err, &bfe) {
-			if bfe.HTTPStatusCode == http.StatusUnauthorized {
-				// try to refresh the token and go again
+		var bitflyerError *clients.BitflyerError
+
+		switch {
+		case errors.As(err, &bitflyerError):
+
+			// if this was a bitflyer 401 response refresh the token and retry upload otherwise return bitflyer error
+			if bitflyerError.HTTPStatusCode == http.StatusUnauthorized {
 				logger.Warn().Msg("attempting to refresh the bf token")
 				_, err = service.bfClient.RefreshToken(ctx, bitflyer.TokenPayloadFromCtx(ctx))
 				if err != nil {
 					return fmt.Errorf("failed to get token from bf: %w", err)
 				}
-				// redo the request after token refresh
-				_, err := service.bfClient.UploadBulkPayout(ctx, payload)
+				withdrawToDepositIDBulkResponse, err = service.bfClient.UploadBulkPayout(ctx, payload)
 				if err != nil {
 					return fmt.Errorf("failed to transfer funds: %w", err)
 				}
+			} else {
+				return bitflyerError
 			}
 
-			for _, v := range bfe.ErrorIDs {
-				// non-retry errors, report to sentry
-				if v == "NO_INV" {
-					logger.Error().Err(bfe).Msg("no bitflyer inventory")
-					sentry.CaptureException(bfe)
-				}
-			}
-			// runner has ability to read ErrorIDs from bfe and code it
-			return bfe
+		default:
+			return fmt.Errorf("failed to transfer funds: %w", err)
 		}
-		return fmt.Errorf("failed to transfer funds: %w", err)
+	}
+
+	if withdrawToDepositIDBulkResponse == nil || len(withdrawToDepositIDBulkResponse.Withdrawals) == 0 {
+		return fmt.Errorf("submit batch transfer error: response cannot be nil for batchID %s", batchID)
+	}
+
+	// check the txn for errors
+	for _, withdrawal := range withdrawToDepositIDBulkResponse.Withdrawals {
+		if withdrawal.CategorizeStatus() == "failed" {
+
+			err = fmt.Errorf("submit batch transfer error: bitflyer %s error for batchID %s",
+				withdrawal.Status, withdrawal.TransferID)
+
+			retry := true
+			if withdrawal.Status == "NO_INV" {
+				retry = false
+			}
+
+			codified := errorutils.Codified{
+				ErrCode: fmt.Sprintf("bitflyer_%s", strings.ToLower(withdrawal.Status)),
+				Retry:   retry,
+			}
+
+			return errorutils.New(err, "submit batch transfer", codified)
+		}
 	}
 
 	if err := service.Datastore.MarkBatchTransferSubmitted(ctx, batchID); err != nil {
@@ -444,14 +474,12 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to get wallet")
 		return nil, err
 	}
-
 	// no wallet on record
 	if wallet == nil {
 		logger.Error().Err(errorutils.ErrMissingWallet).
 			Msg("RedeemAndTransferFunds: missing wallet")
 		return nil, errorutils.ErrMissingWallet
 	}
-
 	// wallet not linked to deposit destination, if absent fail redeem and transfer
 	if wallet.UserDepositDestination == "" {
 		logger.Error().Err(errorutils.ErrNoDepositProviderDestination).
@@ -462,7 +490,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		logger.Error().Msg("RedeemAndTransferFunds: no deposit provider")
 		return nil, errorutils.ErrNoDepositProviderDestination
 	}
-
 	// check to see if we skip the cbr redemption case
 	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
 		// failed to redeem credentials
@@ -535,7 +562,6 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
-
 		promoTotal := map[string]decimal.Decimal{}
 		// iterate through the credentials
 		// get a total count per promotion
@@ -615,18 +641,19 @@ func redeemAndTransferGeminiFunds(
 	transferID := uuid.NewV4().String()
 
 	tx := new(walletutils.TransactionInfo)
-
 	tx.ID = transferID
 	tx.Destination = wallet.UserDepositDestination
 	tx.DestAmount = total
+	tx.Status = txnStatusGeminiPending
 
-	account := "primary" // the account we want to drain from
 	settlementTx := settlement.Transaction{
 		SettlementID: transferID,
 		Type:         txType,
 		Destination:  wallet.UserDepositDestination,
 		Channel:      channel,
 	}
+
+	account := "primary" // the account we want to drain from
 	payouts := []gemini.PayoutPayload{
 		{
 			TxRef:       gemini.GenerateTxRef(&settlementTx),
@@ -689,10 +716,11 @@ func redeemAndTransferGeminiFunds(
 		}
 	}
 
-	// check if we have a drainChannel defined on our service
+	// used for testing only
 	if service.drainChannel != nil {
 		service.drainChannel <- tx
 	}
+
 	return tx, err
 }
 
@@ -769,4 +797,38 @@ func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uui
 	}
 
 	return &walletID, nil
+}
+
+// GetGeminiTxnStatus retrieves the status for a given gemini transaction
+func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*walletutils.TransactionInfo, error) {
+	apiKey, ok := ctx.Value(appctx.GeminiAPIKeyCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	clientID, ok := ctx.Value(appctx.GeminiClientIDCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
+	}
+
+	if response == nil || strings.ToLower(response.Result) == "error" {
+		return nil, fmt.Errorf("failed to get gemini txn status for %s", txRef)
+	}
+
+	switch strings.ToLower(ptr.String(response.Status)) {
+	case "completed":
+		return &walletutils.TransactionInfo{Status: "complete"}, nil
+	case "pending":
+		return &walletutils.TransactionInfo{Status: "pending"}, nil
+	case "failed":
+		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(response.Reason)}, nil
+	}
+
+	return nil, fmt.Errorf("failed to get txn status for %s: unknown status %s",
+		txRef, ptr.String(response.Status))
 }

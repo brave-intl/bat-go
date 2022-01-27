@@ -169,3 +169,41 @@ func (mr *MockBatchTransferWorkerMockRecorder) SubmitBatchTransfer(ctx, batchID 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBatchTransfer", reflect.TypeOf((*MockBatchTransferWorker)(nil).SubmitBatchTransfer), ctx, batchID)
 }
+
+// MockGeminiTxnStatusWorker is a mock of GeminiTxnStatusWorker interface.
+type MockGeminiTxnStatusWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockGeminiTxnStatusWorkerMockRecorder
+}
+
+// MockGeminiTxnStatusWorkerMockRecorder is the mock recorder for MockGeminiTxnStatusWorker.
+type MockGeminiTxnStatusWorkerMockRecorder struct {
+	mock *MockGeminiTxnStatusWorker
+}
+
+// NewMockGeminiTxnStatusWorker creates a new mock instance.
+func NewMockGeminiTxnStatusWorker(ctrl *gomock.Controller) *MockGeminiTxnStatusWorker {
+	mock := &MockGeminiTxnStatusWorker{ctrl: ctrl}
+	mock.recorder = &MockGeminiTxnStatusWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGeminiTxnStatusWorker) EXPECT() *MockGeminiTxnStatusWorkerMockRecorder {
+	return m.recorder
+}
+
+// GetGeminiTxnStatus mocks base method.
+func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*wallet.TransactionInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGeminiTxnStatus", ctx, transactionID)
+	ret0, _ := ret[0].(*wallet.TransactionInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGeminiTxnStatus indicates an expected call of GetGeminiTxnStatus.
+func (mr *MockGeminiTxnStatusWorkerMockRecorder) GetGeminiTxnStatus(ctx, transactionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGeminiTxnStatus", reflect.TypeOf((*MockGeminiTxnStatusWorker)(nil).GetGeminiTxnStatus), ctx, transactionID)
+}

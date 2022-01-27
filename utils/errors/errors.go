@@ -99,6 +99,71 @@ func (me *MultiError) Count() int {
 	return len(me.Errs)
 }
 
+type wErrs struct {
+	err   error
+	cause error
+}
+
+func (we *wErrs) Cause(err error) {
+	we.cause = err
+}
+
+func (we *wErrs) Error() string {
+	var result string
+	if we.err != nil {
+		result = we.err.Error()
+	}
+	if we.cause != nil {
+		result += ": " + we.cause.Error()
+	}
+	return result
+}
+
+// Is - implement interface{ Is(error) bool } for equality check
+func (we *wErrs) Is(err error) bool {
+	return err == we.err
+}
+
+// As - implement interface{ As(target interface{}) bool } for equality check
+func (we *wErrs) As(target interface{}) bool {
+	return errors.As(we.err, target)
+}
+
+// Unwrap - implement unwrap interface to get the cause
+func (we *wErrs) Unwrap() error {
+	return we.cause
+}
+
+// Unwrap - implement Unwrap for unwrapping sub errors
+func (me *MultiError) Unwrap() error {
+	var errs []error
+	// iterate over all the errors and wrapped errors
+	// make a list so we can put them in wErr nodes
+	for _, v := range me.Errs {
+		vv := v
+		for {
+			errs = append(errs, vv)
+			// unwrap until cant
+			err := errors.Unwrap(vv)
+			if err == nil {
+				break
+			}
+			vv = err
+		}
+	}
+
+	var wrappedErr = new(wErrs)
+	for _, v := range errs {
+		if v != nil {
+			wrappedErr = &wErrs{err: v, cause: wrappedErr}
+		}
+	}
+	wrappedErr = &wErrs{err: errors.New("wrapped errors"), cause: wrappedErr}
+
+	return wrappedErr
+
+}
+
 // Error - implement Error interface
 func (me *MultiError) Error() string {
 	var errText string
