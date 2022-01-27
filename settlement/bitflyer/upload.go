@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -347,7 +348,7 @@ func breakOutTransactions(
 	ptnx *PreparedTransactions,
 ) *PreparedTransactions {
 	vpr := viper.GetViper()
-	chunkSize := vpr.GetInt("chunk-size")
+	chunkSize := float64(vpr.GetInt("chunk-size"))
 	logger := logging.FromContext(ctx)
 	total := []settlement.AggregateTransaction{}
 	chuncked := [][]settlement.AggregateTransaction{}
@@ -356,10 +357,10 @@ func breakOutTransactions(
 		total = append(total, batch...)
 	}
 
-	length := len(total)
-	logger.Info().Int("Total", length).Msg("Chunking transactions")
+	length := float64(len(total))
+	logger.Info().Float64("Total", length).Msg("Chunking transactions")
 
-	for i := 0; i < length/chunkSize; i += 1 {
+	for i := float64(0); i < math.Ceil(length/chunkSize); i += 1 {
 		start := i * chunkSize
 		if start > length {
 			break
@@ -369,7 +370,7 @@ func breakOutTransactions(
 			end = length
 		}
 
-		chuncked = append(chuncked, total[start:end])
+		chuncked = append(chuncked, total[int(start):int(end)])
 	}
 
 	logger.Info().Int("Chunks", len(chuncked)).Msg("Chunked transactions")
