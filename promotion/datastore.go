@@ -1179,18 +1179,24 @@ limit 1`
 				worker.PauseWorker(time.Now().Add(30 * time.Minute))
 			}
 
-			// inform sentry about this error
+			// add jobID and inform sentry about this error
+			err = fmt.Errorf("failed to redeem and create suggestion event for jobID %s: %w", job.ID, err)
 			sentry.CaptureException(err)
+
+			// update suggestion drain as erred
 
 			_, errCode, _ := errToDrainCode(err)
 
 			stmt := "update suggestion_drain set erred = true, errcode = $1 where id = $2"
-			// if there is no error we want to commit this transaction
-			// otherwise we pass the error back to the caller.
-			if _, err = tx.Exec(stmt, errCode, job.ID); err == nil {
-				err = tx.Commit()
+			if _, err := tx.Exec(stmt, errCode, job.ID); err != nil {
+				return attempted, fmt.Errorf("failed to update errored suggestion job: jobID %s: %w", job.ID, err)
 			}
-			return attempted, fmt.Errorf("failed to commit transaction: %w", err)
+
+			if err := tx.Commit(); err != nil {
+				return attempted, fmt.Errorf("failed to commit txn for suggestion job: jobID %s: %w", job.ID, err)
+			}
+
+			return attempted, err
 		}
 
 		stmt := "delete from suggestion_drain where id = $1"
