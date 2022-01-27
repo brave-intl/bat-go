@@ -83,7 +83,7 @@ func settlementTransaction(amount, address string) settlement.Transaction {
 		Type:             "contribution",
 		SettlementID:     settlementID,
 		WalletProvider:   "bitflyer",
-		WalletProviderID: uuid.NewV4().String(),
+		WalletProviderID: address,
 		TransferFee:      decimal.NewFromFloat(0),
 		ExchangeFee:      decimal.NewFromFloat(0),
 		Channel:          "brave.com",

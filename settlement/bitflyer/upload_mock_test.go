@@ -578,6 +578,16 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 	suite.Require().Equal(3, totalTxns, "three transaction should be aggregated")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
 
+	suite.client.EXPECT().
+		FetchQuote(ctx, currencyCode, true).
+		Return(&bitflyer.Quote{
+			PriceToken:   priceToken.String(),
+			ProductCode:  currencyCode,
+			MainCurrency: JPY,
+			SubCurrency:  BAT,
+			Rate:         price,
+		}, nil)
+
 	preparedTransactions, err = PrepareRequests(
 		ctx,
 		suite.client,
