@@ -119,11 +119,15 @@ func (at AntifraudTransaction) ProviderInfo() ProviderInfo {
 func (at AntifraudTransaction) ToTransaction() (Transaction, error) {
 	t := at.Transaction
 
-	if len(at.Destination) == 0 || len(at.WalletProviderInfo) == 0 {
-		return t, errors.New("Invalid address or wallet provider info")
+	if len(at.Destination) == 0 {
+		return t, errors.New("Invalid address")
 	}
 
 	if at.BAT.GreaterThan(decimal.Zero) {
+		if len(at.WalletProviderInfo) == 0 {
+			return t, errors.New("Invalid wallet provider info")
+
+		}
 		alt := altcurrency.BAT
 		providerInfo := at.ProviderInfo()
 
@@ -137,6 +141,10 @@ func (at AntifraudTransaction) ToTransaction() (Transaction, error) {
 		t.SettlementID = at.PayoutReportID
 	} else if at.Probi.GreaterThan(decimal.Zero) {
 		t.Amount = t.AltCurrency.FromProbi(at.Probi)
+	}
+
+	if len(t.WalletProviderID) == 0 {
+		return t, errors.New("Invalid wallet provider id")
 	}
 
 	if !t.Amount.GreaterThan(decimal.NewFromFloat(0)) {
