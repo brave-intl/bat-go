@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package promotion
@@ -21,7 +22,6 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 
-	"github.com/brave-intl/bat-go/utils/clients"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 
@@ -1570,7 +1570,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 			DryRun: false,
 			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
 				CurrencyCode: BAT,
-				Status:       "NOT_FOUND",
+				Status:       "SUCCESS",
 				TransferID:   "transferid",
 			}},
 		}, nil)
@@ -2226,12 +2226,20 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 			Rate:         decimal.New(1, 1),
 		}, nil)
 
+	withdrawal := bitflyer.WithdrawToDepositIDResponse{
+		Status: "NO_INV",
+	}
+
+	withdrawToDepositIDBulkResponse := bitflyer.WithdrawToDepositIDBulkResponse{
+		DryRun: false,
+		Withdrawals: []bitflyer.WithdrawToDepositIDResponse{
+			withdrawal,
+		},
+	}
+
 	bfClient.EXPECT().
-		UploadBulkPayout(
-			gomock.Any(),
-			gomock.Any(),
-		).
-		Return(nil, &clients.BitflyerError{ErrorIDs: []string{"NO_INV"}})
+		UploadBulkPayout(gomock.Any(), gomock.Any()).
+		Return(&withdrawToDepositIDBulkResponse, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err, "Failed to create wallet keypair")
@@ -2375,15 +2383,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	<-service.drainChannel
 	<-time.After(1 * time.Second)
 
-	// the runnextbatchpayments job needs to kick in before checking the drain status
+	// the run next batch payments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().IsType(&clients.BitflyerError{}, err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
 	suite.Require().Equal(*drainJob.ErrCode, "bitflyer_no_inv", "error code should be no inv")
-
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {

@@ -557,7 +557,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	claim := claims[0]
 
 	// This will error if user has already claimed due to uniqueness constraint
-	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds) values ($1, $2, $3)`, issuer.ID, claim.ID, blindedCredsJSON)
+	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds, created_at) values ($1, $2, $3, now())`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +701,7 @@ func (pg *Postgres) GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error) {
 
 // SaveClaimCreds updates the stored claim credentials
 func (pg *Postgres) SaveClaimCreds(creds *ClaimCreds) error {
-	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err := pg.RawDB().Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3, updated_at= now() where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	return err
 }
 
@@ -1084,7 +1084,7 @@ on claim_cred.issuer_id = issuers.id`
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3, updated_at = now() where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
 		return attempted, err
 	}
@@ -1799,7 +1799,7 @@ func (pg *Postgres) UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid
 		return fmt.Errorf("update drain job: failed to get affected rows for walletID %s: %w", walletID, err)
 	}
 
-	if affectedRows != 1 {
+	if affectedRows == 0 {
 		return fmt.Errorf("update drain job: failed to update row for walletID %s: %w", walletID,
 			errorutils.ErrNotFound)
 	}

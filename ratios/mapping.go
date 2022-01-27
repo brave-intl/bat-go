@@ -55,6 +55,7 @@ var (
 		"duck":  "dlp-duck-token",
 		"edg":   "edgeless",
 		"ert":   "eristica",
+		"eth":   "ethereum",
 		"flx":   "reflexer-ungovernance-token",
 		"frm":   "ferrum-network",
 		"ftm":   "fantom",

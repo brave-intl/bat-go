@@ -55,6 +55,8 @@ type ClaimCreds struct {
 	SignedCreds  *jsonutils.JSONStringArray `db:"signed_creds"`
 	BatchProof   *string                    `db:"batch_proof"`
 	PublicKey    *string                    `db:"public_key"`
+	CreatedAt    pq.NullTime                `db:"created_at"`
+	UpdatedAt    pq.NullTime                `db:"updated_at"`
 }
 
 func blindCredsEq(a, b []string) bool {
