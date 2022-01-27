@@ -1,6 +1,11 @@
 package test
 
-import "math/rand"
+// This file provides some basic helpers to generate random values for testing only
+
+import (
+	"crypto/rand"
+	"math/big"
+)
 
 // RandomString return a random alphanumeric string with length 10
 func RandomString() string {
@@ -12,7 +17,8 @@ func RandomStringWithLen(length int) string {
 	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 	s := make([]rune, length)
 	for i := range s {
-		s[i] = letters[rand.Intn(len(letters))]
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		s[i] = letters[n.Int64()]
 	}
 	return string(s)
 }
