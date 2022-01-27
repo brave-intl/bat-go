@@ -245,7 +245,9 @@ func setupSettlementTransactions(
 			}
 		}
 		settlements = append(settlements, limitedTxs...)
-		set = append(set, aggregatedTx)
+		if !aggregatedTx.Probi.Equals(decimal.Zero) {
+			set = append(set, aggregatedTx)
+		}
 		settlementRequests[index] = set
 	}
 	return settlements, settlementRequests, notSubmittedSettlements, numReduced, nil

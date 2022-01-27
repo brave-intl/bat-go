@@ -575,7 +575,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 		totalTxns += len(batches)
 	}
 
-	suite.Require().Equal(3, totalTxns, "three transaction should be aggregated")
+	suite.Require().Equal(3, totalTxns, "three agrregated transactions should be prepared")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 0, "zero transaction should be skipped")
 
 	suite.client.EXPECT().
@@ -600,7 +600,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 	for _, batches := range preparedTransactions.AggregateTransactionBatches {
 		totalTxns += len(batches)
 	}
-	suite.Require().Equal(2, totalTxns, "two transaction should be aggregated")
+	suite.Require().Equal(2, totalTxns, "two aggregated transaction should be prepared")
 	suite.Require().Len(preparedTransactions.NotSubmittedTransactions, 1, "one transaction should be skipped")
 
 }
