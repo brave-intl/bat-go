@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package bitflyersettlement
@@ -7,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -83,7 +83,7 @@ func settlementTransaction(amount, address string) settlement.Transaction {
 		Type:             "contribution",
 		SettlementID:     settlementID,
 		WalletProvider:   "bitflyer",
-		WalletProviderID: uuid.NewV4().String(),
+		WalletProviderID: address,
 		TransferFee:      decimal.NewFromFloat(0),
 		ExchangeFee:      decimal.NewFromFloat(0),
 		Channel:          "brave.com",
@@ -116,18 +116,20 @@ func transactionSubmitted(status string, tx settlement.Transaction, note string)
 func (suite *BitflyerSuite) TestFailures() {
 	ctx := context.Background()
 	settlementTx0 := settlementTransaction("1.9", uuid.NewV4().String())
-	tmpFile0 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx0,
-	})
-	defer func() { _ = os.Remove(tmpFile0.Name()) }()
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx0},
+		false,
+	)
 
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -137,7 +139,7 @@ func (suite *BitflyerSuite) TestFailures() {
 	suite.Require().Len(failedTxs, 1, "one tx failed")
 
 	failedBytes, err := json.Marshal(failedTxs)
-	settlementTx0.ProviderID = settlementTx0.TransferID()
+	settlementTx0.ProviderID = settlementTx0.BitflyerTransferID()
 	failedTxNote := failedTxs[0].Note
 	fmt.Printf("%#v\n", failedTxNote)
 	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
@@ -156,9 +158,8 @@ func (suite *BitflyerSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile0.Name()},
 		"tipping",
-		false,
+		*preparedTransactions,
 		nil, // dry run first
 	)
 	suite.client.SetAuthToken(suite.token)
@@ -190,10 +191,13 @@ func (suite *BitflyerSuite) TestFormData() {
 	}
 
 	settlementTx1 := settlementTransaction("1.9", address)
-	tmpFile1 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx1,
-	})
-	defer func() { _ = os.Remove(tmpFile1.Name()) }()
+
+	preparedTransactions, err := PrepareRequests(
+		ctx,
+		suite.client,
+		[]settlement.Transaction{settlementTx1},
+		false,
+	)
 	/*
 		resultIteration := make(map[string]int)
 
@@ -225,9 +229,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		dryRunOptions, // dry run first
 	)
 	suite.Require().NoError(err)
@@ -237,7 +240,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	completedDryRunBytes, err := json.Marshal(completedDryRunTxs)
 	suite.Require().NoError(err)
 
-	settlementTx1.ProviderID = settlementTx1.TransferID()
+	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID()
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
@@ -252,9 +255,8 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile1.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -265,8 +267,8 @@ func (suite *BitflyerSuite) TestFormData() {
 	completeSerialized, err := json.Marshal(completed)
 	suite.Require().NoError(err)
 
-	settlementTx1.ProviderID = settlementTx1.TransferID()     // add bitflyer transaction hash
-	mCompleted, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID() // add bitflyer transaction hash
+	mCompleted, err := json.Marshal([]settlement.Transaction{     // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
 	suite.Require().NoError(err)
@@ -282,9 +284,8 @@ func (suite *BitflyerSuite) TestFormData() {
 			ctx,
 			"checkstatus",
 			suite.client,
-			[]string{tmpFile1.Name()},
 			sourceFrom,
-			false,
+			*preparedTransactions,
 			nil,
 		)
 		suite.Require().NoError(err)
@@ -310,18 +311,14 @@ func (suite *BitflyerSuite) TestFormData() {
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
-	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
-	tmpFile2 := suite.writeSettlementFiles([]settlement.Transaction{
-		settlementTx2,
-	})
-	defer func() { _ = os.Remove(tmpFile2.Name()) }()
+	settlementTx2.ProviderID = settlementTx2.BitflyerTransferID() // add bitflyer transaction hash
+
 	payoutFiles, err = IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
-		[]string{tmpFile2.Name()},
 		sourceFrom,
-		false,
+		*preparedTransactions,
 		nil,
 	)
 	suite.Require().NoError(err)
@@ -348,19 +345,4 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(idempotencyFailCompleteExpected),
 		string(idempotencyFailCompleteActual),
 	)
-}
-
-func (suite *BitflyerSuite) writeSettlementFiles(txs []settlement.Transaction) (filepath *os.File) {
-	tmpDir := os.TempDir()
-	tmpFile, err := ioutil.TempFile(tmpDir, "bat-go-test-bitflyer-upload-")
-	suite.Require().NoError(err)
-
-	json, err := json.Marshal(txs)
-	suite.Require().NoError(err)
-
-	_, err = tmpFile.Write([]byte(json))
-	suite.Require().NoError(err)
-	err = tmpFile.Close()
-	suite.Require().NoError(err)
-	return tmpFile
 }

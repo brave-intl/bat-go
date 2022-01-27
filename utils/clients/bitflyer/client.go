@@ -202,7 +202,7 @@ func NewWithdrawsFromTxs(
 			CurrencyCode: "BAT",
 			Amount:       f64,
 			DepositID:    tx.Destination,
-			TransferID:   tx.TransferID(),
+			TransferID:   tx.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		})
 	}

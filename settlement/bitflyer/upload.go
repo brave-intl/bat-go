@@ -59,6 +59,7 @@ func CategorizeResponse(
 		tmp := altcurrency.BAT
 		tx.AltCurrency = &tmp
 		tx.Currency = tmp.String()
+		tx.Status = key
 		currentTx.Inputs[i] = tx
 	}
 	return currentTx.Inputs, key
@@ -96,10 +97,7 @@ func SubmitBulkPayoutTransactions(
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 	logging.SubmitProgress(ctx, blockProgress, total)
 
 	logger.Debug().
@@ -137,10 +135,7 @@ func CheckPayoutTransactionsStatus(
 	total int,
 	blockProgress int,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 
 	result, err := bitflyerClient.CheckPayoutStatus(
 		ctx,
@@ -250,7 +245,9 @@ func setupSettlementTransactions(
 			}
 		}
 		settlements = append(settlements, limitedTxs...)
-		set = append(set, aggregatedTx)
+		if !aggregatedTx.Probi.Equals(decimal.Zero) {
+			set = append(set, aggregatedTx)
+		}
 		settlementRequests[index] = set
 	}
 	return settlements, settlementRequests, notSubmittedSettlements, numReduced, nil
@@ -310,10 +307,7 @@ func PrepareRequests(
 	txs []settlement.Transaction,
 	excludeLimited bool,
 ) (*PreparedTransactions, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		return nil, err
-	}
+	logger := logging.FromContext(ctx)
 
 	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
 	if err != nil {
