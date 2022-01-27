@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/utils/ptr"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/ptr"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/settlement"
