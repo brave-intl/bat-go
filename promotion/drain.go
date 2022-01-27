@@ -815,16 +815,16 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
 
-	if response == nil || response.Result == "Error" {
+	if response == nil || strings.ToLower(response.Result) == "error" {
 		return nil, fmt.Errorf("failed to get gemini txn status for %s", txRef)
 	}
 
-	switch ptr.String(response.Status) {
-	case "Completed":
+	switch strings.ToLower(ptr.String(response.Status)) {
+	case "completed":
 		return &walletutils.TransactionInfo{Status: "complete"}, nil
-	case "Pending":
+	case "pending":
 		return &walletutils.TransactionInfo{Status: "pending"}, nil
-	case "Failed":
+	case "failed":
 		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(response.Reason)}, nil
 	}
 
