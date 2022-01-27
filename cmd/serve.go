@@ -58,7 +58,12 @@ func SetupRouter(ctx context.Context) *chi.Mux {
 		middleware.RequestIDTransfer)
 
 	if os.Getenv("ENV") == "production" {
-		r.Use(middleware.RateLimiter(ctx, 180))
+		rl, ok := ctx.Value(appctx.RateLimitPerMinuteCTXKey).(int)
+		if !ok {
+			r.Use(middleware.RateLimiter(ctx, 180))
+		} else {
+			r.Use(middleware.RateLimiter(ctx, rl))
+		}
 	}
 	if logger != nil {
 		// Also handles panic recovery

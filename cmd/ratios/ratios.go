@@ -39,6 +39,10 @@ func init() {
 	ratiosCmd.PersistentFlags().String("redis-addr", "redis://localhost:6379", "the redis address")
 	cmd.Must(viper.BindPFlag("redis-addr", ratiosCmd.PersistentFlags().Lookup("redis-addr")))
 	cmd.Must(viper.BindEnv("redis-addr", "REDIS_ADDR"))
+
+	ratiosCmd.PersistentFlags().Int("rate-limit-per-min", 50, "rate limit per minute value")
+	cmd.Must(viper.BindPFlag("rate-limit-per-min", ratiosCmd.PersistentFlags().Lookup("rate-limit-per-min")))
+	cmd.Must(viper.BindEnv("rate-limit-per-min", "RATE_LIMIT_PER_MIN"))
 }
 
 var (
