@@ -10,13 +10,13 @@ import (
 	"os/user"
 	"path"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/hashicorp/vault/api"
+	"github.com/keybase/go-crypto/openpgp"
+	"github.com/keybase/go-crypto/openpgp/packet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -166,7 +166,7 @@ func Initialize(command *cobra.Command, args []string) error {
 				}
 				switch p := p.(type) {
 				case *packet.EncryptedKey:
-					keys := entityList.KeysById(p.KeyId)
+					keys := entityList.KeysById(p.KeyId, nil)
 					if len(keys) == 1 {
 						for k := range keys[0].Entity.Identities {
 							logger.Info().Msgf("Writing share-%d.gpg for %s\n", i, k)
