@@ -121,10 +121,7 @@ func (we *wErrs) Error() string {
 
 // Is - implement interface{ Is(error) bool } for equality check
 func (we *wErrs) Is(err error) bool {
-	if err == we.err {
-		return true
-	}
-	return false
+	return err == we.err
 }
 
 // As - implement interface{ As(target interface{}) bool } for equality check
