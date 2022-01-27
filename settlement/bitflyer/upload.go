@@ -12,6 +12,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -332,10 +333,48 @@ func PrepareRequests(
 	jpyBATRate, _ := rate.Float64()
 	logger.Info().Float64("JPY/BAT", jpyBATRate).Int("batches", len(transactionBatches)).Int("ignored", len(notSubmittedTransactions)).Int("reduced", numReduced).Msg("prepared bf transactions")
 
-	return &PreparedTransactions{
-		AggregateTransactionBatches: transactionBatches,
-		NotSubmittedTransactions:    notSubmittedTransactions,
-	}, err
+	ptnx := breakOutTransactions(
+		ctx,
+		&PreparedTransactions{
+			AggregateTransactionBatches: transactionBatches,
+			NotSubmittedTransactions:    notSubmittedTransactions,
+		})
+	return ptnx, err
+}
+
+func breakOutTransactions(
+	ctx context.Context,
+	ptnx *PreparedTransactions,
+) *PreparedTransactions {
+	vpr := viper.GetViper()
+	chunkSize := vpr.GetInt("chunk-size")
+	logger := logging.FromContext(ctx)
+	total := []settlement.AggregateTransaction{}
+	chuncked := [][]settlement.AggregateTransaction{}
+
+	for _, batch := range ptnx.AggregateTransactionBatches {
+		total = append(total, batch...)
+	}
+
+	length := len(total)
+	logger.Info().Int("Total", length).Msg("Chunking transactions")
+
+	for i := 0; i < length/chunkSize; i += 1 {
+		start := i * chunkSize
+		if start > length {
+			break
+		}
+		end := start + chunkSize
+		if end > length {
+			end = length
+		}
+
+		chuncked = append(chuncked, total[start:end])
+	}
+
+	logger.Info().Int("Chunks", len(chuncked)).Msg("Chunked transactions")
+	ptnx.AggregateTransactionBatches = chuncked
+	return ptnx
 }
 
 type PreparedTransactions struct {
