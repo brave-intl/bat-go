@@ -346,15 +346,15 @@ func breakOutTransactions(
 	ptnx *PreparedTransactions,
 ) *PreparedTransactions {
 	logger := logging.FromContext(ctx)
-	var total []settlement.AggregateTransaction
-	var chuncked [][]settlement.AggregateTransaction
+	total := []settlement.AggregateTransaction{}
+	chuncked := [][]settlement.AggregateTransaction{}
 
-	for i, _ := range ptnx.AggregateTransactionBatches {
-		total = append(total, ptnx.AggregateTransactionBatches[i]...)
+	for _, batch := range ptnx.AggregateTransactionBatches {
+		total = append(total, batch...)
 	}
 
 	length := len(total)
-	logger.Info().Int("Total Length", length).Msg("Chucnking transactions")
+	logger.Info().Int("Total", length).Msg("Chunking transactions")
 	chunkSize := 10
 	for i := 0; i < length/chunkSize; i += 1 {
 		start := i * chunkSize
@@ -365,12 +365,11 @@ func breakOutTransactions(
 		if end > length {
 			end = length
 		}
-		currentChunk := total[start:end]
-		chuncked[i] = make([]settlement.AggregateTransaction, len(currentChunk))
-		chuncked[i] = currentChunk
+
+		chuncked = append(chuncked, total[start:end])
 	}
 
-	logger.Info().Int("Chunks count", len(chuncked)).Msg("Chucnked transactions")
+	logger.Info().Int("Chunks", len(chuncked)).Msg("Chunked transactions")
 	ptnx.AggregateTransactionBatches = chuncked
 	return ptnx
 }
