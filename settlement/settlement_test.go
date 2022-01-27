@@ -276,7 +276,6 @@ func TestUnmarshalTransaction(t *testing.T) {
 	for _, afTxn := range afTransactions {
 		txn, err := afTxn.ToTransaction()
 		if err != nil {
-
 			t.Fatal(err)
 		}
 		settlements = append(settlements, txn)
@@ -322,11 +321,11 @@ func TestUnmarshalCreatorsTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	txn, err := settlement.ToTransaction()
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	out, err := json.MarshalIndent(txn, "", "    ")
 	if err != nil {
 		t.Fatal(err)
