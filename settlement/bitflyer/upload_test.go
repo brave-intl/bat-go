@@ -139,7 +139,7 @@ func (suite *BitflyerSuite) TestFailures() {
 	suite.Require().Len(failedTxs, 1, "one tx failed")
 
 	failedBytes, err := json.Marshal(failedTxs)
-	settlementTx0.ProviderID = settlementTx0.TransferID()
+	settlementTx0.ProviderID = settlementTx0.BitflyerTransferID()
 	failedTxNote := failedTxs[0].Note
 	fmt.Printf("%#v\n", failedTxNote)
 	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
@@ -240,7 +240,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	completedDryRunBytes, err := json.Marshal(completedDryRunTxs)
 	suite.Require().NoError(err)
 
-	settlementTx1.ProviderID = settlementTx1.TransferID()
+	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID()
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
@@ -267,8 +267,8 @@ func (suite *BitflyerSuite) TestFormData() {
 	completeSerialized, err := json.Marshal(completed)
 	suite.Require().NoError(err)
 
-	settlementTx1.ProviderID = settlementTx1.TransferID()     // add bitflyer transaction hash
-	mCompleted, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID() // add bitflyer transaction hash
+	mCompleted, err := json.Marshal([]settlement.Transaction{     // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
 	suite.Require().NoError(err)
@@ -311,7 +311,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
-	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
+	settlementTx2.ProviderID = settlementTx2.BitflyerTransferID() // add bitflyer transaction hash
 
 	payoutFiles, err = IterateRequest(
 		ctx,

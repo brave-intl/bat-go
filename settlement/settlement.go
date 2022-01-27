@@ -89,7 +89,7 @@ func (tx Transaction) TransferID() string {
 func (tx Transaction) BitflyerTransferID() string {
 	inputs := []string{
 		tx.SettlementID,
-		tx.ProviderID,
+		tx.WalletProviderID,
 	}
 	key := strings.Join(inputs, "_")
 	bytes := sha256.Sum256([]byte(key))

@@ -74,7 +74,7 @@ func CategorizeResponses(
 	batchByTransferID := make(map[string]settlement.AggregateTransaction)
 
 	for _, tx := range batch {
-		batchByTransferID[tx.TransferID()] = tx
+		batchByTransferID[tx.BitflyerTransferID()] = tx
 	}
 
 	for _, payout := range *response {

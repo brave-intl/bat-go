@@ -59,8 +59,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	price := decimal.NewFromFloat(0.25)
 	amount := decimal.NewFromFloat(1.9)
 	amountAsFloat, _ := amount.Float64()
-	knownDepositID := uuid.NewV4()
-	settlementTx0 := settlementTransaction(amount.String(), knownDepositID.String())
+	settlementTx0 := settlementTransaction(amount.String(), uuid.NewV4().String())
 	priceToken := uuid.NewV4()
 	JPY := "JPY"
 	BAT := "BAT"
@@ -101,8 +100,8 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		&[]bitflyer.WithdrawToDepositIDPayload{{
 			CurrencyCode: BAT,
 			Amount:       amountAsFloat,
-			DepositID:    knownDepositID.String(),
-			TransferID:   settlementTx0.TransferID(),
+			DepositID:    settlementTx0.Destination,
+			TransferID:   settlementTx0.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		}},
 	)
@@ -117,7 +116,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 				CurrencyCode: currencyCode,
 				Amount:       price,
 				Status:       "NOT_FOUND",
-				TransferID:   settlementTx0.TransferID(),
+				TransferID:   settlementTx0.BitflyerTransferID(),
 			}},
 		}, nil)
 	payoutFiles, err := IterateRequest(
@@ -166,8 +165,8 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		&[]bitflyer.WithdrawToDepositIDPayload{{
 			CurrencyCode: BAT,
 			Amount:       amountAsFloat,
-			DepositID:    knownDepositID.String(),
-			TransferID:   settlementTx0.TransferID(),
+			DepositID:    settlementTx0.Destination,
+			TransferID:   settlementTx0.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		}},
 	)
@@ -265,7 +264,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			CurrencyCode: BAT,
 			Amount:       amountAsFloat,
 			DepositID:    address,
-			TransferID:   settlementTx1.TransferID(),
+			TransferID:   settlementTx1.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		}},
 	)
@@ -280,7 +279,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 				CurrencyCode: currencyCode,
 				Amount:       amount,
 				Status:       "SUCCESS",
-				TransferID:   settlementTx1.TransferID(),
+				TransferID:   settlementTx1.BitflyerTransferID(),
 			}},
 		}, nil)
 
@@ -302,7 +301,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()
 	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.TransferID()),
+		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().JSONEq(
 		string(expectedBytes),
@@ -327,7 +326,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			CurrencyCode: BAT,
 			Amount:       amountAsFloat,
 			DepositID:    address,
-			TransferID:   settlementTx1.TransferID(),
+			TransferID:   settlementTx1.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		}},
 	)
@@ -342,7 +341,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 				CurrencyCode: currencyCode,
 				Amount:       amount,
 				Status:       "SUCCESS",
-				TransferID:   settlementTx1.TransferID(),
+				TransferID:   settlementTx1.BitflyerTransferID(),
 			}},
 		}, nil)
 
@@ -364,7 +363,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()     // add bitflyer transaction hash
 	mCompleted, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
-		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.TransferID()),
+		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(
@@ -394,7 +393,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 						CurrencyCode: BAT,
 						Amount:       amountAsFloat,
 						DepositID:    address,
-						TransferID:   settlementTx1.TransferID(),
+						TransferID:   settlementTx1.BitflyerTransferID(),
 						SourceFrom:   sourceFrom,
 					}},
 				).ToBulkStatus(),
@@ -403,7 +402,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 				DryRun: true,
 				Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
 					Status:     "EXECUTED",
-					TransferID: settlementTx1.TransferID(),
+					TransferID: settlementTx1.BitflyerTransferID(),
 				}},
 			}, nil)
 
@@ -427,7 +426,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.Require().NoError(err)
 
 	mCompletedStatus, err := json.Marshal([]settlement.Transaction{
-		transactionSubmitted("complete", settlementTx1, "EXECUTED transferID: "+settlementTx1.TransferID()),
+		transactionSubmitted("complete", settlementTx1, "EXECUTED transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().NoError(err)
 	suite.Require().JSONEq(string(mCompletedStatus), string(completeSerializedStatus))
@@ -439,7 +438,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	settlementTx2.SettlementID = settlementTx1.SettlementID
 	settlementTx2.Destination = settlementTx1.Destination
 	settlementTx2.WalletProviderID = settlementTx1.WalletProviderID
-	settlementTx2.ProviderID = settlementTx2.TransferID() // add bitflyer transaction hash
+	settlementTx2.ProviderID = settlementTx2.BitflyerTransferID() // add bitflyer transaction hash
 
 	suite.client.EXPECT().
 		FetchQuote(ctx, currencyCode, true).
@@ -474,7 +473,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			CurrencyCode: BAT,
 			Amount:       threeAsFloat,
 			DepositID:    address,
-			TransferID:   settlementTx2.TransferID(),
+			TransferID:   settlementTx2.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		}},
 	)
@@ -490,7 +489,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 				Amount:       amount,
 				Message:      "Duplicate transfer_id and different parameters",
 				Status:       "OTHER_ERROR",
-				TransferID:   settlementTx2.TransferID(),
+				TransferID:   settlementTx2.BitflyerTransferID(),
 			}},
 		}, nil)
 
