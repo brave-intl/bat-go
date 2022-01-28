@@ -236,7 +236,7 @@ func setupSettlementTransactions(
 			}
 		}
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
-			aggregatedTx.Probi = aggregatedTx.Probi.Truncate(8)
+			aggregatedTx.Probi = altcurrency.BAT.ToProbi(altcurrency.BAT.FromProbi(aggregatedTx.Probi).Truncate(8))
 			settlements = append(settlements, aggregatedTx)
 		}
 	}
