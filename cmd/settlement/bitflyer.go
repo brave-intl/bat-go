@@ -103,10 +103,6 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
-	sourceFrom, err := cmd.Flags().GetString("bitflyer-source-from")
-	if err != nil {
-		return err
-	}
 	excludeLimited, err := cmd.Flags().GetBool("exclude-limited")
 	if err != nil {
 		return err
@@ -121,7 +117,6 @@ func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		input,
 		out,
 		token,
-		sourceFrom,
 		excludeLimited,
 		dryRunOptions,
 	)
@@ -164,10 +159,7 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	sourceFrom, err := cmd.Flags().GetString("bitflyer-source-from")
-	if err != nil {
-		return err
-	}
+
 	dryRunOptions, err := ParseDryRun(cmd)
 	if err != nil {
 		return err
@@ -178,7 +170,6 @@ func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
 		input,
 		out,
 		token,
-		sourceFrom,
 		excludeLimited,
 		dryRunOptions,
 	)
@@ -208,11 +199,6 @@ func init() {
 		"the location of the file").
 		Bind("out").
 		Env("OUT")
-
-	uploadCheckStatusBuilder.Flag().String("bitflyer-source-from", "tipping",
-		"tells bitflyer where to draw funds from").
-		Bind("bitflyer-source-from").
-		Env("BITFLYER_SOURCE_FROM")
 
 	uploadCheckStatusBuilder.Flag().Bool("bitflyer-dryrun", false,
 		"tells bitflyer that this is a practice round").
@@ -252,12 +238,17 @@ func init() {
 	allBuilder.Flag().Bool("exclude-limited", false,
 		"in order to avoid not knowing what the payout amount will be because of transfer limits").
 		Bind("exclude-limited")
+
+	allBuilder.Flag().String("bitflyer-source-from", "tipping",
+		"tells bitflyer where to draw funds from").
+		Bind("bitflyer-source-from").
+		Env("BITFLYER_SOURCE_FROM")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
 func BitflyerUploadSettlement(
 	ctx context.Context,
-	action, inPath, outPath, token, sourceFrom string,
+	action, inPath, outPath, token string,
 	excludeLimited bool,
 	dryRun *bitflyer.DryRunOption,
 ) error {
@@ -299,7 +290,6 @@ func BitflyerUploadSettlement(
 		ctx,
 		action,
 		bitflyerClient,
-		sourceFrom,
 		preparedTransactions,
 		dryRun,
 	)

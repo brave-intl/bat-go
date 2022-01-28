@@ -167,6 +167,7 @@ func setupSettlementTransactions(
 	transactionsByProviderID map[string][]settlement.Transaction,
 	probiLimit decimal.Decimal,
 	excludeLimited bool,
+	sourceFrom string,
 ) (
 	[]settlement.AggregateTransaction,
 	[]settlement.Transaction,
@@ -237,6 +238,7 @@ func setupSettlementTransactions(
 		}
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
 			aggregatedTx.Probi = altcurrency.BAT.ToProbi(altcurrency.BAT.FromProbi(aggregatedTx.Probi).Truncate(8))
+			aggregatedTx.SourceFrom = sourceFrom
 			settlements = append(settlements, aggregatedTx)
 		}
 	}
@@ -244,14 +246,15 @@ func setupSettlementTransactions(
 }
 
 func createBitflyerRequest(
-	sourceFrom string,
 	dryRun *bitflyer.DryRunOption,
 	token string,
 	settlementRequests []settlement.AggregateTransaction,
 ) (*bitflyer.WithdrawToDepositIDBulkPayload, error) {
 	set := []settlement.Transaction{}
+	sourceFrom := ""
 	for _, tx := range settlementRequests {
 		set = append(set, tx.Transaction)
+		sourceFrom = tx.SourceFrom
 	}
 	bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
 		sourceFrom,
@@ -274,6 +277,7 @@ func PrepareRequests(
 	bitflyerClient bitflyer.Client,
 	txs []settlement.Transaction,
 	excludeLimited bool,
+	sourceFrom string,
 ) (*PreparedTransactions, error) {
 	logger := logging.FromContext(ctx)
 
@@ -298,6 +302,7 @@ func PrepareRequests(
 		groupedByWalletProviderID,
 		probiLimit,
 		excludeLimited,
+		sourceFrom,
 	)
 	if err != nil {
 		return nil, err
@@ -361,7 +366,6 @@ func IterateRequest(
 	ctx context.Context,
 	action string,
 	bitflyerClient bitflyer.Client,
-	sourceFrom string,
 	prepared PreparedTransactions,
 	dryRun *bitflyer.DryRunOption,
 ) (map[string][]settlement.Transaction, error) {
@@ -395,7 +399,6 @@ func IterateRequest(
 		}
 
 		request, err := createBitflyerRequest(
-			sourceFrom,
 			dryRun,
 			quote.PriceToken,
 			batch,
