@@ -236,13 +236,14 @@ func setupSettlementTransactions(
 			}
 		}
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
+			aggregatedTx.Probi = aggregatedTx.Probi.Truncate(8)
 			settlements = append(settlements, aggregatedTx)
 		}
 	}
 	return settlements, notSubmittedSettlements, numReduced, nil
 }
 
-func createBitflyerRequests(
+func createBitflyerRequest(
 	sourceFrom string,
 	dryRun *bitflyer.DryRunOption,
 	token string,
@@ -393,7 +394,7 @@ func IterateRequest(
 			return nil, err
 		}
 
-		request, err := createBitflyerRequests(
+		request, err := createBitflyerRequest(
 			sourceFrom,
 			dryRun,
 			quote.PriceToken,
