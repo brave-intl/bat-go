@@ -237,6 +237,7 @@ func setupSettlementTransactions(
 			}
 		}
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
+			//Bitflyer Specific requirement to truncate into 8 places or we will get API errors
 			aggregatedTx.Probi = altcurrency.BAT.ToProbi(altcurrency.BAT.FromProbi(aggregatedTx.Probi).Truncate(8))
 			aggregatedTx.SourceFrom = sourceFrom
 			settlements = append(settlements, aggregatedTx)
@@ -393,6 +394,7 @@ func IterateRequest(
 		}
 		transactionBatches[i] = batch
 
+		//  this will only fetch a new quote when needed - but ensures that we don't have problems due to quote expiring midway through
 		quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
 		if err != nil {
 			return nil, err
