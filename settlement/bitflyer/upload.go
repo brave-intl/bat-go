@@ -169,28 +169,20 @@ func setupSettlementTransactions(
 	probiLimit decimal.Decimal,
 	excludeLimited bool,
 ) (
-	[]settlement.Transaction,
-	[][]settlement.AggregateTransaction,
+	[]settlement.AggregateTransaction,
 	[]settlement.Transaction,
 	int,
 	error,
 ) {
 	// goes to bitflyer, does not include 0 value txs
-	settlementRequests := [][]settlement.AggregateTransaction{}
-	// goes to eyeshade, includes 0 value txs
-	settlements := []settlement.Transaction{}
+	settlements := []settlement.AggregateTransaction{}
 	// a list of settlements that are not being sent
 	notSubmittedSettlements := []settlement.Transaction{}
 	// number of transactions whose amounts were reduced
 	numReduced := 0
 
 	for _, groupedWithdrawals := range transactionsByProviderID {
-		set, index := getSettlementGroup(settlementRequests, len(groupedWithdrawals))
-		if index == len(settlementRequests) {
-			settlementRequests = append(settlementRequests, set)
-		}
 		aggregatedTx := settlement.AggregateTransaction{}
-		limitedTxs := []settlement.Transaction{}
 		providerIDProbiLimit := probiLimit
 		for groupedWithdrawalIndex, limitedTx := range groupedWithdrawals {
 			if groupedWithdrawalIndex == 0 {
@@ -242,17 +234,13 @@ func setupSettlementTransactions(
 				limitedTx.Amount = partialAmount
 				limitedTx.BATPlatformFee = partialFee
 				limitedTx.Probi = partialProbi
-				settlements = append(settlements, limitedTx)
-				limitedTxs = append(limitedTxs, limitedTx)
 			}
 		}
-		settlements = append(settlements, limitedTxs...)
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
-			set = append(set, aggregatedTx)
+			settlements = append(settlements, aggregatedTx)
 		}
-		settlementRequests[index] = set
 	}
-	return settlements, settlementRequests, notSubmittedSettlements, numReduced, nil
+	return settlements, notSubmittedSettlements, numReduced, nil
 }
 
 func createBitflyerRequests(
@@ -283,25 +271,6 @@ func createBitflyerRequests(
 	return &bitflyerRequests, nil
 }
 
-func getSettlementGroup(
-	settlementRequests [][]settlement.AggregateTransaction,
-	toAdd int,
-) ([]settlement.AggregateTransaction, int) {
-	requestSeries := settlementRequests
-	if len(requestSeries) == 0 {
-		set := []settlement.AggregateTransaction{}
-		return set, 0
-	}
-	lastIndex := len(requestSeries) - 1
-	set := requestSeries[lastIndex]
-	futureLength := len(requestSeries[lastIndex]) + toAdd
-	if futureLength > 1000 {
-		set := []settlement.AggregateTransaction{}
-		return set, len(settlementRequests) - 1
-	}
-	return set, len(settlementRequests) - 1
-}
-
 // PrepareRequests prepares requests
 func PrepareRequests(
 	ctx context.Context,
@@ -311,54 +280,61 @@ func PrepareRequests(
 ) (*PreparedTransactions, error) {
 	logger := logging.FromContext(ctx)
 
-	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-	if err != nil {
-		return nil, err
-	}
+	//quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
+	//if err != nil {
+	//return nil, err
+	//}
 
-	rate := quote.Rate
+	//rate := quote.Rate
+	rate := decimal.NewFromFloat(95.145)
 
 	// group by wallet provider id
 	groupedByWalletProviderID := GroupSettlements(&txs)
+
+	logger.Info().Int("count", len(groupedByWalletProviderID)).Msg("grouped bf transactions")
+
 	// bat limit
 	probiLimit := altcurrency.BAT.ToProbi(decimal.NewFromFloat32(200000). // start with jpy
 										Div(rate).                      // convert to bat
 										Mul(decimal.NewFromFloat(0.9)). // reduce by an extra 10% if we're paranoid
 										Truncate(8))                    // truncated to satoshis
-	_, transactionBatches, notSubmittedTransactions, numReduced, err := setupSettlementTransactions(
+	transactions, notSubmittedTransactions, numReduced, err := setupSettlementTransactions(
 		groupedByWalletProviderID,
 		probiLimit,
 		excludeLimited,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	jpyBATRate, _ := rate.Float64()
+
+	transactionBatches := batchTransactions(ctx, transactions)
+
 	logger.Info().Float64("JPY/BAT", jpyBATRate).Int("batches", len(transactionBatches)).Int("ignored", len(notSubmittedTransactions)).Int("reduced", numReduced).Msg("prepared bf transactions")
 
-	ptnx := breakOutTransactions(
-		ctx,
-		&PreparedTransactions{
-			AggregateTransactionBatches: transactionBatches,
-			NotSubmittedTransactions:    notSubmittedTransactions,
-		})
-	return ptnx, err
+	return &PreparedTransactions{
+		AggregateTransactionBatches: transactionBatches,
+		NotSubmittedTransactions:    notSubmittedTransactions,
+	}, nil
 }
 
-func breakOutTransactions(
+func batchTransactions(
 	ctx context.Context,
-	ptnx *PreparedTransactions,
-) *PreparedTransactions {
+	total []settlement.AggregateTransaction,
+) [][]settlement.AggregateTransaction {
 	vpr := viper.GetViper()
 	chunkSize := float64(vpr.GetInt("chunk-size"))
 	logger := logging.FromContext(ctx)
-	total := []settlement.AggregateTransaction{}
-	chuncked := [][]settlement.AggregateTransaction{}
+	chunked := [][]settlement.AggregateTransaction{}
 
-	for _, batch := range ptnx.AggregateTransactionBatches {
-		total = append(total, batch...)
+	inner := 0
+	for _, agg := range total {
+		inner += len(agg.Inputs)
 	}
 
 	length := float64(len(total))
-	logger.Info().Float64("Total", length).Msg("Chunking transactions")
+	logger.Info().Float64("Total", length).Int("inner count", inner).Msg("Chunking transactions")
 
 	for i := float64(0); i < math.Ceil(length/chunkSize); i += 1 {
 		start := i * chunkSize
@@ -370,12 +346,11 @@ func breakOutTransactions(
 			end = length
 		}
 
-		chuncked = append(chuncked, total[int(start):int(end)])
+		chunked = append(chunked, total[int(start):int(end)])
 	}
 
-	logger.Info().Int("Chunks", len(chuncked)).Msg("Chunked transactions")
-	ptnx.AggregateTransactionBatches = chuncked
-	return ptnx
+	logger.Info().Int("Chunks", len(chunked)).Msg("Chunked transactions")
+	return chunked
 }
 
 type PreparedTransactions struct {
