@@ -2,7 +2,6 @@ package bitflyersettlement
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -247,28 +246,25 @@ func createBitflyerRequests(
 	sourceFrom string,
 	dryRun *bitflyer.DryRunOption,
 	token string,
-	settlementRequests [][]settlement.AggregateTransaction,
-) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
-	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
-	for _, withdrawalSet := range settlementRequests {
-		set := []settlement.Transaction{}
-		for _, tx := range withdrawalSet {
-			set = append(set, tx.Transaction)
-		}
-		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
-			sourceFrom,
-			set,
-		)
-		if err != nil {
-			return nil, err
-		}
-		bitflyerRequests = append(bitflyerRequests, *bitflyer.NewWithdrawToDepositIDBulkPayload(
-			dryRun,
-			token,
-			bitflyerPayloads,
-		))
+	settlementRequests []settlement.AggregateTransaction,
+) (*bitflyer.WithdrawToDepositIDBulkPayload, error) {
+	set := []settlement.Transaction{}
+	for _, tx := range settlementRequests {
+		set = append(set, tx.Transaction)
 	}
-	return &bitflyerRequests, nil
+	bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
+		sourceFrom,
+		set,
+	)
+	if err != nil {
+		return nil, err
+	}
+	bitflyerRequest := bitflyer.NewWithdrawToDepositIDBulkPayload(
+		dryRun,
+		token,
+		bitflyerPayloads,
+	)
+	return bitflyerRequest, nil
 }
 
 // PrepareRequests prepares requests
@@ -280,13 +276,12 @@ func PrepareRequests(
 ) (*PreparedTransactions, error) {
 	logger := logging.FromContext(ctx)
 
-	//quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-	//if err != nil {
-	//return nil, err
-	//}
+	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
+	if err != nil {
+		return nil, err
+	}
 
-	//rate := quote.Rate
-	rate := decimal.NewFromFloat(95.145)
+	rate := quote.Rate
 
 	// group by wallet provider id
 	groupedByWalletProviderID := GroupSettlements(&txs)
@@ -386,41 +381,36 @@ func IterateRequest(
 		)
 	}
 
-	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-	if err != nil {
-		return nil, err
-	}
 	for i, batch := range transactionBatches {
 		for j, tx := range batch {
 			tx.ProviderID = tx.BitflyerTransferID()
 			batch[j] = tx
 		}
 		transactionBatches[i] = batch
-	}
 
-	requests, err := createBitflyerRequests(
-		sourceFrom,
-		dryRun,
-		quote.PriceToken,
-		transactionBatches,
-	)
-	if err != nil {
-		return nil, err
-	}
+		quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
+		if err != nil {
+			return nil, err
+		}
 
-	if len(*requests) != len(transactionBatches) {
-		return nil, errors.New("number of requests doesn't match number of batches!")
-	}
+		request, err := createBitflyerRequests(
+			sourceFrom,
+			dryRun,
+			quote.PriceToken,
+			batch,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	for i, request := range *requests {
 		if action == "upload" {
 			submittedTransactions, err = SubmitBulkPayoutTransactions(
 				ctx,
 				transactionBatches[i],
 				submittedTransactions,
-				request,
+				*request,
 				bitflyerClient,
-				len(*requests),
+				len(batch),
 				i+1,
 			)
 			if err != nil {
@@ -432,9 +422,9 @@ func IterateRequest(
 				ctx,
 				transactionBatches[i],
 				submittedTransactions,
-				request,
+				*request,
 				bitflyerClient,
-				len(*requests),
+				len(batch),
 				i+1,
 			)
 			if err != nil {
@@ -443,5 +433,6 @@ func IterateRequest(
 			}
 		}
 	}
+
 	return submittedTransactions, nil
 }
