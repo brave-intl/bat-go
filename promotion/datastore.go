@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/settlement"
-	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	"github.com/brave-intl/bat-go/utils/ptr"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/ptr"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients"
@@ -585,6 +586,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 			promos.id,
 			promos.promotion_type,
 			promos.created_at,
+			promos.created_at + interval '3 months' as claimable_until,
 			promos.expires_at,
 			promos.version,
 			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
