@@ -140,6 +140,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"approximateValue": "` + promotion.ApproximateValue.String() + `",
 			"available": ` + strconv.FormatBool(available) + `,
 			"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
+			"claimableUntil": "` + promotion.ClaimableUntil.Format(time.RFC3339Nano) + `",
 			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
 			"id": "` + promotion.ID.String() + `",
 			"legacyClaimed": ` + strconv.FormatBool(promotion.LegacyClaimed) + `,
@@ -183,8 +184,16 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	promotionGeneric, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
+	// do a get promotion to get the promotion with the claimable until
+	promotionGeneric, err = service.Datastore.GetPromotion(promotionGeneric.ID)
+	suite.Require().NoError(err, "Failed to get the general promotion")
+
 	promotionDesktop, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
+
+	// do a get promotion to get the promotion with the claimable until
+	promotionDesktop, err = service.Datastore.GetPromotion(promotionDesktop.ID)
+	suite.Require().NoError(err, "Failed to get the desktop promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
@@ -235,6 +244,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionDesktop) + `
 		]
 	}`
+
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
 	rr = httptest.NewRecorder()
