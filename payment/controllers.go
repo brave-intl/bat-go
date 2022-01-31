@@ -505,7 +505,7 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 
 		if transaction != nil {
 			// if the transaction is already added, then do an update
-			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)
 			if err != nil {
 				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
 			}
