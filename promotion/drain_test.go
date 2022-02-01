@@ -617,10 +617,6 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *tes
 		UploadBulkPayout(ctx, gomock.Any()).
 		Return(&withdrawToDepositIDBulkResponse, nil)
 
-	datastore.EXPECT().
-		MarkBatchTransferSubmitted(ctx, batchID).
-		Return(nil)
-
 	s := Service{
 		bfClient:  bfClient,
 		Datastore: datastore,
