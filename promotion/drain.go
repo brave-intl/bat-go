@@ -448,10 +448,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 		}
 	}
 
-	if err := service.Datastore.MarkBatchTransferSubmitted(ctx, batchID); err != nil {
-		return err
-	}
-
 	if overLimitErr != nil {
 		return overLimitErr
 	}

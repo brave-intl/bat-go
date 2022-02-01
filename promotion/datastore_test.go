@@ -1080,6 +1080,137 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_SubmitBatchTransfer_
 	suite.Require().Equal(drainCodeError, actualErr)
 }
 
+// tests batches are only processed once the drain job has set all claims drains
+// to prepared and have they have transactionIDs
+func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurrent() {
+
+	suite.CleanDB()
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	walletID := uuid.NewV4()
+	batchID := uuid.NewV4()
+
+	info := &walletutils.Info{
+		ID:                         walletID.String(),
+		Provider:                   "uphold",
+		ProviderID:                 uuid.NewV4().String(),
+		PublicKey:                  "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY=",
+		UserDepositAccountProvider: ptr.FromString("bitflyer"),
+	}
+	err = walletDB.UpsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	// setup claim drains
+	for i := 0; i < 3; i++ {
+		claimDrainFixtures(pg.RawDB(), batchID, walletID, false, false)
+	}
+
+	transactionInfo := walletutils.TransactionInfo{}
+	transactionInfo.Status = "bitflyer-consolidate"
+	transactionInfo.ID = uuid.NewV4().String()
+
+	drainWorker := NewMockDrainWorker(ctrl)
+	drainWorker.EXPECT().
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&transactionInfo, nil).
+		Times(3)
+
+	batchTransferWorker := NewMockBatchTransferWorker(ctrl)
+	batchTransferWorker.EXPECT().
+		SubmitBatchTransfer(gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
+
+	// start batch payments job to pick up claim drains when all in batch are in prepared state
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
+			}
+		}
+	}(ctx)
+
+	// run next drain job to pickup job and set as prepared and set transactionID
+
+	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	var drainJobsFirst []DrainJob
+	err = pg.RawDB().Select(&drainJobsFirst, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	// check no jobs have been submitted to batch and one job are prepared
+	prepared := 0
+	for _, drain := range drainJobsFirst {
+		suite.Require().NotEqual("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should not be submitted got %s", ptr.String(drain.Status)))
+		if ptr.String(drain.Status) == "prepared" {
+			prepared += 1
+		}
+	}
+	suite.Require().Equal(1, prepared)
+
+	// run next drain job to pickup job and set as prepared and set transactionID
+
+	attempted, err = pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	var drainJobsSecond []DrainJob
+	err = pg.RawDB().Select(&drainJobsSecond, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	// check no jobs have been submitted to batch and two job are prepared
+	prepared = 0
+	for _, drain := range drainJobsSecond {
+		suite.Require().NotEqual("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should not be submitted got %s", ptr.String(drain.Status)))
+		if ptr.String(drain.Status) == "prepared" {
+			prepared += 1
+		}
+	}
+	suite.Require().Equal(2, prepared)
+
+	// run final next drain job to set claim drain as prepared and transactionID
+
+	attempted, err = pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// run batch payments should now pickup all claims in batch and process
+	var actual []DrainJob
+	err = pg.RawDB().Select(&actual, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	for _, drain := range actual {
+		suite.Require().Equal("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should be submitted got %s", ptr.String(drain.Status)))
+		suite.Require().NotNil(drain.TransactionID)
+	}
+	// shutdown bath payments job routine
+	cancel()
+}
+
 func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)

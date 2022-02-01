@@ -977,11 +977,11 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 			join wallets w on w.id=cd.wallet_id
 		where
 			cd.erred = false and
-			cd.status='prepared' and
 			w.user_deposit_account_provider = 'bitflyer'
 		group by
 			cd.batch_id
-		having bool_and(transaction_id is not null) = true
+		having bool_and(transaction_id is not null) = true 
+		   and bool_and(cd.status = 'prepared') = true
 		limit 1
 `
 	var batchID = new(uuid.UUID)
@@ -1465,7 +1465,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
-and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending'))
+and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending', 'submitted'))
 for update skip locked
 limit 1`
 
