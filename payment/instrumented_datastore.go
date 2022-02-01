@@ -511,3 +511,17 @@ func (_d DatastoreWithPrometheus) UpdateOrderMetadata(orderID uuid.UUID, key str
 	}()
 	return _d.base.UpdateOrderMetadata(orderID, key, value)
 }
+
+// UpdateTransaction implements Datastore
+func (_d DatastoreWithPrometheus) UpdateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (tp1 *Transaction, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateTransaction", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateTransaction(orderID, externalTransactionID, status, currency, kind, amount)
+}
