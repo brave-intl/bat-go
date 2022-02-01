@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
+
 	// needed for profiling
 	_ "net/http/pprof"
 	// re-using viper bind-env for wallet env variables
@@ -430,6 +432,11 @@ func GrantServer(
 			// no need to panic here, log the error and move on with serving
 			if err := gemini.WatchGeminiBalance(ctx); err != nil {
 				logger.Error().Err(err).Msg("error launching gemini balance watch")
+			}
+		}()
+		go func() {
+			if err := bitflyer.WatchBitflyerBalance(ctx, 10*time.Minute); err != nil {
+				logger.Error().Err(err).Msg("error launching bitflyer balance watch")
 			}
 		}()
 	}
