@@ -52,6 +52,20 @@ func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload Ch
 	return _d.base.CheckPayoutStatus(ctx, payload)
 }
 
+// FetchBalance implements Client
+func (_d ClientWithPrometheus) FetchBalance(ctx context.Context) (ip1 *InventoryResponse, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchBalance", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FetchBalance(ctx)
+}
+
 // FetchQuote implements Client
 func (_d ClientWithPrometheus) FetchQuote(ctx context.Context, productCode string, readFromFile bool) (qp1 *Quote, err error) {
 	_since := time.Now()

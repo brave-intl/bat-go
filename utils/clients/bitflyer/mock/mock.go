@@ -50,6 +50,21 @@ func (mr *MockClientMockRecorder) CheckPayoutStatus(ctx, payload interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckPayoutStatus", reflect.TypeOf((*MockClient)(nil).CheckPayoutStatus), ctx, payload)
 }
 
+// FetchBalance mocks base method.
+func (m *MockClient) FetchBalance(ctx context.Context) (*bitflyer.InventoryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchBalance", ctx)
+	ret0, _ := ret[0].(*bitflyer.InventoryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchBalance indicates an expected call of FetchBalance.
+func (mr *MockClientMockRecorder) FetchBalance(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchBalance", reflect.TypeOf((*MockClient)(nil).FetchBalance), ctx)
+}
+
 // FetchQuote mocks base method.
 func (m *MockClient) FetchQuote(ctx context.Context, productCode string, readFromFile bool) (*bitflyer.Quote, error) {
 	m.ctrl.T.Helper()
