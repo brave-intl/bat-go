@@ -59,13 +59,14 @@ type VsockLogServer struct {
 	port uint32
 }
 
-func NewVsockLogServer(port uint32) VsockLogServer {
-	return VsockLogServer{port}
+func NewVsockLogServer(port int) VsockLogServer {
+	return VsockLogServer{uint32(port)}
 }
 
-func (s VsockLogServer) Serve(l *net.Listener) error {
+func (s VsockLogServer) Serve(l net.Listener) error {
 	if l == nil {
-		l, err := vsock.Listen(s.port)
+		var err error
+		l, err = vsock.Listen(s.port)
 		if err != nil {
 			log.Panicln(err)
 		}
@@ -74,7 +75,7 @@ func (s VsockLogServer) Serve(l *net.Listener) error {
 	log.Printf("Listening to connections on vsock port %d\n", s.port)
 
 	for {
-		conn, err := (*l).Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			log.Panicln(err)
 		}

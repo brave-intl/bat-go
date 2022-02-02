@@ -125,6 +125,9 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// LogWriterKey - the context key for getting the zerolog writer
+	LogWriterKey CTXKey = "log_writer_key"
 )
 
 var (
