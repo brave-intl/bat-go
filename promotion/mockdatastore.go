@@ -144,6 +144,20 @@ func (mr *MockDatastoreMockRecorder) DrainClaim(drainID, claim, credentials, wal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaim", reflect.TypeOf((*MockDatastore)(nil).DrainClaim), drainID, claim, credentials, wallet, total, codedErr)
 }
 
+// DrainClaims mocks base method.
+func (m *MockDatastore) DrainClaims(drainClaims []DrainClaim) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DrainClaims", drainClaims)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DrainClaims indicates an expected call of DrainClaims.
+func (mr *MockDatastoreMockRecorder) DrainClaims(drainClaims interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaims", reflect.TypeOf((*MockDatastore)(nil).DrainClaims), drainClaims)
+}
+
 // EnqueueMintDrainJob mocks base method.
 func (m *MockDatastore) EnqueueMintDrainJob(ctx context.Context, walletID go_uuid.UUID, promotionIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()

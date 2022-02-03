@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sort"
 	"testing"
 	"time"
 
@@ -935,6 +937,84 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	suite.Require().NoError(err)
 
 	// FIXME add test for successful drain job
+}
+
+func (suite *PostgresTestSuite) TestDrainClaims_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	walletInfo := walletutils.Info{
+		ID:       uuid.NewV4().String(),
+		Provider: "uphold",
+	}
+
+	err = walletDB.UpsertWallet(context.Background(), &walletInfo)
+	suite.NoError(err)
+
+	drainClaims := make([]DrainClaim, 5)
+	for i := 0; i < 5; i++ {
+		total := decimal.NewFromFloat(rand.Float64())
+
+		promotion, err := pg.CreatePromotion("ugp", 1,
+			decimal.NewFromFloat(1), testutils.RandomString())
+		suite.Require().NoError(err)
+
+		claim, err := pg.CreateClaim(promotion.ID, walletInfo.ID, total, decimal.NewFromFloat(0), false)
+		suite.Require().NoError(err)
+
+		credentialRedemptions := []cbr.CredentialRedemption{
+			{
+				Issuer:        testutils.RandomString(),
+				TokenPreimage: testutils.RandomString(),
+				Signature:     testutils.RandomString(),
+			},
+		}
+
+		drainClaims[i] = DrainClaim{
+			BatchID:     ptr.FromUUID(uuid.NewV4()),
+			Claim:       claim,
+			Credentials: credentialRedemptions,
+			Wallet:      &walletInfo,
+			Total:       total,
+			CodedErr:    nil,
+		}
+	}
+
+	err = pg.DrainClaims(drainClaims)
+
+	// assert correct number of claims and claims drains inserted
+
+	var claims []Claim
+	err = pg.RawDB().Select(&claims, "SELECT * FROM claims")
+	suite.Require().NoError(err)
+	suite.Require().Equal(len(drainClaims), len(claims))
+
+	var claimDrains []DrainJob
+	err = pg.RawDB().Select(&claimDrains, "SELECT * FROM claim_drain")
+	suite.Require().NoError(err)
+	suite.Require().Equal(len(drainClaims), len(claimDrains))
+
+	// assert the retrieved claims and claims drains inserted are the ones added
+
+	sort.Slice(drainClaims, func(i, j int) bool {
+		return drainClaims[i].Claim.ID.String() < drainClaims[j].Claim.ID.String()
+	})
+
+	sort.Slice(claims, func(i, j int) bool {
+		return claims[i].ID.String() < claims[j].ID.String()
+	})
+
+	sort.Slice(claimDrains, func(i, j int) bool {
+		return claimDrains[i].ClaimID.String() < claimDrains[j].ClaimID.String()
+	})
+
+	for i := 0; i < 5; i++ {
+		suite.Require().Equal(drainClaims[i].Claim.ID.String(), claims[i].ID.String())
+		suite.Require().Equal(drainClaims[i].Claim.ID.String(), claimDrains[i].ClaimID.String())
+	}
 }
 
 func (suite *PostgresTestSuite) TestRunNextDrainJob_Gemini_Claim() {
