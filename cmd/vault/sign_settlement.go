@@ -381,12 +381,14 @@ func createBitflyerArtifact(
 
 	vpr := viper.GetViper()
 	exclude := vpr.GetBool("exclude-limited")
+	sourceFrom := vpr.GetString("bitflyer-source-from")
 
 	preparedTransactions, err := bitflyersettlement.PrepareRequests(
 		ctx,
 		bitflyerClient,
 		bitflyerOnlySettlements,
 		exclude,
+		sourceFrom,
 	)
 	if err != nil {
 		return err

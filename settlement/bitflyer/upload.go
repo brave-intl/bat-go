@@ -10,7 +10,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
@@ -168,6 +167,7 @@ func setupSettlementTransactions(
 	transactionsByProviderID map[string][]settlement.Transaction,
 	probiLimit decimal.Decimal,
 	excludeLimited bool,
+	sourceFrom string,
 ) (
 	[]settlement.AggregateTransaction,
 	[]settlement.Transaction,
@@ -237,38 +237,39 @@ func setupSettlementTransactions(
 			}
 		}
 		if !aggregatedTx.Probi.Equals(decimal.Zero) {
+			//Bitflyer Specific requirement to truncate into 8 places or we will get API errors
+			aggregatedTx.Probi = altcurrency.BAT.ToProbi(altcurrency.BAT.FromProbi(aggregatedTx.Probi).Truncate(8))
+			aggregatedTx.SourceFrom = sourceFrom
 			settlements = append(settlements, aggregatedTx)
 		}
 	}
 	return settlements, notSubmittedSettlements, numReduced, nil
 }
 
-func createBitflyerRequests(
-	sourceFrom string,
+func createBitflyerRequest(
 	dryRun *bitflyer.DryRunOption,
 	token string,
-	settlementRequests [][]settlement.AggregateTransaction,
-) (*[]bitflyer.WithdrawToDepositIDBulkPayload, error) {
-	bitflyerRequests := []bitflyer.WithdrawToDepositIDBulkPayload{}
-	for _, withdrawalSet := range settlementRequests {
-		set := []settlement.Transaction{}
-		for _, tx := range withdrawalSet {
-			set = append(set, tx.Transaction)
-		}
-		bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
-			sourceFrom,
-			set,
-		)
-		if err != nil {
-			return nil, err
-		}
-		bitflyerRequests = append(bitflyerRequests, *bitflyer.NewWithdrawToDepositIDBulkPayload(
-			dryRun,
-			token,
-			bitflyerPayloads,
-		))
+	settlementRequests []settlement.AggregateTransaction,
+) (*bitflyer.WithdrawToDepositIDBulkPayload, error) {
+	set := []settlement.Transaction{}
+	sourceFrom := ""
+	for _, tx := range settlementRequests {
+		set = append(set, tx.Transaction)
+		sourceFrom = tx.SourceFrom
 	}
-	return &bitflyerRequests, nil
+	bitflyerPayloads, err := bitflyer.NewWithdrawsFromTxs(
+		sourceFrom,
+		set,
+	)
+	if err != nil {
+		return nil, err
+	}
+	bitflyerRequest := bitflyer.NewWithdrawToDepositIDBulkPayload(
+		dryRun,
+		token,
+		bitflyerPayloads,
+	)
+	return bitflyerRequest, nil
 }
 
 // PrepareRequests prepares requests
@@ -277,16 +278,16 @@ func PrepareRequests(
 	bitflyerClient bitflyer.Client,
 	txs []settlement.Transaction,
 	excludeLimited bool,
+	sourceFrom string,
 ) (*PreparedTransactions, error) {
 	logger := logging.FromContext(ctx)
 
-	//quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-	//if err != nil {
-	//return nil, err
-	//}
+	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
+	if err != nil {
+		return nil, err
+	}
 
-	//rate := quote.Rate
-	rate := decimal.NewFromFloat(95.145)
+	rate := quote.Rate
 
 	// group by wallet provider id
 	groupedByWalletProviderID := GroupSettlements(&txs)
@@ -302,6 +303,7 @@ func PrepareRequests(
 		groupedByWalletProviderID,
 		probiLimit,
 		excludeLimited,
+		sourceFrom,
 	)
 	if err != nil {
 		return nil, err
@@ -365,14 +367,10 @@ func IterateRequest(
 	ctx context.Context,
 	action string,
 	bitflyerClient bitflyer.Client,
-	sourceFrom string,
 	prepared PreparedTransactions,
 	dryRun *bitflyer.DryRunOption,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 	transactionBatches := prepared.AggregateTransactionBatches
 	notSubmittedTransactions := prepared.NotSubmittedTransactions
 
@@ -386,41 +384,53 @@ func IterateRequest(
 		)
 	}
 
-	quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
-	if err != nil {
-		return nil, err
-	}
 	for i, batch := range transactionBatches {
+		var totalValue decimal.Decimal = decimal.Zero
 		for j, tx := range batch {
 			tx.ProviderID = tx.BitflyerTransferID()
 			batch[j] = tx
+			totalValue = totalValue.Add(tx.Amount)
 		}
 		transactionBatches[i] = batch
-	}
 
-	requests, err := createBitflyerRequests(
-		sourceFrom,
-		dryRun,
-		quote.PriceToken,
-		transactionBatches,
-	)
-	if err != nil {
-		return nil, err
-	}
+		//  this will only fetch a new quote when needed - but ensures that we don't have problems due to quote expiring midway through
+		quote, err := bitflyerClient.FetchQuote(ctx, "BAT_JPY", true)
+		if err != nil {
+			return nil, err
+		}
 
-	if len(*requests) != len(transactionBatches) {
-		return nil, errors.New("number of requests doesn't match number of batches!")
-	}
+		request, err := createBitflyerRequest(
+			dryRun,
+			quote.PriceToken,
+			batch,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	for i, request := range *requests {
 		if action == "upload" {
+			inv, err := bitflyerClient.CheckInventory(ctx)
+			if err != nil {
+				return nil, err
+			}
+			threshold, err := decimal.NewFromString("0.9")
+			if err != nil {
+				return nil, err
+			}
+			logger.Info().Str("Required Funds", totalValue.String()).Str("available", inv["BAT"].Available.String()).Msg("Will continue if within threshold")
+			if inv["BAT"].Available.Mul(threshold).LessThan(totalValue) {
+				err = errors.New("not enough balance in account")
+				logger.Error().Err(err).Msg("failed to submit bulk payout transactions due to insufficient available funds")
+				return nil, err
+			}
+
 			submittedTransactions, err = SubmitBulkPayoutTransactions(
 				ctx,
 				transactionBatches[i],
 				submittedTransactions,
-				request,
+				*request,
 				bitflyerClient,
-				len(*requests),
+				len(transactionBatches),
 				i+1,
 			)
 			if err != nil {
@@ -432,9 +442,9 @@ func IterateRequest(
 				ctx,
 				transactionBatches[i],
 				submittedTransactions,
-				request,
+				*request,
 				bitflyerClient,
-				len(*requests),
+				len(transactionBatches),
 				i+1,
 			)
 			if err != nil {
@@ -443,5 +453,6 @@ func IterateRequest(
 			}
 		}
 	}
+
 	return submittedTransactions, nil
 }

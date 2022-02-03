@@ -62,7 +62,8 @@ type AntifraudTransaction struct {
 // AggregateTransaction is a single transaction aggregating multiple input transactions
 type AggregateTransaction struct {
 	Transaction
-	Inputs []Transaction `json:"inputs"`
+	Inputs     []Transaction `json:"inputs"`
+	SourceFrom string        `json:"source"`
 }
 
 // ProviderInfo holds information parsed from the wallet_provider_id

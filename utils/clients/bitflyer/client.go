@@ -143,6 +143,17 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+type Inventory struct {
+	CurrencyCode string          `json:"currency_code"`
+	Amount       decimal.Decimal `json:"amount"`
+	Available    decimal.Decimal `json:"available"`
+}
+
+type InventoryResponse struct {
+	AccountHash string      `json:"account_hash"`
+	Inventory   []Inventory `json:"inventory"`
+}
+
 // DryRunOption holds options for dry running a transaction
 type DryRunOption struct {
 	RequestAPITransferStatus string `json:"request_api_transfer_status"`
@@ -217,6 +228,8 @@ type Client interface {
 	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
 	CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error)
+	// CheckInventory check available balance of bitflyer account
+	CheckInventory(ctx context.Context) (map[string]Inventory, error)
 	// RefreshToken refreshes the token belonging to the provided secret values
 	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
 	// SetAuthToken sets the auth token on underlying client object
@@ -420,6 +433,49 @@ func (c *HTTPClient) RefreshToken(
 		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
 	c.SetAuthToken(body.AccessToken)
 	return &body, handleBitflyerError(err, req, resp)
+}
+
+func (c *HTTPClient) CheckInventory(
+	ctx context.Context,
+) (map[string]Inventory, error) {
+	logger := logging.Logger(ctx, "CheckInventory")
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to check inventory")
+		}
+	}()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
+		Msg("Calling account inventory")
+
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "/api/link/v1/account/inventory", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.setupRequestHeaders(req)
+
+	var body InventoryResponse
+	resp, err := c.client.Do(ctx, req, &body)
+	err = handleBitflyerError(err, req, resp)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[string]Inventory)
+
+	for _, inv := range body.Inventory {
+		output[inv.CurrencyCode] = inv
+	}
+
+	logger.Info().
+		Str("Account Hash", body.AccountHash).
+		Str("Available JPY", output["JPY"].Available.String()).
+		Str("Available BAT", output["BAT"].Available.String()).
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
+	return output, err
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
