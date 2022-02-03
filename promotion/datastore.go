@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jmoiron/sqlx"
 	"os"
 	"strings"
 	"time"
@@ -45,6 +46,16 @@ type BATLossEvent struct {
 	ReportID int             `db:"report_id" json:"reportId"`
 	Amount   decimal.Decimal `db:"amount" json:"amount"`
 	Platform string          `db:"platform" json:"platform"`
+}
+
+// DrainClaim holds drain claim data
+type DrainClaim struct {
+	BatchID     *uuid.UUID
+	Claim       *Claim
+	Credentials []cbr.CredentialRedemption
+	Wallet      *walletutils.Info
+	Total       decimal.Decimal
+	CodedErr    errorutils.DrainCodified
 }
 
 // Datastore abstracts over the underlying datastore
@@ -99,6 +110,8 @@ type Datastore interface {
 	InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (*uuid.UUID, error)
 	// DrainClaim by marking the claim as drained and inserting a new drain entry
 	DrainClaim(drainID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error
+	// InsertBatchDrainClaim insert drain claims
+	DrainClaims(drainClaims []DrainClaim) error
 	// RunNextDrainJob to process deposits if there is one waiting
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 	// RunNextDrainRetryJob toggles failed drain jobs to be reprocessed if eligible
@@ -977,11 +990,11 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 			join wallets w on w.id=cd.wallet_id
 		where
 			cd.erred = false and
-			cd.status='prepared' and
 			w.user_deposit_account_provider = 'bitflyer'
 		group by
 			cd.batch_id
-		having bool_and(transaction_id is not null) = true
+		having bool_and(transaction_id is not null) = true 
+		   and bool_and(cd.status = 'prepared') = true
 		limit 1
 `
 	var batchID = new(uuid.UUID)
@@ -1300,17 +1313,57 @@ func (pg *Postgres) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID,
 }
 
 // DrainClaim by marking the claim as drained and inserting a new drain entry
-func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
-	credentialsJSON, err := json.Marshal(credentials)
-	if err != nil {
-		return err
-	}
-
+func (pg *Postgres) DrainClaim(batchID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption, wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
 		return err
 	}
 	defer pg.RollbackTx(tx)
+
+	err = pg.txDrainClaim(tx, batchID, claim, credentials, wallet, total, codedErr)
+	if err != nil {
+		return fmt.Errorf("drain claim: error for claimID %s: %w", claim.ID, err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// DrainClaims marks all drain claim as drained and inserts a new drain entry
+func (pg *Postgres) DrainClaims(drainClaims []DrainClaim) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("insert batch drain claim: error could not begin tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	for _, d := range drainClaims {
+		err = pg.txDrainClaim(tx, d.BatchID, d.Claim, d.Credentials, d.Wallet, d.Total, d.CodedErr)
+		if err != nil {
+			return fmt.Errorf("insert batch drain claim: error could not insert drain claim for claimID %s: %w",
+				d.Claim.ID, err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("insert batch drain claim: error could not commit drain claims: %w", err)
+	}
+
+	return nil
+}
+
+func (pg *Postgres) txDrainClaim(tx *sqlx.Tx, batchID *uuid.UUID, claim *Claim, credentials []cbr.CredentialRedemption,
+	wallet *walletutils.Info, total decimal.Decimal, codedErr errorutils.DrainCodified) error {
+
+	credentialsJSON, err := json.Marshal(credentials)
+	if err != nil {
+		return err
+	}
 
 	var claimID *uuid.UUID
 	// if the claim is not nil, we should set it to drained, as we are in drained state
@@ -1332,7 +1385,7 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 		insert into claim_drain (credentials, wallet_id, total, batch_id, claim_id, deposit_destination, updated_at)
 		values ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
 		returning *`
-		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, drainPollID, claim.ID, &wallet.UserDepositDestination)
+		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total, batchID, claim.ID, &wallet.UserDepositDestination)
 		if err != nil {
 			return err
 		}
@@ -1345,15 +1398,10 @@ func (pg *Postgres) DrainClaim(drainPollID *uuid.UUID, claim *Claim, credentials
 		values ($1, $2, $3, $4, $5, $6, true, $7, CURRENT_TIMESTAMP)
 		returning *`
 		err = tx.Get(&claimDrain, statement, credentialsJSON, wallet.ID, total,
-			drainPollID, claimID, &wallet.UserDepositDestination, code)
+			batchID, claimID, &wallet.UserDepositDestination, code)
 		if err != nil {
 			return fmt.Errorf("failed to insert erred drain job: %w", err)
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -1465,7 +1513,7 @@ func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bo
 select *
 from claim_drain
 where not erred and transaction_id is null
-and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending'))
+and (status is null or status not in ('complete', 'reputation-failed', 'failed', 'prepared', 'gemini-pending', 'submitted'))
 for update skip locked
 limit 1`
 

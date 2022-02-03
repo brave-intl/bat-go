@@ -144,6 +144,20 @@ func (_d DatastoreWithPrometheus) DrainClaim(drainID *uuid.UUID, claim *Claim, c
 	return _d.base.DrainClaim(drainID, claim, credentials, wallet, total, codedErr)
 }
 
+// DrainClaims implements Datastore
+func (_d DatastoreWithPrometheus) DrainClaims(drainClaims []DrainClaim) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "DrainClaims", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.DrainClaims(drainClaims)
+}
+
 // EnqueueMintDrainJob implements Datastore
 func (_d DatastoreWithPrometheus) EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) (err error) {
 	_since := time.Now()

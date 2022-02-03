@@ -121,74 +121,107 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 		}
 	}
 
+	drainClaims := make([]DrainClaim, 0)
 	for k, v := range fundingSources {
-		var (
-			promotion = promotions[k]
-		)
+		var promotion = promotions[k]
 
 		// if the type is not ads
 		// except in the case the promotion is for ios and deposit provider is a brave wallet
-		if v.Type != "ads" &&
-			depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
+		if v.Type != "ads" && depositProvider != "brave" && strings.ToLower(promotion.Platform) != "ios" {
 			sublogger.Error().Msg("invalid promotion platform, must be ads")
-			return nil, errors.New("only ads suggestions can be drained")
+			continue
 		}
 
 		claim, err := service.Datastore.GetClaimByWalletAndPromotion(wallet, promotion)
 		if err != nil || claim == nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("claim does not exist for wallet")
 			// the case where there this wallet never got this promotion
-			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errMismatchedWallet)
+			drainClaims = append(drainClaims, DrainClaim{
+				BatchID:     &batchID,
+				Claim:       claim,
+				Credentials: v.Credentials,
+				Wallet:      wallet,
+				Total:       v.Amount,
+				CodedErr:    errMismatchedWallet,
+			})
+			continue
 		}
 
 		suggestionsExpected, err := claim.SuggestionsNeeded(promotion)
 		if err != nil {
 			sublogger.Error().Err(err).Str("promotion_id", promotion.ID.String()).Msg("invalid number of suggestions")
 			// the case where there is an invalid number of suggestions
-			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionCount)
+			drainClaims = append(drainClaims, DrainClaim{
+				BatchID:     &batchID,
+				Claim:       claim,
+				Credentials: v.Credentials,
+				Wallet:      wallet,
+				Total:       v.Amount,
+				CodedErr:    errInvalidSuggestionCount,
+			})
+			continue
 		}
 
 		amountExpected := decimal.New(int64(suggestionsExpected), 0).Mul(promotion.CredentialValue())
 		if v.Amount.GreaterThan(amountExpected) {
 			sublogger.Error().Str("promotion_id", promotion.ID.String()).Msg("attempting to claim more funds than earned")
 			// the case where there the amount is higher than expected
-			return &batchID, service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, errInvalidSuggestionAmount)
+			drainClaims = append(drainClaims, DrainClaim{
+				BatchID:     &batchID,
+				Claim:       claim,
+				Credentials: v.Credentials,
+				Wallet:      wallet,
+				Total:       v.Amount,
+				CodedErr:    errInvalidSuggestionAmount,
+			})
+			continue
 		}
 
-		// Skip already drained promotions for idempotency
+		// skip already drained promotions for idempotency
 		if !claim.Drained {
-			// Mark corresponding claim as drained
-			err := service.Datastore.DrainClaim(&batchID, claim, v.Credentials, wallet, v.Amount, nil)
-			if err != nil {
-				sublogger.Error().Msg("failed to drain the claim")
-				return nil, fmt.Errorf("error draining claim: %w", err)
-			}
-
-			// the original request context will be cancelled as soon as the dialer closes the connection.
-			// this will setup a new context with the same values and a 90 second timeout
-			asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
-			scopedCtx := appctx.Wrap(ctx, asyncCtx)
-
-			go func() {
-				defer asyncCancel()
-				defer middleware.ConcurrentGoRoutines.With(
-					prometheus.Labels{
-
-						"method": "NextDrainJob",
-					}).Dec()
-
-				middleware.ConcurrentGoRoutines.With(
-					prometheus.Labels{
-						"method": "NextDrainJob",
-					}).Inc()
-
-				_, err := service.RunNextDrainJob(scopedCtx)
-				if err != nil {
-					sentry.CaptureException(err)
-				}
-			}()
+			drainClaims = append(drainClaims, DrainClaim{
+				BatchID:     &batchID,
+				Claim:       claim,
+				Credentials: v.Credentials,
+				Wallet:      wallet,
+				Total:       v.Amount,
+				CodedErr:    nil,
+			})
 		}
 	}
+
+	if len(drainClaims) > 0 {
+		err = service.Datastore.DrainClaims(drainClaims)
+		if err != nil {
+			return nil, fmt.Errorf("faied to insert drain claims for walletID %s: %w", walletID, err)
+		}
+	}
+
+	for i := 0; i < len(drainClaims); i++ {
+		// the original request context will be cancelled as soon as the dialer closes the connection.
+		// this will setup a new context with the same values and a 90 second timeout
+		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
+		scopedCtx := appctx.Wrap(ctx, asyncCtx)
+
+		go func() {
+			defer asyncCancel()
+			defer middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextDrainJob",
+				}).Dec()
+
+			middleware.ConcurrentGoRoutines.With(
+				prometheus.Labels{
+					"method": "NextDrainJob",
+				}).Inc()
+
+			_, err := service.RunNextDrainJob(scopedCtx)
+			if err != nil {
+				sentry.CaptureException(err)
+			}
+		}()
+	}
+
 	if depositProvider == "brave" && wallet.UserDepositDestination != "" {
 		asyncCtx, asyncCancel := context.WithTimeout(context.Background(), 90*time.Second)
 		scopedCtx := appctx.Wrap(ctx, asyncCtx)
@@ -211,6 +244,7 @@ func (service *Service) Drain(ctx context.Context, credentials []CredentialBindi
 			}
 		}()
 	}
+
 	return &batchID, nil
 }
 
@@ -446,10 +480,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 
 			return errorutils.New(err, "submit batch transfer", codified)
 		}
-	}
-
-	if err := service.Datastore.MarkBatchTransferSubmitted(ctx, batchID); err != nil {
-		return err
 	}
 
 	if overLimitErr != nil {
