@@ -80,6 +80,20 @@ func (_d ClientWithPrometheus) RefreshToken(ctx context.Context, payload TokenPa
 	return _d.base.RefreshToken(ctx, payload)
 }
 
+// CheckInventory implements Client
+func (_d ClientWithPrometheus) CheckInventory(ctx context.Context) (inv map[string]Inventory, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckInventory", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CheckInventory(ctx)
+}
+
 // SetAuthToken implements Client
 func (_d ClientWithPrometheus) SetAuthToken(authToken string) {
 	_since := time.Now()

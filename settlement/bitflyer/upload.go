@@ -2,6 +2,7 @@ package bitflyersettlement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
@@ -370,10 +370,7 @@ func IterateRequest(
 	prepared PreparedTransactions,
 	dryRun *bitflyer.DryRunOption,
 ) (map[string][]settlement.Transaction, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.FromContext(ctx)
 	transactionBatches := prepared.AggregateTransactionBatches
 	notSubmittedTransactions := prepared.NotSubmittedTransactions
 
@@ -388,9 +385,11 @@ func IterateRequest(
 	}
 
 	for i, batch := range transactionBatches {
+		var totalValue decimal.Decimal = decimal.Zero
 		for j, tx := range batch {
 			tx.ProviderID = tx.BitflyerTransferID()
 			batch[j] = tx
+			totalValue = totalValue.Add(tx.Amount)
 		}
 		transactionBatches[i] = batch
 
@@ -410,13 +409,28 @@ func IterateRequest(
 		}
 
 		if action == "upload" {
+			inv, err := bitflyerClient.CheckInventory(ctx)
+			if err != nil {
+				return nil, err
+			}
+			threshold, err := decimal.NewFromString("0.9")
+			if err != nil {
+				return nil, err
+			}
+			logger.Info().Str("Required Funds", totalValue.String()).Str("available", inv["BAT"].Available.String()).Msg("Will continue if within threshold")
+			if inv["BAT"].Available.Mul(threshold).LessThan(totalValue) {
+				err = errors.New("not enough balance in account")
+				logger.Error().Err(err).Msg("failed to submit bulk payout transactions due to insufficient available funds")
+				return nil, err
+			}
+
 			submittedTransactions, err = SubmitBulkPayoutTransactions(
 				ctx,
 				transactionBatches[i],
 				submittedTransactions,
 				*request,
 				bitflyerClient,
-				len(batch),
+				len(transactionBatches),
 				i+1,
 			)
 			if err != nil {
@@ -430,7 +444,7 @@ func IterateRequest(
 				submittedTransactions,
 				*request,
 				bitflyerClient,
-				len(batch),
+				len(transactionBatches),
 				i+1,
 			)
 			if err != nil {
