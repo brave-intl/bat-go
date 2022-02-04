@@ -47,6 +47,10 @@ var (
 	)
 )
 
+func init() {
+	prometheus.MustRegister(countClaimDrainStatus)
+}
+
 // ClobberedCreds holds data of claims that have been clobbered and when they were first reported
 type ClobberedCreds struct {
 	ID        uuid.UUID `db:"id"`
