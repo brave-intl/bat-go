@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -77,6 +78,33 @@ func TestSign(t *testing.T) {
 	}
 
 	if s.Sig != "RbGSX1MttcKCpCkq9nsPGkdJGUZsAU+0TpiXJYkwde+0ZwxEp9dXO3v17DwyGLXjv385253RdGI7URbrI7J6DQ==" {
+		t.Error("Incorrect signature genearted for ED25519")
+	}
+
+	// ED25519 Test
+	privHexECDSA := "fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19"
+	var s2 signature
+	s2.Algorithm = ED25519
+	s2.KeyID = "primary"
+	s2.Headers = []string{"foo"}
+
+	r2, httperr := http.NewRequest("GET", "http://example.org/foo", nil)
+	if httperr != nil {
+		t.Error(httperr)
+	}
+	r2.Header.Set("Foo", "bar")
+
+	err = s2.Sign(ECDSAKey(privHexECDSA), crypto.Hash(0), r2)
+	if err != nil {
+		t.Error("Unexpected error while building ED25519 signing string:", err)
+	}
+
+	err = s2.UnmarshalText([]byte(r2.Header.Get("Signature")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if s2.Sig != "md6tOJfP6O3GkKNzLopKv1CkaFPaqDfUjYXgT+E6twkbYJKfiwxtmSZ9EqJKEIA4tovYdwKMRiixzzJV8DM9QAA=" {
 		t.Error("Incorrect signature genearted for ED25519")
 	}
 }
@@ -224,6 +252,23 @@ func TestVerify(t *testing.T) {
 	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",headers="digest",signature="`+sig+`"`)
 
 	valid, err = s2.Verify(hmacVerifier, nil, req)
+	if err != nil {
+		t.Error("Unexpected error while building signing string")
+	}
+	if valid {
+		t.Error("The signature should be invalid")
+	}
+
+	var ecdsaVerifier ECDSAKey = "fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19"
+	var s3 signature
+	s3.Algorithm = HS2019
+	s3.KeyID = "secondary"
+	s3.Headers = []string{"foo"}
+	notHexSig := "md6tOJfP6O3GkKNzLopKv1CkaFPaqDfUjYXgT+E6twkbYJKfiwxtmSZ9EqJKEIA4tovYdwKMRiixzzJV8DM9QAA="
+	sig = hexutil.Encode([]byte(notHexSig))
+	req.Header.Set("Signature", `keyId="secondary",algorithm="hs2019",signature="`+sig+`"`)
+
+	valid, err = s3.Verify(ecdsaVerifier, nil, req)
 	if err != nil {
 		t.Error("Unexpected error while building signing string")
 	}

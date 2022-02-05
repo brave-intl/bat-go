@@ -826,6 +826,7 @@ func PostReportBAPEvent(service *Service) handlers.AppHandler {
 type CustodianDrainInfoResponse struct {
 	responses.Meta
 	Drains []CustodianDrain `json:"drains,omitempty"`
+	Status string           `json:"status"`
 }
 
 // GetCustodianDrainInfo is the handler which provides information about a particular paymentId's drains
