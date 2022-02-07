@@ -491,7 +491,6 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error) {
-
 	// setup a logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -504,6 +503,19 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to get wallet")
 		return nil, err
 	}
+
+	defer func() {
+		if err != nil {
+			custodian := "unknown"
+			if wallet != nil && wallet.UserDepositDestination != "" {
+				custodian = wallet.UserDepositDestination
+			}
+			countClaimDrainStatus.
+				With(prometheus.Labels{"custodian": custodian,
+					"status": "failed"}).Inc()
+		}
+	}()
+
 	// no wallet on record
 	if wallet == nil {
 		logger.Error().Err(errorutils.ErrMissingWallet).

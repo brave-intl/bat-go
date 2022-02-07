@@ -475,20 +475,6 @@ func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionTex
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSuggestion", reflect.TypeOf((*MockDatastore)(nil).InsertSuggestion), credentials, suggestionText, suggestion)
 }
 
-// MarkBatchTransferSubmitted mocks base method.
-func (m *MockDatastore) MarkBatchTransferSubmitted(ctx context.Context, batchID *go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkBatchTransferSubmitted", ctx, batchID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkBatchTransferSubmitted indicates an expected call of MarkBatchTransferSubmitted.
-func (mr *MockDatastoreMockRecorder) MarkBatchTransferSubmitted(ctx, batchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBatchTransferSubmitted", reflect.TypeOf((*MockDatastore)(nil).MarkBatchTransferSubmitted), ctx, batchID)
-}
-
 // Migrate mocks base method.
 func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()

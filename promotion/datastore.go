@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jmoiron/sqlx"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -31,6 +33,23 @@ import (
 )
 
 var desktopPlatforms = [...]string{"linux", "osx", "windows"}
+
+var (
+	// metric for claim drains status
+	// custodians are gemini, bitflyer, uphold and unknown
+	// status are complete and failed
+	countClaimDrainStatus = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_claim_drain_status",
+			Help: "provides a count of the complete and failed claim drains partitioned by custodian and status",
+		},
+		[]string{"custodian", "status"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(countClaimDrainStatus)
+}
 
 // ClobberedCreds holds data of claims that have been clobbered and when they were first reported
 type ClobberedCreds struct {
@@ -141,9 +160,6 @@ type Datastore interface {
 	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
-
-	// MarkBatchTransferSubmitted mark this batch of transfers submitted
-	MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) error
 	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
 	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
 	// UpdateDrainJobErred - manually update drain job for retry
@@ -174,7 +190,6 @@ type ReadOnlyDatastore interface {
 	// GetClaimByWalletAndPromotion gets whether a wallet has a claimed grants
 	// with the given promotion and returns the grant if so
 	GetClaimByWalletAndPromotion(wallet *walletutils.Info, promotionID *Promotion) (*Claim, error)
-
 	// GetDrainPoll gets the information about a drain poll job
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
@@ -963,7 +978,6 @@ ORDER BY created_at DESC
 
 // RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error) {
-
 	// setup a logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -1019,12 +1033,11 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	// perform submit against payments API
 	err = worker.SubmitBatchTransfer(ctx, batchID)
 	if err != nil {
-		// log the error from redeem and transfer
-		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
 
+		logger.Error().Err(err).Msg("run next batch payments: failed to submit batch transfers")
 		status, errCode, _ := errToDrainCode(err)
-		// inform sentry about this error
 		sentry.CaptureException(fmt.Errorf("errCode: %s - %w", errCode, err))
+		countClaimDrainStatus.With(prometheus.Labels{"custodian": "bitflyer", "status": "failed"}).Inc()
 
 		stmt := "update claim_drain set erred = true, errcode = $1, status = $2 where batch_id = $3"
 		if _, err := tx.Exec(stmt, errCode, status, batchID); err != nil {
@@ -1050,6 +1063,8 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	if err != nil {
 		return attempted, err
 	}
+
+	countClaimDrainStatus.With(prometheus.Labels{"custodian": "bitflyer", "status": "complete"}).Inc()
 
 	return attempted, nil
 }
@@ -1103,7 +1118,8 @@ on claim_cred.issuer_id = issuers.id`
 		return attempted, err
 	}
 
-	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3, updated_at = now() where claim_id = $4`, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	_, err = tx.Exec(`update claim_creds set signed_creds = $1, batch_proof = $2, public_key = $3, updated_at = now() where claim_id = $4`,
+		creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
 	if err != nil {
 		return attempted, err
 	}
@@ -1553,11 +1569,10 @@ limit 1`
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
-		status, errCode, _ := errToDrainCode(err)
-
-		// inform sentry about this error
 		sentry.CaptureException(err)
+
 		// record as error (retriable or not)
+		status, errCode, _ := errToDrainCode(err)
 		if _, err := tx.Exec(`
 				update claim_drain set
 					erred = true,
@@ -1580,6 +1595,7 @@ limit 1`
 			return attempted, err
 		}
 	} else {
+		countClaimDrainStatus.With(prometheus.Labels{"custodian": "uphold", "status": "complete"}).Inc()
 		_, err = tx.Exec(`
 			update claim_drain set
 				transaction_id = $1,
@@ -1935,6 +1951,10 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 	err = tx.Commit()
 	if err != nil {
 		return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
+	}
+
+	if txStatus.Status == "complete" || txStatus.Status == "failed" {
+		countClaimDrainStatus.With(prometheus.Labels{"custodian": "gemini", "status": txStatus.Status}).Inc()
 	}
 
 	return true, nil
