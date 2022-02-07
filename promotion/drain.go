@@ -507,8 +507,8 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	defer func() {
 		if err != nil {
 			custodian := "unknown"
-			if wallet != nil && wallet.UserDepositDestination != "" {
-				custodian = wallet.UserDepositDestination
+			if wallet != nil && ptr.String(wallet.UserDepositAccountProvider) != "" {
+				custodian = *wallet.UserDepositAccountProvider
 			}
 			countClaimDrainStatus.
 				With(prometheus.Labels{"custodian": custodian,
