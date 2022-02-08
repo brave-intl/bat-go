@@ -314,7 +314,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 			rb := string(b)
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-			return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
+			return resp, NewHTTPError(err, req.URL.String(), fmt.Sprintf("response: %s", rb), code, struct {
 				Body            interface{}
 				ResponseHeaders interface{}
 			}{
