@@ -1924,6 +1924,18 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 
 	txStatus, err := worker.GetGeminiTxnStatus(ctx, txRef)
 	if err != nil || txStatus == nil {
+
+		// update the erred claim drain so it goes to back of queue
+		query := `update claim_drain set status = $1, updated_at = now() where id = $2`
+		if _, err := tx.ExecContext(ctx, query, txnStatusGeminiPending, drainJob.ID); err != nil {
+			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
+		}
+
 		return true, fmt.Errorf("failed to get status for txn %s: %w", *drainJob.TransactionID, err)
 	}
 
