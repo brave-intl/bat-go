@@ -35,6 +35,8 @@ const localEnv = "local"
 var (
 	// toggle for drain retry job
 	enableDrainRetryJob = isDrainRetryJobEnabled()
+	// toggle for gemini check status
+	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
 
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
@@ -88,6 +90,19 @@ func isDrainRetryJobEnabled() bool {
 	return toggle
 }
 
+// remove once gemini enabled
+func isRunNextGeminiCheckStatus() bool {
+	var toggle = false
+	if os.Getenv("GEMINI_CHECK_STATUS_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_CHECK_STATUS_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 // SetSuggestionTopic allows for a new topic to be suggested
 func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
@@ -125,18 +140,18 @@ type Service struct {
 }
 
 // Jobs - Implement srv.JobService interface
-func (s *Service) Jobs() []srv.Job {
-	return s.jobs
+func (service *Service) Jobs() []srv.Job {
+	return service.jobs
 }
 
 // InitKafka by creating a kafka writer and creating local copies of codecs
-func (s *Service) InitKafka(ctx context.Context) error {
+func (service *Service) InitKafka(ctx context.Context) error {
 
 	// TODO: eventually as cobra/viper
 	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
 
 	var err error
-	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, suggestionTopic)
+	service.kafkaWriter, service.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, suggestionTopic)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
@@ -148,13 +163,13 @@ func (s *Service) InitKafka(ctx context.Context) error {
 			return errors.New("failed not initialize kafka could not find consumer group")
 		}
 
-		s.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
+		service.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
 		}
 	}
 
-	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
 		"suggestion":          suggestionEventSchema,
 		adminAttestationTopic: adminAttestationEventSchema,
 	})
@@ -166,7 +181,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 }
 
 // InitHotWallet by reading the keypair and card id from the environment
-func (s *Service) InitHotWallet(ctx context.Context) error {
+func (service *Service) InitHotWallet(ctx context.Context) error {
 	grantWalletPublicKeyHex := os.Getenv("GRANT_WALLET_PUBLIC_KEY")
 	grantWalletPrivateKeyHex := os.Getenv("GRANT_WALLET_PRIVATE_KEY")
 	grantWalletCardID := os.Getenv("GRANT_WALLET_CARD_ID")
@@ -193,7 +208,7 @@ func (s *Service) InitHotWallet(ctx context.Context) error {
 			return errorutils.Wrap(err, "grantWalletPrivateKeyHex is invalid")
 		}
 
-		s.hotWallet, err = uphold.New(ctx, info, privKey, pubKey)
+		service.hotWallet, err = uphold.New(ctx, info, privKey, pubKey)
 		if err != nil {
 			return err
 		}
@@ -335,6 +350,16 @@ func InitService(
 			})
 	}
 
+	// toggle for gemini check status
+	if enableGeminiCheckStatus {
+		service.jobs = append(service.jobs,
+			srv.Job{
+				Func:    service.RunNextGeminiCheckStatus,
+				Cadence: time.Second,
+				Workers: 1,
+			})
+	}
+
 	var enableLinkingDraining bool
 	// make sure that we only enable the DrainJob if we have linking/draining enabled
 	if os.Getenv("ENABLE_LINKING_DRAINING") != "" {
@@ -367,45 +392,45 @@ func InitService(
 }
 
 // ReadableDatastore returns a read only datastore if available, otherwise a normal datastore
-func (s *Service) ReadableDatastore() ReadOnlyDatastore {
-	if s.RoDatastore != nil {
-		return s.RoDatastore
+func (service *Service) ReadableDatastore() ReadOnlyDatastore {
+	if service.RoDatastore != nil {
+		return service.RoDatastore
 	}
-	return s.Datastore
+	return service.Datastore
 }
 
 // RunNextMintDrainJob takes the next mint job and completes it
-func (s *Service) RunNextMintDrainJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextMintDrainJob(ctx, s)
+func (service *Service) RunNextMintDrainJob(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextMintDrainJob(ctx, service)
 }
 
 // RunNextBatchPaymentsJob takes the next claim job and completes it
-func (s *Service) RunNextBatchPaymentsJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextBatchPaymentsJob(ctx, s)
+func (service *Service) RunNextBatchPaymentsJob(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextBatchPaymentsJob(ctx, service)
 }
 
 // RunNextClaimJob takes the next claim job and completes it
-func (s *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextClaimJob(ctx, s)
+func (service *Service) RunNextClaimJob(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextClaimJob(ctx, service)
 }
 
 // RunNextSuggestionJob takes the next suggestion job and completes it
-func (s *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextSuggestionJob(ctx, s)
+func (service *Service) RunNextSuggestionJob(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextSuggestionJob(ctx, service)
 }
 
 // RunNextDrainJob takes the next drain job and completes it
-func (s *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
-	return s.Datastore.RunNextDrainJob(ctx, s)
+func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextDrainJob(ctx, service)
 }
 
 // RunNextDrainRetryJob - retires failed drain jobs
-func (s *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) {
-	return true, s.Datastore.RunNextDrainRetryJob(ctx, s)
+func (service *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) {
+	return true, service.Datastore.RunNextDrainRetryJob(ctx, service)
 }
 
 // RunNextPromotionMissingIssuer takes the next job and completes it
-func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
+func (service *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
 	// get logger from context
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -413,16 +438,21 @@ func (s *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, erro
 	}
 
 	// create issuer for all of the promotions without an issuer
-	uuids, err := s.RoDatastore.GetPromotionsMissingIssuer(100)
+	uuids, err := service.RoDatastore.GetPromotionsMissingIssuer(100)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get promotions from datastore")
 		return false, fmt.Errorf("failed to get promotions from datastore: %w", err)
 	}
 
 	for _, uuid := range uuids {
-		if _, err := s.CreateIssuer(ctx, uuid, "control"); err != nil {
+		if _, err := service.CreateIssuer(ctx, uuid, "control"); err != nil {
 			logger.Error().Err(err).Msg("failed to create issuer")
 		}
 	}
 	return true, nil
+}
+
+// RunNextGeminiCheckStatus periodically check the status of gemini claim drain transactions
+func (service *Service) RunNextGeminiCheckStatus(ctx context.Context) (bool, error) {
+	return service.Datastore.RunNextGeminiCheckStatus(ctx, service)
 }

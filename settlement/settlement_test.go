@@ -1,6 +1,7 @@
 package settlement
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -15,6 +16,8 @@ import (
 )
 
 func TestTransactions(t *testing.T) {
+	ctx := context.Background()
+
 	if os.Getenv("UPHOLD_ACCESS_TOKEN") == "" {
 		t.Skip("skipping test; UPHOLD_ACCESS_TOKEN not set")
 	}
@@ -87,7 +90,7 @@ func TestTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = SubmitPreparedTransactions(donorWallet, settlements)
+	err = SubmitPreparedTransactions(ctx, donorWallet, settlements)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +101,7 @@ func TestTransactions(t *testing.T) {
 	}
 
 	// Multiple submit should have no effect
-	err = SubmitPreparedTransactions(donorWallet, settlements)
+	err = SubmitPreparedTransactions(ctx, donorWallet, settlements)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,14 +112,14 @@ func TestTransactions(t *testing.T) {
 		}
 	}
 
-	err = ConfirmPreparedTransactions(donorWallet, settlements)
+	err = ConfirmPreparedTransactions(ctx, donorWallet, settlements)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for i := 0; i < len(settlements); i++ {
 		var txInfo *wallet.TransactionInfo
-		txInfo, err = donorWallet.GetTransaction(settlements[i].ProviderID)
+		txInfo, err = donorWallet.GetTransaction(ctx, settlements[i].ProviderID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +130,7 @@ func TestTransactions(t *testing.T) {
 	}
 
 	// Multiple confirm should not error
-	err = ConfirmPreparedTransactions(donorWallet, settlements)
+	err = ConfirmPreparedTransactions(ctx, donorWallet, settlements)
 	if err != nil {
 		t.Fatal(err)
 	}

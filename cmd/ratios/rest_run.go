@@ -40,6 +40,7 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.CoingeckoCoinLimitCTXKey, viper.GetInt("coingecko-coin-limit"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, viper.GetInt("coingecko-vs-currency-limit"))
 	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
+	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, viper.GetInt("rate-limit-per-min"))
 
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)
@@ -48,9 +49,10 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	// do rest endpoints
-	r := cmd.SetupRouter(command.Context())
+	r := cmd.SetupRouter(ctx)
 	r.Get("/v2/relative/provider/coingecko/{coinIDs}/{vsCurrencies}/{duration}", middleware.InstrumentHandler("GetRelativeHandler", ratios.GetRelativeHandler(s)).ServeHTTP)
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
+	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {

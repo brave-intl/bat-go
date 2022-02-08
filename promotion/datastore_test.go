@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package promotion
@@ -7,8 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
+	"sort"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+
+	"github.com/jmoiron/sqlx"
+
+	"github.com/brave-intl/bat-go/utils/ptr"
 
 	"github.com/brave-intl/bat-go/utils/logging"
 
@@ -929,6 +939,113 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	// FIXME add test for successful drain job
 }
 
+func (suite *PostgresTestSuite) TestDrainClaims_Success() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	walletInfo := walletutils.Info{
+		ID:       uuid.NewV4().String(),
+		Provider: "uphold",
+	}
+
+	err = walletDB.UpsertWallet(context.Background(), &walletInfo)
+	suite.NoError(err)
+
+	drainClaims := make([]DrainClaim, 5)
+	for i := 0; i < 5; i++ {
+		total := decimal.NewFromFloat(rand.Float64())
+
+		promotion, err := pg.CreatePromotion("ugp", 1,
+			decimal.NewFromFloat(1), testutils.RandomString())
+		suite.Require().NoError(err)
+
+		claim, err := pg.CreateClaim(promotion.ID, walletInfo.ID, total, decimal.NewFromFloat(0), false)
+		suite.Require().NoError(err)
+
+		credentialRedemptions := []cbr.CredentialRedemption{
+			{
+				Issuer:        testutils.RandomString(),
+				TokenPreimage: testutils.RandomString(),
+				Signature:     testutils.RandomString(),
+			},
+		}
+
+		drainClaims[i] = DrainClaim{
+			BatchID:     ptr.FromUUID(uuid.NewV4()),
+			Claim:       claim,
+			Credentials: credentialRedemptions,
+			Wallet:      &walletInfo,
+			Total:       total,
+			CodedErr:    nil,
+		}
+	}
+
+	err = pg.DrainClaims(drainClaims)
+
+	// assert correct number of claims and claims drains inserted
+
+	var claims []Claim
+	err = pg.RawDB().Select(&claims, "SELECT * FROM claims")
+	suite.Require().NoError(err)
+	suite.Require().Equal(len(drainClaims), len(claims))
+
+	var claimDrains []DrainJob
+	err = pg.RawDB().Select(&claimDrains, "SELECT * FROM claim_drain")
+	suite.Require().NoError(err)
+	suite.Require().Equal(len(drainClaims), len(claimDrains))
+
+	// assert the retrieved claims and claims drains inserted are the ones added
+
+	sort.Slice(drainClaims, func(i, j int) bool {
+		return drainClaims[i].Claim.ID.String() < drainClaims[j].Claim.ID.String()
+	})
+
+	sort.Slice(claims, func(i, j int) bool {
+		return claims[i].ID.String() < claims[j].ID.String()
+	})
+
+	sort.Slice(claimDrains, func(i, j int) bool {
+		return claimDrains[i].ClaimID.String() < claimDrains[j].ClaimID.String()
+	})
+
+	for i := 0; i < 5; i++ {
+		suite.Require().Equal(drainClaims[i].Claim.ID.String(), claims[i].ID.String())
+		suite.Require().Equal(drainClaims[i].Claim.ID.String(), claimDrains[i].ClaimID.String())
+	}
+}
+
+func (suite *PostgresTestSuite) TestRunNextDrainJob_Gemini_Claim() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	drainJob := suite.insertClaimDrainWithStatus(pg, "", false)
+
+	transactionInfo := walletutils.TransactionInfo{}
+	transactionInfo.Status = txnStatusGeminiPending
+
+	drainWorker := NewMockDrainWorker(ctrl)
+	drainWorker.EXPECT().
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&transactionInfo, nil)
+
+	attempted, err := pg.RunNextDrainJob(context.Background(), drainWorker)
+	suite.True(attempted)
+
+	// get the updated drain job and assert
+	err = pg.RawDB().Get(&drainJob, "select * from claim_drain where id = $1", drainJob.ID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(txnStatusGeminiPending, *drainJob.Status)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Nil(drainJob.ErrCode)
+}
+
 func (suite *PostgresTestSuite) TestDrainRetryJob_Success() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
@@ -1041,6 +1158,137 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_SubmitBatchTransfer_
 
 	suite.Require().True(actual, "should have attempted job run")
 	suite.Require().Equal(drainCodeError, actualErr)
+}
+
+// tests batches are only processed once the drain job has set all claims drains
+// to prepared and have they have transactionIDs
+func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurrent() {
+
+	suite.CleanDB()
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	walletID := uuid.NewV4()
+	batchID := uuid.NewV4()
+
+	info := &walletutils.Info{
+		ID:                         walletID.String(),
+		Provider:                   "uphold",
+		ProviderID:                 uuid.NewV4().String(),
+		PublicKey:                  "hBrtClwIppLmu/qZ8EhGM1TQZUwDUosbOrVu3jMwryY=",
+		UserDepositAccountProvider: ptr.FromString("bitflyer"),
+	}
+	err = walletDB.UpsertWallet(ctx, info)
+	suite.Require().NoError(err)
+
+	// setup claim drains
+	for i := 0; i < 3; i++ {
+		claimDrainFixtures(pg.RawDB(), batchID, walletID, false, false)
+	}
+
+	transactionInfo := walletutils.TransactionInfo{}
+	transactionInfo.Status = "bitflyer-consolidate"
+	transactionInfo.ID = uuid.NewV4().String()
+
+	drainWorker := NewMockDrainWorker(ctrl)
+	drainWorker.EXPECT().
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&transactionInfo, nil).
+		Times(3)
+
+	batchTransferWorker := NewMockBatchTransferWorker(ctrl)
+	batchTransferWorker.EXPECT().
+		SubmitBatchTransfer(gomock.Any(), gomock.Any()).
+		Return(nil).
+		Times(1)
+
+	// start batch payments job to pick up claim drains when all in batch are in prepared state
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				pg.RunNextBatchPaymentsJob(context.Background(), batchTransferWorker)
+			}
+		}
+	}(ctx)
+
+	// run next drain job to pickup job and set as prepared and set transactionID
+
+	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	var drainJobsFirst []DrainJob
+	err = pg.RawDB().Select(&drainJobsFirst, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	// check no jobs have been submitted to batch and one job are prepared
+	prepared := 0
+	for _, drain := range drainJobsFirst {
+		suite.Require().NotEqual("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should not be submitted got %s", ptr.String(drain.Status)))
+		if ptr.String(drain.Status) == "prepared" {
+			prepared += 1
+		}
+	}
+	suite.Require().Equal(1, prepared)
+
+	// run next drain job to pickup job and set as prepared and set transactionID
+
+	attempted, err = pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	var drainJobsSecond []DrainJob
+	err = pg.RawDB().Select(&drainJobsSecond, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	// check no jobs have been submitted to batch and two job are prepared
+	prepared = 0
+	for _, drain := range drainJobsSecond {
+		suite.Require().NotEqual("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should not be submitted got %s", ptr.String(drain.Status)))
+		if ptr.String(drain.Status) == "prepared" {
+			prepared += 1
+		}
+	}
+	suite.Require().Equal(2, prepared)
+
+	// run final next drain job to set claim drain as prepared and transactionID
+
+	attempted, err = pg.RunNextDrainJob(ctx, drainWorker)
+	suite.Require().True(attempted)
+	suite.NoError(err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// run batch payments should now pickup all claims in batch and process
+	var actual []DrainJob
+	err = pg.RawDB().Select(&actual, `SELECT * FROM claim_drain`)
+	suite.Require().NoError(err, "should have retrieved drain job")
+
+	for _, drain := range actual {
+		suite.Require().Equal("submitted", ptr.String(drain.Status),
+			fmt.Sprintf("should be submitted got %s", ptr.String(drain.Status)))
+		suite.Require().NotNil(drain.TransactionID)
+	}
+	// shutdown bath payments job routine
+	cancel()
 }
 
 func (suite *PostgresTestSuite) TestUpdateDrainJobAsRetriable_Success() {
@@ -1161,14 +1409,10 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 
 	walletID := uuid.NewV4()
 
-	randomString := func() string {
-		return uuid.NewV4().String()
-	}
-
 	credentialRedemption := cbr.CredentialRedemption{
-		Issuer:        randomString(),
-		TokenPreimage: randomString(),
-		Signature:     randomString(),
+		Issuer:        testutils.RandomString(),
+		TokenPreimage: testutils.RandomString(),
+		Signature:     testutils.RandomString(),
 	}
 	credentialRedemptions := make([]cbr.CredentialRedemption, 0)
 	credentialRedemptions = append(credentialRedemptions, credentialRedemption)
@@ -1196,6 +1440,281 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 
 	suite.Require().NoError(err, "should have been successful attempted job")
 	suite.Require().True(attempted)
+}
+
+func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Complete() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	txnStatus := &walletutils.TransactionInfo{Status: "complete"}
+
+	ctrl := gomock.NewController(suite.T())
+	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
+	geminiTxnStatusWorker.EXPECT().
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(txnStatus, nil)
+
+	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+	suite.Require().NoError(err, "should be no error")
+	suite.Require().True(attempted)
+
+	err = pg.RawDB().Get(&drainJob, "select * from claim_drain where id = $1", drainJob.ID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal("complete", *drainJob.Status)
+	suite.Require().True(drainJob.Completed)
+	suite.Require().False(drainJob.Erred)
+}
+
+func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Pending() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
+
+	ctx := context.Background()
+	txnStatus := &walletutils.TransactionInfo{Status: "pending"}
+
+	// insert drain jobs in pending state and setup mock call to get status
+	drainJobs := [5]DrainJob{}
+	for i := 0; i < len(drainJobs); i++ {
+		drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+
+		// create tx_ref
+		settlementTx := settlement.Transaction{
+			SettlementID: ptr.String(drainJob.TransactionID),
+			Type:         "drain",
+			Destination:  ptr.String(drainJob.DepositDestination),
+			Channel:      "wallet",
+		}
+		txRef := gemini.GenerateTxRef(&settlementTx)
+
+		geminiTxnStatusWorker.EXPECT().
+			GetGeminiTxnStatus(ctx, txRef).
+			Return(txnStatus, nil).
+			Times(1)
+
+		drainJobs[i] = drainJob
+	}
+
+	// check all claim drains are processed in the order they were inserted earliest to latest date
+	for i := 0; i < len(drainJobs); i++ {
+		attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+		suite.Require().NoError(err, "should be no error")
+		suite.Require().True(attempted)
+
+		err = pg.RawDB().Get(&drainJobs[i], "select * from claim_drain where id = $1", drainJobs[i].ID)
+		suite.Require().NoError(err)
+
+		suite.Require().Equal(txnStatusGeminiPending, *drainJobs[i].Status)
+		suite.Require().False(drainJobs[i].Completed)
+		suite.Require().False(drainJobs[i].Erred)
+	}
+
+	// should return no jobs as we wait 10 mins before retrying
+	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+	suite.Require().NoError(err, "should be no error")
+	suite.Require().False(attempted)
+
+	// retrieve next job to run this should be the first inserted job in the cycle
+	var nextDrainJob DrainJob
+	err = pg.RawDB().Get(&nextDrainJob, "select * from claim_drain order by updated_at asc limit 1")
+
+	suite.Require().NoError(err)
+	suite.Require().Equal(drainJobs[0].ID, nextDrainJob.ID, "should have been first job we inserted")
+}
+
+func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	note := testutils.RandomString()
+	txnStatus := &walletutils.TransactionInfo{Status: "failed", Note: note}
+
+	ctrl := gomock.NewController(suite.T())
+	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
+	geminiTxnStatusWorker.EXPECT().
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(txnStatus, nil)
+
+	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+	suite.Require().NoError(err, "should be no error")
+	suite.Require().True(attempted)
+
+	err = pg.RawDB().Get(&drainJob, "select * from claim_drain where id = $1", drainJob.ID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal("failed", *drainJob.Status)
+	suite.Require().Equal(true, drainJob.Erred)
+	suite.Require().Equal(note, *drainJob.ErrCode)
+}
+
+func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_GetGeminiTxnStatus_Error() {
+	// clean db so only one claim drain job selectable
+	suite.CleanDB()
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+
+	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
+
+	// create tx_ref
+	settlementTx := settlement.Transaction{
+		SettlementID: ptr.String(drainJob.TransactionID),
+		Type:         "drain",
+		Destination:  ptr.String(drainJob.DepositDestination),
+		Channel:      "wallet",
+	}
+	txRef := gemini.GenerateTxRef(&settlementTx)
+
+	getGeminiTxnStatusError := fmt.Errorf(testutils.RandomString())
+
+	ctrl := gomock.NewController(suite.T())
+	geminiTxnStatusWorker := NewMockGeminiTxnStatusWorker(ctrl)
+	geminiTxnStatusWorker.EXPECT().
+		GetGeminiTxnStatus(ctx, txRef).
+		Return(nil, getGeminiTxnStatusError)
+
+	attempted, err := pg.RunNextGeminiCheckStatus(ctx, geminiTxnStatusWorker)
+
+	suite.Require().Errorf(err, fmt.Sprintf("failed to get status for txn %s: %s",
+		*drainJob.TransactionID, getGeminiTxnStatusError.Error()))
+
+	suite.Require().True(attempted)
+
+	err = pg.RawDB().Get(&drainJob, "select * from claim_drain where id = $1", drainJob.ID)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(txnStatusGeminiPending, *drainJob.Status)
+	suite.Require().Equal(false, drainJob.Erred)
+	suite.Require().Nil(drainJob.ErrCode)
+}
+
+func (suite *PostgresTestSuite) TestGetDrainPoll() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletID := uuid.NewV4()
+
+	completeID := uuid.NewV4()
+	delayedID := uuid.NewV4()
+	pendingID := uuid.NewV4()
+	inprogressID := uuid.NewV4()
+
+	err = claimDrainFixtures(pg.RawDB(), completeID, walletID, true, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	err = claimDrainFixtures(pg.RawDB(), delayedID, walletID, false, true)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	err = claimDrainFixtures(pg.RawDB(), pendingID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, true, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, false, false)
+	suite.Require().NoError(err, "failed to fixture claim_drain")
+
+	service := &Service{
+		Datastore: pg,
+	}
+
+	drainPoll, err := service.Datastore.GetDrainPoll(&completeID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+	suite.Require().True(drainPoll.Status == "complete")
+
+	drainPoll, err = service.Datastore.GetDrainPoll(&delayedID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+	suite.Require().True(drainPoll.Status == "delayed")
+
+	drainPoll, err = service.Datastore.GetDrainPoll(&pendingID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+	suite.Require().True(drainPoll.Status == "pending")
+
+	drainPoll, err = service.Datastore.GetDrainPoll(&inprogressID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+	suite.Require().True(drainPoll.Status == "in_progress")
+
+	// unknown batch_id
+	unknownID := uuid.NewV4()
+	drainPoll, err = service.Datastore.GetDrainPoll(&unknownID)
+	suite.Require().NoError(err, "Failed to get drain poll response")
+
+	suite.Require().True(drainPoll.Status == "unknown")
+}
+
+func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
+	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) 
+		values ($1, '[{"t":"123"}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
+	return err
+}
+
+func (suite *PostgresTestSuite) insertClaimDrainWithStatus(pg Datastore, status string, hasTransaction bool) DrainJob {
+	walletID := uuid.NewV4()
+
+	var transactionID *uuid.UUID
+	if hasTransaction {
+		transactionID = ptr.FromUUID(uuid.NewV4())
+	}
+
+	credentialRedemption := cbr.CredentialRedemption{
+		Issuer:        testutils.RandomString(),
+		TokenPreimage: testutils.RandomString(),
+		Signature:     testutils.RandomString(),
+	}
+	credentialRedemptions := make([]cbr.CredentialRedemption, 0)
+	credentialRedemptions = append(credentialRedemptions, credentialRedemption)
+
+	credentials, err := json.Marshal(credentialRedemptions)
+	suite.Require().NoError(err, "should have serialized credentials")
+
+	query := `INSERT INTO claim_drain (credentials, wallet_id, total, transaction_id, erred, status, completed, updated_at) 
+				VALUES ($1, $2, $3, $4, $5, $6, $7, now() - (interval '11 MINUTE')) RETURNING *;`
+
+	var drainJob DrainJob
+	err = pg.RawDB().Get(&drainJob, query, credentials, walletID, 1, transactionID, false, status, false)
+	suite.Require().NoError(err, "should have inserted and returned claim drain row")
+
+	return drainJob
 }
 
 func isCBRBypass(ctx context.Context) gomock.Matcher {

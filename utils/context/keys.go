@@ -122,6 +122,9 @@ const (
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 	// BlacklistedCountryCodesCTXKey - the context key for getting the ratios redis address
 	BlacklistedCountryCodesCTXKey CTXKey = "blacklisted_country_codes"
+
+	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
+	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 )
 
 var (

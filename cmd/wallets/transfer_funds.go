@@ -278,7 +278,7 @@ func TransferFunds(
 	var balance *wallet.Balance
 
 	if walletc == altc {
-		balance, err = w.GetBalance(true)
+		balance, err = w.GetBalance(ctx, true)
 		if err != nil {
 			return err
 		}
@@ -302,7 +302,7 @@ func TransferFunds(
 		return err
 	}
 	for {
-		submitInfo, err := w.SubmitTransaction(signedTx, oneshot)
+		submitInfo, err := w.SubmitTransaction(ctx, signedTx, oneshot)
 		if err != nil {
 			return err
 		}
@@ -328,13 +328,13 @@ func TransferFunds(
 			return errors.New("exiting")
 		}
 
-		_, err = w.ConfirmTransaction(submitInfo.ID)
+		_, err = w.ConfirmTransaction(ctx, submitInfo.ID)
 		if err != nil {
 			logger.Error().Err(err).Msg("error confirming")
 			return err
 		}
 
-		upholdInfo, err := w.GetTransaction(submitInfo.ID)
+		upholdInfo, err := w.GetTransaction(ctx, submitInfo.ID)
 		if err != nil {
 			return err
 		}

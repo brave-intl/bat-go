@@ -144,6 +144,20 @@ func (mr *MockDatastoreMockRecorder) DrainClaim(drainID, claim, credentials, wal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaim", reflect.TypeOf((*MockDatastore)(nil).DrainClaim), drainID, claim, credentials, wallet, total, codedErr)
 }
 
+// DrainClaims mocks base method.
+func (m *MockDatastore) DrainClaims(drainClaims []DrainClaim) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DrainClaims", drainClaims)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DrainClaims indicates an expected call of DrainClaims.
+func (mr *MockDatastoreMockRecorder) DrainClaims(drainClaims interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaims", reflect.TypeOf((*MockDatastore)(nil).DrainClaims), drainClaims)
+}
+
 // EnqueueMintDrainJob mocks base method.
 func (m *MockDatastore) EnqueueMintDrainJob(ctx context.Context, walletID go_uuid.UUID, promotionIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()
@@ -461,20 +475,6 @@ func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionTex
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSuggestion", reflect.TypeOf((*MockDatastore)(nil).InsertSuggestion), credentials, suggestionText, suggestion)
 }
 
-// MarkBatchTransferSubmitted mocks base method.
-func (m *MockDatastore) MarkBatchTransferSubmitted(ctx context.Context, batchID *go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkBatchTransferSubmitted", ctx, batchID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkBatchTransferSubmitted indicates an expected call of MarkBatchTransferSubmitted.
-func (mr *MockDatastoreMockRecorder) MarkBatchTransferSubmitted(ctx, batchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBatchTransferSubmitted", reflect.TypeOf((*MockDatastore)(nil).MarkBatchTransferSubmitted), ctx, batchID)
-}
-
 // Migrate mocks base method.
 func (m *MockDatastore) Migrate(arg0 ...uint) error {
 	m.ctrl.T.Helper()
@@ -605,6 +605,21 @@ func (m *MockDatastore) RunNextDrainRetryJob(ctx context.Context, worker DrainRe
 func (mr *MockDatastoreMockRecorder) RunNextDrainRetryJob(ctx, worker interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextDrainRetryJob", reflect.TypeOf((*MockDatastore)(nil).RunNextDrainRetryJob), ctx, worker)
+}
+
+// RunNextGeminiCheckStatus mocks base method.
+func (m *MockDatastore) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunNextGeminiCheckStatus", ctx, worker)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunNextGeminiCheckStatus indicates an expected call of RunNextGeminiCheckStatus.
+func (mr *MockDatastoreMockRecorder) RunNextGeminiCheckStatus(ctx, worker interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextGeminiCheckStatus", reflect.TypeOf((*MockDatastore)(nil).RunNextGeminiCheckStatus), ctx, worker)
 }
 
 // RunNextMintDrainJob mocks base method.

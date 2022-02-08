@@ -71,6 +71,13 @@ docker:
 		--build-arg BUILD_TIME=$(BUILD_TIME) -t bat-go:$(GIT_VERSION)$(BUILD_TIME) .
 	docker tag bat-go:$(GIT_VERSION)$(BUILD_TIME) bat-go:latest
 
+docker-reproducible:
+	docker run -v $(PWD):/workspace --network=host \
+		gcr.io/kaniko-project/executor:latest \
+		--reproducible --dockerfile /workspace/Dockerfile \
+		--no-push --tarPath /workspace/bat-go-repro.tar \
+		--destination bat-go-repro:latest --context dir:///workspace/ && cat bat-go-repro.tar | docker load
+
 docker-up-dev:
 	COMMIT=$(GIT_COMMIT) VERSION=$(GIT_VERSION) BUILD_TIME=$(BUILD_TIME) docker-compose \
 		-f docker-compose.yml -f docker-compose.dev.yml up -d

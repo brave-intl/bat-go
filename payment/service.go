@@ -27,7 +27,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 	stripe "github.com/stripe/stripe-go/v71"
 
@@ -394,7 +394,7 @@ type getCustodialTxFn func(context.Context, string) (*decimal.Decimal, string, s
 // get the uphold tx based on txRef
 func getUpholdCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	var wallet uphold.Wallet
-	upholdTransaction, err := wallet.GetTransaction(txRef)
+	upholdTransaction, err := wallet.GetTransaction(ctx, txRef)
 
 	if err != nil {
 		return nil, "", "", "", err
@@ -557,6 +557,44 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 	return transaction, err
 }
 
+// UpdateTransactionFromRequest queries the endpoints and creates a transaciton
+func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
+
+	sublogger := logging.Logger(ctx, "payments").With().
+		Str("func", "UpdateTransactionFromRequest").
+		Logger()
+
+	// get the information from the custodian
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
+		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
+	}
+
+	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
+		return nil, errorutils.Wrap(err, "error recording transaction")
+	}
+
+	isPaid, err := s.IsOrderPaid(transaction.OrderID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to validate the order is paid based on transactions")
+		return nil, errorutils.Wrap(err, "error validating order is paid")
+	}
+
+	// If the transaction that was satisifies the order then let's update the status
+	if isPaid {
+		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to set the status to paid")
+			return nil, errorutils.Wrap(err, "error updating order status")
+		}
+	}
+
+	return transaction, err
+}
+
 // CreateAnonCardTransaction takes a signed transaction and executes it on behalf of an anon card
 func (s *Service) CreateAnonCardTransaction(ctx context.Context, walletID uuid.UUID, transaction string, orderID uuid.UUID) (*Transaction, error) {
 
@@ -618,7 +656,7 @@ func (s *Service) waitForUpholdTxStatus(ctx context.Context, walletID uuid.UUID,
 		case <-ctx.Done():
 			return nil, errors.New("timeout waiting for correct status")
 		default:
-			txInfo, err = upholdWallet.GetTransaction(txInfo.ID)
+			txInfo, err = upholdWallet.GetTransaction(ctx, txInfo.ID)
 			if err != nil {
 				return nil, errorutils.Wrap(err, "error getting transaction")
 			}

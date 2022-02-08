@@ -42,6 +42,8 @@ type Datastore interface {
 	UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error
 	// CreateTransaction creates a transaction
 	CreateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
+	// UpdateTransaction creates a transaction
+	UpdateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error)
 	// GetTransaction returns a transaction given an external transaction id
 	GetTransaction(externalTransactionID string) (*Transaction, error)
 	// GetTransactions returns all the transactions for a specific order
@@ -656,6 +658,32 @@ func (pg *Postgres) CreateTransaction(orderID uuid.UUID, externalTransactionID s
 			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
 	`, orderID, externalTransactionID, status, currency, kind, amount)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &transaction, nil
+}
+
+// UpdateTransaction creates a transaction given an orderID, externalTransactionID, currency, and a kind of transaction
+func (pg *Postgres) UpdateTransaction(orderID uuid.UUID, externalTransactionID string, status string, currency string, kind string, amount decimal.Decimal) (*Transaction, error) {
+	tx := pg.RawDB().MustBegin()
+	defer pg.RollbackTx(tx)
+
+	var transaction Transaction
+	err := tx.Get(&transaction,
+		`
+			update transactions set status=$1, currency=$2, kind=$3, amount=$4
+			where external_transaction_id=$5 and order_id=$6
+			RETURNING id, order_id, created_at, updated_at, external_transaction_id, status, currency, kind, amount
+	`, status, currency, kind, amount, externalTransactionID, orderID)
 
 	if err != nil {
 		return nil, err

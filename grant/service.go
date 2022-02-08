@@ -15,7 +15,7 @@ import (
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shopspring/decimal"
 )
@@ -31,6 +31,7 @@ var (
 
 // Service contains datastore as well as prometheus metrics
 type Service struct {
+	baseCtx                context.Context
 	Datastore              Datastore
 	RoDatastore            ReadOnlyDatastore
 	wallet                 *wallet.Service
@@ -53,6 +54,7 @@ func InitService(
 	promotionService *promotion.Service,
 ) (*Service, error) {
 	gs := &Service{
+		baseCtx:     ctx,
 		Datastore:   datastore,
 		RoDatastore: roDatastore,
 		wallet:      walletService,
@@ -122,7 +124,7 @@ func (s *Service) Describe(ch chan<- *prometheus.Desc) {
 // Collect returns the current state of all metrics of the collector.
 // We implement this and the Describe function to fulfill the prometheus.Collector interface
 func (s *Service) Collect(ch chan<- prometheus.Metric) {
-	balance, err := grantWallet.GetBalance(true)
+	balance, err := grantWallet.GetBalance(s.baseCtx, true)
 	if err != nil {
 		sentry.CaptureException(err)
 		balance = grantWallet.LastBalance

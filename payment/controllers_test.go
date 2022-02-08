@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package payment
@@ -9,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -468,19 +468,36 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
-	// Test to make sure we can't submit the same externalTransactionID twice
+	// make sure we get a call to CheckTxStatus and return the right things
+	mockGemini.EXPECT().
+		CheckTxStatus(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(
+			&gemini.PayoutResult{
+				Destination: &settlementAddress,
+				Amount:      &amount,
+				Currency:    &currency,
+				Status:      &status,
+			}, nil)
 
 	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/gemini", bytes.NewBuffer(body))
+
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	// setup context
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientCTXKey, mockGemini))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiAPIKeyCTXKey, "key"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientIDCTXKey, "client_id"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiBrowserClientIDCTXKey, "browser_client_id"))
+	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiSettlementAddressCTXKey, settlementAddress))
 
 	suite.Require().NoError(err)
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
-	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Assert().Equal(rr.Body.String(), "{\"message\":\"Error creating the transaction: external Transaction ID: 150d7a21-c203-4ba4-8fdf-c5fc36aca004 has already been added to the order\",\"code\":400}\n")
+	// now should be a 200 for updating tx
+	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
 func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
@@ -521,17 +538,17 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
-	_, err = uphold.FundWallet(&w, altcurrency.BAT.ToProbi(orderAmount))
+	_, err = uphold.FundWallet(ctx, &w, altcurrency.BAT.ToProbi(orderAmount))
 	suite.Require().NoError(err, "Failed to fund wallet")
 
 	<-time.After(1 * time.Second)
 
 	// pay the transaction
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	tInfo, err := w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
+	tInfo, err := w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(orderAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	createRequest := &CreateTransactionRequest{
@@ -573,9 +590,9 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 	suite.Require().NoError(err)
 	suite.Assert().Equal("paid", updatedOrder.Status)
 
-	// Test to make sure we can't submit the same externalTransactionID twice
-
+	// Test to make sure on repost we update tx
 	req, err = http.NewRequest("POST", "/v1/orders/{orderID}/transactions/uphold", bytes.NewBuffer(body))
+
 	rctx = chi.NewRouteContext()
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
@@ -584,8 +601,9 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
-	suite.Require().Equal(http.StatusBadRequest, rr.Code)
-	suite.Assert().Equal(rr.Body.String(), fmt.Sprintf("{\"message\":\"Error creating the transaction: external Transaction ID: %s has already been added to the order\",\"code\":400}\n", createRequest.ExternalTransactionID.String()))
+
+	// now it should be a 200 when updating a tx status
+	suite.Require().Equal(http.StatusOK, rr.Code)
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
@@ -668,7 +686,7 @@ func (suite *ControllersTestSuite) TestGetTransactions() {
 	suite.Assert().Equal(order.ID, transactions[0].OrderID)
 }
 
-func generateWallet(t *testing.T) *uphold.Wallet {
+func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 	var info walletutils.Info
 	info.ID = uuid.NewV4().String()
 	info.Provider = "uphold"
@@ -684,7 +702,7 @@ func generateWallet(t *testing.T) *uphold.Wallet {
 	}
 	info.PublicKey = hex.EncodeToString(publicKey)
 	newWallet := &uphold.Wallet{Info: info, PrivKey: privateKey, PubKey: publicKey}
-	err = newWallet.Register("bat-go test card")
+	err = newWallet.Register(ctx, "bat-go test card")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -930,20 +948,20 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	err = json.Unmarshal([]byte(rr.Body.String()), &order)
 	suite.Require().NoError(err)
 
-	userWallet := generateWallet(suite.T())
+	userWallet := generateWallet(ctx, suite.T())
 	err = suite.service.wallet.Datastore.UpsertWallet(ctx, &userWallet.Info)
 	suite.Require().NoError(err)
 
-	balanceBefore, err := userWallet.GetBalance(true)
+	balanceBefore, err := userWallet.GetBalance(ctx, true)
 	suite.Require().NoError(err)
-	balanceAfter, err := uphold.FundWallet(userWallet, order.TotalPrice)
+	balanceAfter, err := uphold.FundWallet(ctx, userWallet, order.TotalPrice)
 	suite.Require().NoError(err)
 
 	// wait for balance to become available
 	for i := 0; i < 5; i++ {
 		select {
 		case <-time.After(500 * time.Millisecond):
-			balances, err := userWallet.GetBalance(true)
+			balances, err := userWallet.GetBalance(ctx, true)
 			suite.Require().NoError(err)
 			totalProbi := altcurrency.BAT.FromProbi(balances.TotalProbi)
 			if totalProbi.GreaterThan(decimal.Zero) {

@@ -78,15 +78,17 @@ func WatchGeminiBalance(ctx context.Context) error {
 					}
 				}()
 				result, err := client.FetchBalances(ctx, apiKey, signer, string(payload))
-				// dont care about float downsampling from decimal errs
-				if result == nil || len(*result) < 1 {
-					logger.Error().Msg("gemini result is empty")
-				}
-				b := *result
-				available, _ := b[0].Available.Float64()
-				balanceGauge.Set(available)
 				if err != nil {
 					logger.Error().Err(err).Msg("failed to fetch gemini balance")
+				} else {
+					// dont care about float downsampling from decimal errs
+					if result == nil || len(*result) < 1 {
+						logger.Error().Msg("gemini result is empty")
+					} else {
+						b := *result
+						available, _ := b[0].Available.Float64()
+						balanceGauge.Set(available)
+					}
 				}
 			}()
 		}
@@ -353,12 +355,7 @@ func setPrivateRequestHeaders(
 }
 
 // CheckTxStatus uploads the bulk payout for gemini
-func (c *HTTPClient) CheckTxStatus(
-	ctx context.Context,
-	APIKey string,
-	clientID string,
-	txRef string,
-) (*PayoutResult, error) {
+func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID string, txRef string) (*PayoutResult, error) {
 	urlPath := fmt.Sprintf("/v1/payment/%s/%s", clientID, txRef)
 	req, err := c.client.NewRequest(ctx, "GET", urlPath, nil, nil)
 	if err != nil {

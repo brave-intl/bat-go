@@ -9,7 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
+	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -23,12 +27,80 @@ import (
 )
 
 var (
+	bfBalanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "bitflyer_account_balance",
+		Help: "A gauge of the current account balance in bitflyer",
+	})
+
 	validSourceFrom = map[string]bool{
 		"tipping":   true,
 		"adrewards": true,
 		"userdrain": true,
 	}
 )
+
+func init() {
+	prometheus.MustRegister(bfBalanceGauge)
+}
+
+// InventoryResponse bitflyer inventory response
+type InventoryResponse struct {
+	AccountHash string      `json:"account_hash"`
+	Inventory   []Inventory `json:"inventory"`
+}
+
+// Inventory a bitflyer inventory response item representing an asset in the account inventory
+type Inventory struct {
+	CurrencyCode string  `json:"currency_code"`
+	Amount       float64 `json:"amount"`
+	Available    float64 `json:"available"`
+}
+
+// WatchBitflyerBalance periodically checks bitflyer inventory balance for BAT
+func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
+	client, err := New()
+	if err != nil {
+		return fmt.Errorf("failed to create bitflyer client: %w", err)
+	}
+
+	_, err = client.RefreshToken(ctx, TokenPayloadFromCtx(ctx))
+	if err != nil {
+		return fmt.Errorf("failed to get bitflyer access token: %w", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(duration):
+			go func() {
+				result, err := client.FetchBalance(ctx)
+				if err != nil {
+					logging.FromContext(ctx).Error().Err(err).
+						Msg("bitflyer client error")
+				} else {
+					found := false
+					for _, inv := range result.Inventory {
+						if strings.ToLower(inv.CurrencyCode) == "bat" {
+							found = true
+							if inv.Amount < 1 {
+								logging.FromContext(ctx).Error().Err(errors.New("account is empty")).
+									Msg("bitflyer account error")
+							} else {
+								bfBalanceGauge.Set(inv.Amount)
+							}
+							break
+						}
+					}
+					if !found {
+						logging.FromContext(ctx).Error().Err(errors.New("currency code BAT not found in response")).
+							Msg("bitflyer response error")
+					}
+				}
+			}()
+		}
+	}
+}
 
 // Quote returns a quote of BAT prices
 type Quote struct {
@@ -219,6 +291,8 @@ type Client interface {
 	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
 	// SetAuthToken sets the auth token on underlying client object
 	SetAuthToken(authToken string)
+	// FetchBalance requests balance information for the auth token on the underlying client object
+	FetchBalance(ctx context.Context) (*InventoryResponse, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -242,9 +316,7 @@ func New() (Client, error) {
 }
 
 // SetAuthToken sets the auth token
-func (c *HTTPClient) SetAuthToken(
-	authToken string,
-) {
+func (c *HTTPClient) SetAuthToken(authToken string) {
 	c.client.AuthToken = authToken
 }
 
@@ -285,7 +357,7 @@ func (c *HTTPClient) FetchQuote(
 			})
 		}
 	}
-	return &body, handleBitflyerError(err, req, resp)
+	return &body, handleBitflyerError(err, resp)
 }
 
 // PriceTokenInfo holds info from the price token
@@ -348,76 +420,60 @@ func readQuoteFromFile() (*SavedQuote, error) {
 }
 
 // UploadBulkPayout uploads payouts to bitflyer
-func (c *HTTPClient) UploadBulkPayout(
-	ctx context.Context,
-	payload WithdrawToDepositIDBulkPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
+func (c *HTTPClient) UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error) {
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-request", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
-	var body WithdrawToDepositIDBulkResponse
-	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+
+	var withdrawToDepositIDBulkResponse WithdrawToDepositIDBulkResponse
+	resp, err := c.client.Do(ctx, req, &withdrawToDepositIDBulkResponse)
+
+	return &withdrawToDepositIDBulkResponse, handleBitflyerError(err, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
-func (c *HTTPClient) CheckPayoutStatus(
-	ctx context.Context,
-	payload CheckBulkStatusPayload,
-) (*WithdrawToDepositIDBulkResponse, error) {
-	req, err := c.client.NewRequest(
-		ctx,
-		http.MethodPost,
-		"/api/link/v1/coin/withdraw-to-deposit-id/bulk-status",
-		payload,
-		nil,
-	)
+func (c *HTTPClient) CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error) {
+
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/coin/withdraw-to-deposit-id/bulk-status", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	return &body, handleBitflyerError(err, req, resp)
+
+	return &body, handleBitflyerError(err, resp)
 }
 
 // RefreshToken gets a new token from bitflyer
-func (c *HTTPClient) RefreshToken(
-	ctx context.Context,
-	payload TokenPayload,
-) (*TokenResponse, error) {
-
-	logger := logging.Logger(ctx, "RefreshToken")
+func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to refresh bitflyer token")
+			logging.FromContext(ctx).Error().
+				Str("panic", fmt.Sprintf("%+v", r)).
+				Str("stacktrace", string(debug.Stack())).
+				Msg("failed to get bitflyer refresh token")
 		}
 	}()
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
-	logger.Info().
-		Str("client_id", payload.ClientID).
-		Str("client_secret", payload.ClientSecret).
-		Str("extra_client_secret", payload.ExtraClientSecret).
-		Str("grant_type", payload.GrantType).
-		Msg("payload values")
+
 	req, err := c.client.NewRequest(ctx, http.MethodPost, "/api/link/v1/token", payload, nil)
 	if err != nil {
 		return nil, err
 	}
 	c.setupRequestHeaders(req)
+
 	var body TokenResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	logger.Info().
-		Str("token", body.AccessToken).
-		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
+	if err != nil {
+		return &body, err
+	}
 	c.SetAuthToken(body.AccessToken)
-	return &body, handleBitflyerError(err, req, resp)
+
+	return &body, handleBitflyerError(err, resp)
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
@@ -425,12 +481,12 @@ func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
 	req.Header.Set("content-type", "application/json")
 }
 
-func handleBitflyerError(e error, req *http.Request, resp *http.Response) error {
+func handleBitflyerError(e error, resp *http.Response) error {
 	if resp == nil {
 		return e
 	}
 
-	// if this is is not an error just return err passed in
+	// if this is not a bitflyer error just return err passed in
 	if resp.StatusCode > 299 {
 		return e
 	}
@@ -485,4 +541,21 @@ func TokenPayloadFromCtx(ctx context.Context) TokenPayload {
 		ClientSecret:      clientSecret,
 		ExtraClientSecret: extraClientSecret,
 	}
+}
+
+// FetchBalance requests balance information for the auth token on the underlying client object
+func (c *HTTPClient) FetchBalance(ctx context.Context) (*InventoryResponse, error) {
+	request, err := c.client.NewRequest(ctx, http.MethodGet, "api/link/v1/account/inventory", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetch balance error: could not create request: %w", err)
+	}
+	c.setupRequestHeaders(request)
+
+	var inventoryResponse *InventoryResponse
+	response, err := c.client.Do(ctx, request, &inventoryResponse)
+	if err != nil {
+		return nil, fmt.Errorf("fetch balance error: could not execute request: %w", err)
+	}
+
+	return inventoryResponse, handleBitflyerError(err, response)
 }

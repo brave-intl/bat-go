@@ -57,8 +57,8 @@ type Promotion struct {
 	Platform            string                    `json:"platform" db:"platform"`
 	PublicKeys          jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
 	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
-	LegacyClaimed bool `json:"legacyClaimed" db:"legacy_claimed"`
-	//ClaimableUntil      time.Time
+	LegacyClaimed  bool      `json:"legacyClaimed" db:"legacy_claimed"`
+	ClaimableUntil time.Time `json:"claimableUntil" db:"claimable_until"`
 }
 
 // Filter promotions to all that satisfy the function passed

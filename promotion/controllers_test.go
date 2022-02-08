@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package promotion
@@ -21,14 +22,13 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/handlers"
 
-	"github.com/brave-intl/bat-go/utils/clients"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -40,10 +40,9 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
-	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
@@ -141,6 +140,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			"approximateValue": "` + promotion.ApproximateValue.String() + `",
 			"available": ` + strconv.FormatBool(available) + `,
 			"createdAt": "` + promotion.CreatedAt.Format(time.RFC3339Nano) + `",
+			"claimableUntil": "` + promotion.ClaimableUntil.Format(time.RFC3339Nano) + `",
 			"expiresAt": "` + promotion.ExpiresAt.Format(time.RFC3339Nano) + `",
 			"id": "` + promotion.ID.String() + `",
 			"legacyClaimed": ` + strconv.FormatBool(promotion.LegacyClaimed) + `,
@@ -184,8 +184,16 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	promotionGeneric, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(15.0), "")
 	suite.Require().NoError(err, "Failed to create a general promotion")
 
+	// do a get promotion to get the promotion with the claimable until
+	promotionGeneric, err = service.Datastore.GetPromotion(promotionGeneric.ID)
+	suite.Require().NoError(err, "Failed to get the general promotion")
+
 	promotionDesktop, err := service.Datastore.CreatePromotion("ugp", 2, decimal.NewFromFloat(20.0), "desktop")
 	suite.Require().NoError(err, "Failed to create osx promotion")
+
+	// do a get promotion to get the promotion with the claimable until
+	promotionDesktop, err = service.Datastore.GetPromotion(promotionDesktop.ID)
+	suite.Require().NoError(err, "Failed to get the desktop promotion")
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, reqOSX)
@@ -236,6 +244,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 			` + promotionJSON(true, promotionDesktop) + `
 		]
 	}`
+
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 
 	rr = httptest.NewRecorder()
@@ -280,15 +289,10 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
-func (suite *ControllersTestSuite) ClaimGrant(
-	service *Service,
-	w walletutils.Info,
-	privKey crypto.Signer,
-	promotion *Promotion,
-	blindedCreds []string,
-	claimStatus int,
-	// promoActive bool,
-) *uuid.UUID {
+// ClaimPromotion helper that calls promotion endpoint and does assertions
+func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
+	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
+
 	handler := middleware.HTTPSignedOnly(service)(ClaimPromotion(service))
 
 	walletID, err := uuid.FromString(w.ID)
@@ -431,7 +435,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := GetAvailablePromotions(service)
@@ -611,7 +615,7 @@ func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -758,7 +762,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
@@ -1338,7 +1342,7 @@ func (suite *ControllersTestSuite) TestClaimCompatibility() {
 			}
 		}
 
-		claimID := suite.ClaimGrant(
+		claimID := suite.ClaimPromotion(
 			service,
 			info,
 			privKey,
@@ -1469,7 +1473,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1570,7 +1574,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 			DryRun: false,
 			Withdrawals: []bitflyer.WithdrawToDepositIDResponse{{
 				CurrencyCode: BAT,
-				Status:       "NOT_FOUND",
+				Status:       "SUCCESS",
 				TransferID:   "transferid",
 			}},
 		}, nil)
@@ -1653,7 +1657,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -1823,7 +1827,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainSkipCBRDupRedeem() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	/* cb should not be called, we are using the bypass redeem credentials feature
@@ -2012,7 +2016,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2135,7 +2139,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID = suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID = suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2226,12 +2230,20 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 			Rate:         decimal.New(1, 1),
 		}, nil)
 
+	withdrawal := bitflyer.WithdrawToDepositIDResponse{
+		Status: "NO_INV",
+	}
+
+	withdrawToDepositIDBulkResponse := bitflyer.WithdrawToDepositIDBulkResponse{
+		DryRun: false,
+		Withdrawals: []bitflyer.WithdrawToDepositIDResponse{
+			withdrawal,
+		},
+	}
+
 	bfClient.EXPECT().
-		UploadBulkPayout(
-			gomock.Any(),
-			gomock.Any(),
-		).
-		Return(nil, &clients.BitflyerError{ErrorIDs: []string{"NO_INV"}})
+		UploadBulkPayout(gomock.Any(), gomock.Any()).
+		Return(&withdrawToDepositIDBulkResponse, nil)
 
 	publicKey, privKey, err := httpsignature.GenerateEd25519Key(nil)
 	suite.Require().NoError(err, "Failed to create wallet keypair")
@@ -2311,7 +2323,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2375,15 +2387,13 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	<-service.drainChannel
 	<-time.After(1 * time.Second)
 
-	// the runnextbatchpayments job needs to kick in before checking the drain status
+	// the run next batch payments job needs to kick in before checking the drain status
 	attempted, err := service.RunNextBatchPaymentsJob(ctx)
 	suite.Require().True(attempted)
-	suite.Require().IsType(&clients.BitflyerError{}, err)
 
 	var drainJob = getClaimDrainEntry(pg.(*DatastoreWithPrometheus).base.(*Postgres))
 	suite.Require().True(drainJob.Erred)
 	suite.Require().Equal(*drainJob.ErrCode, "bitflyer_no_inv", "error code should be no inv")
-
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
@@ -2497,7 +2507,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2568,6 +2578,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2598,7 +2610,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2631,7 +2643,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
@@ -2665,7 +2677,8 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	// calling claim promotion will trigger a RunNextClaimJob
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2688,7 +2701,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -2740,62 +2753,18 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	<-time.After(1 * time.Second)
 
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// pull out drain id, and check the datastore has completed state
 	drainPoll, err := service.Datastore.GetDrainPoll(dsv2r.DrainID)
 	suite.Require().NoError(err, "Failed to get drain poll response")
-
 	suite.Require().True(drainPoll.Status == "complete")
-
-	// test other conditions
-	delayedID := uuid.NewV4()
-	pendingID := uuid.NewV4()
-	inprogressID := uuid.NewV4()
-
-	err = claimDrainFixtures(pg.RawDB(), delayedID, walletID, false, true)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), pendingID, walletID, false, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, true, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-	err = claimDrainFixtures(pg.RawDB(), inprogressID, walletID, false, false)
-	suite.Require().NoError(err, "failed to fixture claim_drain")
-
-	// there is an error in one of the drainings
-	drainPoll, err = service.Datastore.GetDrainPoll(&delayedID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "delayed")
-
-	// at least one drain poll batch has started, but all are not complete
-	drainPoll, err = service.Datastore.GetDrainPoll(&pendingID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "pending")
-
-	// none of the drain poll batches have started
-	drainPoll, err = service.Datastore.GetDrainPoll(&inprogressID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "in_progress")
-
-	// unknown batch_id
-	unknownID := uuid.NewV4()
-	drainPoll, err = service.Datastore.GetDrainPoll(&unknownID)
-	suite.Require().NoError(err, "Failed to get drain poll response")
-
-	suite.Require().True(drainPoll.Status == "unknown")
-
-}
-
-func claimDrainFixtures(db *sqlx.DB, batchID, walletID uuid.UUID, completed, erred bool) error {
-	_, err := db.Exec(`INSERT INTO claim_drain (batch_id, credentials, completed, erred, wallet_id, total, updated_at) values ($1, '[{"t":"123"}]', $2, $3, $4, $5, CURRENT_TIMESTAMP);`, batchID, completed, erred, walletID, 1)
-	return err
 }
 
 func (suite *ControllersTestSuite) TestSuggestionDrain() {
+	ctx := context.Background()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
@@ -2826,7 +2795,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		PrivKey: privKey,
 		PubKey:  publicKey,
 	}
-	err = w.Register("drain-card-test")
+	err = w.Register(ctx, "drain-card-test")
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
@@ -2858,7 +2827,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		drainChannel:     ch,
 	}
 
-	err = service.InitHotWallet(context.Background())
+	err = service.InitHotWallet(ctx)
 	suite.Require().NoError(err, "Failed to init hot wallet")
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
@@ -2892,7 +2861,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 		SignedTokens: signedCreds,
 	}, nil)
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
@@ -2915,7 +2884,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	body, err := json.Marshal(&drainReq)
 	suite.Require().NoError(err)
 
-	ctx := context.WithValue(context.Background(), appctx.ReputationOnDrainCTXKey, true)
+	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, true)
 	req, err := http.NewRequestWithContext(ctx, "POST", "/suggestion/drain", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
@@ -2959,7 +2928,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 
 	<-time.After(1 * time.Second)
 	settlementAddr := os.Getenv("BAT_SETTLEMENT_ADDRESS")
-	_, err = w.Transfer(altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
+	_, err = w.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(grantAmount), settlementAddr)
 	suite.Require().NoError(err)
 
 	// testing out the drain info handler
@@ -3096,7 +3065,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	err = walletDB.UpsertWallet(context.Background(), &info)
 	suite.Require().NoError(err, "Failed to insert wallet")
 
-	claimID := suite.ClaimGrant(service, info, privKey, promotion, blindedCreds, http.StatusOK)
+	claimID := suite.ClaimPromotion(service, info, privKey, promotion, blindedCreds, http.StatusOK)
 	suite.WaitForClaimToPropagate(service, promotion, claimID)
 
 	handler := MakeSuggestion(service)
