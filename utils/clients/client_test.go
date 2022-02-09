@@ -2,7 +2,9 @@ package clients
 
 import (
 	"context"
+	"fmt"
 	"github.com/brave-intl/bat-go/utils/errors"
+	testutils "github.com/brave-intl/bat-go/utils/test"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -10,9 +12,11 @@ import (
 )
 
 func TestDo_ResponseBody_HttpState(t *testing.T) {
+	errorMsg := testutils.RandomString()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Length", "1")
+		w.Write([]byte(errorMsg))
 	}))
 	defer ts.Close()
 
@@ -35,5 +39,5 @@ func TestDo_ResponseBody_HttpState(t *testing.T) {
 	httpState := actual.Data().(HTTPState)
 	assert.Equal(t, httpState.Status, http.StatusOK)
 	assert.Equal(t, ts.URL, httpState.Path)
-	assert.NotEmpty(t, httpState.Body)
+	assert.Contains(t, fmt.Sprintf("+%v", httpState.Body), errorMsg)
 }
