@@ -11,11 +11,10 @@ import (
 	"testing"
 )
 
-func TestDo_ResponseBody_HttpState(t *testing.T) {
+func TestDo_ErrorWithResponse(t *testing.T) {
 	errorMsg := testutils.RandomString()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Length", "1")
 		w.Write([]byte(errorMsg))
 	}))
 	defer ts.Close()
@@ -26,10 +25,11 @@ func TestDo_ResponseBody_HttpState(t *testing.T) {
 	client, err := New(ts.URL, "")
 	assert.NoError(t, err)
 
+	// pass data as invalid result type to cause error
 	var data *string
 	response, err := client.Do(context.Background(), req, data)
 
-	assert.IsType(t, err, &errors.ErrorBundle{})
+	assert.IsType(t, &errors.ErrorBundle{}, err)
 	assert.NotNil(t, response)
 
 	actual := err.(*errors.ErrorBundle)
