@@ -857,19 +857,14 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 	if err != nil {
 		var errorBundle *errorutils.ErrorBundle
 		if errors.As(err, &errorBundle) {
-			msg := "unknown gemini client http state"
-			if httpState, ok := errorBundle.Data().(clients.HTTPState); ok {
-				bytes, err := json.Marshal(httpState.Body)
-				if err != nil {
-					bytes = []byte("error decoding http state body")
-				}
-				msg = fmt.Sprintf("status: %d; path: %s; body: %s;",
-					httpState.Status, httpState.Path, string(bytes))
+			bytes, err := json.Marshal(errorBundle.Data())
+			if err != nil {
+				bytes = []byte(fmt.Errorf("unknown gemini client http state %w", err).Error())
 			}
 			logging.FromContext(ctx).Error().
 				Err(errorBundle.Cause()).
 				Str("txRef", txRef).
-				Str("http_state", msg).
+				Str("error_bundle", string(bytes)).
 				Msg("gemini client check status error")
 		}
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
