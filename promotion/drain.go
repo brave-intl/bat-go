@@ -747,20 +747,14 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 	}
 
 	// for all the submitted, check they are all okay
-	for _, v := range *resp {
-
-		logger.Info().
-			Str("transaction_id", transferID).
-			Str("status", ptr.StringOr(v.Status, "unknown status")).
-			Str("result", v.Result).
-			Str("reason", ptr.StringOr(v.Reason, "no reason set")).
-			Msg("gemini bulk payout response")
-
-		if strings.ToLower(v.Result) != "ok" {
-			if v.Reason != nil {
-				return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s", *v.Reason)
-			}
-			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	for _, payout := range *resp {
+		if strings.ToLower(payout.Result) != "ok" {
+			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s",
+				ptr.StringOr(payout.Reason, "unknown reason"))
+		}
+		if strings.ToLower(ptr.String(payout.Status)) == "failed" {
+			return nil, fmt.Errorf("failed to transfer funds: gemini payout status failed: %s",
+				ptr.StringOr(payout.Reason, "unknown reason"))
 		}
 	}
 
@@ -865,8 +859,12 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 		if errors.As(err, &errorBundle) {
 			msg := "unknown gemini client http state"
 			if httpState, ok := errorBundle.Data().(clients.HTTPState); ok {
-				msg = fmt.Sprintf("status: %d; path: %s; body: %+v;",
-					httpState.Status, httpState.Path, httpState.Body)
+				bytes, err := json.Marshal(httpState.Body)
+				if err != nil {
+					bytes = []byte("error decoding http state body")
+				}
+				msg = fmt.Sprintf("status: %d; path: %s; body: %s;",
+					httpState.Status, httpState.Path, string(bytes))
 			}
 			logging.FromContext(ctx).Error().
 				Err(errorBundle.Cause()).
