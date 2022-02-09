@@ -15,7 +15,8 @@ func TestDo_ErrorWithResponse(t *testing.T) {
 	errorMsg := testutils.RandomString()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(errorMsg))
+		_, err := w.Write([]byte(errorMsg))
+		assert.NoError(t, err)
 	}))
 	defer ts.Close()
 
