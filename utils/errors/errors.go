@@ -73,6 +73,7 @@ func (e ErrorBundle) Error() string {
 	return e.message
 }
 
+// DataToString returns string representation of data
 func (e ErrorBundle) DataToString() string {
 	if e.data == nil {
 		return "no error bundle data"
