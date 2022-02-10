@@ -279,19 +279,19 @@ func IterateRequest(
 
 				signer := cryptography.NewHMACHasher([]byte(apiSecret))
 				result, err := geminiClient.FetchBalances(ctx, apiKey, signer, string(payload))
-				available_currency := map[string]decimal.Decimal{}
+				availableCurrency := map[string]decimal.Decimal{}
 				for _, currency := range *result {
-					available_currency[currency.Currency] = currency.Amount
+					availableCurrency[currency.Currency] = currency.Amount
 				}
 
-				required_currency := map[string]decimal.Decimal{}
+				requiredCurrency := map[string]decimal.Decimal{}
 				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
-					required_currency[pay.Currency] = required_currency[pay.Currency].Add(pay.Amount)
+					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
 				}
 
-				for key, amount := range required_currency {
-					if available_currency[key].LessThan(amount) {
-						logger.Error().Str("required", amount.String()).Str("available", available_currency[key].String()).Str("currency", key).Err(err).Msg("failed to meet required balance")
+				for key, amount := range requiredCurrency {
+					if availableCurrency[key].LessThan(amount) {
+						logger.Error().Str("required", amount.String()).Str("available", availableCurrency[key].String()).Str("currency", key).Err(err).Msg("failed to meet required balance")
 						return submittedTransactions, fmt.Errorf("failed to meet required balance: %w", err)
 					}
 				}
@@ -321,7 +321,7 @@ func IterateRequest(
 					blockProgress,
 				)
 				if err != nil {
-					logger.Error().Err(err).Msg("falied to check payout transactions status")
+					logger.Error().Err(err).Msg("failed to check payout transactions status")
 					return nil, err
 				}
 			}
