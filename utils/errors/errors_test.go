@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"testing"
+
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	"github.com/stretchr/testify/assert"
-	"testing"
 
 	errutil "github.com/brave-intl/bat-go/utils/errors"
 )
