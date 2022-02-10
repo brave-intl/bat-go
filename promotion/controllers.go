@@ -298,7 +298,6 @@ func GetPromotions(service *Service) handlers.AppHandler {
 			})
 		}
 
-		// GetClaimByAddressID
 		claim, err := service.Datastore.GetClaimByAddressID(addressID)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
@@ -451,7 +450,6 @@ func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
 
-		// GetClaimByAddressID
 		claim, err := service.Datastore.GetClaimByAddressID(req.AccountID)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)

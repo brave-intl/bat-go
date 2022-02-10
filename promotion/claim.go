@@ -103,7 +103,7 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
-	// q check if we need to override the auto expiry of the promotion
+	// check if we need to override the auto expiry of the promotion
 	overrideAutoExpiry := false
 	if claim != nil {
 		overrideAutoExpiry = claim.LegacyClaimed
@@ -179,13 +179,11 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	// probably need a new method here
 	claim, err = service.Datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
 
-	// maybe remove legacy claimed
 	value, _ := claim.ApproximateValue.Float64()
 	labels := prometheus.Labels{
 		"platform": promotion.Platform,
