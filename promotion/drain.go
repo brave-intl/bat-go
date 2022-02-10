@@ -663,19 +663,13 @@ func redeemAndTransferBitflyerFunds(
 	return tx, nil
 }
 
-func redeemAndTransferGeminiFunds(
-	ctx context.Context,
-	service *Service,
-	wallet *walletutils.Info,
-	total decimal.Decimal,
-) (*walletutils.TransactionInfo, error) {
-	logger := logging.Logger(ctx, "redeemAndTransferGeminiFunds")
+func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet *walletutils.Info,
+	total decimal.Decimal) (*walletutils.TransactionInfo, error) {
 
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
 	if service.geminiConf == nil || service.geminiClient == nil {
-		logger.Error().Msg("gemini is misconfigured, missing gemini client and configuration")
-		return nil, errGeminiMisconfigured
+		return nil, fmt.Errorf("missing gemini client and configuration: %w", errGeminiMisconfigured)
 	}
 
 	txType := "drain"
@@ -715,7 +709,6 @@ func redeemAndTransferGeminiFunds(
 	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
 	serializedPayload, err := json.Marshal(payload)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to serialize payload")
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
 	// gemini client will base64 encode the payload prior to sending
@@ -727,19 +720,15 @@ func redeemAndTransferGeminiFunds(
 	)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("failed request to gemini")
 		var eb *errorutils.ErrorBundle
 		if errors.As(err, &eb) {
-			// okay, there was an errorbundle, unwrap and log the error
-			// convert err.Data() to json and report out
-			b, err := json.Marshal(eb.Data())
-			if err != nil {
-				logger.Error().Err(err).Msg("failed serialize error bundle data")
-			} else {
-				logger.Error().Err(err).
-					Str("data", string(b)).
-					Msg("gemini client error details")
-			}
+			// retrieve the error bundle data if there is any and log
+			errorData := eb.DataToString()
+			logging.FromContext(ctx).Error().
+				Err(eb.Cause()).
+				Str("wallet_id", wallet.ID).
+				Str("error_bundle", errorData).
+				Msg("failed to transfer funds gemini")
 		}
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
 	}
@@ -748,13 +737,16 @@ func redeemAndTransferGeminiFunds(
 		// failed to get a response from the server
 		return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
 	}
+
 	// for all the submitted, check they are all okay
-	for _, v := range *resp {
-		if strings.ToLower(v.Result) != "ok" {
-			if v.Reason != nil {
-				return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s", *v.Reason)
-			}
-			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK")
+	for _, payout := range *resp {
+		if strings.ToLower(payout.Result) != "ok" {
+			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s",
+				ptr.StringOr(payout.Reason, "unknown reason"))
+		}
+		if strings.ToLower(ptr.String(payout.Status)) == "failed" {
+			return nil, fmt.Errorf("failed to transfer funds: gemini payout status failed: %s",
+				ptr.StringOr(payout.Reason, "unknown reason"))
 		}
 	}
 
@@ -855,11 +847,25 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 
 	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
 	if err != nil {
+		var errorBundle *errorutils.ErrorBundle
+		if errors.As(err, &errorBundle) {
+			errorData := errorBundle.DataToString()
+			logging.FromContext(ctx).Error().
+				Err(errorBundle.Cause()).
+				Str("txRef", txRef).
+				Str("error_bundle", errorData).
+				Msg("gemini client check status error")
+		}
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
 
-	if response == nil || strings.ToLower(response.Result) == "error" {
-		return nil, fmt.Errorf("failed to get gemini txn status for %s", txRef)
+	if response == nil {
+		return nil, fmt.Errorf("failed to get gemini txn status for %s: response nil", txRef)
+	}
+
+	if strings.ToLower(response.Result) == "error" {
+		return nil, fmt.Errorf("failed to get gemini txn status for %s: %s", txRef,
+			ptr.StringOr(response.Reason, "unknown gemini response error"))
 	}
 
 	switch strings.ToLower(ptr.String(response.Status)) {

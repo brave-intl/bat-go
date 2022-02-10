@@ -1,9 +1,13 @@
 package errors_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
+
+	testutils "github.com/brave-intl/bat-go/utils/test"
+	"github.com/stretchr/testify/assert"
 
 	errutil "github.com/brave-intl/bat-go/utils/errors"
 )
@@ -45,4 +49,36 @@ func TestMultiErrorUnwrap(t *testing.T) {
 	if !errors.Is(merr, err2) {
 		t.Error("failed to unwrap multierror correctly: not 'is' err2")
 	}
+}
+
+func TestErrorBundle_DataToString_DataNil(t *testing.T) {
+	err := errutil.Wrap(errors.New(testutils.RandomString()), testutils.RandomString())
+	var actual *errutil.ErrorBundle
+	errors.As(err, &actual)
+	assert.Equal(t, "no error bundle data", actual.DataToString())
+}
+
+func TestErrorBundle_DataToString_MarshallError(t *testing.T) {
+	unsupportedData := func() {}
+	sut := errutil.New(errors.New(testutils.RandomString()), testutils.RandomString(), unsupportedData)
+
+	expected := "error retrieving error bundle data"
+
+	var actual *errutil.ErrorBundle
+	errors.As(sut, &actual)
+
+	assert.Contains(t, actual.DataToString(), expected)
+}
+
+func TestErrorBundle_DataToString(t *testing.T) {
+	errorData := testutils.RandomString()
+	sut := errutil.New(errors.New(testutils.RandomString()), testutils.RandomString(), errorData)
+
+	expected, err := json.Marshal(errorData)
+	assert.NoError(t, err)
+
+	var actual *errutil.ErrorBundle
+	errors.As(sut, &actual)
+
+	assert.Equal(t, string(expected), actual.DataToString())
 }
