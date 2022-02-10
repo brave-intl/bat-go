@@ -149,7 +149,6 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
-	// dont know what the cohort or promotion type is
 	cohort := "control"
 	issuer, err := service.GetOrCreateIssuer(ctx, promotionID, cohort)
 	if err != nil {

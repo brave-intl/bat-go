@@ -686,6 +686,8 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 		select
 			promos.id,
 			promos.promotion_type,
+			promos.created_at,
+			promos.created_at + interval '3 months' as claimable_until,
 			promos.expires_at,
 			promos.auto_claim,
 			promos.skip_captcha,
@@ -724,14 +726,14 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 			)
 		order by promos.created_at;`
 
-	promotions := []PromotionV2{}
+	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
 	if err != nil {
-		return promotions, err
+		return PromotionsToV2(promotions), err
 	}
 
-	return promotions, nil
+	return PromotionsToV2(promotions), nil
 }
 
 // GetAvailablePromotions returns the list of available promotions for all wallets
@@ -794,14 +796,14 @@ func (pg *Postgres) GetAvailablePromotionsV2(platform string) ([]PromotionV2, er
 		group by promotions.id
 		order by promotions.created_at;`
 
-	promotions := []PromotionV2{}
+	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, platform)
 	if err != nil {
-		return promotions, err
+		return PromotionsToV2(promotions), err
 	}
 
-	return promotions, nil
+	return PromotionsToV2(promotions), nil
 }
 
 // GetPromotionsMissingIssuer returns the list of promotions missing an issuer

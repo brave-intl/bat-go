@@ -62,7 +62,7 @@ func Router(service *Service) chi.Router {
 	// version 1 clobbered claims
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
-	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaimWithPromotion", GetClaimWithPromotion(service)))
+	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
@@ -290,14 +290,12 @@ func GetPromotions(service *Service) handlers.AppHandler {
 				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
 			})
 		}
-
 		addressID := r.URL.Query().Get("address")
 		if len(addressID) > 0 {
 			return handlers.ValidationError("request query parameter", map[string]string{
 				"address": fmt.Sprintf("address '%s' is not supported", addressID),
 			})
 		}
-
 		claim, err := service.Datastore.GetClaimByAddressID(addressID)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
@@ -306,7 +304,6 @@ func GetPromotions(service *Service) handlers.AppHandler {
 		if !validators.IsUUID(walletID.String()) {
 			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
 		}
-
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
@@ -316,7 +313,6 @@ func GetPromotions(service *Service) handlers.AppHandler {
 				"paymentId": "paymentId must match signature",
 			})
 		}
-
 		promotions, err := service.GetAvailablePromotionsV2(r.Context(), &walletID, platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
@@ -424,7 +420,7 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 
 // ClaimSwapRewardsPromotionRequest includes the ID of the Account attempting to claim and blinded credentials which to be signed
 type ClaimSwapRewardsPromotionRequest struct {
-	AccountID    string   `json:"address"` // TODO figure out how to validate address https://pkg.go.dev/github.com/asaskevich/govalidator#section-readme
+	AddressID    string   `json:"address"` // TODO figure out how to validate address https://pkg.go.dev/github.com/asaskevich/govalidator#section-readme
 	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
 }
 
@@ -443,14 +439,13 @@ func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
 		}
 
 		// TODO not sure if it's needed
-		logging.AddAccountAddressContext(r.Context(), req.AccountID)
+		logging.AddAccountAddressContext(r.Context(), req.AddressID)
 
 		keyID, err := middleware.GetKeyID(r.Context())
 		if err != nil {
 			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
 		}
-
-		claim, err := service.Datastore.GetClaimByAddressID(req.AccountID)
+		claim, err := service.Datastore.GetClaimByAddressID(req.AddressID)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
 		}

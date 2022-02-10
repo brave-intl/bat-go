@@ -357,11 +357,7 @@ func (suite *ControllersTestSuite) ClaimSwapRewardsPromotion(service *Service, w
 	req, err := http.NewRequest("POST", "/v2/promotion/{promotionId}", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	//todo need the signature
-
-	// not sure if it always comes in as hex?
-	// privHexECDSA := "fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19"
-	// err = s2.Sign(ECDSAKey(privHexECDSA), crypto.Hash(0), r2)
+	//todo likely fix below
 	var s httpsignature.SignatureParams
 	s.Algorithm = httpsignature.ED25519
 	s.KeyID = w.ID

@@ -2,6 +2,7 @@ package promotion
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -60,9 +61,12 @@ type Promotion struct {
 	Type                string                    `json:"type" db:"promotion_type"`
 	RemainingGrants     int                       `json:"-" db:"remaining_grants"`
 	Active              bool                      `json:"-" db:"active"`
-	Available           bool                      `json:"available" db:"available"`
 	Platform            string                    `json:"platform" db:"platform"`
 	PublicKeys          jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
+	Available           bool                      `json:"available" db:"available"`
+	AutoClaim           sql.NullBool              `json:"-" db:"auto_claim"`
+	SkipCaptcha         sql.NullBool              `json:"-" db:"skip_captcha"`
+	NumSuggestions      sql.NullInt64             `json:"-" db:"num_suggestions"`
 	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
 	LegacyClaimed  bool      `json:"legacyClaimed" db:"legacy_claimed"`
 	ClaimableUntil time.Time `json:"claimableUntil" db:"claimable_until"`
@@ -71,16 +75,32 @@ type Promotion struct {
 // PromotionV2 includes a new format for information about a particular promotion
 //nolint
 type PromotionV2 struct {
-	ID               uuid.UUID                 `json:"id" db:"id"`
-	ExpiresAt        time.Time                 `json:"expiresAt" db:"expires_at"`
-	Version          int                       `json:"version" db:"version"`
-	NumSuggestions   int                       `json:"numSuggestions" db:"num_suggestions"`
-	ApproximateValue decimal.Decimal           `json:"approximateValue" db:"approximate_value"`
-	Type             string                    `json:"type" db:"promotion_type"`
-	AutoClaim        bool                      `json:"-" db:"autoClaim"`
-	SkipCaptcha      bool                      `json:"-" db:"skipCaptcha"`
-	Available        bool                      `json:"available" db:"available"`
-	PublicKeys       jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
+	ID               uuid.UUID                 `json:"id"`
+	ExpiresAt        time.Time                 `json:"expiresAt"`
+	Version          int                       `json:"version"`
+	NumSuggestions   sql.NullInt64             `json:"numSuggestions"`
+	ApproximateValue decimal.Decimal           `json:"approximateValue"`
+	Type             string                    `json:"type"`
+	AutoClaim        sql.NullBool              `json:"autoClaim"`
+	SkipCaptcha      sql.NullBool              `json:"skipCaptcha"`
+	Available        bool                      `json:"available"`
+	PublicKeys       jsonutils.JSONStringArray `json:"publicKeys"`
+}
+
+// PromotionToV2 is a helper function to go from Promotion to PromotionV2
+//nolint
+func PromotionToV2(promo Promotion) PromotionV2 {
+	return PromotionV2{ID: promo.ID, ExpiresAt: promo.ExpiresAt, Version: promo.Version, NumSuggestions: promo.NumSuggestions, ApproximateValue: promo.ApproximateValue, Type: promo.Type, AutoClaim: promo.AutoClaim, SkipCaptcha: promo.SkipCaptcha, Available: promo.Available, PublicKeys: promo.PublicKeys}
+}
+
+// PromotionsToV2 is a helper function to go from []Promotion to []PromotionV2
+func PromotionsToV2(promos []Promotion) []PromotionV2 {
+	promotionsv2 := []PromotionV2{}
+	for _, promotion := range promos {
+		promotionsv2 = append(promotionsv2, PromotionToV2(promotion))
+	}
+
+	return promotionsv2
 }
 
 // Filter promotions to all that satisfy the function passed
