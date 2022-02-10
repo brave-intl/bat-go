@@ -666,13 +666,10 @@ func redeemAndTransferBitflyerFunds(
 func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet *walletutils.Info,
 	total decimal.Decimal) (*walletutils.TransactionInfo, error) {
 
-	logger := logging.Logger(ctx, "redeemAndTransferGeminiFunds")
-
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
 	if service.geminiConf == nil || service.geminiClient == nil {
-		logger.Error().Msg("gemini is misconfigured, missing gemini client and configuration")
-		return nil, errGeminiMisconfigured
+		return nil, fmt.Errorf("missing gemini client and configuration: %w", errGeminiMisconfigured)
 	}
 
 	txType := "drain"
@@ -712,7 +709,6 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 	signer := cryptography.NewHMACHasher([]byte(service.geminiConf.Secret))
 	serializedPayload, err := json.Marshal(payload)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to serialize payload")
 		return nil, fmt.Errorf("failed to serialize payload: %w", err)
 	}
 	// gemini client will base64 encode the payload prior to sending
@@ -724,19 +720,15 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 	)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("failed request to gemini")
 		var eb *errorutils.ErrorBundle
 		if errors.As(err, &eb) {
-			// okay, there was an errorbundle, unwrap and log the error
-			// convert err.Data() to json and report out
-			b, err := json.Marshal(eb.Data())
-			if err != nil {
-				logger.Error().Err(err).Msg("failed serialize error bundle data")
-			} else {
-				logger.Error().Err(err).
-					Str("data", string(b)).
-					Msg("gemini client error details")
-			}
+			// retrieve the error bundle data if there is any and log
+			errorData := eb.DataToString()
+			logging.FromContext(ctx).Error().
+				Err(eb.Cause()).
+				Str("wallet_id", wallet.ID).
+				Str("error_bundle", errorData).
+				Msg("failed to transfer funds gemini")
 		}
 		return nil, fmt.Errorf("failed to transfer funds: %w", err)
 	}
@@ -857,14 +849,11 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 	if err != nil {
 		var errorBundle *errorutils.ErrorBundle
 		if errors.As(err, &errorBundle) {
-			bytes, err := json.Marshal(errorBundle.Data())
-			if err != nil {
-				bytes = []byte(fmt.Errorf("unknown gemini client http state %w", err).Error())
-			}
+			errorData := errorBundle.DataToString()
 			logging.FromContext(ctx).Error().
 				Err(errorBundle.Cause()).
 				Str("txRef", txRef).
-				Str("error_bundle", string(bytes)).
+				Str("error_bundle", errorData).
 				Msg("gemini client check status error")
 		}
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
