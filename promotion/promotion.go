@@ -20,6 +20,13 @@ var (
 		},
 		[]string{"filter", "migrate"},
 	)
+	promotionV2GetCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "promotion_v2_get_count",
+			Help: "a count of the number of times the swap promotions were collected",
+		},
+		[]string{"platform"},
+	)
 	promotionExposureCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "promotion_exposure_count",
@@ -59,6 +66,21 @@ type Promotion struct {
 	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
 	LegacyClaimed  bool      `json:"legacyClaimed" db:"legacy_claimed"`
 	ClaimableUntil time.Time `json:"claimableUntil" db:"claimable_until"`
+}
+
+// PromotionV2 includes a new format for information about a particular promotion
+//nolint
+type PromotionV2 struct {
+	ID               uuid.UUID                 `json:"id" db:"id"`
+	ExpiresAt        time.Time                 `json:"expiresAt" db:"expires_at"`
+	Version          int                       `json:"version" db:"version"`
+	NumSuggestions   int                       `json:"numSuggestions" db:"num_suggestions"`
+	ApproximateValue decimal.Decimal           `json:"approximateValue" db:"approximate_value"`
+	Type             string                    `json:"type" db:"promotion_type"`
+	AutoClaim        bool                      `json:"-" db:"autoClaim"`
+	SkipCaptcha      bool                      `json:"-" db:"skipCaptcha"`
+	Available        bool                      `json:"available" db:"available"`
+	PublicKeys       jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
 }
 
 // Filter promotions to all that satisfy the function passed
@@ -138,5 +160,33 @@ func (service *Service) GetAvailablePromotions(
 		return &promos, nil
 	}
 	promos, err := service.ReadableDatastore().GetAvailablePromotions(platform)
+	return &promos, err
+}
+
+// GetAvailablePromotionsV2 first tries to look up the wallet and then retrieves available promotions
+func (service *Service) GetAvailablePromotionsV2(
+	ctx context.Context,
+	walletID *uuid.UUID,
+	platform string,
+) (*[]PromotionV2, error) {
+	if walletID != nil {
+		logging.AddWalletIDToContext(ctx, *walletID)
+
+		wallet, err := service.wallet.GetWallet(ctx, *walletID)
+		if err != nil {
+			return nil, err
+		}
+		if wallet == nil {
+			return nil, nil
+		}
+
+		promos, err := service.ReadableDatastore().GetAvailablePromotionsV2ForWallet(wallet, platform)
+		if err != nil {
+			return nil, err
+		}
+
+		return &promos, nil
+	}
+	promos, err := service.ReadableDatastore().GetAvailablePromotionsV2(platform)
 	return &promos, err
 }

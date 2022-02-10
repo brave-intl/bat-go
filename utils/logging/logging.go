@@ -80,6 +80,16 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	return l.WithContext(ctx), &l
 }
 
+// AddAccountAddressContext adds account address to context
+func AddAccountAddressContext(ctx context.Context, accountAddress string) {
+	l := zerolog.Ctx(ctx)
+	if e := l.Debug(); e.Enabled() {
+		l.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			return c.Str("accountAddress", accountAddress)
+		})
+	}
+}
+
 // AddWalletIDToContext adds wallet id to context
 func AddWalletIDToContext(ctx context.Context, walletID uuid.UUID) {
 	l := zerolog.Ctx(ctx)

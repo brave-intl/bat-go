@@ -33,6 +33,7 @@ type Claim struct {
 	DrainedAt        pq.NullTime     `db:"drained_at"`
 	UpdatedAt        pq.NullTime     `db:"updated_at"`
 	ClaimType        *string         `db:"claim_type"`
+	AddressID        *string         `db:"address_id"`
 }
 
 // SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
@@ -102,7 +103,7 @@ func (service *Service) ClaimPromotionForWallet(
 		return nil, errorutils.Wrap(err, "error checking previous claims for wallet")
 	}
 
-	// check if we need to override the auto expiry of the promotion
+	// q check if we need to override the auto expiry of the promotion
 	overrideAutoExpiry := false
 	if claim != nil {
 		overrideAutoExpiry = claim.LegacyClaimed
@@ -148,6 +149,7 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
+	// dont know what the cohort or promotion type is
 	cohort := "control"
 	issuer, err := service.GetOrCreateIssuer(ctx, promotionID, cohort)
 	if err != nil {
@@ -177,11 +179,13 @@ func (service *Service) ClaimPromotionForWallet(
 		}
 	}
 
+	// probably need a new method here
 	claim, err = service.Datastore.ClaimForWallet(promotion, issuer, wallet, jsonutils.JSONStringArray(blindedCreds))
 	if err != nil {
 		return nil, err
 	}
 
+	// maybe remove legacy claimed
 	value, _ := claim.ApproximateValue.Float64()
 	labels := prometheus.Labels{
 		"platform": promotion.Platform,

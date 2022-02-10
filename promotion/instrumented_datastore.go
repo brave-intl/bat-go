@@ -186,6 +186,20 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotions(platform string) (pa1 [
 	return _d.base.GetAvailablePromotions(platform)
 }
 
+// GetAvailablePromotionsV2 implements Datastore
+func (_d DatastoreWithPrometheus) GetAvailablePromotionsV2(platform string) (pa1 []PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsV2", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetAvailablePromotionsV2(platform)
+}
+
 // GetAvailablePromotionsForWallet implements Datastore
 func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
@@ -198,6 +212,20 @@ func (_d DatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *wallet
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsForWallet", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetAvailablePromotionsForWallet(wallet, platform)
+}
+
+// GetAvailablePromotionsV2ForWallet implements Datastore
+func (_d DatastoreWithPrometheus) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, platform string) (pa1 []PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsV2ForWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetAvailablePromotionsV2ForWallet(wallet, platform)
 }
 
 // GetClaimByWalletAndPromotion implements Datastore
@@ -282,6 +310,20 @@ func (_d DatastoreWithPrometheus) GetDrainsByBatchID(ctx context.Context, batchI
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainsByBatchID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetDrainsByBatchID(ctx, batchID)
+}
+
+// GetClaimByAddressID implements Datastore
+func (_d DatastoreWithPrometheus) GetClaimByAddressID(addressID string) (claim *Claim, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimByAddressID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetClaimByAddressID(addressID)
 }
 
 // GetIssuer implements Datastore

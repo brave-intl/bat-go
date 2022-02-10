@@ -39,6 +39,9 @@ func RouterV2(service *Service) chi.Router {
 		r.Method("POST", "/", CreatePromotion(service))
 	}
 
+	r.Method("GET", "/", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("GetPromotions", GetPromotions(service))))
+	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("GetClaimWithPromotion", GetClaimWithPromotion(service))))
+	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimSwapRewardsPromotion", ClaimSwapRewardsPromotion(service))))
 	// version 2 clobbered claims
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 2)))
 
@@ -59,7 +62,7 @@ func Router(service *Service) chi.Router {
 	// version 1 clobbered claims
 	r.Method("POST", "/reportclobberedclaims", middleware.InstrumentHandler("ReportClobberedClaims", PostReportClobberedClaims(service, 1)))
 	r.Method("POST", "/{promotionId}", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("ClaimPromotion", ClaimPromotion(service))))
-	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaim", GetClaim(service)))
+	r.Method("GET", "/{promotionId}/claims/{claimId}", middleware.InstrumentHandler("GetClaimWithPromotion", GetClaimWithPromotion(service)))
 	r.Method("GET", "/drain/{drainId}", middleware.InstrumentHandler("GetDrainPoll", GetDrainPoll(service)))
 	r.Method("POST", "/report-bap", middleware.HTTPSignedOnly(service)(middleware.InstrumentHandler("PostReportBAPEvent", PostReportBAPEvent(service))))
 	r.Method("GET", "/custodian-drain-status/{paymentId}", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("GetCustodianDrainInfo", GetCustodianDrainInfo(service))))
@@ -151,6 +154,11 @@ type PromotionsResponse struct {
 	Promotions []Promotion `json:"promotions"`
 }
 
+// PromotionsV2Response is a list of known promotions with a new format to be consumed by the browser
+type PromotionsV2Response struct {
+	Promotions []PromotionV2 `json:"promotions"`
+}
+
 // GetAvailablePromotions is the handler for getting available promotions
 func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -215,6 +223,126 @@ func GetAvailablePromotions(service *Service) handlers.AppHandler {
 	})
 }
 
+// GetAvailablePromotionsV2 is the handler for getting available promotions
+func GetAvailablePromotionsV2(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			filter   string
+			walletID = new(inputs.ID)
+		)
+		walletIDText := r.URL.Query().Get("paymentId")
+
+		if len(walletIDText) > 0 {
+			if err := inputs.DecodeAndValidateString(context.Background(), walletID, walletIDText); err != nil {
+				return handlers.ValidationError(
+					"Error validating request url parameter",
+					map[string]interface{}{
+						"paymentId": err.Error(),
+					},
+				)
+			}
+
+			logging.AddWalletIDToContext(r.Context(), *walletID.UUID())
+			filter = "walletID"
+		}
+
+		platform := r.URL.Query().Get("platform")
+		if len(platform) > 0 && !validators.IsPlatform(platform) {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			})
+		}
+
+		promotions, err := service.GetAvailablePromotionsV2(r.Context(), walletID.UUID(), platform)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
+		}
+		if promotions == nil {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&PromotionsV2Response{*promotions}); err != nil {
+			panic(err)
+		}
+		if len(filter) == 0 {
+			filter = "none"
+		}
+		promotionGetCount.With(prometheus.Labels{
+			"filter":  filter,
+			"migrate": "N/A",
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
+		}
+		return nil
+	})
+}
+
+// GetPromotions is the handler for getting available v2 promotions
+func GetPromotions(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		platform := r.URL.Query().Get("platform")
+		if len(platform) > 0 && !validators.IsPlatform(platform) {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"platform": fmt.Sprintf("platform '%s' is not supported", platform),
+			})
+		}
+
+		addressID := r.URL.Query().Get("address")
+		if len(addressID) > 0 {
+			return handlers.ValidationError("request query parameter", map[string]string{
+				"address": fmt.Sprintf("address '%s' is not supported", addressID),
+			})
+		}
+
+		// GetClaimByAddressID
+		claim, err := service.Datastore.GetClaimByAddressID(addressID)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
+		}
+		walletID := claim.WalletID
+		if !validators.IsUUID(walletID.String()) {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+		if walletID.String() != keyID {
+			return handlers.ValidationError("Error validating request", map[string]string{
+				"paymentId": "paymentId must match signature",
+			})
+		}
+
+		promotions, err := service.GetAvailablePromotionsV2(r.Context(), &walletID, platform)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
+		}
+		if promotions == nil {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&PromotionsV2Response{*promotions}); err != nil {
+			panic(err)
+		}
+
+		promotionV2GetCount.With(prometheus.Labels{
+			"platform": platform,
+		}).Inc()
+		for _, promotion := range *promotions {
+			promotionExposureCount.With(prometheus.Labels{
+				"id": promotion.ID.String(),
+			}).Inc()
+		}
+		return nil
+	})
+}
+
 // ClaimRequest includes the ID of the wallet attempting to claim and blinded credentials which to be signed
 type ClaimRequest struct {
 	WalletID     uuid.UUID `json:"paymentId" valid:"-"`
@@ -263,6 +391,93 @@ func ClaimPromotion(service *Service) handlers.AppHandler {
 		}
 
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), req.WalletID, req.BlindedCreds)
+
+		if err != nil {
+			var (
+				target *errorutils.ErrorBundle
+				status = http.StatusBadRequest
+			)
+
+			if errors.Is(err, errClaimedDifferentBlindCreds) {
+				status = http.StatusConflict
+			}
+
+			if errors.As(err, &target) {
+				err = target
+				response, ok := target.Data().(clients.HTTPState)
+				if ok {
+					if response.Status != 0 {
+						status = response.Status
+					}
+					err = fmt.Errorf(target.Error())
+				}
+			}
+			return handlers.WrapError(err, "Error claiming promotion", status)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(&ClaimResponse{*claimID}); err != nil {
+			panic(err)
+		}
+		return nil
+	})
+}
+
+// ClaimSwapRewardsPromotionRequest includes the ID of the Account attempting to claim and blinded credentials which to be signed
+type ClaimSwapRewardsPromotionRequest struct {
+	AccountID    string   `json:"address"` // TODO figure out how to validate address https://pkg.go.dev/github.com/asaskevich/govalidator#section-readme
+	BlindedCreds []string `json:"blindedCreds" valid:"base64"`
+}
+
+// ClaimSwapRewardsPromotion is the handler for claiming a particular promotion by a wallet
+func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var req ClaimSwapRewardsPromotionRequest
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		// TODO not sure if it's needed
+		logging.AddAccountAddressContext(r.Context(), req.AccountID)
+
+		keyID, err := middleware.GetKeyID(r.Context())
+		if err != nil {
+			return handlers.WrapError(err, "Error looking up http signature info", http.StatusBadRequest)
+		}
+
+		// GetClaimByAddressID
+		claim, err := service.Datastore.GetClaimByAddressID(req.AccountID)
+		if err != nil {
+			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
+		}
+		walletID := claim.WalletID
+		if !validators.IsUUID(walletID.String()) {
+			return handlers.WrapError(err, "Error finding wallet", http.StatusNotFound)
+		}
+
+		if walletID.String() != keyID {
+			return handlers.ValidationError("Error validating request", map[string]string{
+				"paymentId": "paymentId must match signature",
+			})
+		}
+
+		var promotionID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), promotionID, chi.URLParam(r, "promotionId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"promotionId": err.Error(),
+				},
+			)
+		}
+
+		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), walletID, req.BlindedCreds)
 
 		if err != nil {
 			var (
@@ -379,6 +594,90 @@ func GetClaim(service *Service) handlers.AppHandler {
 				Code:    http.StatusAccepted,
 				Data:    map[string]interface{}{},
 			}
+		}
+
+		resp := &GetClaimResponse{
+			SignedCreds: *claim.SignedCreds,
+			BatchProof:  *claim.BatchProof,
+			PublicKey:   *claim.PublicKey,
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			panic(err)
+		}
+		return nil
+
+	})
+}
+
+// GetClaimWithPromotion is the handler for checking on a particular claim's status
+func GetClaimWithPromotion(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var claimID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), claimID, chi.URLParam(r, "claimId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"claimId": err.Error(),
+				},
+			)
+		}
+
+		claim, err := service.Datastore.GetClaimCreds(*claimID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
+		}
+
+		if claim == nil {
+			return &handlers.AppError{
+				Message: "Claim does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		if claim.SignedCreds == nil {
+			return &handlers.AppError{
+				Message: "Claim has been accepted but is not ready",
+				Code:    http.StatusAccepted,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		var promotionID = new(inputs.ID)
+		if err := inputs.DecodeAndValidateString(context.Background(), promotionID, chi.URLParam(r, "promotionId")); err != nil {
+			return handlers.ValidationError(
+				"Error validating request url parameter",
+				map[string]interface{}{
+					"promotionId": err.Error(),
+				},
+			)
+		}
+
+		promotion, err := service.Datastore.GetPromotion(*promotionID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "Error getting promotion", http.StatusBadRequest)
+		}
+
+		if promotion == nil {
+			return &handlers.AppError{
+				Message: "Claim does not exist",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		promotionHasKey := false
+		for _, key := range promotion.PublicKeys {
+			if key == *claim.PublicKey {
+				promotionHasKey = true
+			}
+		}
+
+		if !promotionHasKey {
+			err := fmt.Errorf("promotion didnt have key: '%s'", *claim.PublicKey)
+			return handlers.WrapError(err, "Error promotion doesnt have publicKey", http.StatusBadRequest)
 		}
 
 		resp := &GetClaimResponse{

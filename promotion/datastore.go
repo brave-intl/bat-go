@@ -94,8 +94,12 @@ type Datastore interface {
 	CreatePromotion(promotionType string, numGrants int, value decimal.Decimal, platform string) (*Promotion, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
+	// GetAvailablePromotionsV2ForWallet returns the list of available promotions for the wallet
+	GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, platform string) ([]PromotionV2, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetAvailablePromotionsV2 returns the list of available promotions for all wallets
+	GetAvailablePromotionsV2(platform string) ([]PromotionV2, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
 	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -158,6 +162,8 @@ type Datastore interface {
 	GetDrainPoll(drainID *uuid.UUID) (*DrainPoll, error)
 	// GetDrainsByBatchID gets the information about a drain poll job
 	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
+	// GetClaimByAddressID gets the information about a drain poll job
+	GetClaimByAddressID(addressID string) (*Claim, error)
 	// GetCustodianDrainInfo gets the information about a drain poll job
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
@@ -173,8 +179,12 @@ type ReadOnlyDatastore interface {
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
+	// GetAvailablePromotionsV2ForWallet returns the list of available promotions for the wallet
+	GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, platform string) ([]PromotionV2, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetAvailablePromotionsV2 returns the list of available promotions for all wallets
+	GetAvailablePromotionsV2(platform string) ([]PromotionV2, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
 	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -196,6 +206,8 @@ type ReadOnlyDatastore interface {
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 	// GetDrainsByBatchID gets the information about a drain poll job
 	GetDrainsByBatchID(ctx context.Context, batchID *uuid.UUID) ([]DrainTransfer, error)
+	// GetClaimByAddressID gets the information about a drain poll job
+	GetClaimByAddressID(addressID string) (*Claim, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -663,6 +675,65 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 	return promotions, nil
 }
 
+// GetAvailablePromotionsV2ForWallet returns the list of available promotions for the wallet
+func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, platform string) ([]PromotionV2, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
+	statement := `
+		select
+			promos.id,
+			promos.promotion_type,
+			promos.expires_at,
+			promos.auto_claim,
+			promos.skip_captcha,
+			promos.available,
+			promos.num_suggestions,
+			promos.version,
+			coalesce(wallet_claims.approximate_value, promos.approximate_value) as approximate_value,
+			greatest(1, (coalesce(wallet_claims.approximate_value, promos.approximate_value) /
+					promos.approximate_value *
+					promos.suggestions_per_grant
+				)::int) as suggestions_per_grant,
+			promos.active,
+			promos.public_keys,
+		from
+			(
+				select * from 
+					(
+						select
+						promotion_id,
+						array_to_json(array_remove(array_agg(public_key), null)) as public_keys
+						from issuers
+						group by promotion_id
+					) issuer_keys join promotions on promotions.id = issuer_keys.promotion_id
+						where ( promotions.platform = '' or promotions.platform = $2)
+			) promos left join (
+				select * from claims where claims.wallet_id = $1
+			) wallet_claims on promos.id = wallet_claims.promotion_id
+		where
+			wallet_claims.redeemed is distinct from true and (
+				wallet_claims.legacy_claimed is true or (
+					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
+						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+					)
+				)
+			)
+		order by promos.created_at;`
+
+	promotions := []PromotionV2{}
+
+	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
+	if err != nil {
+		return promotions, err
+	}
+
+	return promotions, nil
+}
+
 // GetAvailablePromotions returns the list of available promotions for all wallets
 func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error) {
 	for _, desktopPlatform := range desktopPlatforms {
@@ -686,6 +757,44 @@ func (pg *Postgres) GetAvailablePromotions(platform string) ([]Promotion, error)
 		order by promotions.created_at;`
 
 	promotions := []Promotion{}
+
+	err := pg.RawDB().Select(&promotions, statement, platform)
+	if err != nil {
+		return promotions, err
+	}
+
+	return promotions, nil
+}
+
+// GetAvailablePromotionsV2 returns the list of available promotions for all wallets
+func (pg *Postgres) GetAvailablePromotionsV2(platform string) ([]PromotionV2, error) {
+	for _, desktopPlatform := range desktopPlatforms {
+		if platform == desktopPlatform {
+			platform = "desktop"
+		}
+	}
+	statement := `
+		select
+			true as available,
+			promotions.auto_claim,
+			promotions.skip_captcha,
+			promotions.available,
+			promotions.num_suggestions,
+			promotions.version,
+			promotions.id,
+			promotions.promotion_type,
+			promotions.expires_at,
+			promotions.approximate_value,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.promotion_type = 'swap' and
+			( promotions.platform = '' or promotions.platform = $1) and
+			promotions.active and promotions.remaining_grants > 0
+		group by promotions.id
+		order by promotions.created_at;`
+
+	promotions := []PromotionV2{}
 
 	err := pg.RawDB().Select(&promotions, statement, platform)
 	if err != nil {
@@ -1991,4 +2100,19 @@ where
 	}
 
 	return resp, nil
+}
+
+// GetClaimByAddressID is used to fetch a "claim" given a particular address_id
+func (pg *Postgres) GetClaimByAddressID(addressID string) (*Claim, error) {
+	claims := []Claim{}
+	err := pg.RawDB().Select(&claims, "select * from claims where address_id = $1", addressID)
+	if err != nil {
+		return &Claim{}, err
+	}
+
+	if len(claims) > 0 {
+		return &claims[0], nil
+	}
+
+	return &Claim{}, nil
 }

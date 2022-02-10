@@ -192,11 +192,35 @@ func (mr *MockDatastoreMockRecorder) GetAvailablePromotions(platform interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotions", reflect.TypeOf((*MockDatastore)(nil).GetAvailablePromotions), platform)
 }
 
+// GetAvailablePromotionsV2 mocks base method.
+func (m *MockDatastore) GetAvailablePromotionsV2(platform string) ([]PromotionV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAvailablePromotionsV2", platform)
+	ret0, _ := ret[0].([]PromotionV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAvailablePromotionsV2 indicates an expected call of GetAvailablePromotionsV2.
+func (mr *MockDatastoreMockRecorder) GetAvailablePromotionsV2(platform interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotionsV2", reflect.TypeOf((*MockDatastore)(nil).GetAvailablePromotionsV2), platform)
+}
+
 // GetAvailablePromotionsForWallet mocks base method.
 func (m *MockDatastore) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAvailablePromotionsForWallet", wallet, platform)
 	ret0, _ := ret[0].([]Promotion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAvailablePromotionsV2ForWallet mocks base method.
+func (m *MockDatastore) GetAvailablePromotionsV2ForWallet(wallet *wallet.Info, platform string) ([]PromotionV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAvailablePromotionsV2ForWallet", wallet, platform)
+	ret0, _ := ret[0].([]PromotionV2)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -295,6 +319,21 @@ func (m *MockDatastore) GetDrainsByBatchID(ctx context.Context, batchID *go_uuid
 func (mr *MockDatastoreMockRecorder) GetDrainsByBatchID(ctx, batchID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainsByBatchID", reflect.TypeOf((*MockDatastore)(nil).GetDrainsByBatchID), ctx, batchID)
+}
+
+// GetClaimByAddressID mocks base method.
+func (m *MockDatastore) GetClaimByAddressID(addressID string) (*Claim, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClaimByAddressID", addressID)
+	ret0, _ := ret[0].(*Claim)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClaimByAddressID indicates an expected call of GetClaimByAddressID.
+func (mr *MockDatastoreMockRecorder) GetClaimByAddressID(addressID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimByAddressID", reflect.TypeOf((*MockDatastore)(nil).GetClaimByAddressID), addressID)
 }
 
 // GetIssuer mocks base method.
@@ -746,6 +785,21 @@ func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotions(platform int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotions", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetAvailablePromotions), platform)
 }
 
+// GetAvailablePromotionsV2 mocks base method.
+func (m *MockReadOnlyDatastore) GetAvailablePromotionsV2(platform string) ([]PromotionV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAvailablePromotionsV2", platform)
+	ret0, _ := ret[0].([]PromotionV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAvailablePromotionsV2 indicates an expected call of GetAvailablePromotionsV2.
+func (mr *MockReadOnlyDatastoreMockRecorder) GetAvailablePromotionsV2(platform interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailablePromotionsV2", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetAvailablePromotionsV2), platform)
+}
+
 // GetAvailablePromotionsForWallet mocks base method.
 func (m *MockReadOnlyDatastore) GetAvailablePromotionsForWallet(wallet *wallet.Info, platform string) ([]Promotion, error) {
 	m.ctrl.T.Helper()
@@ -849,6 +903,21 @@ func (m *MockReadOnlyDatastore) GetDrainsByBatchID(ctx context.Context, batchID 
 func (mr *MockReadOnlyDatastoreMockRecorder) GetDrainsByBatchID(ctx, batchID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDrainsByBatchID", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetDrainsByBatchID), ctx, batchID)
+}
+
+// GetClaimByAddressID mocks base method.
+func (m *MockReadOnlyDatastore) GetClaimByAddressID(addressID string) (*Claim, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClaimByAddressID", addressID)
+	ret0, _ := ret[0].(*Claim)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClaimByAddressID indicates an expected call of GetClaimByAddressID.
+func (mr *MockReadOnlyDatastoreMockRecorder) GetClaimByAddressID(addressID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClaimByAddressID", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetClaimByAddressID), addressID)
 }
 
 // GetIssuer mocks base method.

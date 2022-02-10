@@ -56,6 +56,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotions(platform string
 	return _d.base.GetAvailablePromotions(platform)
 }
 
+// GetAvailablePromotionsV2 implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsV2(platform string) (pa1 []PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsV2", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetAvailablePromotionsV2(platform)
+}
+
 // GetAvailablePromotionsForWallet implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) (pa1 []Promotion, err error) {
 	_since := time.Now()
@@ -68,6 +82,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsForWallet(wallet
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsForWallet", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetAvailablePromotionsForWallet(wallet, platform)
+}
+
+// GetAvailablePromotionsV2ForWallet implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, platform string) (pa1 []PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetAvailablePromotionsV2ForWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetAvailablePromotionsV2ForWallet(wallet, platform)
 }
 
 // GetClaimByWalletAndPromotion implements ReadOnlyDatastore
@@ -152,6 +180,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetDrainsByBatchID(ctx context.Context
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetDrainsByBatchID", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetDrainsByBatchID(ctx, batchID)
+}
+
+// GetClaimByAddressID implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetClaimByAddressID(addressID string) (claim *Claim, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetClaimByAddressID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetClaimByAddressID(addressID)
 }
 
 // GetIssuer implements ReadOnlyDatastore

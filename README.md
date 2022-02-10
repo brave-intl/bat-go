@@ -44,6 +44,8 @@ To bring up a dev environment, run `make docker-dev`.
 This brings up an additional vault service, used for integration testing of
 some auxiliary binaries.
 
+Also if you want to run migrations locally, have postgres installed with a grants database and use `migrate -database ${POSTGRESQL_URL} -path migrations/ up`
+
 ### Testing
 
 ## Default Testing Behavior

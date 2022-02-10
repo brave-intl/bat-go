@@ -337,6 +337,59 @@ func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutil
 	return &claimResp.ClaimID
 }
 
+// ClaimSwapRewardsPromotion helper that calls promotion endpoint and does assertions
+func (suite *ControllersTestSuite) ClaimSwapRewardsPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
+	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
+
+	handler := middleware.HTTPSignedOnly(service)(ClaimSwapRewardsPromotion(service))
+
+	walletID, err := uuid.FromString(w.ID)
+	suite.Require().NoError(err)
+
+	claimReq := ClaimRequest{
+		WalletID:     walletID,
+		BlindedCreds: blindedCreds,
+	}
+
+	body, err := json.Marshal(&claimReq)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v2/promotion/{promotionId}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	//todo need the signature
+
+	// not sure if it always comes in as hex?
+	// privHexECDSA := "fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19"
+	// err = s2.Sign(ECDSAKey(privHexECDSA), crypto.Hash(0), r2)
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = w.ID
+	s.Headers = []string{"digest", "(request-target)"}
+
+	err = s.Sign(privKey, crypto.Hash(0), req)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("promotionId", promotion.ID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if claimStatus != 200 {
+		// return early if claim is supposed to fail
+		suite.Require().Equal(rr.Code, claimStatus, string(rr.Body.Bytes()))
+		return nil
+	}
+	// if claim was not supposed to fail, or rr.Code is supposed to be ok following line fails
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	var claimResp ClaimResponse
+	err = json.Unmarshal(rr.Body.Bytes(), &claimResp)
+	suite.Require().NoError(err)
+	return &claimResp.ClaimID
+}
+
 func (suite *ControllersTestSuite) WaitForClaimToPropagate(service *Service, promotion *Promotion, claimID *uuid.UUID) {
 	handler := GetClaim(service)
 
