@@ -1568,7 +1568,9 @@ limit 1`
 	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
-		logger.Error().Err(err).Msg("failed to redeem and transfer funds")
+		logger.Error().Err(err).
+			Interface("claim_drain_id", job.ID).
+			Msg("failed to redeem and transfer funds")
 		sentry.CaptureException(err)
 
 		// record as error (retriable or not)

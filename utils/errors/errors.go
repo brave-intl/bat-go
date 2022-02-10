@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -53,23 +54,35 @@ func New(cause error, message string, data interface{}) error {
 }
 
 // Data from error origin
-func (err ErrorBundle) Data() interface{} {
-	return err.data
+func (e ErrorBundle) Data() interface{} {
+	return e.data
 }
 
 // Cause returns the associated cause
-func (err ErrorBundle) Cause() error {
-	return err.cause
+func (e ErrorBundle) Cause() error {
+	return e.cause
 }
 
 // Unwrap returns the associated cause
-func (err ErrorBundle) Unwrap() error {
-	return err.cause
+func (e ErrorBundle) Unwrap() error {
+	return e.cause
 }
 
 // Error turns into an error
-func (err ErrorBundle) Error() string {
-	return err.message
+func (e ErrorBundle) Error() string {
+	return e.message
+}
+
+// DataToString returns string representation of data
+func (e ErrorBundle) DataToString() string {
+	if e.data == nil {
+		return "no error bundle data"
+	}
+	b, err := json.Marshal(e.data)
+	if err != nil {
+		return fmt.Sprintf("error retrieving error bundle data %s", err.Error())
+	}
+	return string(b)
 }
 
 // Wrap wraps an error

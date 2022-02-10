@@ -390,12 +390,8 @@ func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID 
 }
 
 // UploadBulkPayout uploads the bulk payout for gemini
-func (c *HTTPClient) UploadBulkPayout(
-	ctx context.Context,
-	APIKey string,
-	signer cryptography.HMACKey,
-	payload string,
-) (*[]PayoutResult, error) {
+func (c *HTTPClient) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error) {
+
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil, nil)
 	if err != nil {
 		return nil, err
@@ -410,6 +406,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	if err != nil {
 		return nil, err
 	}
+
 	return &body, err
 }
 
