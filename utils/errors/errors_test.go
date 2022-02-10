@@ -57,7 +57,7 @@ func TestErrorBundle_DataToString_DataNil(t *testing.T) {
 	assert.Equal(t, "no error bundle data", actual.DataToString())
 }
 
-func TestErrorBundle_DataToString_MarchallError(t *testing.T) {
+func TestErrorBundle_DataToString_MarshallError(t *testing.T) {
 	unsupportedData := func() {}
 	sut := errutil.New(errors.New(testutils.RandomString()), testutils.RandomString(), unsupportedData)
 
