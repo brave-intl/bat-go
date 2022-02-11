@@ -2,8 +2,8 @@ package httpsignature
 
 import (
 	"crypto"
-	"fmt"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	ethc "github.com/ethereum/go-ethereum/crypto"
 )
@@ -17,11 +17,8 @@ func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool,
 	// convert key to eth address
 	address := common.HexToAddress(string(key))
 
-	// re-create the message (message is just the built http signing string)
-	m := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
-
 	// recover the public key that created the signature
-	hash := ethc.Keccak256([]byte(m))
+	hash := accounts.TextHash(message)
 
 	pubKey, err := ethc.SigToPub(hash, sig)
 	if err != nil {

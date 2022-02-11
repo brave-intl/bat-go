@@ -9,6 +9,7 @@ require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.18.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/btcsuite/btcd/btcutil v1.1.0 // indirect
 	github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d
 	github.com/containerd/containerd v1.5.9 // indirect
 	github.com/ethereum/go-ethereum v1.10.15 // indirect
@@ -21,6 +22,7 @@ require (
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
+	github.com/hashicorp/go-kms-wrapping v0.6.8 // indirect
 	github.com/hashicorp/vault v1.9.3
 	github.com/hashicorp/vault/api v1.3.0
 	github.com/hashicorp/vault/sdk v0.3.1-0.20220103172553-29ded54520a4
@@ -46,8 +48,8 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	golang.org/x/net v0.0.0-20211020060615-d418f374d309
+	golang.org/x/crypto v0.0.0-20220210151621-f4118a5b28e2
+	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b
 	gopkg.in/linkedin/goavro.v1 v1.0.5 // indirect
 	gopkg.in/macaroon.v2 v2.1.0
