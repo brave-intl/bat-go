@@ -194,16 +194,16 @@ func (m *MockGeminiTxnStatusWorker) EXPECT() *MockGeminiTxnStatusWorkerMockRecor
 }
 
 // GetGeminiTxnStatus mocks base method.
-func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, transactionID string) (*wallet.TransactionInfo, error) {
+func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, txRef string) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGeminiTxnStatus", ctx, transactionID)
+	ret := m.ctrl.Call(m, "GetGeminiTxnStatus", ctx, txRef)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetGeminiTxnStatus indicates an expected call of GetGeminiTxnStatus.
-func (mr *MockGeminiTxnStatusWorkerMockRecorder) GetGeminiTxnStatus(ctx, transactionID interface{}) *gomock.Call {
+func (mr *MockGeminiTxnStatusWorkerMockRecorder) GetGeminiTxnStatus(ctx, txRef interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGeminiTxnStatus", reflect.TypeOf((*MockGeminiTxnStatusWorker)(nil).GetGeminiTxnStatus), ctx, transactionID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGeminiTxnStatus", reflect.TypeOf((*MockGeminiTxnStatusWorker)(nil).GetGeminiTxnStatus), ctx, txRef)
 }

@@ -1924,8 +1924,8 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 	}
 	txRef := gemini.GenerateTxRef(&settlementTx)
 
-	txStatus, err := worker.GetGeminiTxnStatus(ctx, txRef)
-	if err != nil || txStatus == nil {
+	transactionInfo, err := worker.GetGeminiTxnStatus(ctx, txRef)
+	if err != nil || transactionInfo == nil {
 
 		// update the erred claim drain so it goes to back of queue
 		query := `update claim_drain set status = $1, updated_at = now() where id = $2`
@@ -1933,15 +1933,14 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 
-		err = tx.Commit()
-		if err != nil {
+		if err := tx.Commit(); err != nil {
 			return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 
 		return true, fmt.Errorf("failed to get status for txn %s: %w", *drainJob.TransactionID, err)
 	}
 
-	switch txStatus.Status {
+	switch transactionInfo.Status {
 	case "complete":
 		query := `update claim_drain set completed = true, completed_at = now(), status = 'complete' where id = $1`
 		if _, err := tx.ExecContext(ctx, query, drainJob.ID); err != nil {
@@ -1954,12 +1953,12 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 		}
 	case "failed":
 		query := `update claim_drain set status = 'failed', erred = true, errcode = $1 where id = $2`
-		if _, err := tx.ExecContext(ctx, query, txStatus.Note, drainJob.ID); err != nil {
+		if _, err := tx.ExecContext(ctx, query, transactionInfo.Note, drainJob.ID); err != nil {
 			return true, fmt.Errorf("failed to update status for txn %s: %w", *drainJob.TransactionID, err)
 		}
 	default:
 		return true, fmt.Errorf("failed to update status for txn %s: unknown status %s",
-			*drainJob.TransactionID, txStatus.Status)
+			*drainJob.TransactionID, transactionInfo.Status)
 	}
 
 	err = tx.Commit()
@@ -1967,8 +1966,8 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 		return true, fmt.Errorf("failed to commit update status for txn %s: %w", *drainJob.TransactionID, err)
 	}
 
-	if txStatus.Status == "complete" || txStatus.Status == "failed" {
-		countClaimDrainStatus.With(prometheus.Labels{"custodian": "gemini", "status": txStatus.Status}).Inc()
+	if transactionInfo.Status == "complete" || transactionInfo.Status == "failed" {
+		countClaimDrainStatus.With(prometheus.Labels{"custodian": "gemini", "status": transactionInfo.Status}).Inc()
 	}
 
 	return true, nil
