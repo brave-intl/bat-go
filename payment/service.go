@@ -268,6 +268,10 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 		return nil, fmt.Errorf("failed to get order (%s): %w", orderID.String(), err)
 	}
 
+	if order == nil {
+		return nil, fmt.Errorf("failed to get order (%s)", orderID.String())
+	}
+
 	if !order.IsPaid() && order.IsStripePayable() {
 		order, err = s.TransformStripeOrder(order)
 		if err != nil {
