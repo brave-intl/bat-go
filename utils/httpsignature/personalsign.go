@@ -2,6 +2,7 @@ package httpsignature
 
 import (
 	"crypto"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -9,16 +10,16 @@ import (
 )
 
 // EthAddress - the ethereum address hex repr
-type EthAddress string
+type EthAddress common.Address
 
 // Verify the signature sig for message based on eth address
 func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
-
 	// convert key to eth address
-	address := common.HexToAddress(string(key))
+	address := common.HexToAddress(fmt.Sprintf("%s", key))
 
+	m := fmt.Sprintf("Claim Brave Swap Rewards BAT\n%s", []byte(message))
 	// recover the public key that created the signature
-	hash := accounts.TextHash(message)
+	hash := accounts.TextHash([]byte(m))
 
 	pubKey, err := ethc.SigToPub(hash, sig)
 	if err != nil {
@@ -31,9 +32,4 @@ func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool,
 	}
 
 	return false, nil
-}
-
-// String - implement stringer
-func (key EthAddress) String() string {
-	return string(key)
 }
