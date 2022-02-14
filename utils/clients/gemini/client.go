@@ -25,13 +25,24 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "gemini_account_balance",
-	Help: "A gauge of the current account balance in gemini",
-})
+var (
+	balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gemini_account_balance",
+		Help: "A gauge of the current account balance in gemini",
+	})
+
+	countGeminiWalletAccountValidation = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_gemini_wallet_account_validation",
+			Help: "Counts the number of gemini wallets requesting account validation partitioned by country code",
+		},
+		[]string{"country_code"},
+	)
+)
 
 func init() {
 	prometheus.MustRegister(balanceGauge)
+	prometheus.MustRegister(countGeminiWalletAccountValidation)
 }
 
 // WatchGeminiBalance - when called reports the balance to prometheus
@@ -450,6 +461,10 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	_, err = c.client.Do(ctx, req, res)
 	if err != nil {
 		return "", err
+	}
+
+	if res.CountryCode != "" {
+		countGeminiWalletAccountValidation.With(prometheus.Labels{"country_code": res.CountryCode}).Inc()
 	}
 
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
