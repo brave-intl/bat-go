@@ -315,7 +315,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 	// if this is a stripe order, and there is a checkout session, we actually need to check it with
 	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
-	if order.Metadata["stripeCheckoutSessionId"] != "" {
+	if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
 		// get old checkout session from stripe by id
 		stripeSession, err := session.Get(cs, nil)
 		if err != nil {
