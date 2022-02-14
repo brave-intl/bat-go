@@ -279,7 +279,7 @@ type BatchTransferWorker interface {
 
 // GeminiTxnStatusWorker this worker retrieves the status for a given gemini transaction
 type GeminiTxnStatusWorker interface {
-	GetGeminiTxnStatus(ctx context.Context, transactionID string) (*walletutils.TransactionInfo, error)
+	GetGeminiTxnStatus(ctx context.Context, txRef string) (*walletutils.TransactionInfo, error)
 }
 
 // drainClaimErred - a codified err type for draind
@@ -845,7 +845,7 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 		return nil, fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
 	}
 
-	response, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
+	payoutResult, err := service.geminiClient.CheckTxStatus(ctx, apiKey, clientID, txRef)
 	if err != nil {
 		var errorBundle *errorutils.ErrorBundle
 		if errors.As(err, &errorBundle) {
@@ -859,24 +859,24 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
 
-	if response == nil {
+	if payoutResult == nil {
 		return nil, fmt.Errorf("failed to get gemini txn status for %s: response nil", txRef)
 	}
 
-	if strings.ToLower(response.Result) == "error" {
+	if strings.ToLower(payoutResult.Result) == "error" {
 		return nil, fmt.Errorf("failed to get gemini txn status for %s: %s", txRef,
-			ptr.StringOr(response.Reason, "unknown gemini response error"))
+			ptr.StringOr(payoutResult.Reason, "unknown gemini response error"))
 	}
 
-	switch strings.ToLower(ptr.String(response.Status)) {
+	switch strings.ToLower(ptr.String(payoutResult.Status)) {
 	case "completed":
 		return &walletutils.TransactionInfo{Status: "complete"}, nil
 	case "pending":
 		return &walletutils.TransactionInfo{Status: "pending"}, nil
 	case "failed":
-		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(response.Reason)}, nil
+		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(payoutResult.Reason)}, nil
 	}
 
 	return nil, fmt.Errorf("failed to get txn status for %s: unknown status %s",
-		txRef, ptr.String(response.Status))
+		txRef, ptr.String(payoutResult.Status))
 }
