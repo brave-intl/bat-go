@@ -35,6 +35,29 @@ be performed against.
 Returned is the exact same array with the exception that every single record will have a document id which is the qldb
 identifier, used to verify the transaction data is correct and has not been tampered with.
 
+#### Error Conditions
+
+- 400 - Non-Retriable Errors
+  - Custodian URL Parameter Invalid
+  - Transaction List is inproperly formatted
+- 500 - Retriable Error
+  - Misconfigured Service
+  - Unrecoverable Server Error
+- 503 - Retriable Error
+  - Service not available
+
+#### Common Error Response Structure
+
+```json
+{
+    "message": <string>, // will include a human readable message about the cause of the error
+    "code": <int>, // the application specific error coding
+    "data": <object> // context data about the error
+}
+```
+
+
+
 ### Submit
 
 ```http
@@ -52,4 +75,53 @@ HTTP/1.1 200
 The caller will perform a `POST` request to the `/v1/payments/submit` endpoint with the response from the prepare API call.
 This request will employ an http signature from a hard coded set of valid http signers called authorizers.  The signature will
 employ the ed25519 signature scheme currently employed for other services.
+
+#### Error Conditions
+
+- 400 - Non-retriable Error
+  - Transaction List is inproperly formatted
+  - Transaction List has been tampered with
+  - Upstream Custodian Validation Errors
+- 403 - Non-retriable error
+  - Unauthorized Submit, Verifier is not acceptable, Signature Invalid
+- 500 - Retriable Error
+  - Misconfigured Service
+  - Unrecoverable Server Error
+  - Upstream Custodian Transient Server Errors
+- 503 - Retriable Error
+  - Service not available
+
+#### Common Error Response Structure
+
+```json
+{
+    "message": <string>, // will include a human readable message about the cause of the error
+    "code": <int>, // the application specific error coding
+    "data": <object> // context data about the error
+}
+```
+
+Within the `data` in the common error response there will be a list of failed transactions with the
+custodian specific information related to the failure.  Example below:
+
+```json
+{
+    "message": "failed to submit transaction",
+    "code": 400,
+    "data": {
+        "failedTransactions": [
+            {
+                "transaction": {
+                        idempotencyKey: <uuid>,
+                        amount: <decimal>,
+                        to: <identifier>,
+                        from: <identifier>,
+                        documentId: <identifier>
+                },
+                "upstreamResponse": <custodian response>
+            }
+        ]
+    }
+}
+```
 
