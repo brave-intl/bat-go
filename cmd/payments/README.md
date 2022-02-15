@@ -130,11 +130,7 @@ Example below:
 ### Get Status
 
 ```http
-POST /v1/payments/get-status
-[
-  <document id>,
-  ...
-]
+GET /v1/payments/{document_id}/status
 
 HTTP/1.1 200
 [
