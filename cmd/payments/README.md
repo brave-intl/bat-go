@@ -69,12 +69,15 @@ SIGNATURE: ...
   ...
 ]
 
-HTTP/1.1 200
+HTTP/1.1 202
 ```
 
 The caller will perform a `POST` request to the `/v1/payments/submit` endpoint with the response from the prepare API call.
 This request will employ an http signature from a hard coded set of valid http signers called authorizers.  The signature will
 employ the ed25519 signature scheme currently employed for other services.
+
+The submit endpoint will asynchronously process transactions.  To get the individual status of the transactions
+one must use the Get Status endpoint discussed below to get the full response from the custodian.
 
 #### Error Conditions
 
@@ -101,15 +104,14 @@ employ the ed25519 signature scheme currently employed for other services.
 }
 ```
 
-Within the `data` in the common error response there will be a list of failed transactions with the
-custodian specific information related to the failure.  Example below:
+Example below:
 
 ```json
 {
-    "message": "failed to submit transaction",
+    "message": "failed to accept transaction",
     "code": 400,
     "data": {
-        "failedTransactions": [
+        "transactions": [
             {
                 "transaction": {
                         idempotencyKey: <uuid>,
@@ -118,10 +120,50 @@ custodian specific information related to the failure.  Example below:
                         from: <identifier>,
                         documentId: <identifier>
                 },
-                "upstreamResponse": <custodian response>
+                "reason": "invalid documentId"
             }
         ]
     }
 }
 ```
 
+### Get Status
+
+```http
+POST /v1/payments/get-status
+[
+  <document id>,
+  ...
+]
+
+HTTP/1.1 200
+[
+  {
+    "transaction": { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier> },
+    "response": <custodian response>
+    "status": (completed | pending | processing | failed)
+  },
+  ...
+]
+```
+
+#### Error Conditions
+
+- 400 - Non-Retriable Errors
+  - invalid document ids
+  - Transaction List is inproperly formatted
+- 500 - Retriable Error
+  - Misconfigured Service
+  - Unrecoverable Server Error
+- 503 - Retriable Error
+  - Service not available
+
+#### Common Error Response Structure
+
+```json
+{
+    "message": <string>, // will include a human readable message about the cause of the error
+    "code": <int>, // the application specific error coding
+    "data": <object> // context data about the error
+}
+```
