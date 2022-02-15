@@ -16,13 +16,8 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		var (
 			custodian = chi.URLParam(r, "custodian")
+			logger    = logging.Logger(ctx, "PrepareHandler")
 		)
-
-		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
 
 		logger.Info().Str("custodian", custodian).Msg("handling prepare request")
 
@@ -38,14 +33,29 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		// get context from request
 		ctx := r.Context()
 
-		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		var (
+			logger = logging.Logger(ctx, "SubmitHandler")
+		)
 
 		logger.Info().Msg("handling submit request")
 		// FIXME - do the submission
+		return nil
+	})
+}
+
+// StatusHandler - handler to perform submission of transactions to custodian
+func StatusHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			documentID = chi.URLParam(r, "documentID")
+			logger     = logging.Logger(ctx, "StatusHandler")
+		)
+
+		logger.Info().Str("documentID", documentID).Msg("handling status request")
+		// FIXME - do the status
 		return nil
 	})
 }
