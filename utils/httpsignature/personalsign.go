@@ -14,9 +14,6 @@ type EthAddress common.Address
 
 // Verify the signature sig for message based on eth address
 func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool, error) {
-	// convert key to eth address
-	address := common.HexToAddress(fmt.Sprintf("%s", key))
-
 	m := fmt.Sprintf("Claim Brave Swap Rewards BAT\n%s", []byte(message))
 	// recover the public key that created the signature
 	hash := accounts.TextHash([]byte(m))
@@ -26,7 +23,7 @@ func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool,
 		return false, err
 	}
 
-	if ethc.PubkeyToAddress(*pubKey) == address {
+	if ethc.PubkeyToAddress(*pubKey) == key {
 		// address matches, perform verification
 		return ethc.VerifySignature(ethc.FromECDSAPub(pubKey), hash, sig), nil
 	}
