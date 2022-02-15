@@ -23,7 +23,7 @@ func (key EthAddress) Verify(message, sig []byte, opts crypto.SignerOpts) (bool,
 		return false, err
 	}
 
-	if ethc.PubkeyToAddress(*pubKey) == key {
+	if EthAddress(ethc.PubkeyToAddress(*pubKey)) == key {
 		// address matches, perform verification
 		return ethc.VerifySignature(ethc.FromECDSAPub(pubKey), hash, sig), nil
 	}
