@@ -140,7 +140,8 @@ HTTP/1.1 200
 [
   {
     "transaction": { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier> },
-    "response": <custodian response>
+    "submissionResponse": <custodian response>
+    "statusResponse": <custodian response>
     "status": (completed | pending | processing | failed)
   },
   ...
