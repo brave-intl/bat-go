@@ -423,7 +423,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	settlementAddress := "settlement"
 	currency := "BAT"
 	status := "completed"
-	amount, err := decimal.NewFromString("1")
+	amount, err := decimal.NewFromString("0.0000000001")
 	suite.Require().NoError(err)
 	// make sure we get a call to CheckTxStatus and return the right things
 	mockGemini.EXPECT().

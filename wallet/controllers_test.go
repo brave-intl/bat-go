@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package wallet
@@ -108,7 +109,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 
 	w1 := suite.NewWallet(service, "uphold")
 
-	bat1 := decimal.NewFromFloat(1)
+	bat1 := decimal.NewFromFloat(0.000000001)
 
 	suite.FundWallet(w1, bat1)
 
@@ -172,8 +173,8 @@ func (suite *WalletControllersTestSuite) TestUnLinkWalletV3() {
 	w3 := suite.NewWallet(service, "uphold")
 	w4 := suite.NewWallet(service, "uphold")
 	w5 := suite.NewWallet(service, "uphold")
-	bat1 := decimal.NewFromFloat(1)
-	bat2 := decimal.NewFromFloat(2)
+	bat1 := decimal.NewFromFloat(0.000000001)
+	bat2 := decimal.NewFromFloat(0.000000002)
 
 	suite.FundWallet(w1, bat1)
 	suite.FundWallet(w2, bat1)
@@ -271,8 +272,8 @@ func (suite *WalletControllersTestSuite) TestLinkWalletV3() {
 	w2 := suite.NewWallet(service, "uphold")
 	w3 := suite.NewWallet(service, "uphold")
 	w4 := suite.NewWallet(service, "uphold")
-	bat1 := decimal.NewFromFloat(1)
-	bat2 := decimal.NewFromFloat(2)
+	bat1 := decimal.NewFromFloat(0.000000001)
+	bat2 := decimal.NewFromFloat(0.000000002)
 
 	suite.FundWallet(w1, bat1)
 	suite.FundWallet(w2, bat1)
