@@ -6,27 +6,19 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/qldbsession"
-	"github.com/awslabs/amazon-qldb-driver-go/qldbdriver"
+	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
-type custodian string
-
-const (
-	uphold   = custodian("uphold")
-	gemini   = custodian("gemini")
-	bitflyer = custodian("bitflyer")
-)
-
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey *uuid.UUID       `json:idempotencyKey,omitempty ion:idempotencyKey`
-	Amount         *decimal.Decimal `json:amount,omitempty ion:amount`
-	To             *string          `json:to,omitempty ion:to`
-	From           *string          `json:from,omitempty ion:from`
-	Custodian      custodian        `json:- ion:custodian`
+	IdempotencyKey *uuid.UUID      `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"uuid"`
+	Amount         decimal.Decimal `json:"amount,omitempty" ion:"amount" valid:"numeric"`
+	To             string          `json:"to,omitempty" ion:"to" valid:"required"`
+	From           string          `json:"from,omitempty" ion:"from" valid:"required"`
+	Custodian      string          `json:"custodian" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
 }
 
 // newQLDBDatastore - create a new qldbDatastore
@@ -66,7 +58,7 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 
 // InsertTransactions - perform a qldb insertion on the transactions
 func (s Service) InsertTransactions(ctx context.Context, transactions ...*Transaction) error {
-	_, err = driver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
 		// for all of the transactions load up a check to see if this transaction has already existed
 		// or not, then perform the insertion of the records.
 		for _, transaction := range transactions {
@@ -84,8 +76,9 @@ func (s Service) InsertTransactions(ctx context.Context, transactions ...*Transa
 					return nil, fmt.Errorf("failed to insert tx: %s due to: %w", transaction.IdempotencyKey, err)
 				}
 			}
-			return nil, nil
-		})
+		}
+		return nil, nil
+	})
 	if err != nil {
 		return fmt.Errorf("failed to insert transactions: %w", err)
 	}

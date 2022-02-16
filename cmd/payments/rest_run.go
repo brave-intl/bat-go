@@ -37,7 +37,7 @@ func RestRun(command *cobra.Command, args []string) {
 	//ctx = context.WithValue(ctx, appctx.CoingeckoServerCTXKey, viper.Get("coingecko-service"))
 
 	// setup the service now
-	ctx, s, err := payments.InitService(ctx)
+	ctx, s, err := payments.NewService(ctx)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initalize payments service")
 	}
@@ -46,7 +46,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(ctx)
 
 	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
-	r.Post("/v1/payments/{custodian}/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
+	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
 	// submit will have an http signature from a known list of public keys
 	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
 	// status to get the status and submission results from the submit

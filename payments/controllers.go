@@ -1,10 +1,13 @@
 package payments
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/go-chi/chi"
 )
 
@@ -15,13 +18,26 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 
 		var (
-			custodian = chi.URLParam(r, "custodian")
-			logger    = logging.Logger(ctx, "PrepareHandler")
+			logger = logging.Logger(ctx, "PrepareHandler")
+			req    = []*Transaction{}
 		)
 
-		logger.Info().Str("custodian", custodian).Msg("handling prepare request")
+		// read the transactions in the body
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+		// validate the list of transactions
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
 
-		// FIXME - do the prepare
+		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
+
+		if err := service.InsertTransactions(ctx, req...); err != nil {
+			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
+		}
 
 		return nil
 	})

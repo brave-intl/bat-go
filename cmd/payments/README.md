@@ -12,20 +12,20 @@ custodian.
 ### Prepare
 
 ```http
-POST /v1/payments/{custodian}/prepare
+POST /v1/payments/prepare
 [
-  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier> }
+  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, custodian: <custodian enum> }
   ...
 ]
 
 HTTP/1.1 200
 [
-  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier> }
+  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier>, custodian: <custodian enum> }
   ...
 ]
 ```
 
-The caller will perform a `POST` request to the `/v1/payments/{custodian}/prepare` endpoint with 
+The caller will perform a `POST` request to the `/v1/payments/prepare` endpoint with 
 a JSON array of transactions.  Transactions will consist of an idempotencyKey which will be passed along to
 the custodians to make sure this transaction only happens once, an amount in decimal form, to which is where the
 funds should go (uphold card, gemini recipient id, bitflyer deposit id) and a from which is a brave owned card in uphold's case,

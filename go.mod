@@ -10,6 +10,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.18.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/aws/aws-sdk-go v1.37.19
+	github.com/awslabs/amazon-qldb-driver-go v1.1.1 // indirect
 	github.com/awslabs/amazon-qldb-driver-go/v2 v2.0.2
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/containerd/containerd v1.5.9 // indirect
