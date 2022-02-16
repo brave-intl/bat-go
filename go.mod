@@ -9,6 +9,8 @@ require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.18.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/aws/aws-sdk-go v1.37.19
+	github.com/awslabs/amazon-qldb-driver-go/v2 v2.0.2
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/containerd/containerd v1.5.9 // indirect
 	github.com/getsentry/sentry-go v0.12.0
@@ -17,8 +19,9 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/golang-migrate/migrate/v4 v4.14.1
 	github.com/golang/mock v1.6.0
-	github.com/gomodule/redigo v2.0.0+incompatible
+	github.com/gomodule/redigo v1.8.8
 	github.com/google/go-querystring v1.1.0
+	github.com/google/uuid v1.3.0
 	github.com/hashicorp/vault v1.9.3
 	github.com/hashicorp/vault/api v1.3.0
 	github.com/hashicorp/vault/sdk v0.3.1-0.20220103172553-29ded54520a4
