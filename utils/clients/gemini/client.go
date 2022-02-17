@@ -36,7 +36,7 @@ var (
 			Name: "count_gemini_wallet_account_validation",
 			Help: "Counts the number of gemini wallets requesting account validation partitioned by country code",
 		},
-		[]string{"country_code"},
+		[]string{"country_code", "status"},
 	)
 )
 
@@ -463,17 +463,26 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", err
 	}
 
-	if res.CountryCode != "" {
-		countGeminiWalletAccountValidation.With(prometheus.Labels{"country_code": res.CountryCode}).Inc()
-	}
-
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
 		// check country code
 		for _, v := range blacklist {
 			if strings.EqualFold(res.CountryCode, v) {
+				if res.CountryCode != "" {
+					countGeminiWalletAccountValidation.With(prometheus.Labels{
+						"country_code": res.CountryCode,
+						"status":       "failure",
+					}).Inc()
+				}
 				return "", ErrInvalidCountry
 			}
 		}
+	}
+
+	if res.CountryCode != "" {
+		countGeminiWalletAccountValidation.With(prometheus.Labels{
+			"country_code": res.CountryCode,
+			"status":       "success",
+		}).Inc()
 	}
 
 	return res.ID, nil
