@@ -136,7 +136,7 @@ func (suite *WalletControllersTestSuite) TestBalanceV3() {
 	err = json.Unmarshal(rr.Body.Bytes(), &balance)
 	suite.Require().NoError(err, "failed to unmarshal balance result")
 
-	suite.Require().Equal(balance.Total, float64(1), fmt.Sprintf("balance is expected to match %f: %f", balance.Total, float64(1)))
+	suite.Require().Equal(balance.Total, float64(0.000000001), fmt.Sprintf("balance is expected to match %f: %f", balance.Total, float64(1)))
 
 	_, err = pg.RawDB().Exec(`update wallets set provider_id = '' where id = $1`, w1.ID)
 	suite.Require().NoError(err, "wallet provider_id could not be set as empty string")
