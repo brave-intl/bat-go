@@ -445,7 +445,8 @@ var ErrInvalidCountry = errors.New("invalid country")
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
 	// create the query string parameters
 	var (
-		res = new(ValidateAccountRes)
+		res    = new(ValidateAccountRes)
+		logger = logging.Logger(ctx, "ValidateAccount")
 	)
 
 	// create the request
@@ -464,6 +465,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	}
 
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
+		logger.Debug().Str("blacklist", fmt.Sprintf("%+v", blacklist)).Msg("blacklist found on context")
 		// check country code
 		for _, v := range blacklist {
 			if strings.EqualFold(res.CountryCode, v) {
@@ -476,6 +478,8 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 				return "", ErrInvalidCountry
 			}
 		}
+	} else {
+		logger.Debug().Msg("blacklist not found on context")
 	}
 
 	if res.CountryCode != "" {
