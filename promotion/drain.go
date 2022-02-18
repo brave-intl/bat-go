@@ -855,6 +855,12 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 				Str("txRef", txRef).
 				Str("error_bundle", errorData).
 				Msg("gemini client check status error")
+
+			if httpState, ok := errorBundle.Data().(clients.HTTPState); ok {
+				if httpState.Status == http.StatusNotFound {
+					return &walletutils.TransactionInfo{Status: "failed", Note: "GEMINI_NOT_FOUND"}, nil
+				}
+			}
 		}
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
