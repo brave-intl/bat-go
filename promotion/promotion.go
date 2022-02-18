@@ -2,7 +2,6 @@ package promotion
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/jsonutils"
@@ -64,9 +63,9 @@ type Promotion struct {
 	Platform            string                    `json:"platform" db:"platform"`
 	PublicKeys          jsonutils.JSONStringArray `json:"publicKeys" db:"public_keys"`
 	Available           bool                      `json:"available" db:"available"`
-	AutoClaim           sql.NullBool              `json:"-" db:"auto_claim"`
-	SkipCaptcha         sql.NullBool              `json:"-" db:"skip_captcha"`
-	NumSuggestions      sql.NullInt64             `json:"-" db:"num_suggestions"`
+	AutoClaim           *bool                     `json:"-" db:"auto_claim"`
+	SkipCaptcha         *bool                     `json:"-" db:"skip_captcha"`
+	NumSuggestions      *int                      `json:"-" db:"num_suggestions"`
 	// warning, legacy claimed is not defined in promotions, but rather as a claim attribute
 	LegacyClaimed  bool      `json:"legacyClaimed" db:"legacy_claimed"`
 	ClaimableUntil time.Time `json:"claimableUntil" db:"claimable_until"`
@@ -78,11 +77,11 @@ type PromotionV2 struct {
 	ID               uuid.UUID                 `json:"id"`
 	ExpiresAt        time.Time                 `json:"expiresAt"`
 	Version          int                       `json:"version"`
-	NumSuggestions   sql.NullInt64             `json:"numSuggestions"`
+	NumSuggestions   *int                      `json:"numSuggestions,omitempty"`
 	ApproximateValue decimal.Decimal           `json:"approximateValue"`
 	Type             string                    `json:"type"`
-	AutoClaim        sql.NullBool              `json:"autoClaim"`
-	SkipCaptcha      sql.NullBool              `json:"skipCaptcha"`
+	AutoClaim        *bool                     `json:"autoClaim,omitempty"`
+	SkipCaptcha      *bool                     `json:"skipCaptcha,omitempty"`
 	Available        bool                      `json:"available"`
 	PublicKeys       jsonutils.JSONStringArray `json:"publicKeys"`
 }

@@ -289,6 +289,188 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
+func (suite *ControllersTestSuite) TestGetPromotionsV2() {
+
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	cbClient, err := cbr.New()
+	suite.Require().NoError(err, "Failed to create challenge bypass client")
+
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	walletID := uuid.NewV4()
+	w := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: nil,
+		PublicKey:   "-",
+		LastBalance: nil,
+	}
+
+	err = walletDB.InsertWallet(context.Background(), &w)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  cbClient,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+	}
+
+	handler := GetPromotions(service)
+	addressID := "0x12AE66CDc592e10B60f9097a7b0D3C59fce29876"
+
+	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
+	claimStatement := `
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed)
+	values ($1, $2, $3, $4, false)
+	returning *`
+	claims := []Claim{}
+	pg.RawDB().Select(&claims, claimStatement, promotion.ID, addressID, w.ID, decimal.NewFromFloat(1.0))
+
+	urlWithPlatformAndAddress := func(addressID string, platform string) string {
+		return fmt.Sprintf("/v2/promotions?address=%s&platform=%s", addressID, platform)
+	}
+
+	ctx := middleware.AddKeyID(context.Background(), w.ID)
+	reqFailure, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(addressID, "noexist"), nil)
+	suite.Require().NoError(err, "Failed to create get promotions request")
+
+	reqOSX, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(addressID, "osx"), nil)
+	suite.Require().NoError(err, "Failed to create get promotions request")
+
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = w.ID
+	s.Headers = []string{"digest", "(request-target)"}
+	_, privKey, _ := httpsignature.GenerateEd25519Key(nil)
+
+	err = s.Sign(privKey, crypto.Hash(0), reqOSX)
+
+	reqAndroid, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(addressID, "android"), nil)
+
+	err = s.Sign(privKey, crypto.Hash(0), reqAndroid)
+
+	suite.Require().NoError(err, "Failed to create get promotions request")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqFailure)
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
+	expectationFailure := `{
+		"code":400,
+		"message": "Error validating request query parameter",
+		"data": {
+			"validationErrors": {
+				"platform": "platform 'noexist' is not supported"
+			}
+		}
+	}`
+	suite.Assert().JSONEq(expectationFailure, rr.Body.String(), "unexpected result")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	suite.Assert().JSONEq(`{"promotions": []}`, rr.Body.String(), "unexpected result")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqOSX)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	expectedOSX := `{
+		"promotions": [
+		]
+	}`
+	suite.Require().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqAndroid)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	expectedAndroid := `{
+		"promotions": [
+		]
+	}`
+	suite.Assert().JSONEq(expectedAndroid, rr.Body.String(), "unexpected result")
+
+	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
+
+	promotionDesktopID := uuid.NewV4()
+	promotionAndroidID := uuid.NewV4()
+	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+
+	promoStatement := `
+	insert into promotions (id, promotion_type, num_suggestions, approximate_value, suggestions_per_grant, remaining_grants, platform, auto_claim, skip_captcha, active)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	returning *`
+	promotionsDesktop := []Promotion{}
+	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "swap", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
+	suite.Require().NoError(err, "Failed to create desktop promotion")
+
+	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
+	desktopClaims := []Claim{}
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, w.ID, decimal.NewFromFloat(1.0))
+	suite.Require().NoError(err, "Failed to create desktop claim")
+
+	issuerID := uuid.NewV4()
+	issuerDesktop := &Issuer{ID: issuerID, PromotionID: promotionDesktopID, Cohort: "control", PublicKey: publicKey}
+	_, err = service.Datastore.InsertIssuer(issuerDesktop)
+	suite.Require().NoError(err, "Failed to create desktop issuer")
+	promotionsDesktop[0].PublicKeys = jsonutils.JSONStringArray([]string{issuerDesktop.PublicKey})
+
+	promotionsAndroid := []Promotion{}
+	err = pg.RawDB().Select(&promotionsAndroid, promoStatement, promotionAndroidID, "swap", 2, decimal.NewFromFloat(1.0), 6, 3, "android", false, false, true)
+	suite.Require().NoError(err, "Failed to create android promo")
+
+	AndroidClaims := []Claim{}
+
+	AndroidAddressID := "0xa54d3c09E34aC96807c1CC397404bF2B98DC4eFb"
+	err = pg.RawDB().Select(&AndroidClaims, claimStatement, promotionAndroidID, AndroidAddressID, w.ID, decimal.NewFromFloat(1.0))
+	suite.Require().NoError(err, "Failed to create android claim")
+	if err != nil {
+		fmt.Printf("claim in test case: %+v", err)
+	}
+
+	issuerID = uuid.NewV4()
+	issuer := &Issuer{ID: issuerID, PromotionID: promotionAndroidID, Cohort: "control", PublicKey: publicKey}
+	service.Datastore.InsertIssuer(issuer)
+	promotionsAndroid[0].PublicKeys = jsonutils.JSONStringArray([]string{issuer.PublicKey})
+
+	suite.Require().NoError(err, "Failed to create android issuer")
+
+	promotionDesktopV2 := PromotionsToV2(promotionsDesktop)
+	promotionAndroidV2 := PromotionsToV2(promotionsAndroid)
+
+	reqDesktopWorking, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(desktopAddressID, "desktop"), nil)
+	err = s.Sign(privKey, crypto.Hash(0), reqDesktopWorking)
+	suite.Require().NoError(err, "Failed to create get working desktop promotions request")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqDesktopWorking)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	promoDesktopJson, _ := json.Marshal(promotionDesktopV2)
+	expectedWorkingDesktop := `{"promotions":` + string(promoDesktopJson) +`}`
+
+	suite.Assert().JSONEq(expectedWorkingDesktop, rr.Body.String(), "unexpected result")
+
+	reqAndroidWorking, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(AndroidAddressID, "android"), nil)
+	err = s.Sign(privKey, crypto.Hash(0), reqAndroidWorking)
+	suite.Require().NoError(err, "Failed to create get working android promotions request")
+
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, reqAndroidWorking)
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	promoAndroidJson, _ := json.Marshal(promotionAndroidV2)
+	expectedWorkingAndroid := `{"promotions":` + string(promoAndroidJson) +`}`
+
+	suite.Assert().JSONEq(expectedWorkingAndroid, rr.Body.String(), "unexpected result")
+}
+
 // ClaimPromotion helper that calls promotion endpoint and does assertions
 func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
 	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {

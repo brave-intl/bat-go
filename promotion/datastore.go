@@ -469,6 +469,13 @@ func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, er
 		return nil, err
 	}
 
+	fmt.Printf("in the issuers---d-d-d-=============%+v \n", issuers)
+
+	statement = "select * from issuers"
+	issuersTwo := []Issuer{}
+	err = pg.RawDB().Select(&issuersTwo, statement)
+	fmt.Printf("in the issuersTwo---d-d-d-=============%+v \n", issuersTwo)
+
 	if len(issuers) > 0 {
 		return &issuers[0], nil
 	}
@@ -682,6 +689,7 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 			platform = "desktop"
 		}
 	}
+
 	statement := `
 		select
 			promos.id,
@@ -700,7 +708,7 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 					promos.suggestions_per_grant
 				)::int) as suggestions_per_grant,
 			promos.active,
-			promos.public_keys,
+			promos.public_keys
 		from
 			(
 				select * from 
@@ -720,7 +728,8 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 				wallet_claims.legacy_claimed is true or (
 					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
 						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
-						( promos.promotion_type = 'ads' and wallet_claims.id is not null )
+						( promos.promotion_type = 'ads' and wallet_claims.id is not null ) or
+						( promos.promotion_type = 'swap' and wallet_claims.id is not null )
 					)
 				)
 			)
@@ -729,6 +738,7 @@ func (pg *Postgres) GetAvailablePromotionsV2ForWallet(wallet *walletutils.Info, 
 	promotions := []Promotion{}
 
 	err := pg.RawDB().Select(&promotions, statement, wallet.ID, platform)
+
 	if err != nil {
 		return PromotionsToV2(promotions), err
 	}

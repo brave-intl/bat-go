@@ -291,7 +291,7 @@ func GetPromotions(service *Service) handlers.AppHandler {
 			})
 		}
 		addressID := r.URL.Query().Get("address")
-		if len(addressID) > 0 {
+		if len(addressID) > 0 && !validators.IsETHAddress(addressID) {
 			return handlers.ValidationError("request query parameter", map[string]string{
 				"address": fmt.Sprintf("address '%s' is not supported", addressID),
 			})
@@ -310,9 +310,10 @@ func GetPromotions(service *Service) handlers.AppHandler {
 		}
 		if walletID.String() != keyID {
 			return handlers.ValidationError("Error validating request", map[string]string{
-				"paymentId": "paymentId must match signature",
+				"walletID": "walletID must match signature",
 			})
 		}
+
 		promotions, err := service.GetAvailablePromotionsV2(r.Context(), &walletID, platform)
 		if err != nil {
 			return handlers.WrapError(err, "Error getting available promotions", http.StatusInternalServerError)
