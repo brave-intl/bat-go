@@ -469,13 +469,6 @@ func (pg *Postgres) GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, er
 		return nil, err
 	}
 
-	fmt.Printf("in the issuers---d-d-d-=============%+v \n", issuers)
-
-	statement = "select * from issuers"
-	issuersTwo := []Issuer{}
-	err = pg.RawDB().Select(&issuersTwo, statement)
-	fmt.Printf("in the issuersTwo---d-d-d-=============%+v \n", issuersTwo)
-
 	if len(issuers) > 0 {
 		return &issuers[0], nil
 	}

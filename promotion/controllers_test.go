@@ -454,7 +454,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	handler.ServeHTTP(rr, reqDesktopWorking)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	promoDesktopJson, _ := json.Marshal(promotionDesktopV2)
-	expectedWorkingDesktop := `{"promotions":` + string(promoDesktopJson) +`}`
+	expectedWorkingDesktop := `{"promotions":` + string(promoDesktopJson) + `}`
 
 	suite.Assert().JSONEq(expectedWorkingDesktop, rr.Body.String(), "unexpected result")
 
@@ -466,7 +466,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	handler.ServeHTTP(rr, reqAndroidWorking)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 	promoAndroidJson, _ := json.Marshal(promotionAndroidV2)
-	expectedWorkingAndroid := `{"promotions":` + string(promoAndroidJson) +`}`
+	expectedWorkingAndroid := `{"promotions":` + string(promoAndroidJson) + `}`
 
 	suite.Assert().JSONEq(expectedWorkingAndroid, rr.Body.String(), "unexpected result")
 }
