@@ -396,6 +396,20 @@ func (_d DatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (pp1 *Prom
 	return _d.base.GetPromotion(promotionID)
 }
 
+// GetPromotionV2 implements Datastore
+func (_d DatastoreWithPrometheus) GetPromotionV2(promotionID uuid.UUID) (pp1 *PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionV2", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPromotionV2(promotionID)
+}
+
 // GetPromotionsMissingIssuer implements Datastore
 func (_d DatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
 	_since := time.Now()

@@ -346,17 +346,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	reqOSX, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(addressID, "osx"), nil)
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
-	var s httpsignature.SignatureParams
-	s.Algorithm = httpsignature.ED25519
-	s.KeyID = w.ID
-	s.Headers = []string{"digest", "(request-target)"}
-	_, privKey, _ := httpsignature.GenerateEd25519Key(nil)
-
-	err = s.Sign(privKey, crypto.Hash(0), reqOSX)
-
 	reqAndroid, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(addressID, "android"), nil)
-
-	err = s.Sign(privKey, crypto.Hash(0), reqAndroid)
 
 	suite.Require().NoError(err, "Failed to create get promotions request")
 
@@ -447,7 +437,6 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	promotionAndroidV2 := PromotionsToV2(promotionsAndroid)
 
 	reqDesktopWorking, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(desktopAddressID, "desktop"), nil)
-	err = s.Sign(privKey, crypto.Hash(0), reqDesktopWorking)
 	suite.Require().NoError(err, "Failed to create get working desktop promotions request")
 
 	rr = httptest.NewRecorder()
@@ -459,7 +448,6 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	suite.Assert().JSONEq(expectedWorkingDesktop, rr.Body.String(), "unexpected result")
 
 	reqAndroidWorking, err := http.NewRequestWithContext(ctx, "GET", urlWithPlatformAndAddress(AndroidAddressID, "android"), nil)
-	err = s.Sign(privKey, crypto.Hash(0), reqAndroidWorking)
 	suite.Require().NoError(err, "Failed to create get working android promotions request")
 
 	rr = httptest.NewRecorder()
@@ -469,6 +457,103 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	expectedWorkingAndroid := `{"promotions":` + string(promoAndroidJson) + `}`
 
 	suite.Assert().JSONEq(expectedWorkingAndroid, rr.Body.String(), "unexpected result")
+}
+
+func (suite *ControllersTestSuite) TestGetClaimWithPromotion() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	cbClient, err := cbr.New()
+	suite.Require().NoError(err, "Failed to create challenge bypass client")
+
+	walletID := uuid.NewV4()
+	w := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: nil,
+		PublicKey:   "-",
+		LastBalance: nil,
+	}
+
+	err = walletDB.InsertWallet(context.Background(), &w)
+	suite.Require().NoError(err, "Failed to insert wallet")
+
+	service := &Service{
+		Datastore: pg,
+		cbClient:  cbClient,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+	}
+
+	promotionDesktopID := uuid.NewV4()
+	promoStatement := `
+	insert into promotions (id, promotion_type, num_suggestions, approximate_value, suggestions_per_grant, remaining_grants, platform, auto_claim, skip_captcha, active)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	returning *`
+	promotionsDesktop := []Promotion{}
+	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "swap", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
+	suite.Require().NoError(err, "Failed to create desktop promotion")
+
+	claimStatement := `
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed)
+	values ($1, $2, $3, $4, false)
+	returning *`
+	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
+	desktopClaims := []Claim{}
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0))
+	suite.Require().NoError(err, "Failed to create desktop claim")
+
+	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
+	issuerID := uuid.NewV4()
+	issuerDesktop := &Issuer{ID: issuerID, PromotionID: promotionDesktopID, Cohort: "control", PublicKey: publicKey}
+	issuer, IssuerErr := service.Datastore.InsertIssuer(issuerDesktop)
+	promotionsDesktop[0].PublicKeys = jsonutils.JSONStringArray([]string{issuerDesktop.PublicKey})
+	suite.Require().NoError(IssuerErr, "Failed to create desktop issuer")
+
+	claimsID := desktopClaims[0].ID
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	blindedCredsJson, _ := json.Marshal(blindedCreds)
+	signedCredsJson, _ := json.Marshal(signedCreds)
+	claimCredsStatement := `
+	insert into claim_creds (claim_id, blinded_creds, signed_creds, batch_proof, public_key, issuer_id)
+	values ($1, $2, $3, $4, $5, $6)
+	returning *`
+	claimsCreds := []ClaimCreds{}
+	err = pg.RawDB().Select(&claimsCreds, claimCredsStatement, claimsID, blindedCredsJson, signedCredsJson, proof, publicKey, issuer.ID)
+	suite.Require().NoError(err, "Failed to create claim credential")
+	claimCred := claimsCreds[0]
+
+	claimResponse := GetClaimResponse{SignedCreds: *claimCred.SignedCreds, BatchProof: *claimCred.BatchProof, PublicKey: *claimCred.PublicKey}
+
+	suite.Require().NoError(err, "Failed to create desktop claim")
+
+	handler := GetClaimWithPromotion(service)
+
+	req, err := http.NewRequest("GET", "/v2/promotions/{promotionId}/claims/{claimId}", nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("promotionId", promotionDesktopID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	ctx, _ := context.WithTimeout(req.Context(), 500*time.Millisecond)
+	rctx.URLParams.Add("claimId", claimsID.String())
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code, "Claim with promotion failed")
+	claimResponseJson, _ := json.Marshal(claimResponse)
+
+	suite.Assert().JSONEq(string(claimResponseJson), rr.Body.String(), "unexpected result")
 }
 
 // ClaimPromotion helper that calls promotion endpoint and does assertions
@@ -520,52 +605,98 @@ func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutil
 }
 
 // ClaimSwapRewardsPromotion helper that calls promotion endpoint and does assertions
-func (suite *ControllersTestSuite) ClaimSwapRewardsPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
-	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
+func (suite *ControllersTestSuite) TestClaimSwapRewardsPromotion() {
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
 
-	handler := middleware.HTTPSignedOnly(service)(ClaimSwapRewardsPromotion(service))
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
 
-	walletID, err := uuid.FromString(w.ID)
-	suite.Require().NoError(err)
+	cbClient, err := cbr.New()
+	suite.Require().NoError(err, "Failed to create challenge bypass client")
 
-	claimReq := ClaimRequest{
-		WalletID:     walletID,
-		BlindedCreds: blindedCreds,
+	walletID := uuid.NewV4()
+	w := walletutils.Info{
+		ID:          walletID.String(),
+		Provider:    "uphold",
+		ProviderID:  "-",
+		AltCurrency: nil,
+		PublicKey:   "-",
+		LastBalance: nil,
 	}
 
-	body, err := json.Marshal(&claimReq)
-	suite.Require().NoError(err)
+	err = walletDB.InsertWallet(context.Background(), &w)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
-	req, err := http.NewRequest("POST", "/v2/promotion/{promotionId}", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
+	service := &Service{
+		Datastore: pg,
+		cbClient:  cbClient,
+		wallet: &wallet.Service{
+			Datastore: walletDB,
+		},
+	}
 
-	//todo likely fix below
-	var s httpsignature.SignatureParams
-	s.Algorithm = httpsignature.ED25519
-	s.KeyID = w.ID
-	s.Headers = []string{"digest", "(request-target)"}
+	promotionDesktopID := uuid.NewV4()
+	promoStatement := `
+	insert into promotions (id, promotion_type, num_suggestions, approximate_value, suggestions_per_grant, remaining_grants, platform, auto_claim, skip_captcha, active)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	returning *`
+	promotionsDesktop := []Promotion{}
+	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "swap", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
+	suite.Require().NoError(err, "Failed to create desktop promotion")
 
-	err = s.Sign(privKey, crypto.Hash(0), req)
-	suite.Require().NoError(err)
+	claimStatement := `
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed, redeemed)
+	values ($1, $2, $3, $4, true, $5)
+	returning *`
+	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
+	desktopClaims := []Claim{}
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), true)
+	suite.Require().NoError(err, "Failed to create desktop claim")
+
+	publicKey, _, err := httpsignature.GenerateEd25519Key(nil)
+	stringPublicKey := hex.EncodeToString(publicKey)
+	issuerID := uuid.NewV4()
+	issuerDesktop := &Issuer{ID: issuerID, PromotionID: promotionDesktopID, Cohort: "control", PublicKey: stringPublicKey}
+	issuer, issuerErr := service.Datastore.InsertIssuer(issuerDesktop)
+	suite.Require().NoError(issuerErr, "Failed to create desktop issuer")
+	issuerID = issuer.ID
+
+	claimsID := desktopClaims[0].ID
+	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
+	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
+	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
+	blindedCredsJson, _ := json.Marshal(blindedCreds)
+	signedCredsJson, _ := json.Marshal(signedCreds)
+	claimCredsStatement := `
+	insert into claim_creds (claim_id, blinded_creds, signed_creds, batch_proof, public_key, issuer_id)
+	values ($1, $2, $3, $4, $5, $6)
+	returning *`
+	claimsCreds := []ClaimCreds{}
+	err = pg.RawDB().Select(&claimsCreds, claimCredsStatement, claimsID, blindedCredsJson, signedCredsJson, proof, stringPublicKey, issuerID)
+	suite.Require().NoError(err, "Failed to create claim credential")
+
+	claimReq := ClaimSwapRewardsPromotionRequest{AddressID: desktopAddressID, BlindedCreds: blindedCreds}
+
+	handler := ClaimSwapRewardsPromotion(service)
+	body, claimReqErr := json.Marshal(&claimReq)
+	suite.Require().NoError(claimReqErr)
 
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("promotionId", promotion.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	ctx := middleware.AddKeyID(context.Background(), w.ID)
+	rctx.URLParams.Add("promotionId", promotionDesktopID.String())
+
+	req, err := http.NewRequestWithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx), "POST", "/v2/promotions/{promotionId}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	if claimStatus != 200 {
-		// return early if claim is supposed to fail
-		suite.Require().Equal(rr.Code, claimStatus, string(rr.Body.Bytes()))
-		return nil
-	}
-	// if claim was not supposed to fail, or rr.Code is supposed to be ok following line fails
-	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	var claimResp ClaimResponse
-	err = json.Unmarshal(rr.Body.Bytes(), &claimResp)
-	suite.Require().NoError(err)
-	return &claimResp.ClaimID
+	suite.Require().Equal(http.StatusOK, rr.Code, "Claim with promotion failed")
+	claimResponse := ClaimResponse{ClaimID: desktopClaims[0].ID}
+	claimResponseJson, _ := json.Marshal(claimResponse)
+
+	suite.Assert().JSONEq(string(claimResponseJson), rr.Body.String(), "unexpected result")
 }
 
 func (suite *ControllersTestSuite) WaitForClaimToPropagate(service *Service, promotion *Promotion, claimID *uuid.UUID) {

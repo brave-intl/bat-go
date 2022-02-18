@@ -252,6 +252,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotion(promotionID uuid.UUID) (p
 	return _d.base.GetPromotion(promotionID)
 }
 
+// GetPromotionV2 implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionV2(promotionID uuid.UUID) (pp1 *PromotionV2, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionV2", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetPromotionV2(promotionID)
+}
+
 // GetPromotionsMissingIssuer implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) (ua1 []uuid.UUID, err error) {
 	_since := time.Now()

@@ -85,6 +85,7 @@ func (service *Service) ClaimPromotionForWallet(
 	walletID uuid.UUID,
 	blindedCreds []string,
 ) (*uuid.UUID, error) {
+
 	promotion, err := service.Datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err

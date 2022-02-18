@@ -411,6 +411,21 @@ func (mr *MockDatastoreMockRecorder) GetPromotion(promotionID interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockDatastore)(nil).GetPromotion), promotionID)
 }
 
+// GetPromotionV2 mocks base method.
+func (m *MockDatastore) GetPromotionV2(promotionID go_uuid.UUID) (*PromotionV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPromotionV2", promotionID)
+	ret0, _ := ret[0].(*PromotionV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPromotionV2 indicates an expected call of GetPromotionV2.
+func (mr *MockDatastoreMockRecorder) GetPromotionV2(promotionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotionV2", reflect.TypeOf((*MockDatastore)(nil).GetPromotionV2), promotionID)
+}
+
 // GetPromotionsMissingIssuer mocks base method.
 func (m *MockDatastore) GetPromotionsMissingIssuer(limit int) ([]go_uuid.UUID, error) {
 	m.ctrl.T.Helper()
@@ -978,6 +993,21 @@ func (m *MockReadOnlyDatastore) GetPromotion(promotionID go_uuid.UUID) (*Promoti
 func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotion(promotionID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotion", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPromotion), promotionID)
+}
+
+// GetPromotionV2 mocks base method.
+func (m *MockReadOnlyDatastore) GetPromotionV2(promotionID go_uuid.UUID) (*PromotionV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPromotionV2", promotionID)
+	ret0, _ := ret[0].(*PromotionV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPromotionV2 indicates an expected call of GetPromotionV2.
+func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotionV2(promotionID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotionV2", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPromotionV2), promotionID)
 }
 
 // GetPromotionsMissingIssuer mocks base method.

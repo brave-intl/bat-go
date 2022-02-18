@@ -108,6 +108,8 @@ type Datastore interface {
 	SaveClaimCreds(claimCreds *ClaimCreds) error
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
+	// GetPromotionV2 by ID
+	GetPromotionV2(promotionID uuid.UUID) (*PromotionV2, error)
 	// InsertIssuer inserts the given issuer
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	// GetIssuer by PromotionID and cohort
@@ -191,6 +193,8 @@ type ReadOnlyDatastore interface {
 	GetClaimCreds(claimID uuid.UUID) (*ClaimCreds, error)
 	// GetPromotion by ID
 	GetPromotion(promotionID uuid.UUID) (*Promotion, error)
+	// GetPromotionV2 by ID
+	GetPromotionV2(promotionID uuid.UUID) (*PromotionV2, error)
 	// GetIssuer by PromotionID and cohort
 	GetIssuer(promotionID uuid.UUID, cohort string) (*Issuer, error)
 	// GetIssuerByPublicKey
@@ -289,6 +293,39 @@ func (pg *Postgres) GetPromotion(promotionID uuid.UUID) (*Promotion, error) {
 	}
 
 	return nil, nil
+}
+
+// GetPromotionV2 by ID
+func (pg *Postgres) GetPromotionV2(promotionID uuid.UUID) (*PromotionV2, error) {
+	statement := `
+		select
+			true as available,
+			promotions.auto_claim,
+			promotions.skip_captcha,
+			promotions.available,
+			promotions.num_suggestions,
+			promotions.version,
+			promotions.id,
+			promotions.promotion_type,
+			promotions.expires_at,
+			promotions.approximate_value,
+			array_to_json(array_remove(array_agg(issuers.public_key), null)) as public_keys
+		from
+		promotions left join issuers on promotions.id = issuers.promotion_id
+		where promotions.id = $1
+		group by promotions.id
+		order by promotions.created_at;`
+
+	promotions := []Promotion{}
+
+	err := pg.RawDB().Select(&promotions, statement, promotionID)
+	if err != nil {
+		promotionsV2 := PromotionsToV2(promotions)
+		return &promotionsV2[0], err
+	}
+
+	promotionsV2 := PromotionsToV2(promotions)
+	return &promotionsV2[0], nil
 }
 
 // InsertClobberedClaims inserts clobbered claims to the db

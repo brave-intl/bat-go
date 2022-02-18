@@ -439,7 +439,6 @@ func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		// TODO not sure if it's needed
 		logging.AddAccountAddressContext(r.Context(), req.AddressID)
 
 		keyID, err := middleware.GetKeyID(r.Context())
@@ -471,6 +470,7 @@ func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
 			)
 		}
 
+		// blows up in reputation thing
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), walletID, req.BlindedCreds)
 
 		if err != nil {
@@ -649,7 +649,7 @@ func GetClaimWithPromotion(service *Service) handlers.AppHandler {
 			)
 		}
 
-		promotion, err := service.Datastore.GetPromotion(*promotionID.UUID())
+		promotion, err := service.Datastore.GetPromotionV2(*promotionID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting promotion", http.StatusBadRequest)
 		}
@@ -670,7 +670,7 @@ func GetClaimWithPromotion(service *Service) handlers.AppHandler {
 		}
 
 		if !promotionHasKey {
-			err := fmt.Errorf("promotion didnt have key: '%s'", *claim.PublicKey)
+			err := fmt.Errorf("promotion did not have key: '%s'", *claim.PublicKey)
 			return handlers.WrapError(err, "Error promotion doesnt have publicKey", http.StatusBadRequest)
 		}
 
