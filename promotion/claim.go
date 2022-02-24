@@ -17,6 +17,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	uuid "github.com/satori/go.uuid"
+	segmentKafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 )
 
@@ -250,56 +251,56 @@ type SwapRewardGrant struct {
 
 // SwapRewardsWorker - gets reward grant information
 type SwapRewardsWorker interface {
-	FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, error)
+	FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, *segmentKafka.Message, error)
 }
 
 // FetchRewardsGrants - retrieves grant from topic
-func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, error) {
+func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, *segmentKafka.Message, error) {
 
-	message, err := service.kafkaGrantRewardsReader.ReadMessage(ctx)
+	message, err := service.kafkaGrantRewardsReader.FetchMessage(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
+		return nil, nil, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
 	codec, ok := service.codecs["rewardsTopic"]
 	if !ok {
-		return nil, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
+		return nil, nil, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
 	}
 
 	native, _, err := codec.NativeFromBinary(message.Value)
 	if err != nil {
-		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+		return nil, nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
 	}
 
 	textual, err := codec.TextualFromNative(nil, native)
 	if err != nil {
-		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+		return nil, nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
 	}
 
 	var grantRewardsEvent GrantRewardsEvent
 	err = json.Unmarshal(textual, &grantRewardsEvent)
 	if err != nil {
-		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+		return nil, nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
 	}
 
 	walletID := uuid.FromStringOrNil(grantRewardsEvent.WalletID)
 	if walletID == uuid.Nil {
-		return nil, fmt.Errorf("read message: error could not decode walletID %s", grantRewardsEvent.WalletID)
+		return nil, nil, fmt.Errorf("read message: error could not decode walletID %s", grantRewardsEvent.WalletID)
 	}
 
 	promotionID := uuid.FromStringOrNil(grantRewardsEvent.PromotionID)
 	if promotionID == uuid.Nil {
-		return nil, fmt.Errorf("read message: error could not decode PromotionID %s", grantRewardsEvent.PromotionID)
+		return nil, nil, fmt.Errorf("read message: error could not decode PromotionID %s", grantRewardsEvent.PromotionID)
 	}
 
 	transactionKey := uuid.FromStringOrNil(grantRewardsEvent.TransactionKey)
 	if transactionKey == uuid.Nil {
-		return nil, fmt.Errorf("read message: error could not decode TransactionKey %s", grantRewardsEvent.TransactionKey)
+		return nil, nil, fmt.Errorf("read message: error could not decode TransactionKey %s", grantRewardsEvent.TransactionKey)
 	}
 
 	rewardAmount, err := decimal.NewFromString(grantRewardsEvent.RewardAmount)
 	if err != nil {
-		return nil, fmt.Errorf("read message: error could not decode RewardAmount %s", grantRewardsEvent.RewardAmount)
+		return nil, nil, fmt.Errorf("read message: error could not decode RewardAmount %s", grantRewardsEvent.RewardAmount)
 	}
 
 	grant := &SwapRewardGrant{
@@ -309,5 +310,5 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 		RewardAmount:   rewardAmount,
 	}
 
-	return grant, nil
+	return grant, &message, nil
 }

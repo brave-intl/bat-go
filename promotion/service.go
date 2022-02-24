@@ -137,6 +137,8 @@ func SetAdminAttestationTopic(newTopic string) {
 // KafkaReader - reader interface
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msg kafka.Message) error
 }
 
 // Service contains datastore and challenge bypass client connections

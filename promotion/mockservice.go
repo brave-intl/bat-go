@@ -49,3 +49,32 @@ func (mr *MockKafkaReaderMockRecorder) ReadMessage(ctx interface{}) *gomock.Call
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadMessage", reflect.TypeOf((*MockKafkaReader)(nil).ReadMessage), ctx)
 }
+
+// FetchMessage mocks base method.
+func (m *MockKafkaReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchMessage", ctx)
+	ret0, _ := ret[0].(kafka.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchMessage indicates an expected call of FetchMessage.
+func (mr *MockKafkaReaderMockRecorder) FetchMessage(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMessage", reflect.TypeOf((*MockKafkaReader)(nil).FetchMessage), ctx)
+}
+
+// CommitMessages mocks base method.
+func (m *MockKafkaReader) CommitMessages(ctx context.Context, msg kafka.Message) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitMessages", ctx, msg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitMessages indicates an expected call of CommitMessages.
+func (mr *MockKafkaReaderMockRecorder) CommitMessages(ctx interface{}, msg kafka.Message) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockKafkaReader)(nil).CommitMessages), ctx, msg)
+}

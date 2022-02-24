@@ -62,6 +62,16 @@ func (k *Reader) ReadMessage(ctx context.Context) (kafka.Message, error) {
 	return k.kafkaReader.ReadMessage(ctx)
 }
 
+// FetchMessage - reads kafka messages without acking
+func (k *Reader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	return k.kafkaReader.FetchMessage(ctx)
+}
+
+// CommitMessages - commits kafka message(s)
+func (k *Reader) CommitMessages(ctx context.Context, msg kafka.Message) error {
+	return k.kafkaReader.CommitMessages(ctx, msg)
+}
+
 // TLSDialer creates a Kafka dialer over TLS. The function requires
 // KAFKA_SSL_CERTIFICATE_LOCATION and KAFKA_SSL_KEY_LOCATION environment
 // variables to be set.

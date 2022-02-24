@@ -1811,7 +1811,7 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 
 	service, _ := InitService(ctx, pg, nil, nil)
 
-	grant, err := worker.FetchRewardsGrants(ctx)
+	grant, msg, err := worker.FetchRewardsGrants(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch rewards grants job: failed to retrieve grant information: %w", err)
 	}
@@ -1831,7 +1831,12 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 	_, err = pg.RawDB().Exec(statement, grant.PromotionID, grant.WalletID, grant.TransactionKey, grant.RewardAmount)
 
 	if err != nil {
-		err = fmt.Errorf("fetch rewards grants job: failed to update claim walletID and PromotionID WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
+		err = fmt.Errorf("fetch rewards grants job: failed to update claim  WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
+		return err
+	}
+
+	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, *msg); err != nil {
+		err = fmt.Errorf("failed to commit kafka offset WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
 		return err
 	}
 
