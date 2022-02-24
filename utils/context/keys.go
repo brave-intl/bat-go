@@ -125,6 +125,14 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// Subscription related keys
+
+	// PaymentServerCTXKey - context key for address of payment service
+	PaymentServerCTXKey  CTXKey = "payments-service"
+	JAASPrivateKeyCTXKey CTXKey = "jass-private-key"
+	JAASTenantIDCTXKey   CTXKey = "jass-tenant-id"
+	JAASKeyIDCTXKey      CTXKey = "jass-key-id"
 )
 
 var (

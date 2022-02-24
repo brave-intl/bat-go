@@ -67,7 +67,7 @@ func (k *Reader) ReadMessage(ctx context.Context) (kafka.Message, error) {
 // variables to be set.
 func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 
-	caPEM, err := readFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
+	caPEM, err := ReadFileFromEnvLoc("KAFKA_SSL_CA_LOCATION", false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -75,7 +75,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 	certEnv := "KAFKA_SSL_CERTIFICATE"
 	certPEM := []byte(os.Getenv(certEnv))
 	if len(certPEM) == 0 {
-		certPEM, err = readFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
+		certPEM, err = ReadFileFromEnvLoc("KAFKA_SSL_CERTIFICATE_LOCATION", true)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -100,7 +100,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 	}
 
 	if len(encryptedKeyPEM) == 0 {
-		encryptedKeyPEM, err = readFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
+		encryptedKeyPEM, err = ReadFileFromEnvLoc("KAFKA_SSL_KEY_LOCATION", true)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -150,7 +150,7 @@ func TLSDialer() (*kafka.Dialer, *x509.Certificate, error) {
 	return dialer, x509Cert, nil
 }
 
-func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
+func ReadFileFromEnvLoc(env string, required bool) ([]byte, error) {
 	loc := os.Getenv(env)
 	if len(loc) == 0 {
 		if !required {
