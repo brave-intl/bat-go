@@ -136,4 +136,26 @@ func (suite *CoingeckoTestSuite) TestFetchMarketChart() {
 	suite.Require().NoError(err, "should marshal second resp")
 
 	suite.Require().True(string(b) == string(b1) && t1.Equal(t), "didn't use cached response")
+
+}
+
+func (suite *CoingeckoTestSuite) TestFetchCoinMarkets() {
+	resp, t, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 1)
+	suite.Require().NoError(err, "should be able to fetch the coin markets")
+
+	suite.Require().Equal(len(*resp), 1, "should have a response length of 1 for limit=1")
+	suite.Require().NotNil((*resp)[0].CurrentPrice, "should have a value for price")
+	suite.Require().NotEqual((*resp)[0].CurrentPrice, 0, "bitcoin is never going to 0")
+
+	// call again, make sure you get back the same resp and t
+	resp1, t1, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 1)
+	suite.Require().NoError(err, "should be able to fetch the coin markets")
+
+	b, err := json.Marshal(resp)
+	suite.Require().NoError(err, "should marshal first resp")
+
+	b1, err := json.Marshal(resp1)
+	suite.Require().NoError(err, "should marshal second resp")
+
+	suite.Require().True(string(b) == string(b1) && t1.Equal(t), "didn't use cached response")
 }
