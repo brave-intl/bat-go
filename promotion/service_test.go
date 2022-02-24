@@ -23,6 +23,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/go-chi/chi"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -111,6 +112,102 @@ func (suite *ServiceTestSuite) TestGetAvailablePromotions() {
 	promotions, err = service.GetAvailablePromotions(ctx, id, "", true)
 	suite.Require().NoError(err)
 	suite.Require().Equal(nilPromotions, promotions)
+}
+
+func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
+	localRewardsTopic := uuid.NewV4().String() + ".grant.rewards"
+	SetRewardsTopic(localRewardsTopic)
+	pg, _, err := NewPostgres()
+	suite.Require().NoError(err)
+
+	promotionID := uuid.NewV4().String()
+	promotion_statement := `
+		insert into promotions (id, promotion_type, num_suggestions, approximate_value, suggestions_per_grant, remaining_grants, platform, auto_claim, skip_captcha, active)
+		values ($1, 'swap', 4, 20.0, 4, 5, 'android', false, false, true)`
+	_, err = pg.RawDB().Exec(promotion_statement, promotionID)
+	suite.Require().NoError(err, "should have inserted promotion")
+
+	walletID := uuid.NewV4().String()
+	wallet_statement := `
+		insert into wallets (id, provider_id, public_key)
+		values ($1, '31317feb-2612-43be-816c-3c67bcd9378b', 'dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4=')`
+	_, err = pg.RawDB().Exec(wallet_statement, walletID)
+	suite.Require().NoError(err, "should have inserted wallet")
+
+	// setup kafka topic and dialer
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	c := context.WithValue(context.Background(), appctx.KafkaBrokersCTXKey, kafkaBrokers)
+	ctx, cancel := context.WithCancel(c)
+	defer cancel()
+
+	dialer, _, err := kafkautils.TLSDialer()
+	suite.Require().NoError(err)
+	conn, err := dialer.DialLeader(ctx, "tcp", strings.Split(kafkaBrokers, ",")[0], localRewardsTopic, 0)
+	suite.Require().NoError(err)
+
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localRewardsTopic, NumPartitions: 1, ReplicationFactor: 1})
+	suite.Require().NoError(err)
+
+	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, localRewardsTopic)
+	suite.Require().NoError(err)
+
+	codecs, err := kafkautils.GenerateCodecs(map[string]string{
+		"rewardsTopic": grantRewardsEventSchema,
+	})
+	suite.Require().NoError(err)
+
+	transactionKey := uuid.NewV5(uuid.NewV4(), "rewardsTest").String()
+	rewardAmount := decimal.NewFromFloat(15.0).String()
+
+	msg := GrantRewardsEvent{
+		WalletID:       walletID,
+		PromotionID:    promotionID,
+		RewardAmount:   rewardAmount,
+		TransactionKey: transactionKey,
+	}
+
+	textual, err := json.Marshal(msg)
+	suite.Require().NoError(err)
+
+	native, _, err := codecs["rewardsTopic"].NativeFromTextual(textual)
+	suite.Require().NoError(err)
+
+	binary, err := codecs["rewardsTopic"].BinaryFromNative(nil, native)
+	suite.Require().NoError(err)
+
+	err = kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Value: binary,
+	})
+	suite.Require().NoError(err)
+
+	// start service
+	go func(ctx context.Context) {
+		service, _ := InitService(ctx, pg, nil, nil)
+		service.RunNextFetchRewardGrantsJob(ctx)
+	}(ctx)
+
+	index := 0
+	end := time.Now().Add(60 * time.Second) // max timeout
+	for {
+		if time.Now().After(end) {
+			suite.Require().Fail("test failed due to timeout")
+		}
+		if index >= 1 {
+			break
+		}
+		claimStatement := `
+				select * from claims where promotion_id = $1 and wallet_id = $2`
+		claims := []Claim{}
+		err = pg.RawDB().Select(&claims, claimStatement, promotionID, walletID)
+		suite.Require().NoError(err)
+		if len(claims) > 0 {
+			suite.Require().Equal(claims[0].WalletID.String(), walletID)
+			suite.Require().Equal(claims[0].PromotionID.String(), promotionID)
+			suite.Require().Equal(*claims[0].TransactionKey, transactionKey)
+			suite.Require().Equal(claims[0].ApproximateValue.String(), rewardAmount)
+			index += 1
+		}
+	}
 }
 
 func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {

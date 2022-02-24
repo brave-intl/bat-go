@@ -51,3 +51,22 @@ type AdminAttestationEvent struct {
 	Justification string `json:"justification"`
 	CreatedAt     string `json:"created_at"`
 }
+
+const grantRewardsEventSchema = `{
+	"type": "record",
+	"name": "grantRewards",
+	"doc": "This message is from when a client claimed a swap reward",
+	"fields": [
+		{ "name": "promotion_id", "type": "string" },
+		{ "name": "wallet_id", "type": "string" },
+		{ "name": "transaction_key", "type": "string" },
+		{ "name": "reward_amount", "type": "string" }
+	]}`
+
+// GrantRewardsEvent - kafka grant rewards event
+type GrantRewardsEvent struct {
+	PromotionID    string `json:"promotion_id"`
+	WalletID       string `json:"wallet_id"`
+	TransactionKey string `json:"transaction_key"`
+	RewardAmount   string `json:"reward_amount"`
+}

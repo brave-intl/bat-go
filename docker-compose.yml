@@ -18,6 +18,7 @@ services:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true
+      - GRANT_REWARDS_JOB_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -43,6 +44,7 @@ services:
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_REQUIRED_ACKS=1
       - KAFKA_CONSUMER_GROUP_PROMOTIONS=grant-bat-promotions-local
+      - KAFKA_CONSUMER_GROUP_REWARDs=grant-bat-rewards-local
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - "RATIOS_SERVICE=https://ratios.rewards.bravesoftware.com"
@@ -90,6 +92,7 @@ services:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
       - DRAIN_RETRY_JOB_ENABLED=true
+      - GRANT_REWARDS_JOB_ENABLED=true
       - ENV=local
       - PKG
       - RUN
@@ -116,6 +119,7 @@ services:
       - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
       - KAFKA_REQUIRED_ACKS=1
       - KAFKA_CONSUMER_GROUP_PROMOTIONS=grant-bat-promotions-local
+      - KAFKA_CONSUMER_GROUP_REWARDs=grant-bat-rewards-local
       - TOKEN_LIST
       - UPHOLD_ACCESS_TOKEN
       - GEMINI_SERVER

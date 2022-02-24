@@ -2,7 +2,9 @@ package promotion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -34,6 +36,7 @@ type Claim struct {
 	UpdatedAt        pq.NullTime     `db:"updated_at"`
 	ClaimType        *string         `db:"claim_type"`
 	AddressID        *string         `db:"address_id"`
+	TransactionKey   *string         `db:"transaction_key"`
 }
 
 // SuggestionsNeeded calculates the number of suggestion credentials needed to fulfill the value of this claim
@@ -235,4 +238,76 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 	}
 
 	return creds, nil
+}
+
+// SwapRewardGrant encapsulates the information from a reward grant sent to kafka
+type SwapRewardGrant struct {
+	WalletID       uuid.UUID
+	PromotionID    uuid.UUID
+	TransactionKey uuid.UUID
+	RewardAmount   decimal.Decimal
+}
+
+// SwapRewardsWorker - gets reward grant information
+type SwapRewardsWorker interface {
+	FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, error)
+}
+
+// FetchRewardsGrants - retrieves grant from topic
+func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, error) {
+
+	message, err := service.kafkaGrantRewardsReader.ReadMessage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
+	}
+
+	codec, ok := service.codecs["rewardsTopic"]
+	if !ok {
+		return nil, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
+	}
+
+	native, _, err := codec.NativeFromBinary(message.Value)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+	}
+
+	textual, err := codec.TextualFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+	}
+
+	var grantRewardsEvent GrantRewardsEvent
+	err = json.Unmarshal(textual, &grantRewardsEvent)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+	}
+
+	walletID := uuid.FromStringOrNil(grantRewardsEvent.WalletID)
+	if walletID == uuid.Nil {
+		return nil, fmt.Errorf("read message: error could not decode walletID %s", grantRewardsEvent.WalletID)
+	}
+
+	promotionID := uuid.FromStringOrNil(grantRewardsEvent.PromotionID)
+	if promotionID == uuid.Nil {
+		return nil, fmt.Errorf("read message: error could not decode PromotionID %s", grantRewardsEvent.PromotionID)
+	}
+
+	transactionKey := uuid.FromStringOrNil(grantRewardsEvent.TransactionKey)
+	if transactionKey == uuid.Nil {
+		return nil, fmt.Errorf("read message: error could not decode TransactionKey %s", grantRewardsEvent.TransactionKey)
+	}
+
+	rewardAmount, err := decimal.NewFromString(grantRewardsEvent.RewardAmount)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode RewardAmount %s", grantRewardsEvent.RewardAmount)
+	}
+
+	grant := &SwapRewardGrant{
+		WalletID:       walletID,
+		PromotionID:    promotionID,
+		TransactionKey: transactionKey,
+		RewardAmount:   rewardAmount,
+	}
+
+	return grant, nil
 }

@@ -141,6 +141,8 @@ type Datastore interface {
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 	// RunNextDrainRetryJob toggles failed drain jobs to be reprocessed if eligible
 	RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error
+	// RunNextFetchRewardGrantsJob toggles failed drain jobs to be reprocessed if eligible
+	RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
 	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
@@ -1802,6 +1804,38 @@ func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryW
 			}
 		}
 	}
+}
+
+// RunNextFetchRewardGrantsJob - runs fetch reward grant jobs
+func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error {
+
+	service, _ := InitService(ctx, pg, nil, nil)
+
+	grant, err := worker.FetchRewardsGrants(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch rewards grants job: failed to retrieve grant information: %w", err)
+	}
+
+	cohort := "control"
+	//maybe this call should be changed to just rely on the right status codes and only rely on 1 post request
+	_, err = service.GetOrCreateIssuer(ctx, grant.PromotionID, cohort)
+	if err != nil {
+		return err
+	}
+
+	statement := `
+			insert into claims (promotion_id, wallet_id, transaction_key, approximate_value, legacy_claimed)
+			values ($1, $2, $3, $4, false)
+			`
+
+	_, err = pg.RawDB().Exec(statement, grant.PromotionID, grant.WalletID, grant.TransactionKey, grant.RewardAmount)
+
+	if err != nil {
+		err = fmt.Errorf("fetch rewards grants job: failed to update claim walletID and PromotionID WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
+		return err
+	}
+
+	return nil
 }
 
 // MintDrainJob - Job structure for the mint_drain queue

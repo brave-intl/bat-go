@@ -298,7 +298,7 @@ func GetPromotions(service *Service) handlers.AppHandler {
 		}
 		claim, err := service.Datastore.GetClaimByAddressID(addressID)
 		if err != nil {
-			return handlers.WrapError(err, "Error getting an associated walletID", http.StatusInternalServerError)
+			return handlers.WrapError(err, "Error getting an associated claim", http.StatusInternalServerError)
 		}
 		walletID := claim.WalletID
 		if !validators.IsUUID(walletID.String()) {
