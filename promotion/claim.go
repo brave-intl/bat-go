@@ -13,6 +13,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/validators"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
@@ -243,7 +244,7 @@ func (service *Service) SignClaimCreds(ctx context.Context, claimID uuid.UUID, i
 
 // SwapRewardGrant encapsulates the information from a reward grant sent to kafka
 type SwapRewardGrant struct {
-	WalletID       uuid.UUID
+	AddressID      string
 	PromotionID    uuid.UUID
 	TransactionKey uuid.UUID
 	RewardAmount   decimal.Decimal
@@ -283,9 +284,8 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 		return nil, nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
 	}
 
-	walletID := uuid.FromStringOrNil(grantRewardsEvent.WalletID)
-	if walletID == uuid.Nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode walletID %s", grantRewardsEvent.WalletID)
+	if !validators.IsETHAddress(grantRewardsEvent.AddressID) {
+		return nil, nil, fmt.Errorf("read message: error could not decode adressID %s", grantRewardsEvent.AddressID)
 	}
 
 	promotionID := uuid.FromStringOrNil(grantRewardsEvent.PromotionID)
@@ -304,7 +304,7 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 	}
 
 	grant := &SwapRewardGrant{
-		WalletID:       walletID,
+		AddressID:      grantRewardsEvent.AddressID,
 		PromotionID:    promotionID,
 		TransactionKey: transactionKey,
 		RewardAmount:   rewardAmount,

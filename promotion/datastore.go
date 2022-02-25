@@ -1817,26 +1817,29 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 	}
 
 	cohort := "control"
-	//maybe this call should be changed to just rely on the right status codes and only rely on 1 post request
+	//maybe this call should be changed to just rely on the right status codes and only do 1 post request
 	_, err = service.GetOrCreateIssuer(ctx, grant.PromotionID, cohort)
 	if err != nil {
 		return err
 	}
 
+	//TODO below somewhere else and not have magic strings
+	claimType := "swap"
+	swapWalletID := "00000000-0000-0000-0000-000000000002"
 	statement := `
-			insert into claims (promotion_id, wallet_id, transaction_key, approximate_value, legacy_claimed)
-			values ($1, $2, $3, $4, false)
+			insert into claims (promotion_id, wallet_id, address_id, transaction_key, approximate_value, legacy_claimed, claim_type)
+			values ($1, $2, $3, $4, $5, false, $6)
 			`
 
-	_, err = pg.RawDB().Exec(statement, grant.PromotionID, grant.WalletID, grant.TransactionKey, grant.RewardAmount)
+	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
 
 	if err != nil {
-		err = fmt.Errorf("fetch rewards grants job: failed to update claim  WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
+		err = fmt.Errorf("fetch rewards grants job: failed to update claim WalletID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
 		return err
 	}
 
 	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, *msg); err != nil {
-		err = fmt.Errorf("failed to commit kafka offset WalletID: %s PromotionID: %s with err: %w", grant.WalletID, grant.PromotionID, err)
+		err = fmt.Errorf("failed to commit kafka offset AddressID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
 		return err
 	}
 

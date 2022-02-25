@@ -58,7 +58,7 @@ const grantRewardsEventSchema = `{
 	"doc": "This message is from when a client claimed a swap reward",
 	"fields": [
 		{ "name": "promotion_id", "type": "string" },
-		{ "name": "wallet_id", "type": "string" },
+		{ "name": "address_id", "type": "string" },
 		{ "name": "transaction_key", "type": "string" },
 		{ "name": "reward_amount", "type": "string" }
 	]}`
@@ -66,7 +66,7 @@ const grantRewardsEventSchema = `{
 // GrantRewardsEvent - kafka grant rewards event
 type GrantRewardsEvent struct {
 	PromotionID    string `json:"promotion_id"`
-	WalletID       string `json:"wallet_id"`
+	AddressID      string `json:"address_id"`
 	TransactionKey string `json:"transaction_key"`
 	RewardAmount   string `json:"reward_amount"`
 }

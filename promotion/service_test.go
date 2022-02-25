@@ -9,6 +9,7 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 
@@ -119,6 +120,20 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 	SetRewardsTopic(localRewardsTopic)
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
+	w := walletutils.Info{
+		ID:          "00000000-0000-0000-0000-000000000002",
+		Provider:    "brave",
+		ProviderID:  "-",
+		AltCurrency: nil,
+		PublicKey:   "-",
+		LastBalance: nil,
+	}
+
+	walletDB, _, err := wallet.NewPostgres()
+	suite.Require().NoError(err, "Failed to get postgres conn")
+
+	err = walletDB.InsertWallet(context.Background(), &w)
+	suite.Require().NoError(err, "Failed to insert wallet")
 
 	promotionID := uuid.NewV4().String()
 	promotion_statement := `
@@ -127,12 +142,7 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 	_, err = pg.RawDB().Exec(promotion_statement, promotionID)
 	suite.Require().NoError(err, "should have inserted promotion")
 
-	walletID := uuid.NewV4().String()
-	wallet_statement := `
-		insert into wallets (id, provider_id, public_key)
-		values ($1, '31317feb-2612-43be-816c-3c67bcd9378b', 'dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4=')`
-	_, err = pg.RawDB().Exec(wallet_statement, walletID)
-	suite.Require().NoError(err, "should have inserted wallet")
+	addressID := "0x12AE66CDc592e10B60f9097a7b0D3C59fce29876"
 
 	// setup kafka topic and dialer
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -160,7 +170,7 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 	rewardAmount := decimal.NewFromFloat(15.0).String()
 
 	msg := GrantRewardsEvent{
-		WalletID:       walletID,
+		AddressID:      addressID,
 		PromotionID:    promotionID,
 		RewardAmount:   rewardAmount,
 		TransactionKey: transactionKey,
@@ -195,13 +205,12 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 		if index >= 1 {
 			break
 		}
-		claimStatement := `
-				select * from claims where promotion_id = $1 and wallet_id = $2`
+		claimStatement := `select * from claims where promotion_id = $1 and address_id = $2`
 		claims := []Claim{}
-		err = pg.RawDB().Select(&claims, claimStatement, promotionID, walletID)
+		err = pg.RawDB().Select(&claims, claimStatement, promotionID, addressID)
 		suite.Require().NoError(err)
 		if len(claims) > 0 {
-			suite.Require().Equal(claims[0].WalletID.String(), walletID)
+			suite.Require().Equal(*claims[0].AddressID, addressID)
 			suite.Require().Equal(claims[0].PromotionID.String(), promotionID)
 			suite.Require().Equal(*claims[0].TransactionKey, transactionKey)
 			suite.Require().Equal(claims[0].ApproximateValue.String(), rewardAmount)
