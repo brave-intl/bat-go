@@ -12,6 +12,7 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -564,9 +565,35 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 	return nil
 }
 
+var (
+	// ErrUnusualActivity - error for wallets with unusual activity
+	ErrUnusualActivity = errors.New("unusual activity")
+)
+
 // LinkWallet links a wallet together
 func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestination string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) error {
+
 	sublogger := logger(ctx).With().Str("wallet_id", ID).Logger()
+
+	// rep check
+	if repClient, ok := ctx.Value(appctx.ReputationClientCTXKey).(reputation.Client); ok {
+		walletID, err := uuid.FromString(ID)
+		if err != nil {
+			sublogger.Warn().Err(err).Msg("invalid wallet id")
+			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
+		}
+		// we have a client, check the value for ID
+		reputable, err := repClient.IsWalletAdsReputable(ctx, walletID, "")
+		if err != nil {
+			sublogger.Warn().Err(err).Msg("failed to check reputation")
+			return fmt.Errorf("failed to check wallet rep: %w", err)
+		}
+
+		if !reputable {
+			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
+			return ErrUnusualActivity
+		}
+	}
 
 	ctx, tx, rollback, commit, err := getTx(ctx, pg)
 	if err != nil {
