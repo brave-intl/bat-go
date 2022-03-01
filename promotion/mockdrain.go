@@ -39,18 +39,18 @@ func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 }
 
 // RedeemAndTransferFunds mocks base method.
-func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
+func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total)
+	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total, claimID)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RedeemAndTransferFunds indicates an expected call of RedeemAndTransferFunds.
-func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total interface{}) *gomock.Call {
+func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total, claimID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total, claimID)
 }
 
 // MockDrainRetryWorker is a mock of DrainRetryWorker interface.

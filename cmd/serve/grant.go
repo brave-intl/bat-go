@@ -81,6 +81,11 @@ func init() {
 		Bind("reputation-on-drain").
 		Env("REPUTATION_ON_DRAIN")
 
+	flagBuilder.Flag().Bool("reputation-withdrawal-on-drain", false,
+		"check wallet withdrawal reputation on drain").
+		Bind("reputation-withdrawal-on-drain").
+		Env("REPUTATION_WITHDRAWAL_ON_DRAIN")
+
 	// stripe configurations
 	flagBuilder.Flag().Bool("stripe-enabled", false,
 		"is stripe enabled for payments").
@@ -382,6 +387,7 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
+	ctx = context.WithValue(ctx, appctx.ReputationWithdrawalOnDrainCTXKey, viper.GetBool("reputation-withdrawal-on-drain"))
 
 	// bitflyer variables
 	ctx = context.WithValue(ctx, appctx.BitflyerExtraClientSecretCTXKey, viper.GetString("bitflyer-extra-client-secret"))
