@@ -926,7 +926,7 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	mockDrainWorker := NewMockDrainWorker(mockCtrl)
 
 	// One drain job should run
-	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Eq(walletID), testutils.DecEq(total), *claim.ID).Return(nil, errors.New("Worker failed"))
+	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Eq(walletID), testutils.DecEq(total), &claim.ID).Return(nil, errors.New("Worker failed"))
 	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
 	suite.Assert().Equal(true, attempted)
 	suite.Require().Error(err)
