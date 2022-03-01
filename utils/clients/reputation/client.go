@@ -62,7 +62,7 @@ func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
 // IsDrainReputableResponse is what the reputation server
 // will send back when we ask if a wallet is reputable
 type IsDrainReputableResponse struct {
-	IsReputable   bool   `json:"isReputable"`
+	Cohort        int    `json:"cohort"`
 	Justification string `json:"justification"`
 }
 
@@ -97,7 +97,7 @@ func (c *HTTPClient) IsDrainReputable(
 		return false, "reputation-service-failures", err
 	}
 
-	return resp.IsReputable, resp.Justification, nil
+	return resp.Cohort == 1, resp.Justification, nil
 }
 
 // IsWalletReputableResponse is what the reputation server
