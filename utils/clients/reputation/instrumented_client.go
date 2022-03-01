@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // ClientWithPrometheus implements Client interface with all methods wrapped
@@ -37,6 +38,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 		base:         base,
 		instanceName: instanceName,
 	}
+}
+
+// IsDrainReputable implements Client
+func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUID, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (b1 bool, s1 string, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "IsDrainReputable", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IsDrainReputable(ctx, id, promotionID, withdrawAmount)
 }
 
 // IsWalletAdsReputable implements Client
