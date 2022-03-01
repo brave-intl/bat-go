@@ -1823,15 +1823,13 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 		return err
 	}
 
-	//TODO below somewhere else and not have magic strings
 	claimType := "swap"
-	swapWalletID := "00000000-0000-0000-0000-000000000002"
 	statement := `
 			insert into claims (promotion_id, wallet_id, address_id, transaction_key, approximate_value, legacy_claimed, claim_type)
 			values ($1, $2, $3, $4, $5, false, $6)
 			`
 
-	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
+	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapSentinelWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
 
 	if err != nil {
 		err = fmt.Errorf("fetch rewards grants job: failed to update claim WalletID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)

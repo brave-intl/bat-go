@@ -41,7 +41,7 @@ var (
 	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
 
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
-	rewardsTopic          = os.Getenv("ENV") + ".grant.rewards"
+	rewardsTopic          = os.Getenv("ENV") + ".grant.swaprewards"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
 	// countContributionsTotal counts the number of contributions made broken down by funding and type
@@ -204,7 +204,7 @@ func (service *Service) InitKafka(ctx context.Context) error {
 
 	// toggle for grant reward job
 	if enableRewardGrantsJob {
-		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_REWARDs")
+		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_REWARDS")
 		if groupID == "" {
 			return errors.New("failed to initialize kafka could not find consumer group")
 		}

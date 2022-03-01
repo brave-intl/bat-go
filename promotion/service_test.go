@@ -121,7 +121,7 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 	w := walletutils.Info{
-		ID:          "00000000-0000-0000-0000-000000000002",
+		ID:          swapSentinelWalletID,
 		Provider:    "brave",
 		ProviderID:  "-",
 		AltCurrency: nil,
