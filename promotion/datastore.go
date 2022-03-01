@@ -1809,7 +1809,14 @@ func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryW
 // RunNextFetchRewardGrantsJob - runs fetch reward grant jobs
 func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error {
 
-	service, _ := InitService(ctx, pg, nil, nil)
+	cbClient, err := cbr.New()
+	if err != nil {
+		return fmt.Errorf("failed to init cbClient in RunNextFetchRewardGrantsJob: %w", err)
+	}
+	service := &Service{
+		Datastore: pg,
+		cbClient:  cbClient,
+	}
 
 	grant, msg, err := worker.FetchRewardsGrants(ctx)
 	if err != nil {
