@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package wallet
@@ -184,7 +185,7 @@ func (suite *WalletPostgresTestSuite) TestConnectCustodialWallet_Rollback() {
 
 	suite.Require().True(err != nil, "should have returned error")
 
-	count, _, err := pg.GetCustodianLinkCount(ctx, linkingID)
+	count, _, err := pg.GetCustodianLinkCount(ctx, linkingID, "")
 
 	suite.Require().NoError(err)
 	suite.Require().True(count == 0, "should have performed rollback on connect custodial wallet")
@@ -228,7 +229,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_InsertUpdate() {
 		wg.Wait()
 
 		used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID)
+			appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
 
 		suite.Require().NoError(err, "should have no error getting custodian link count")
 		suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
@@ -260,7 +261,7 @@ func (suite *WalletPostgresTestSuite) seedWallet(pg Datastore) (string, uuid.UUI
 	}
 
 	used, _, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID)
+		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == walletCount, fmt.Sprintf("used %d", used))
@@ -305,7 +306,7 @@ func (suite *WalletPostgresTestSuite) TestLinkWallet_Concurrent_MaxLinkCount() {
 	wg.Wait()
 
 	used, max, err := pg.GetCustodianLinkCount(context.WithValue(context.Background(),
-		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID)
+		appctx.NoUnlinkPriorToDurationCTXKey, "-P1D"), providerLinkingID, "")
 
 	suite.Require().NoError(err, "should have no error getting custodian link count")
 	suite.Require().True(used == max, fmt.Sprintf("used %d should not exceed max %d", used, max))
