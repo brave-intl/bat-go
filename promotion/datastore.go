@@ -1886,7 +1886,7 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 		return err
 	}
 
-	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, *msg); err != nil {
+	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, msg); err != nil {
 		err = fmt.Errorf("failed to commit kafka offset AddressID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
 		return err
 	}

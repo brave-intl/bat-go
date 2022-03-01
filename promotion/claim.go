@@ -252,55 +252,55 @@ type SwapRewardGrant struct {
 
 // SwapRewardsWorker - gets reward grant information
 type SwapRewardsWorker interface {
-	FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, *segmentKafka.Message, error)
+	FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, segmentKafka.Message, error)
 }
 
 // FetchRewardsGrants - retrieves grant from topic
-func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, *segmentKafka.Message, error) {
+func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGrant, segmentKafka.Message, error) {
 
 	message, err := service.kafkaGrantRewardsReader.FetchMessage(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read message: error reading kafka message %w", err)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
 	codec, ok := service.codecs["rewardsTopic"]
 	if !ok {
-		return nil, nil, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
 	}
 
 	native, _, err := codec.NativeFromBinary(message.Value)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
 	}
 
 	textual, err := codec.TextualFromNative(nil, native)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode textual from native %w", err)
 	}
 
 	var grantRewardsEvent GrantRewardsEvent
 	err = json.Unmarshal(textual, &grantRewardsEvent)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode json from textual %w", err)
 	}
 
 	if !validators.IsETHAddress(grantRewardsEvent.AddressID) {
-		return nil, nil, fmt.Errorf("read message: error could not decode adressID %s", grantRewardsEvent.AddressID)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode adressID %s", grantRewardsEvent.AddressID)
 	}
 
 	promotionID := uuid.FromStringOrNil(grantRewardsEvent.PromotionID)
 	if promotionID == uuid.Nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode PromotionID %s", grantRewardsEvent.PromotionID)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode PromotionID %s", grantRewardsEvent.PromotionID)
 	}
 
 	transactionKey := uuid.FromStringOrNil(grantRewardsEvent.TransactionKey)
 	if transactionKey == uuid.Nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode TransactionKey %s", grantRewardsEvent.TransactionKey)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode TransactionKey %s", grantRewardsEvent.TransactionKey)
 	}
 
 	rewardAmount, err := decimal.NewFromString(grantRewardsEvent.RewardAmount)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read message: error could not decode RewardAmount %s", grantRewardsEvent.RewardAmount)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode RewardAmount %s", grantRewardsEvent.RewardAmount)
 	}
 
 	grant := &SwapRewardGrant{
@@ -310,5 +310,5 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 		RewardAmount:   rewardAmount,
 	}
 
-	return grant, &message, nil
+	return grant, message, nil
 }
