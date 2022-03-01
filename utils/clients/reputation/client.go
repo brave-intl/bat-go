@@ -83,7 +83,7 @@ func (c *HTTPClient) IsDrainReputable(
 	req, err := c.client.NewRequest(
 		ctx,
 		"GET",
-		"v3/reputation/"+paymentID.String()+"/grants",
+		"v2/reputation/"+paymentID.String()+"/grants",
 		nil,
 		&body,
 	)
