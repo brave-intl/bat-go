@@ -35,6 +35,29 @@ func (m *MockClaimWorker) EXPECT() *MockClaimWorkerMockRecorder {
 	return m.recorder
 }
 
+// MockSwapRewardsWorker is a mock of SwapRewardsWorker interface.
+type MockSwapRewardsWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockSwapRewardsWorkerMockRecorder
+}
+
+// MockSwapRewardsWorkerMockRecorder is the mock recorder for MockSwapRewardsWorker.
+type MockSwapRewardsWorkerMockRecorder struct {
+	mock *MockSwapRewardsWorker
+}
+
+// NewMockSwapRewardsWorker creates a new mock instance.
+func NewMockSwapRewardsWorker(ctrl *gomock.Controller) *MockSwapRewardsWorker {
+	mock := &MockSwapRewardsWorker{ctrl: ctrl}
+	mock.recorder = &MockSwapRewardsWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSwapRewardsWorker) EXPECT() *MockSwapRewardsWorkerMockRecorder {
+	return m.recorder
+}
+
 // SignClaimCreds mocks base method.
 func (m *MockClaimWorker) SignClaimCreds(ctx context.Context, claimID go_uuid.UUID, issuer Issuer, blindedCreds []string) (*ClaimCreds, error) {
 	m.ctrl.T.Helper()
@@ -48,4 +71,19 @@ func (m *MockClaimWorker) SignClaimCreds(ctx context.Context, claimID go_uuid.UU
 func (mr *MockClaimWorkerMockRecorder) SignClaimCreds(ctx, claimID, issuer, blindedCreds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignClaimCreds", reflect.TypeOf((*MockClaimWorker)(nil).SignClaimCreds), ctx, claimID, issuer, blindedCreds)
+}
+
+// FetchRewardsGrants mocks base method.
+func (m *MockSwapRewardsWorker) FetchRewardsGrants(ctx context.Context, worker SwapRewardsWorker) (*SwapRewardGrant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchRewardsGrants", ctx, worker)
+	ret0, _ := ret[0].(*SwapRewardGrant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchRewardsGrants indicates an expected call of FetchRewardsGrants.
+func (mr *MockSwapRewardsWorkerMockRecorder) FetchRewardsGrants(ctx interface{}, worker SwapRewardsWorker) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchRewardsGrants", reflect.TypeOf((*MockSwapRewardsWorker)(nil).FetchRewardsGrants), ctx, worker)
 }

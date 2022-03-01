@@ -141,6 +141,8 @@ type Datastore interface {
 	RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error)
 	// RunNextDrainRetryJob toggles failed drain jobs to be reprocessed if eligible
 	RunNextDrainRetryJob(ctx context.Context, worker DrainRetryWorker) error
+	// RunNextFetchRewardGrantsJob toggles failed drain jobs to be reprocessed if eligible
+	RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error
 	// EnqueueMintDrainJob - enqueue a mint drain job in "pending" status
 	EnqueueMintDrainJob(ctx context.Context, walletID uuid.UUID, promotionIDs ...uuid.UUID) error
 	// SetMintDrainPromotionTotal - set the per promotion total for the mint drain
@@ -1802,6 +1804,51 @@ func (pg *Postgres) RunNextDrainRetryJob(ctx context.Context, worker DrainRetryW
 			}
 		}
 	}
+}
+
+// RunNextFetchRewardGrantsJob - runs fetch reward grant jobs
+func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error {
+
+	cbClient, err := cbr.New()
+	if err != nil {
+		return fmt.Errorf("failed to init cbClient in RunNextFetchRewardGrantsJob: %w", err)
+	}
+	service := &Service{
+		Datastore: pg,
+		cbClient:  cbClient,
+	}
+
+	grant, msg, err := worker.FetchRewardsGrants(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch rewards grants job: failed to retrieve grant information: %w", err)
+	}
+
+	cohort := "control"
+	//maybe this call should be changed to just rely on the right status codes and only do 1 post request
+	_, err = service.GetOrCreateIssuer(ctx, grant.PromotionID, cohort)
+	if err != nil {
+		return err
+	}
+
+	claimType := "swap"
+	statement := `
+			insert into claims (promotion_id, wallet_id, address_id, transaction_key, approximate_value, legacy_claimed, claim_type)
+			values ($1, $2, $3, $4, $5, false, $6)
+			`
+
+	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapSentinelWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
+
+	if err != nil {
+		err = fmt.Errorf("fetch rewards grants job: failed to update claim WalletID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
+		return err
+	}
+
+	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, *msg); err != nil {
+		err = fmt.Errorf("failed to commit kafka offset AddressID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
+		return err
+	}
+
+	return nil
 }
 
 // MintDrainJob - Job structure for the mint_drain queue

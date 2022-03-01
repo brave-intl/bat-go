@@ -329,11 +329,11 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 
 	promotion, err := service.Datastore.CreatePromotion("ads", 2, decimal.NewFromFloat(0.25), "")
 	claimStatement := `
-	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed)
-	values ($1, $2, $3, $4, false)
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed, claim_type)
+	values ($1, $2, $3, $4, false, $5)
 	returning *`
 	claims := []Claim{}
-	pg.RawDB().Select(&claims, claimStatement, promotion.ID, addressID, w.ID, decimal.NewFromFloat(1.0))
+	pg.RawDB().Select(&claims, claimStatement, promotion.ID, addressID, w.ID, decimal.NewFromFloat(1.0), "swap")
 
 	urlWithPlatformAndAddress := func(addressID string, platform string) string {
 		return fmt.Sprintf("/v2/promotions?address=%s&platform=%s", addressID, platform)
@@ -404,7 +404,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, w.ID, decimal.NewFromFloat(1.0))
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, w.ID, decimal.NewFromFloat(1.0), "swap")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	issuerID := uuid.NewV4()
@@ -420,7 +420,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	AndroidClaims := []Claim{}
 
 	AndroidAddressID := "0xa54d3c09E34aC96807c1CC397404bF2B98DC4eFb"
-	err = pg.RawDB().Select(&AndroidClaims, claimStatement, promotionAndroidID, AndroidAddressID, w.ID, decimal.NewFromFloat(1.0))
+	err = pg.RawDB().Select(&AndroidClaims, claimStatement, promotionAndroidID, AndroidAddressID, w.ID, decimal.NewFromFloat(1.0), "swap")
 	suite.Require().NoError(err, "Failed to create android claim")
 	if err != nil {
 		fmt.Printf("claim in test case: %+v", err)
@@ -500,12 +500,12 @@ func (suite *ControllersTestSuite) TestGetClaimWithPromotion() {
 	suite.Require().NoError(err, "Failed to create desktop promotion")
 
 	claimStatement := `
-	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed)
-	values ($1, $2, $3, $4, false)
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed, claim_type)
+	values ($1, $2, $3, $4, false, $5)
 	returning *`
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0))
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), "swap")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
@@ -646,12 +646,12 @@ func (suite *ControllersTestSuite) TestClaimSwapRewardsPromotion() {
 	suite.Require().NoError(err, "Failed to create desktop promotion")
 
 	claimStatement := `
-	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed, redeemed)
-	values ($1, $2, $3, $4, true, $5)
+	insert into claims (promotion_id, address_id, wallet_id, approximate_value, legacy_claimed, redeemed, claim_type)
+	values ($1, $2, $3, $4, true, $5, $6)
 	returning *`
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), true)
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), true, "swap")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	publicKey, _, err := httpsignature.GenerateEd25519Key(nil)

@@ -661,6 +661,20 @@ func (mr *MockDatastoreMockRecorder) RunNextDrainRetryJob(ctx, worker interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextDrainRetryJob", reflect.TypeOf((*MockDatastore)(nil).RunNextDrainRetryJob), ctx, worker)
 }
 
+// RunNextFetchRewardGrantsJob mocks base method.
+func (m *MockDatastore) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunNextFetchRewardGrantsJob", ctx, worker)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RunNextFetchRewardGrantsJob indicates an expected call of RunNextFetchRewardGrantsJob.
+func (mr *MockDatastoreMockRecorder) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextFetchRewardGrantsJob", reflect.TypeOf((*MockDatastore)(nil).RunNextFetchRewardGrantsJob), ctx, worker)
+}
+
 // RunNextGeminiCheckStatus mocks base method.
 func (m *MockDatastore) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (bool, error) {
 	m.ctrl.T.Helper()

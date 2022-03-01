@@ -627,6 +627,20 @@ func (_d DatastoreWithPrometheus) RunNextDrainRetryJob(ctx context.Context, work
 	return _d.base.RunNextDrainRetryJob(ctx, worker)
 }
 
+// RunNextFetchRewardGrantsJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextFetchRewardGrantsJob(ctx context.Context, worker SwapRewardsWorker) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextFetchRewardGrantsJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextFetchRewardGrantsJob(ctx, worker)
+}
+
 // RunNextGeminiCheckStatus implements Datastore
 func (_d DatastoreWithPrometheus) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiTxnStatusWorker) (b1 bool, err error) {
 	_since := time.Now()

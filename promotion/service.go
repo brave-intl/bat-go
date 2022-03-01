@@ -35,10 +35,13 @@ const localEnv = "local"
 var (
 	// toggle for drain retry job
 	enableDrainRetryJob = isDrainRetryJobEnabled()
+	// toggle for grant rewards job
+	enableRewardGrantsJob = isGrantRewardsJobEnabled()
 	// toggle for gemini check status
 	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
 
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
+	rewardsTopic          = os.Getenv("ENV") + ".grant.swaprewards"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
 	// countContributionsTotal counts the number of contributions made broken down by funding and type
@@ -90,6 +93,19 @@ func isDrainRetryJobEnabled() bool {
 	return toggle
 }
 
+func isGrantRewardsJobEnabled() bool {
+	var toggle = false
+
+	if os.Getenv("GRANT_REWARDS_JOB_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("GRANT_REWARDS_JOB_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
+
 // remove once gemini enabled
 func isRunNextGeminiCheckStatus() bool {
 	var toggle = false
@@ -108,6 +124,11 @@ func SetSuggestionTopic(newTopic string) {
 	suggestionTopic = newTopic
 }
 
+// SetRewardsTopic allows for a new topic to be set for testing
+func SetRewardsTopic(newTopic string) {
+	rewardsTopic = newTopic
+}
+
 // SetAdminAttestationTopic set admin attestation topic
 func SetAdminAttestationTopic(newTopic string) {
 	adminAttestationTopic = newTopic
@@ -116,6 +137,8 @@ func SetAdminAttestationTopic(newTopic string) {
 // KafkaReader - reader interface
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msg kafka.Message) error
 }
 
 // Service contains datastore and challenge bypass client connections
@@ -132,6 +155,7 @@ type Service struct {
 	kafkaWriter                 *kafka.Writer
 	kafkaDialer                 *kafka.Dialer
 	kafkaAdminAttestationReader KafkaReader
+	kafkaGrantRewardsReader     KafkaReader
 	hotWallet                   *uphold.Wallet
 	drainChannel                chan *w.TransactionInfo
 	jobs                        []srv.Job
@@ -172,6 +196,27 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
 		"suggestion":          suggestionEventSchema,
 		adminAttestationTopic: adminAttestationEventSchema,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to generate codecs kafka: %w", err)
+	}
+
+	// toggle for grant reward job
+	if enableRewardGrantsJob {
+		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_REWARDS")
+		if groupID == "" {
+			return errors.New("failed to initialize kafka could not find consumer group")
+		}
+
+		service.kafkaGrantRewardsReader, err = kafkautils.NewKafkaReader(ctx, groupID, rewardsTopic)
+		if err != nil {
+			return fmt.Errorf("failed to initialize kafka grant rewards reader: %w", err)
+		}
+	}
+
+	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
+		"rewardsTopic": grantRewardsEventSchema,
 	})
 
 	if err != nil {
@@ -338,6 +383,11 @@ func InitService(
 			Cadence: time.Second,
 			Workers: 1,
 		},
+		{
+			Func:    service.RunNextBatchPaymentsJob,
+			Cadence: time.Second,
+			Workers: 1,
+		},
 	}
 
 	// toggle for drain  retry job
@@ -346,6 +396,16 @@ func InitService(
 			srv.Job{
 				Func:    service.RunNextDrainRetryJob,
 				Cadence: 5 * time.Second,
+				Workers: 1,
+			})
+	}
+
+	// toggle for fetch reward grants
+	if enableRewardGrantsJob {
+		service.jobs = append(service.jobs,
+			srv.Job{
+				Func:    service.RunNextFetchRewardGrantsJob,
+				Cadence: time.Second,
 				Workers: 1,
 			})
 	}
@@ -427,6 +487,11 @@ func (service *Service) RunNextDrainJob(ctx context.Context) (bool, error) {
 // RunNextDrainRetryJob - retires failed drain jobs
 func (service *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) {
 	return true, service.Datastore.RunNextDrainRetryJob(ctx, service)
+}
+
+// RunNextFetchRewardGrantsJob takes the next drain job and completes it
+func (service *Service) RunNextFetchRewardGrantsJob(ctx context.Context) (bool, error) {
+	return true, service.Datastore.RunNextFetchRewardGrantsJob(ctx, service)
 }
 
 // RunNextPromotionMissingIssuer takes the next job and completes it
