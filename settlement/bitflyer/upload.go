@@ -207,7 +207,7 @@ func setupSettlementTransactions(
 					// then simply reduce the limit for that bitflyer wallet
 					providerIDProbiLimit = aggregatedTx.Probi
 				} else {
-					numReduced += 1
+					numReduced++
 				}
 				partialProbi = providerIDProbiLimit.Sub(aggregatedTx.Probi)
 			}
@@ -338,7 +338,7 @@ func batchTransactions(
 	length := float64(len(total))
 	logger.Info().Float64("Total", length).Int("inner count", inner).Msg("Chunking transactions")
 
-	for i := float64(0); i < math.Ceil(length/chunkSize); i += 1 {
+	for i := float64(0); i < math.Ceil(length/chunkSize); i++ {
 		start := i * chunkSize
 		if start > length {
 			break
@@ -355,6 +355,7 @@ func batchTransactions(
 	return chunked
 }
 
+// PreparedTransactions are the transactions which have been prepared into batches after applying limits, etc
 type PreparedTransactions struct {
 	// goes to bitflyer
 	AggregateTransactionBatches [][]settlement.AggregateTransaction `json:"aggregateTransactionBatches"`

@@ -143,12 +143,14 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+// Inventory holds the balance for a particular currency
 type Inventory struct {
 	CurrencyCode string          `json:"currency_code"`
 	Amount       decimal.Decimal `json:"amount"`
 	Available    decimal.Decimal `json:"available"`
 }
 
+// InventoryResponse is the response to a balance inquery
 type InventoryResponse struct {
 	AccountHash string      `json:"account_hash"`
 	Inventory   []Inventory `json:"inventory"`
@@ -435,6 +437,7 @@ func (c *HTTPClient) RefreshToken(
 	return &body, handleBitflyerError(err, req, resp)
 }
 
+// CheckInventory fetches the current balances of an account
 func (c *HTTPClient) CheckInventory(
 	ctx context.Context,
 ) (map[string]Inventory, error) {
