@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // ReadOnlyDatastoreWithPrometheus implements ReadOnlyDatastore interface with all methods wrapped
@@ -222,6 +223,20 @@ func (_d ReadOnlyDatastoreWithPrometheus) GetPromotionsMissingIssuer(limit int) 
 		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetPromotionsMissingIssuer", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetPromotionsMissingIssuer(limit)
+}
+
+// GetWithdrawalsAssociated implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) GetWithdrawalsAssociated(walletID *uuid.UUID, claimID *uuid.UUID) (up1 *uuid.UUID, d1 decimal.Decimal, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWithdrawalsAssociated", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetWithdrawalsAssociated(walletID, claimID)
 }
 
 // Migrate implements ReadOnlyDatastore
