@@ -285,7 +285,7 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 	}
 
 	if !validators.IsETHAddress(grantRewardsEvent.AddressID) {
-		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode adressID %s", grantRewardsEvent.AddressID)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error could not decode addressID %s", grantRewardsEvent.AddressID)
 	}
 
 	promotionID := uuid.FromStringOrNil(grantRewardsEvent.PromotionID)

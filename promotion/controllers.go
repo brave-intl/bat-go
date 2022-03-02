@@ -470,7 +470,6 @@ func ClaimSwapRewardsPromotion(service *Service) handlers.AppHandler {
 			)
 		}
 
-		// blows up in reputation thing
 		claimID, err := service.ClaimPromotionForWallet(r.Context(), *promotionID.UUID(), walletID, req.BlindedCreds)
 
 		if err != nil {
