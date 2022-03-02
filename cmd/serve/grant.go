@@ -18,8 +18,8 @@ import (
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/grant"
 	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/payment"
 	"github.com/brave-intl/bat-go/promotion"
+	"github.com/brave-intl/bat-go/skus"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -88,7 +88,7 @@ func init() {
 
 	// stripe configurations
 	flagBuilder.Flag().Bool("stripe-enabled", false,
-		"is stripe enabled for payments").
+		"is stripe enabled for skus").
 		Bind("stripe-enabled").
 		Env("STRIPE_ENABLED")
 
@@ -269,43 +269,43 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// temporarily house batloss events in promotion to avoid widespread conflicts later
 	r.Mount("/v1/wallets", promotion.WalletEventRouter(promotionService))
 
-	paymentPG, err := payment.NewPostgres("", true, "payment_db")
+	skusPG, err := skus.NewPostgres("", true, "skus_db")
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
-	paymentService, err := payment.InitService(ctx, paymentPG, walletService)
+	skusService, err := skus.InitService(ctx, skusPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
-		logger.Panic().Err(err).Msg("Payment service initialization failed")
+		logger.Panic().Err(err).Msg("SKUs service initialization failed")
 	}
 
 	// add runnable jobs:
-	jobs = append(jobs, paymentService.Jobs()...)
+	jobs = append(jobs, skusService.Jobs()...)
 
-	// initialize payment service keys for credentials to use
-	payment.InitEncryptionKeys()
+	// initialize skus service keys for credentials to use
+	skus.InitEncryptionKeys()
 
-	r.Mount("/v1/credentials", payment.CredentialRouter(paymentService))
-	r.Mount("/v2/credentials", payment.CredentialV2Router(paymentService))
-	r.Mount("/v1/orders", payment.Router(paymentService))
-	// for payment webhook integrations
-	r.Mount("/v1/webhooks", payment.WebhookRouter(paymentService))
-	r.Mount("/v1/votes", payment.VoteRouter(paymentService))
+	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
+	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
+	r.Mount("/v1/orders", skus.Router(skusService))
+	// for skus webhook integrations
+	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
+	r.Mount("/v1/votes", skus.VoteRouter(skusService))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
-		paymentDB, err := payment.NewPostgres("", true, "merch_payment_db")
+		skusDB, err := skus.NewPostgres("", true, "merch_skus_db")
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 		}
-		paymentService, err := payment.InitService(ctx, paymentDB, walletService)
+		skusService, err := skus.InitService(ctx, skusDB, walletService)
 		if err != nil {
 			sentry.CaptureException(err)
-			logger.Panic().Err(err).Msg("Payment service initialization failed")
+			logger.Panic().Err(err).Msg("SKUs service initialization failed")
 		}
-		r.Mount("/v1/merchants", payment.MerchantRouter(paymentService))
+		r.Mount("/v1/merchants", skus.MerchantRouter(skusService))
 	}
 
 	// add profiling flag to enable profiling routes
