@@ -1038,8 +1038,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
+	suggestionTopic := uuid.NewV4().String() + ".grant.suggestion"
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
-	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+	SetSuggestionTopic(suggestionTopic)
 
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -1166,6 +1167,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 		MaxWait:          time.Second,
 		RebalanceTimeout: time.Second,
 		Logger:           kafka.LoggerFunc(log.Printf),
+	})
+	codecs, err := kafkautils.GenerateCodecs(map[string]string{
+		suggestionTopic: suggestionEventSchema,
 	})
 	codec := service.codecs["suggestion"]
 
