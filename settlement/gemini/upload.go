@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -241,6 +242,17 @@ func IterateRequest(
 
 	submittedTransactions := make(map[string][]settlement.Transaction)
 
+	apiSecret, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPISecretCTXKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get gemini api secret")
+		return submittedTransactions, fmt.Errorf("failed to get gemini api secret: %w", err)
+	}
+	apiKey, err := appctx.GetStringFromContext(ctx, appctx.GeminiAPIKeyCTXKey)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to get gemini api key")
+		return submittedTransactions, fmt.Errorf("failed to get gemini api key: %w", err)
+	}
+
 	for _, bulkPayoutFile := range bulkPayoutFiles {
 		bytes, err := ioutil.ReadFile(bulkPayoutFile)
 		if err != nil {
@@ -259,6 +271,31 @@ func IterateRequest(
 		for i, bulkPayoutRequestRequirements := range geminiBulkPayoutRequestRequirements {
 			blockProgress := geminiComputeTotal(geminiBulkPayoutRequestRequirements[:i+1])
 			if action == "upload" {
+				payload, err := json.Marshal(gemini.NewBalancesPayload(nil))
+				if err != nil {
+					logger.Error().Err(err).Msg("failed unmarshal balance payload")
+					return submittedTransactions, err
+				}
+
+				signer := cryptography.NewHMACHasher([]byte(apiSecret))
+				result, err := geminiClient.FetchBalances(ctx, apiKey, signer, string(payload))
+				availableCurrency := map[string]decimal.Decimal{}
+				for _, currency := range *result {
+					availableCurrency[currency.Currency] = currency.Amount
+				}
+
+				requiredCurrency := map[string]decimal.Decimal{}
+				for _, pay := range bulkPayoutRequestRequirements.Base.Payouts {
+					requiredCurrency[pay.Currency] = requiredCurrency[pay.Currency].Add(pay.Amount)
+				}
+
+				for key, amount := range requiredCurrency {
+					if availableCurrency[key].LessThan(amount) {
+						logger.Error().Str("required", amount.String()).Str("available", availableCurrency[key].String()).Str("currency", key).Err(err).Msg("failed to meet required balance")
+						return submittedTransactions, fmt.Errorf("failed to meet required balance: %w", err)
+					}
+				}
+
 				submittedTransactions, err = SubmitBulkPayoutTransactions(
 					ctx,
 					transactionsMap,
@@ -284,7 +321,7 @@ func IterateRequest(
 					blockProgress,
 				)
 				if err != nil {
-					logger.Error().Err(err).Msg("falied to check payout transactions status")
+					logger.Error().Err(err).Msg("failed to check payout transactions status")
 					return nil, err
 				}
 			}

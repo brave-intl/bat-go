@@ -11,12 +11,14 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, string, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -44,6 +46,58 @@ func New() (Client, error) {
 	}
 
 	return NewClientWithPrometheus(&HTTPClient{client}, "reputation_client"), nil
+}
+
+// IsDrainReputableOpts - the query string options for the is reputable api call
+type IsDrainReputableOpts struct {
+	WithdrawalAmount decimal.Decimal `url:"withdrawal_amount"`
+	PromotionID      uuid.UUID       `url:"promotion_id"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iro)
+}
+
+// IsDrainReputableResponse is what the reputation server
+// will send back when we ask if a wallet is reputable
+type IsDrainReputableResponse struct {
+	Cohort        int    `json:"cohort"`
+	Justification string `json:"justification"`
+}
+
+// IsDrainReputable makes the request to the reputation server
+// and returns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsDrainReputable(
+	ctx context.Context,
+	paymentID, promotionID uuid.UUID,
+	withdrawalAmount decimal.Decimal,
+) (bool, string, error) {
+
+	var body = IsDrainReputableOpts{
+		WithdrawalAmount: withdrawalAmount,
+		PromotionID:      promotionID,
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v2/reputation/"+paymentID.String()+"/grants",
+		nil,
+		&body,
+	)
+	if err != nil {
+		return false, "reputation-service-failure", err
+	}
+
+	var resp IsDrainReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, "reputation-service-failures", err
+	}
+
+	return resp.Cohort == 1, resp.Justification, nil
 }
 
 // IsWalletReputableResponse is what the reputation server

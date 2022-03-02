@@ -1,4 +1,4 @@
-package payment
+package skus
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	session "github.com/stripe/stripe-go/v71/checkout/session"
-	client "github.com/stripe/stripe-go/v71/client"
-	sub "github.com/stripe/stripe-go/v71/sub"
+	session "github.com/stripe/stripe-go/v72/checkout/session"
+	client "github.com/stripe/stripe-go/v72/client"
+	sub "github.com/stripe/stripe-go/v72/sub"
 
 	"errors"
 
@@ -29,7 +29,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
-	stripe "github.com/stripe/stripe-go/v71"
+	stripe "github.com/stripe/stripe-go/v72"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -265,43 +265,82 @@ func (s *Service) GetOrder(orderID uuid.UUID) (*Order, error) {
 	// get the order
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get order (%s): %w", orderID.String(), err)
 	}
+
+	if order != nil {
+		if !order.IsPaid() && order.IsStripePayable() {
+			order, err = s.TransformStripeOrder(order)
+			if err != nil {
+				return nil, fmt.Errorf("failed to transform stripe order (%s): %w", orderID.String(), err)
+			}
+		}
+	}
+
+	return order, nil
+
+}
+
+// TransformStripeOrder - update checkout session if expired, check the status of the checkout session
+func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 
 	// check if this order has an expired checkout session
-	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(orderID)
+	expired, cs, err := s.Datastore.CheckExpiredCheckoutSession(order.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for expired stripe checkout session: %w", err)
+	}
+
 	if expired {
-		// if expired update with new checkout session
-		if !order.IsPaid() && order.IsStripePayable() {
-
-			// get old checkout session from stripe by id
-			stripeSession, err := session.Get(cs, nil)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
-			}
-
-			checkoutSession, err := order.CreateStripeCheckoutSession(
-				getEmailFromCheckoutSession(stripeSession),
-				stripeSession.SuccessURL, stripeSession.CancelURL,
-				order.getTrialDays(),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create checkout session: %w", err)
-			}
-
-			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update order metadata: %w", err)
-			}
+		// get old checkout session from stripe by id
+		stripeSession, err := session.Get(cs, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
 		}
 
-		// get the order
-		order, err = s.Datastore.GetOrder(orderID)
+		checkoutSession, err := order.CreateStripeCheckoutSession(
+			getEmailFromCheckoutSession(stripeSession),
+			stripeSession.SuccessURL, stripeSession.CancelURL,
+			order.getTrialDays(),
+		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create checkout session: %w", err)
+		}
+
+		err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeCheckoutSessionId", checkoutSession.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update order metadata: %w", err)
+		}
+
+	}
+
+	// if this is a stripe order, and there is a checkout session, we actually need to check it with
+	// stripe, as the redirect flow sometimes is too fast for the webhook to be delivered.
+	if cs, ok := order.Metadata["stripeCheckoutSessionId"]; ok && cs != "" {
+		// get old checkout session from stripe by id
+		stripeSession, err := session.Get(cs, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get stripe checkout session: %w", err)
+		}
+
+		if stripeSession.PaymentStatus == "paid" {
+			// if the session is actually paid, then set the subscription id and order to paid
+			if err = s.Datastore.UpdateOrder(order.ID, "paid"); err != nil {
+				return nil, fmt.Errorf("failed to update order to paid status: %w", err)
+			}
+			err = s.Datastore.UpdateOrderMetadata(order.ID, "stripeSubscriptionId", stripeSession.Subscription.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update order to add the subscription id")
+			}
 		}
 	}
-	return order, err
+
+	// get the order latest state
+	order, err = s.Datastore.GetOrder(order.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get order: %w", err)
+	}
+
+	return order, nil
 }
 
 // CancelOrder - cancels an order, propogates to stripe if needed
@@ -534,6 +573,44 @@ func (s *Service) CreateTransactionFromRequest(ctx context.Context, req CreateTr
 	}
 
 	transaction, err := s.Datastore.CreateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
+		return nil, errorutils.Wrap(err, "error recording transaction")
+	}
+
+	isPaid, err := s.IsOrderPaid(transaction.OrderID)
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to validate the order is paid based on transactions")
+		return nil, errorutils.Wrap(err, "error validating order is paid")
+	}
+
+	// If the transaction that was satisifies the order then let's update the status
+	if isPaid {
+		err = s.Datastore.UpdateOrder(transaction.OrderID, "paid")
+		if err != nil {
+			sublogger.Error().Err(err).Msg("failed to set the status to paid")
+			return nil, errorutils.Wrap(err, "error updating order status")
+		}
+	}
+
+	return transaction, err
+}
+
+// UpdateTransactionFromRequest queries the endpoints and creates a transaciton
+func (s *Service) UpdateTransactionFromRequest(ctx context.Context, req CreateTransactionRequest, orderID uuid.UUID, getCustodialTx getCustodialTxFn) (*Transaction, error) {
+
+	sublogger := logging.Logger(ctx, "payments").With().
+		Str("func", "UpdateTransactionFromRequest").
+		Logger()
+
+	// get the information from the custodian
+	amount, status, currency, kind, err := getCustodialTx(ctx, req.ExternalTransactionID.String())
+	if err != nil {
+		sublogger.Error().Err(err).Msg("failed to get and validate custodian transaction")
+		return nil, errorutils.Wrap(err, fmt.Sprintf("failed to get get and validate custodialtx: %s", err.Error()))
+	}
+
+	transaction, err := s.Datastore.UpdateTransaction(orderID, req.ExternalTransactionID.String(), status, currency, kind, *amount)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to create the transaction for the order")
 		return nil, errorutils.Wrap(err, "error recording transaction")

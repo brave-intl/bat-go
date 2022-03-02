@@ -25,13 +25,24 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-var balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-	Name: "gemini_account_balance",
-	Help: "A gauge of the current account balance in gemini",
-})
+var (
+	balanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "gemini_account_balance",
+		Help: "A gauge of the current account balance in gemini",
+	})
+
+	countGeminiWalletAccountValidation = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_gemini_wallet_account_validation",
+			Help: "Counts the number of gemini wallets requesting account validation partitioned by country code",
+		},
+		[]string{"country_code", "status"},
+	)
+)
 
 func init() {
 	prometheus.MustRegister(balanceGauge)
+	prometheus.MustRegister(countGeminiWalletAccountValidation)
 }
 
 // WatchGeminiBalance - when called reports the balance to prometheus
@@ -355,12 +366,7 @@ func setPrivateRequestHeaders(
 }
 
 // CheckTxStatus uploads the bulk payout for gemini
-func (c *HTTPClient) CheckTxStatus(
-	ctx context.Context,
-	APIKey string,
-	clientID string,
-	txRef string,
-) (*PayoutResult, error) {
+func (c *HTTPClient) CheckTxStatus(ctx context.Context, APIKey string, clientID string, txRef string) (*PayoutResult, error) {
 	urlPath := fmt.Sprintf("/v1/payment/%s/%s", clientID, txRef)
 	req, err := c.client.NewRequest(ctx, "GET", urlPath, nil, nil)
 	if err != nil {
@@ -387,20 +393,27 @@ func (c *HTTPClient) CheckTxStatus(
 	}
 
 	var body PayoutResult
-	_, err = c.client.Do(ctx, req, &body)
+	resp, err := c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		notFoundReason := "404 From Gemini"
+		body = PayoutResult{
+			Result: "Error",
+			Reason: &notFoundReason,
+			TxRef:  txRef,
+		}
+		return &body, nil
+	}
+
 	return &body, err
 }
 
 // UploadBulkPayout uploads the bulk payout for gemini
-func (c *HTTPClient) UploadBulkPayout(
-	ctx context.Context,
-	APIKey string,
-	signer cryptography.HMACKey,
-	payload string,
-) (*[]PayoutResult, error) {
+func (c *HTTPClient) UploadBulkPayout(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]PayoutResult, error) {
+
 	req, err := c.client.NewRequest(ctx, "POST", "/v1/payments/bulkPay", nil, nil)
 	if err != nil {
 		return nil, err
@@ -415,6 +428,7 @@ func (c *HTTPClient) UploadBulkPayout(
 	if err != nil {
 		return nil, err
 	}
+
 	return &body, err
 }
 
@@ -464,9 +478,22 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		// check country code
 		for _, v := range blacklist {
 			if strings.EqualFold(res.CountryCode, v) {
+				if res.CountryCode != "" {
+					countGeminiWalletAccountValidation.With(prometheus.Labels{
+						"country_code": res.CountryCode,
+						"status":       "failure",
+					}).Inc()
+				}
 				return "", ErrInvalidCountry
 			}
 		}
+	}
+
+	if res.CountryCode != "" {
+		countGeminiWalletAccountValidation.With(prometheus.Labels{
+			"country_code": res.CountryCode,
+			"status":       "success",
+		}).Inc()
 	}
 
 	return res.ID, nil

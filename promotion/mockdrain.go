@@ -39,18 +39,18 @@ func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 }
 
 // RedeemAndTransferFunds mocks base method.
-func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*wallet.TransactionInfo, error) {
+func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total)
+	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total, claimID)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RedeemAndTransferFunds indicates an expected call of RedeemAndTransferFunds.
-func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total interface{}) *gomock.Call {
+func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total, claimID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total, claimID)
 }
 
 // MockDrainRetryWorker is a mock of DrainRetryWorker interface.
@@ -168,4 +168,42 @@ func (m *MockBatchTransferWorker) SubmitBatchTransfer(ctx context.Context, batch
 func (mr *MockBatchTransferWorkerMockRecorder) SubmitBatchTransfer(ctx, batchID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBatchTransfer", reflect.TypeOf((*MockBatchTransferWorker)(nil).SubmitBatchTransfer), ctx, batchID)
+}
+
+// MockGeminiTxnStatusWorker is a mock of GeminiTxnStatusWorker interface.
+type MockGeminiTxnStatusWorker struct {
+	ctrl     *gomock.Controller
+	recorder *MockGeminiTxnStatusWorkerMockRecorder
+}
+
+// MockGeminiTxnStatusWorkerMockRecorder is the mock recorder for MockGeminiTxnStatusWorker.
+type MockGeminiTxnStatusWorkerMockRecorder struct {
+	mock *MockGeminiTxnStatusWorker
+}
+
+// NewMockGeminiTxnStatusWorker creates a new mock instance.
+func NewMockGeminiTxnStatusWorker(ctrl *gomock.Controller) *MockGeminiTxnStatusWorker {
+	mock := &MockGeminiTxnStatusWorker{ctrl: ctrl}
+	mock.recorder = &MockGeminiTxnStatusWorkerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockGeminiTxnStatusWorker) EXPECT() *MockGeminiTxnStatusWorkerMockRecorder {
+	return m.recorder
+}
+
+// GetGeminiTxnStatus mocks base method.
+func (m *MockGeminiTxnStatusWorker) GetGeminiTxnStatus(ctx context.Context, txRef string) (*wallet.TransactionInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGeminiTxnStatus", ctx, txRef)
+	ret0, _ := ret[0].(*wallet.TransactionInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetGeminiTxnStatus indicates an expected call of GetGeminiTxnStatus.
+func (mr *MockGeminiTxnStatusWorkerMockRecorder) GetGeminiTxnStatus(ctx, txRef interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGeminiTxnStatus", reflect.TypeOf((*MockGeminiTxnStatusWorker)(nil).GetGeminiTxnStatus), ctx, txRef)
 }

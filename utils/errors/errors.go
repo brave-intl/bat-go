@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -53,23 +54,35 @@ func New(cause error, message string, data interface{}) error {
 }
 
 // Data from error origin
-func (err ErrorBundle) Data() interface{} {
-	return err.data
+func (e ErrorBundle) Data() interface{} {
+	return e.data
 }
 
 // Cause returns the associated cause
-func (err ErrorBundle) Cause() error {
-	return err.cause
+func (e ErrorBundle) Cause() error {
+	return e.cause
 }
 
 // Unwrap returns the associated cause
-func (err ErrorBundle) Unwrap() error {
-	return err.cause
+func (e ErrorBundle) Unwrap() error {
+	return e.cause
 }
 
 // Error turns into an error
-func (err ErrorBundle) Error() string {
-	return err.message
+func (e ErrorBundle) Error() string {
+	return e.message
+}
+
+// DataToString returns string representation of data
+func (e ErrorBundle) DataToString() string {
+	if e.data == nil {
+		return "no error bundle data"
+	}
+	b, err := json.Marshal(e.data)
+	if err != nil {
+		return fmt.Sprintf("error retrieving error bundle data %s", err.Error())
+	}
+	return string(b)
 }
 
 // Wrap wraps an error
@@ -97,6 +110,71 @@ func (me *MultiError) Append(err ...error) {
 // Count - get the number of errors contained herein
 func (me *MultiError) Count() int {
 	return len(me.Errs)
+}
+
+type wErrs struct {
+	err   error
+	cause error
+}
+
+func (we *wErrs) Cause(err error) {
+	we.cause = err
+}
+
+func (we *wErrs) Error() string {
+	var result string
+	if we.err != nil {
+		result = we.err.Error()
+	}
+	if we.cause != nil {
+		result += ": " + we.cause.Error()
+	}
+	return result
+}
+
+// Is - implement interface{ Is(error) bool } for equality check
+func (we *wErrs) Is(err error) bool {
+	return err == we.err
+}
+
+// As - implement interface{ As(target interface{}) bool } for equality check
+func (we *wErrs) As(target interface{}) bool {
+	return errors.As(we.err, target)
+}
+
+// Unwrap - implement unwrap interface to get the cause
+func (we *wErrs) Unwrap() error {
+	return we.cause
+}
+
+// Unwrap - implement Unwrap for unwrapping sub errors
+func (me *MultiError) Unwrap() error {
+	var errs []error
+	// iterate over all the errors and wrapped errors
+	// make a list so we can put them in wErr nodes
+	for _, v := range me.Errs {
+		vv := v
+		for {
+			errs = append(errs, vv)
+			// unwrap until cant
+			err := errors.Unwrap(vv)
+			if err == nil {
+				break
+			}
+			vv = err
+		}
+	}
+
+	var wrappedErr = new(wErrs)
+	for _, v := range errs {
+		if v != nil {
+			wrappedErr = &wErrs{err: v, cause: wrappedErr}
+		}
+	}
+	wrappedErr = &wErrs{err: errors.New("wrapped errors"), cause: wrappedErr}
+
+	return wrappedErr
+
 }
 
 // Error - implement Error interface

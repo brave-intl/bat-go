@@ -1,4 +1,4 @@
-package payment
+package skus
 
 import (
 	"context"
@@ -21,7 +21,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v71"
+	stripe "github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/webhook"
 )
 
@@ -455,8 +455,13 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 		}
 
 		if transaction != nil {
-			err = fmt.Errorf("external Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+			// if the transaction is already added, then do an update
+			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+			if err != nil {
+				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
+			}
+			// return 200 in event of already created transaction
+			return handlers.RenderContent(r.Context(), transaction, w, http.StatusOK)
 		}
 
 		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
@@ -499,8 +504,13 @@ func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 		}
 
 		if transaction != nil {
-			err = fmt.Errorf("external Transaction ID: %s has already been added to the order", req.ExternalTransactionID.String())
-			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
+			// if the transaction is already added, then do an update
+			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)
+			if err != nil {
+				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
+			}
+			// return 200 in event of already created transaction
+			return handlers.RenderContent(r.Context(), transaction, w, http.StatusOK)
 		}
 
 		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getUpholdCustodialTxWithRetries)

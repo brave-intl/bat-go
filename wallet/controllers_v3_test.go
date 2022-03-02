@@ -97,6 +97,15 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		nil,
 	)
 
+	mockReputation.EXPECT().IsWalletAdsReputable(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(), // flag
+	).Return(
+		true,
+		nil,
+	)
+
 	// begin linking tx
 	mock.ExpectBegin()
 
@@ -398,6 +407,15 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
+	mockReputation.EXPECT().IsWalletAdsReputable(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(), // flag
+	).Return(
+		true,
+		nil,
+	)
+
 	r = r.WithContext(ctx)
 
 	router := chi.NewRouter()
@@ -457,6 +475,15 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 			Datastore: datastore,
 		})
 		w = httptest.NewRecorder()
+	)
+
+	mockReputationClient.EXPECT().IsWalletAdsReputable(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(), // flag
+	).Return(
+		true,
+		nil,
 	)
 
 	ctx = context.WithValue(ctx, appctx.DatastoreCTXKey, datastore)
@@ -586,6 +613,15 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		gomock.Any(),
 	).Return(
 		accountID.String(),
+		nil,
+	)
+
+	mockReputationClient.EXPECT().IsWalletAdsReputable(
+		gomock.Any(), // ctx
+		gomock.Any(), // wallet id
+		gomock.Any(), // flag
+	).Return(
+		true,
 		nil,
 	)
 
