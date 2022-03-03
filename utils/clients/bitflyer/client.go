@@ -43,19 +43,6 @@ func init() {
 	prometheus.MustRegister(bfBalanceGauge)
 }
 
-// InventoryResponse bitflyer inventory response
-type InventoryResponse struct {
-	AccountHash string      `json:"account_hash"`
-	Inventory   []Inventory `json:"inventory"`
-}
-
-// Inventory a bitflyer inventory response item representing an asset in the account inventory
-type Inventory struct {
-	CurrencyCode string  `json:"currency_code"`
-	Amount       float64 `json:"amount"`
-	Available    float64 `json:"available"`
-}
-
 // WatchBitflyerBalance periodically checks bitflyer inventory balance for BAT
 func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
 	client, err := New()
@@ -83,11 +70,12 @@ func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
 					for _, inv := range result.Inventory {
 						if strings.ToLower(inv.CurrencyCode) == "bat" {
 							found = true
-							if inv.Amount < 1 {
+							if inv.Amount.LessThan(decimal.NewFromFloat(1.0)) {
 								logging.FromContext(ctx).Error().Err(errors.New("account is empty")).
 									Msg("bitflyer account error")
 							} else {
-								bfBalanceGauge.Set(inv.Amount)
+								tmp, _ := inv.Amount.Float64()
+								bfBalanceGauge.Set(tmp)
 							}
 							break
 						}
@@ -519,7 +507,7 @@ func (c *HTTPClient) CheckInventory(
 
 	var body InventoryResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	err = handleBitflyerError(err, req, resp)
+	err = handleBitflyerError(err, resp)
 	if err != nil {
 		return nil, err
 	}
