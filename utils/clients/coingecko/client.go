@@ -16,6 +16,11 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const (
+	coinMarketsPageSize      = 250
+	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
+)
+
 // Client abstracts over the underlying client
 type Client interface {
 	FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error)
@@ -302,7 +307,7 @@ type coinMarketParams struct {
 // GenerateQueryString - implement the QueryStringBody interface
 func (p *coinMarketParams) GenerateQueryString() (url.Values, error) {
 	p.Page = 1
-	p.PerPage = int(p.Limit)
+	p.PerPage = coinMarketsPageSize
 	return query.Values(p)
 }
 
@@ -315,14 +320,18 @@ type CoinMarket struct {
 	Image                    string  `json:"image"`
 	MarketCap                int     `json:"market_cap"`
 	MarketCapRank            int     `json:"market_cap_rank"`
-	CurrentPrice             int     `json:"current_price"`
+	CurrentPrice             float64 `json:"current_price"`
 	PriceChange24h           float64 `json:"price_change_24h"`
 	PriceChangePercentage24h float64 `json:"price_change_percentage_24h"`
-	TotalVolume              int     `json:"total_volume"`
+	TotalVolume              float64 `json:"total_volume"`
 }
 
 // CoinMarketResponse is the coingecko response for FetchCoinMarkets
 type CoinMarketResponse []CoinMarket
+
+func (cmr *CoinMarketResponse) applyLimit(limit int) CoinMarketResponse {
+	return (*cmr)[:limit]
+}
 
 // FetchCoinMarkets fetches the market data for the top coins
 func (c *HTTPClient) FetchCoinMarkets(
@@ -362,12 +371,12 @@ func (c *HTTPClient) FetchCoinMarkets(
 			return nil, updated, err
 		}
 
-		// Cache is fresh if it's less than an hour old
-		if time.Since(entry.LastUpdated).Hours() < float64(1) {
+		// Check if cache is still fresh
+		if time.Since(entry.LastUpdated).Hours() < float64(coinMarketsCacheTTLHours) {
+			body = (&body).applyLimit(params.Limit)
 			return &body, entry.LastUpdated, err
 		}
 	}
-
 	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
 	if err != nil {
 		return nil, updated, err
@@ -377,12 +386,14 @@ func (c *HTTPClient) FetchCoinMarkets(
 	if err != nil {
 		// attempt to use cache response on error if exists
 		if len(entry.Payload) > 0 {
+			body = (&body).applyLimit(params.Limit)
 			return &body, entry.LastUpdated, nil
 		}
 
 		return nil, updated, err
 	}
 
+	body = (&body).applyLimit(params.Limit)
 	bodyBytes, err := json.Marshal(&body)
 	if err != nil {
 		return nil, updated, err
