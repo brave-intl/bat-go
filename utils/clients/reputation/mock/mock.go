@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
+	decimal "github.com/shopspring/decimal"
 )
 
 // MockClient is a mock of Client interface.
@@ -33,6 +34,22 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
+}
+
+// IsDrainReputable mocks base method.
+func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDrainReputable", ctx, id, promotionID, withdrawAmount)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// IsDrainReputable indicates an expected call of IsDrainReputable.
+func (mr *MockClientMockRecorder) IsDrainReputable(ctx, id, promotionID, withdrawAmount interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDrainReputable", reflect.TypeOf((*MockClient)(nil).IsDrainReputable), ctx, id, promotionID, withdrawAmount)
 }
 
 // IsWalletAdsReputable mocks base method.

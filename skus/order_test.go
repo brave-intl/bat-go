@@ -1,6 +1,7 @@
+//go:build integration
 // +build integration
 
-package payment
+package skus
 
 import (
 	"context"

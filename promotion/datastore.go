@@ -96,6 +96,8 @@ type Datastore interface {
 	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
+	// GetWithdrawalsAssociated returns the promotion and total amount of claims drained for associated wallets
+	GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uuid.UUID, decimal.Decimal, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
 	GetPromotionsMissingIssuer(limit int) ([]uuid.UUID, error)
 	// GetClaimCreds returns the claim credentials for a ClaimID
@@ -173,6 +175,8 @@ type ReadOnlyDatastore interface {
 	GetPreClaim(promotionID uuid.UUID, walletID string) (*Claim, error)
 	// GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
 	GetAvailablePromotionsForWallet(wallet *walletutils.Info, platform string) ([]Promotion, error)
+	// GetWithdrawalsAssociated returns the promotion and total amount of claims drained for associated wallets
+	GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uuid.UUID, decimal.Decimal, error)
 	// GetAvailablePromotions returns the list of available promotions for all wallets
 	GetAvailablePromotions(platform string) ([]Promotion, error)
 	// GetPromotionsMissingIssuer returns the list of promotions missing an issuer
@@ -600,6 +604,39 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	}
 
 	return &claim, nil
+}
+
+// GetWithdrawalsAssociated returns the promotion and total amount of claims drained for associated wallets
+func (pg *Postgres) GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uuid.UUID, decimal.Decimal, error) {
+
+	type associatedWithdrawals struct {
+		PromotionID      *uuid.UUID      `db:"promotion_id"`
+		WithdrawalAmount decimal.Decimal `db:"withdrawal_amount"`
+	}
+
+	var (
+		stmt = `
+		select
+			promotion_id,sum(approximate_value+bonus) as withdrawal_amount
+		from
+			claims
+		where
+			drained=true and
+			wallet_id in (select id from wallets where provider_linking_id = (select provider_linking_id from wallets where wallet_id = $1 limit 1)) and
+			promotion_id= (select promotion_id from claims where claim_id= $2 limit 1)
+		group by
+			promotion_id;
+		`
+		result = new(associatedWithdrawals)
+	)
+
+	var err = pg.RawDB().Get(result, stmt, walletID, claimID)
+	if err != nil {
+		return nil, decimal.Zero, fmt.Errorf("failed to get withdrawal amount: %w", err)
+	}
+
+	// TODO: implement, get the promotion id and the total amount withdrawn for associated wallets
+	return result.PromotionID, result.WithdrawalAmount, nil
 }
 
 // GetAvailablePromotionsForWallet returns the list of available promotions for the wallet
@@ -1472,6 +1509,10 @@ func errToDrainCode(err error) (string, string, bool) {
 		errCode = "reputation-failed"
 		status = "reputation-failed"
 		retriable = false
+	} else if errors.Is(err, errWalletDrainLimitExceeded) {
+		errCode = "exceeded-withdrawal-limit"
+		status = "exceeded-withdrawal-limit"
+		retriable = false
 	} else {
 		errCode = "unknown"
 		var bfe *clients.BitflyerError
@@ -1565,7 +1606,7 @@ limit 1`
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
-	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total)
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total, job.ClaimID)
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).

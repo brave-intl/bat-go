@@ -40,6 +40,7 @@ var (
 	errGeminiMisconfigured      = errors.New("gemini is not configured")
 	errReputationServiceFailure = errors.New("failed to call reputation service")
 	errWalletNotReputable       = errors.New("wallet is not reputable")
+	errWalletDrainLimitExceeded = errors.New("wallet drain limit exceeded")
 )
 
 // Drain ad suggestions into verified wallet
@@ -256,7 +257,7 @@ type DrainPoll struct {
 
 // DrainWorker attempts to work on a drain job by redeeming the credentials and transferring funds
 type DrainWorker interface {
-	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error)
+	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*walletutils.TransactionInfo, error)
 }
 
 // DrainRetryWorker - reads walletID
@@ -490,7 +491,7 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 }
 
 // RedeemAndTransferFunds after validating that all the credential bindings
-func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal) (*walletutils.TransactionInfo, error) {
+func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*walletutils.TransactionInfo, error) {
 	// setup a logger
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -542,51 +543,52 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	}
 
 	if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationOnDrainCTXKey); ok {
-		// perform reputation check for wallet, and error accordingly if there is a reputation failure
-		reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
-		if err != nil {
-			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
-			return nil, errReputationServiceFailure
+		// are we running in withdrawal limit mode?
+		if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationWithdrawalOnDrainCTXKey); ok {
+			// tally up all prior claims on this promotion for all linked provider accounts associated
+			// as the "withdrawalAmount"
+			promotionID, withdrawalAmount, err := service.Datastore.GetWithdrawalsAssociated(&walletID, claimID)
+			if err != nil {
+				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to lookup associated withdrawals")
+				return nil, fmt.Errorf("failed to lookup associated withdrawals: %w", err)
+			}
+
+			if promotionID == nil {
+				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to lookup associated withdrawals")
+				return nil, fmt.Errorf("failed to lookup associated withdrawals: no matching promotion")
+			}
+
+			// perform reputation check for wallet, and error accordingly if there is a reputation failure
+			reputable, justification, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
+			if err != nil {
+				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
+				return nil, errReputationServiceFailure
+			}
+
+			if !reputable {
+				// pass along the justification in the response error
+				switch justification {
+				case "exceeded_withdrawal_limit":
+					return nil, errWalletDrainLimitExceeded
+				default:
+					return nil, errWalletNotReputable
+				}
+			}
+
+		} else {
+			// legacy behavior
+			// perform reputation check for wallet, and error accordingly if there is a reputation failure
+			reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
+			if err != nil {
+				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
+				return nil, errReputationServiceFailure
+			}
+
+			if !reputable {
+				return nil, errWalletNotReputable
+			}
 		}
-
-		if !reputable {
-			return nil, errWalletNotReputable
-		}
 	}
-
-	/* TODO: for nitro enablement we will use the prepare api to send individual txs on a batch
-
-	// use paymentsClient to "prepare" transfer with batch id
-	resp, err := service.paymentsClient.Prepare(ctx, &paymentspb.PrepareRequest{
-		BatchMeta: &paymentspb.BatchMeta{
-			// TODO: get the batch id in here
-		},
-		State:     paymentspb.State_PREPARED,
-		Custodian: paymentspb.Custodian(paymentspb.Custodian_value[strings.ToUpper(*wallet.UserDepositAccountProvider)]),
-		BatchTxs: []*pb.Transaction{
-			{
-				Destination: wallet.UserDepositDestination,
-				Amount:      total.String(),
-				Currency:    "BAT",
-			},
-		},
-	})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to make connection to payments")
-		return nil, fmt.Errorf("failed to call prepare for payments transfer: %w", err)
-	}
-
-	tx := new(walletutils.TransactionInfo)
-
-	tx.ID = resp.DocumentId
-	tx.Destination = wallet.UserDepositDestination
-	tx.DestAmount = total
-
-	if service.drainChannel != nil {
-		service.drainChannel <- tx
-	}
-	return tx, nil
-	*/
 
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
@@ -855,6 +857,12 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 				Str("txRef", txRef).
 				Str("error_bundle", errorData).
 				Msg("gemini client check status error")
+
+			if httpState, ok := errorBundle.Data().(clients.HTTPState); ok {
+				if httpState.Status == http.StatusNotFound {
+					return &walletutils.TransactionInfo{Status: "failed", Note: "GEMINI_NOT_FOUND"}, nil
+				}
+			}
 		}
 		return nil, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, err)
 	}
