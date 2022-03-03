@@ -95,6 +95,26 @@ func (suite *BitflyerMockSuite) TestFailures() {
 			SubCurrency:  BAT,
 			Rate:         price,
 		}, nil)
+
+	suite.client.EXPECT().
+		CheckInventory(ctx).
+		Return(map[string]bitflyer.Inventory{
+			"BAT": bitflyer.Inventory{
+				CurrencyCode: "BAT",
+				Amount:       decimal.NewFromFloat(4.1),
+				Available:    decimal.NewFromFloat(4.1),
+			},
+		}, nil)
+	suite.client.EXPECT().
+		CheckInventory(ctx).
+		Return(map[string]bitflyer.Inventory{
+			"BAT": bitflyer.Inventory{
+				CurrencyCode: "BAT",
+				Amount:       decimal.NewFromFloat(2.2),
+				Available:    decimal.NewFromFloat(2.2),
+			},
+		}, nil)
+
 	withdrawToDepositIDBulkPayload := bitflyer.NewWithdrawToDepositIDBulkPayload(
 		nil,
 		priceToken.String(),
@@ -256,6 +276,24 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			SubCurrency:  BAT,
 			Rate:         price,
 		}, nil)
+	suite.client.EXPECT().
+		CheckInventory(ctx).
+		Return(map[string]bitflyer.Inventory{
+			"BAT": bitflyer.Inventory{
+				CurrencyCode: "BAT",
+				Amount:       decimal.NewFromFloat(4.1),
+				Available:    decimal.NewFromFloat(4.1),
+			},
+		}, nil)
+	suite.client.EXPECT().
+		CheckInventory(ctx).
+		Return(map[string]bitflyer.Inventory{
+			"BAT": bitflyer.Inventory{
+				CurrencyCode: "BAT",
+				Amount:       decimal.NewFromFloat(2.2),
+				Available:    decimal.NewFromFloat(2.2),
+			},
+		}, nil)
 
 	withdrawToDepositIDBulkPayload := bitflyer.NewWithdrawToDepositIDBulkPayload(
 		dryRunOptions,
@@ -329,6 +367,16 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			SourceFrom:   sourceFrom,
 		}},
 	)
+	suite.client.EXPECT().
+		CheckInventory(ctx).
+		Return(map[string]bitflyer.Inventory{
+			"BAT": bitflyer.Inventory{
+				CurrencyCode: "BAT",
+				Amount:       decimal.NewFromFloat(3.2),
+				Available:    decimal.NewFromFloat(3.2),
+			},
+		}, nil)
+
 	suite.client.EXPECT().
 		UploadBulkPayout(
 			ctx,

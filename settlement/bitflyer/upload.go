@@ -330,13 +330,17 @@ func batchTransactions(
 	logger := logging.FromContext(ctx)
 	chunked := [][]settlement.AggregateTransaction{}
 
+	if chunkSize <= 1 {
+		chunkSize = 10
+	}
+
 	inner := 0
 	for _, agg := range total {
 		inner += len(agg.Inputs)
 	}
 
 	length := float64(len(total))
-	logger.Info().Float64("Total", length).Int("inner count", inner).Msg("Chunking transactions")
+	logger.Info().Float64("ChunkSize", chunkSize).Float64("Total", length).Int("inner count", inner).Msg("Chunking transactions")
 
 	for i := float64(0); i < math.Ceil(length/chunkSize); i++ {
 		start := i * chunkSize

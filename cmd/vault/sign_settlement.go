@@ -114,8 +114,8 @@ func init() {
 		"in order to avoid not knowing what the payout amount will be because of transfer limits").
 		Bind("exclude-limited")
 
-	signSettlementBuilder.Flag().Int("chunk-size", 10,
-		"in order to avoid not knowing what the payout amount will be because of transfer limits").
+	signSettlementBuilder.Flag().Int("chunk-size", 0,
+		"how many transfers to combine per request, 0 indicates the default value").
 		Bind("chunk-size")
 }
 
