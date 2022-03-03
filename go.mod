@@ -14,6 +14,7 @@ require (
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.0
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
+	github.com/gofrs/uuid v4.2.0+incompatible
 	github.com/golang-migrate/migrate/v4 v4.14.1
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v1.8.8
@@ -53,6 +54,8 @@ require (
 	gotest.tools v2.2.0+incompatible
 )
 
+require github.com/amzn/ion-go v1.1.3
+
 require (
 	cloud.google.com/go v0.99.0 // indirect
 	cloud.google.com/go/kms v1.1.0 // indirect
@@ -74,7 +77,6 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190620160927-9418d7b0cd0f // indirect
-	github.com/amzn/ion-go v1.1.3 // indirect
 	github.com/amzn/ion-hash-go v1.1.1 // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect

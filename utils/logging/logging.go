@@ -158,3 +158,11 @@ func FromContext(ctx context.Context) *zerolog.Logger {
 	}
 	return logger
 }
+
+// LogAndError - helper to log and error
+func LogAndError(logger *zerolog.Logger, msg string, err error) error {
+	if logger != nil {
+		logger.Error().Err(err).Msg(msg)
+	}
+	return err
+}
