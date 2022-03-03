@@ -234,34 +234,34 @@ func TestDeterministicSigning(t *testing.T) {
 	}
 }
 
-func TestUnmarshalTransaction(t *testing.T) {
-	usdCard := os.Getenv("QA_PUBLISHER_USD_CARD_ID")
+func TestUnmarshalAdsTransaction(t *testing.T) {
 	settlementJSON := []byte(`
   [
     {
-        "address": "` + usdCard + `",
+        "address": "5e14c5b2-8651-427d-905e-b078513b6fc3",
         "altcurrency": "BAT",
-        "authority": "github:evq",
         "currency": "BAT",
-        "fees": "1339169009771847163",
-        "owner": "publishers#uuid:23813236-3f4c-40dc-916e-8f55c8865b5a",
+        "fees": "0",
+        "note": "payout for test ad earnings",
         "probi": "25444211185665096101",
-        "publisher": "example.com",
+				"publisher": "wallet:6e4111a8-0946-4dff-8010-65272bc5b7bb",
         "transactionId": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8",
-        "type": "referral"
+        "type": "adsDirectDeposit",
+				"walletProvider": "uphold",
+				"walletProviderId": "6ff1c5af-5943-4e01-bc2c-88a8881c3606"
     },
     {
-        "address": "` + usdCard + `",
+        "address": "5e14c5b2-8651-427d-905e-b078513b6fc3",
         "altcurrency": "BAT",
-        "authority": "github:evq",
         "currency": "BAT",
-        "fees": "1339169009771847163",
-        "owner": "publishers#uuid:23813236-3f4c-40dc-916e-8f55c8865b5a",
+        "fees": "0",
+        "note": "payout for test ad earnings",
         "probi": "25444211185665096101",
-        "publisher": "example.com",
+				"publisher": "wallet:6e4111a8-0946-4dff-8010-65272bc5b7bb",
         "transactionId": "0f7377cc-73ef-4e94-b69a-7086a4f3b2a8",
-        "type": "manual",
-        "documentId": "98440217-3f84-4a71-98df-56a8d7e8aaeb"
+        "type": "adsDirectDeposit",
+				"walletProvider": "uphold",
+				"walletProviderId": "6ff1c5af-5943-4e01-bc2c-88a8881c3606"
     }
   ]
   `)
@@ -279,10 +279,6 @@ func TestUnmarshalTransaction(t *testing.T) {
 			t.Fatal(err)
 		}
 		settlements = append(settlements, txn)
-	}
-
-	if settlements[1].DocumentID != "98440217-3f84-4a71-98df-56a8d7e8aaeb" {
-		t.Error("DocumentId does not match settlementJSON")
 	}
 
 	expected, err := decimal.NewFromString("25.444211185665096101")
