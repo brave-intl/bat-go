@@ -20,7 +20,7 @@ POST /v1/payments/prepare
 
 HTTP/1.1 200
 [
-  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier>, custodian: <custodian enum>, state: <state enum> }
+  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier>, custodian: <custodian enum>}
   ...
 ]
 ```
@@ -137,7 +137,6 @@ HTTP/1.1 200
     "transaction": { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier> },
     "submissionResponse": <custodian response>
     "statusResponse": <custodian response>
-    "status": (completed | failed | prepared | submitted )
 }
 ```
 

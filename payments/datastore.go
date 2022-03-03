@@ -20,7 +20,7 @@ type Transaction struct {
 	To             string          `json:"to,omitempty" ion:"to" valid:"required"`
 	From           string          `json:"from,omitempty" ion:"from" valid:"required"`
 	Custodian      string          `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State          string          `json:"state,omitempty" ion:"state" valid:"in(prepared|submitted)"`
+	State          string          `json:"-" ion:"state" valid:"in(prepared|submitted)"`
 	DocumentID     string          `json:"documentId,omitempty" ion:"id"`
 }
 
@@ -64,10 +64,6 @@ const (
 	StatePrepared = "prepared"
 	// StateSubmitted - transaction prepared state
 	StateSubmitted = "submitted"
-	// StateCompleted - transaction completed state / verified by custodian
-	StateCompleted = "completed"
-	// StateFailed - transaction failed state / verified by custodian
-	StateFailed = "failed"
 )
 
 // InsertTransactions - perform a qldb insertion on the transactions
