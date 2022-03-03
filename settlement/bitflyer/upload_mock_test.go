@@ -81,6 +81,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		suite.client,
 		[]settlement.Transaction{settlementTx0},
 		false,
+		"tipping",
 	)
 
 	suite.Require().NoError(err)
@@ -123,7 +124,6 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		"tipping",
 		*preparedTransactions,
 		nil,
 	)
@@ -186,7 +186,6 @@ func (suite *BitflyerMockSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		"tipping",
 		*preparedTransactions,
 		nil, // dry run first
 	)
@@ -244,6 +243,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client,
 		[]settlement.Transaction{settlementTx1},
 		false,
+		sourceFrom,
 	)
 	suite.Require().NoError(err)
 
@@ -287,7 +287,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		dryRunOptions, // dry run first
 	)
@@ -349,7 +348,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		nil,
 	)
@@ -410,7 +408,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 			ctx,
 			"checkstatus",
 			suite.client,
-			sourceFrom,
 			*preparedTransactions,
 			nil,
 		)
@@ -455,6 +452,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		suite.client,
 		[]settlement.Transaction{settlementTx2},
 		false,
+		sourceFrom,
 	)
 
 	suite.client.EXPECT().
@@ -497,7 +495,6 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		nil,
 	)
@@ -566,6 +563,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 		suite.client,
 		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		false,
+		"tipping",
 	)
 	suite.Require().NoError(err)
 
@@ -592,6 +590,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 		suite.client,
 		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		true,
+		"tipping",
 	)
 	suite.Require().NoError(err)
 

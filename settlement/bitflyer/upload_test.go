@@ -122,13 +122,13 @@ func (suite *BitflyerSuite) TestFailures() {
 		suite.client,
 		[]settlement.Transaction{settlementTx0},
 		false,
+		"tipping",
 	)
 
 	payoutFiles, err := IterateRequest(
 		ctx,
 		"upload",
 		suite.client,
-		"tipping",
 		*preparedTransactions,
 		nil,
 	)
@@ -158,7 +158,6 @@ func (suite *BitflyerSuite) TestFailures() {
 		ctx,
 		"upload",
 		suite.client,
-		"tipping",
 		*preparedTransactions,
 		nil, // dry run first
 	)
@@ -197,6 +196,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		suite.client,
 		[]settlement.Transaction{settlementTx1},
 		false,
+		sourceFrom,
 	)
 	/*
 		resultIteration := make(map[string]int)
@@ -229,7 +229,6 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		dryRunOptions, // dry run first
 	)
@@ -255,7 +254,6 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		nil,
 	)
@@ -284,7 +282,6 @@ func (suite *BitflyerSuite) TestFormData() {
 			ctx,
 			"checkstatus",
 			suite.client,
-			sourceFrom,
 			*preparedTransactions,
 			nil,
 		)
@@ -317,7 +314,6 @@ func (suite *BitflyerSuite) TestFormData() {
 		ctx,
 		"upload",
 		suite.client,
-		sourceFrom,
 		*preparedTransactions,
 		nil,
 	)
