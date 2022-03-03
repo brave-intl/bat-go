@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -35,11 +36,13 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 
 		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
 
-		if err := service.InsertTransactions(ctx, req...); err != nil {
+		// returns an enriched list of transactions, which includes the document metadata
+		resp, err := service.InsertTransactions(ctx, req...)
+		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
 
-		return nil
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }
 
@@ -51,11 +54,36 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
+			req    = []EnrichedTransaction{}
 		)
 
-		logger.Info().Msg("handling submit request")
-		// FIXME - do the submission
-		return nil
+		// read the transactions in the body
+		err := requestutils.ReadJSON(r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+		// validate the list of transactions
+		_, err = govalidator.ValidateStruct(req)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling submit request")
+
+		// we have passed the http signature middleware, record who authorized the tx
+		keyID, err := middleware.GetKeyID(ctx)
+		if err != nil {
+			return handlers.WrapValidationError(err)
+		}
+
+		err = service.AuthorizeTransactions(ctx, keyID, req...)
+		if err != nil {
+			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
+		}
+
+		// TODO: perform the custodian submission (channel to worker) if the number of authorizations is appropriate
+
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
 }
 
@@ -71,7 +99,23 @@ func StatusHandler(service *Service) handlers.AppHandler {
 		)
 
 		logger.Info().Str("documentID", documentID).Msg("handling status request")
-		// FIXME - do the status
-		return nil
+
+		transaction, err := service.GetTransactionFromDocID(ctx, documentID)
+		if err != nil {
+			return handlers.WrapError(err, "failed to get document", http.StatusInternalServerError)
+		}
+		if transaction == nil {
+			return handlers.WrapError(err, "no such document", http.StatusNotFound)
+		}
+
+		resp := map[string]interface{}{
+			"transaction": transaction,
+		}
+
+		// TODO: get the submission response from qldb add to resp
+
+		// TODO: get the status from the custodian and add to resp
+
+		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
 }

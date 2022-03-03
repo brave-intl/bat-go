@@ -133,15 +133,12 @@ Example below:
 GET /v1/payments/{document_id}/status
 
 HTTP/1.1 200
-[
-  {
+{
     "transaction": { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier> },
     "submissionResponse": <custodian response>
     "statusResponse": <custodian response>
-    "status": (completed | pending | processing | failed)
-  },
-  ...
-]
+    "status": (completed | failed | prepared | submitted )
+}
 ```
 
 #### Error Conditions
