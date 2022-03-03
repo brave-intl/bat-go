@@ -54,7 +54,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
-			req    = []EnrichedTransaction{}
+			req    = []Transaction{}
 		)
 
 		// read the transactions in the body

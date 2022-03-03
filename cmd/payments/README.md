@@ -20,7 +20,7 @@ POST /v1/payments/prepare
 
 HTTP/1.1 200
 [
-  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier>, custodian: <custodian enum> }
+  { idempotencyKey: <uuid>, amount: <decimal>, to: <identifier>, from: <identifier>, documentId: <identifier>, custodian: <custodian enum>, state: <state enum> }
   ...
 ]
 ```
