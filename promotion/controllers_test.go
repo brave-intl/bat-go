@@ -895,7 +895,8 @@ func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
-	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+	localSuggestionTopic := uuid.NewV4().String() + ".grant.suggestion"
+	SetSuggestionTopic(localSuggestionTopic)
 
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -1038,9 +1039,9 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	walletDB, _, err := wallet.NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
-	suggestionTopic := uuid.NewV4().String() + ".grant.suggestion"
+	localSuggestionTopic := uuid.NewV4().String() + ".grant.suggestion"
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
-	SetSuggestionTopic(suggestionTopic)
+	SetSuggestionTopic(localSuggestionTopic)
 
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
@@ -1050,7 +1051,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
 
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localSuggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
 	offset, err := conn.ReadLastOffset()
@@ -1162,16 +1163,16 @@ func (suite *ControllersTestSuite) TestSuggest() {
 
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:          strings.Split(kafkaBrokers, ","),
-		Topic:            suggestionTopic,
+		Topic:            localSuggestionTopic,
 		Dialer:           service.kafkaDialer,
 		MaxWait:          time.Second,
 		RebalanceTimeout: time.Second,
 		Logger:           kafka.LoggerFunc(log.Printf),
 	})
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
-		suggestionTopic: suggestionEventSchema,
+		"suggestion": suggestionEventSchema,
 	})
-	codec := service.codecs["suggestion"]
+	codec := codecs["suggestion"]
 
 	// :cry:
 
@@ -3342,7 +3343,8 @@ func (suite *ControllersTestSuite) CreateOrder() (string, error) {
 
 func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	// Set a random suggestion topic each so the test suite doesn't fail when re-ran
-	SetSuggestionTopic(uuid.NewV4().String() + ".grant.suggestion")
+	localSuggestionTopic := uuid.NewV4().String() + ".grant.suggestion"
+	SetSuggestionTopic(localSuggestionTopic)
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "Failed to get postgres   ")
 	walletDB, _, err := wallet.NewPostgres()
@@ -3356,7 +3358,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "suggestion", 0)
 	suite.Require().NoError(err)
 
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: suggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localSuggestionTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
 	offset, err := conn.ReadLastOffset()
@@ -3492,7 +3494,10 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	codec := service.codecs["suggestion"]
+	codecs, err := kafkautils.GenerateCodecs(map[string]string{
+		"suggestion": suggestionEventSchema,
+	})
+	codec := codecs["suggestion"]
 
 	suggestionEventBinary, err := r.ReadMessage(context.Background())
 	suite.Require().NoError(err)

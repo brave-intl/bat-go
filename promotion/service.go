@@ -193,11 +193,6 @@ func (service *Service) InitKafka(ctx context.Context) error {
 		}
 	}
 
-	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"suggestion":          suggestionEventSchema,
-		adminAttestationTopic: adminAttestationEventSchema,
-	})
-
 	if err != nil {
 		return fmt.Errorf("failed to generate codecs kafka: %w", err)
 	}
@@ -216,7 +211,9 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	}
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"rewardsTopic": grantRewardsEventSchema,
+		"suggestion":          suggestionEventSchema,
+		"rewardsTopic":        grantRewardsEventSchema,
+		adminAttestationTopic: adminAttestationEventSchema,
 	})
 
 	if err != nil {
