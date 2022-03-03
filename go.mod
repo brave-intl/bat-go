@@ -20,8 +20,8 @@ require (
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
 	github.com/hashicorp/vault v1.9.3
-	github.com/hashicorp/vault/api v1.4.1
-	github.com/hashicorp/vault/sdk v0.4.1
+	github.com/hashicorp/vault/api v1.3.0
+	github.com/hashicorp/vault/sdk v0.3.1-0.20220103172553-29ded54520a4
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
