@@ -1,11 +1,12 @@
-//go:build integration
-// +build integration
+//go:build custodianintegration
+// +build custodianintegration
 
 package custodian_test
 
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -39,20 +40,19 @@ func (suite *GeminiCustodianTestSuite) SetupTest() {
 	// setup a logger and put on context
 	suite.ctx, _ = logutils.SetupLogger(suite.ctx)
 
-	/*
-		for _, key := range []appctx.CTXKey{
-			appctx.BitFlyerJWTKeyCTXKey,
-			appctx.GeminiExtraClientSecretCTXKey,
-			appctx.GeminiClientSecretCTXKey,
-			appctx.GeminiClientIDCTXKey,
-			appctx.GeminiServerURLCTXKey,
-			appctx.GeminiProxyURLCTXKey,
-			appctx.GeminiTokenCTXKey,
-			appctx.GeminiSourceFromCTXKey} {
-			// setup keys
-			suite.ctx = context.WithValue(suite.ctx, key, os.Getenv(strings.ToUpper(string(key))))
-		}
-	*/
+	for _, key := range []appctx.CTXKey{
+		appctx.GeminiBrowserClientIDCTXKey,
+		appctx.GeminiClientIDCTXKey,
+		appctx.GeminiClientSecretCTXKey,
+		appctx.GeminiAPIKeyCTXKey,
+		appctx.GeminiAPISecretCTXKey,
+		appctx.GeminiSettlementAddressCTXKey,
+		appctx.GeminiProxyURLCTXKey,
+		appctx.GeminiTokenCTXKey,
+		appctx.GeminiServerURLCTXKey} {
+		// setup keys
+		suite.ctx = context.WithValue(suite.ctx, key, os.Getenv(strings.ToUpper(string(key))))
+	}
 
 	var err error
 	// setup custodian, all configs default to whats in context

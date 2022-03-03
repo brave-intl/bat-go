@@ -1,4 +1,5 @@
-// +build integration
+//go:build custodianintegration
+// +build custodianintegration
 
 package custodian_test
 
