@@ -1,4 +1,4 @@
-package payment
+package skus
 
 const voteSchema = `{
   "namespace": "brave.payments",
