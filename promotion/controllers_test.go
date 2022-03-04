@@ -399,7 +399,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	returning *`
 	promotionsDesktop := []Promotion{}
-	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "vg", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
+	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "swap", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
 	suite.Require().NoError(err, "Failed to create desktop promotion")
 
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
@@ -414,7 +414,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	promotionsDesktop[0].PublicKeys = jsonutils.JSONStringArray([]string{issuerDesktop.PublicKey})
 
 	promotionsAndroid := []Promotion{}
-	err = pg.RawDB().Select(&promotionsAndroid, promoStatement, promotionAndroidID, "vg", 2, decimal.NewFromFloat(1.0), 6, 3, "android", false, false, true)
+	err = pg.RawDB().Select(&promotionsAndroid, promoStatement, promotionAndroidID, "swap", 2, decimal.NewFromFloat(1.0), 6, 3, "android", false, false, true)
 	suite.Require().NoError(err, "Failed to create android promo")
 
 	AndroidClaims := []Claim{}
