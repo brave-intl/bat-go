@@ -50,8 +50,8 @@ func New() (Client, error) {
 
 // IsDrainReputableOpts - the query string options for the is reputable api call
 type IsDrainReputableOpts struct {
-	WithdrawalAmount decimal.Decimal `url:"withdrawal_amount"`
-	PromotionID      uuid.UUID       `url:"promotion_id"`
+	WithdrawalAmount string `url:"withdrawal_amount"`
+	PromotionID      string `url:"promotion_id"`
 }
 
 // GenerateQueryString - implement the QueryStringBody interface
@@ -76,8 +76,8 @@ func (c *HTTPClient) IsDrainReputable(
 ) (bool, string, error) {
 
 	var body = IsDrainReputableOpts{
-		WithdrawalAmount: withdrawalAmount,
-		PromotionID:      promotionID,
+		WithdrawalAmount: withdrawalAmount.String(),
+		PromotionID:      promotionID.String(),
 	}
 
 	req, err := c.client.NewRequest(
