@@ -55,6 +55,11 @@ const (
 	OrderStatusPending = "pending"
 )
 
+// SetVoteTopic allows for a new topic to be suggested
+func SetVoteTopic(newTopic string) {
+	voteTopic = newTopic
+}
+
 // Service contains datastore
 type Service struct {
 	wallet           *wallet.Service

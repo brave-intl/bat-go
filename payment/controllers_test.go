@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -891,13 +892,17 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// FIXME stick kafka setup in suite setup
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
+	localVoteTopic := fmt.Sprintf("%s.payment.vote", uuid.NewV4().String())
+
+	SetVoteTopic(localVoteTopic)
+
 	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
 	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
 	suite.Require().NoError(err)
 
 	// create topics
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localVoteTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
 	offset, err := conn.ReadLastOffset()
