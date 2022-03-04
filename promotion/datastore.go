@@ -1866,7 +1866,7 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 		return err
 	}
 
-	claimType := "swap"
+	claimType := "vg"
 	statement := `
 			insert into claims (promotion_id, wallet_id, address_id, transaction_key, approximate_value, legacy_claimed, claim_type)
 			values ($1, $2, $3, $4, $5, false, $6)
@@ -1875,8 +1875,16 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapSentinelWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
 
 	if err != nil {
-		err = fmt.Errorf("fetch rewards grants job: failed to update claim WalletID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
-		return err
+
+		var pErr *pq.Error
+		if errors.As(err, &pErr) && pErr.Code.Name() == "unique_violation" {
+			if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, msg); err != nil {
+				err = fmt.Errorf("failed to commit kafka offset AddressID: %s PromotionID: %s with err: %w", grant.AddressID, grant.PromotionID, err)
+				return err
+			}
+		}
+
+		return nil
 	}
 
 	if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, msg); err != nil {

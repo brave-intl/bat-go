@@ -333,7 +333,7 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	values ($1, $2, $3, $4, false, $5)
 	returning *`
 	claims := []Claim{}
-	pg.RawDB().Select(&claims, claimStatement, promotion.ID, addressID, w.ID, decimal.NewFromFloat(1.0), "swap")
+	pg.RawDB().Select(&claims, claimStatement, promotion.ID, addressID, w.ID, decimal.NewFromFloat(1.0), "vg")
 
 	urlWithPlatformAndAddress := func(addressID string, platform string) string {
 		return fmt.Sprintf("/v2/promotions?address=%s&platform=%s", addressID, platform)
@@ -399,12 +399,12 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	returning *`
 	promotionsDesktop := []Promotion{}
-	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "swap", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
+	err = pg.RawDB().Select(&promotionsDesktop, promoStatement, promotionDesktopID, "vg", 4, decimal.NewFromFloat(1.0), 6, 4, "desktop", false, false, true)
 	suite.Require().NoError(err, "Failed to create desktop promotion")
 
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, w.ID, decimal.NewFromFloat(1.0), "swap")
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, w.ID, decimal.NewFromFloat(1.0), "vg")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	issuerID := uuid.NewV4()
@@ -414,13 +414,13 @@ func (suite *ControllersTestSuite) TestGetPromotionsV2() {
 	promotionsDesktop[0].PublicKeys = jsonutils.JSONStringArray([]string{issuerDesktop.PublicKey})
 
 	promotionsAndroid := []Promotion{}
-	err = pg.RawDB().Select(&promotionsAndroid, promoStatement, promotionAndroidID, "swap", 2, decimal.NewFromFloat(1.0), 6, 3, "android", false, false, true)
+	err = pg.RawDB().Select(&promotionsAndroid, promoStatement, promotionAndroidID, "vg", 2, decimal.NewFromFloat(1.0), 6, 3, "android", false, false, true)
 	suite.Require().NoError(err, "Failed to create android promo")
 
 	AndroidClaims := []Claim{}
 
 	AndroidAddressID := "0xa54d3c09E34aC96807c1CC397404bF2B98DC4eFb"
-	err = pg.RawDB().Select(&AndroidClaims, claimStatement, promotionAndroidID, AndroidAddressID, w.ID, decimal.NewFromFloat(1.0), "swap")
+	err = pg.RawDB().Select(&AndroidClaims, claimStatement, promotionAndroidID, AndroidAddressID, w.ID, decimal.NewFromFloat(1.0), "vg")
 	suite.Require().NoError(err, "Failed to create android claim")
 	if err != nil {
 		fmt.Printf("claim in test case: %+v", err)
@@ -505,7 +505,7 @@ func (suite *ControllersTestSuite) TestGetClaimWithPromotion() {
 	returning *`
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), "swap")
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), "vg")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	publicKey := "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
@@ -651,7 +651,7 @@ func (suite *ControllersTestSuite) TestClaimSwapRewardsPromotion() {
 	returning *`
 	desktopAddressID := "0x0Fd60495d705F4Fb86e1b36Be396757689FbE8B3"
 	desktopClaims := []Claim{}
-	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), true, "swap")
+	err = pg.RawDB().Select(&desktopClaims, claimStatement, promotionDesktopID, desktopAddressID, walletID, decimal.NewFromFloat(2.0), true, "vg")
 	suite.Require().NoError(err, "Failed to create desktop claim")
 
 	publicKey, _, err := httpsignature.GenerateEd25519Key(nil)

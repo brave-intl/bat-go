@@ -34,8 +34,9 @@ var (
 		},
 		[]string{"id"},
 	)
-	swapSentinelWalletID = "00000000-0000-0000-0000-000000000002"
 )
+
+const swapSentinelWalletID = "00000000-0000-0000-0000-000000000002"
 
 func init() {
 	// register our metrics with prometheus

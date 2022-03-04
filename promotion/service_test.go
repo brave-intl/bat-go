@@ -116,8 +116,8 @@ func (suite *ServiceTestSuite) TestGetAvailablePromotions() {
 }
 
 func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
-	localRewardsTopic := uuid.NewV4().String() + ".grant.rewards"
-	SetRewardsTopic(localRewardsTopic)
+	localSwapRewardsTopic := uuid.NewV4().String() + ".grant.rewards"
+	SetRewardsTopic(localSwapRewardsTopic)
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err)
 	w := walletutils.Info{
@@ -152,17 +152,17 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 
 	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
-	conn, err := dialer.DialLeader(ctx, "tcp", strings.Split(kafkaBrokers, ",")[0], localRewardsTopic, 0)
+	conn, err := dialer.DialLeader(ctx, "tcp", strings.Split(kafkaBrokers, ",")[0], localSwapRewardsTopic, 0)
 	suite.Require().NoError(err)
 
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: localRewardsTopic, NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localSwapRewardsTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
-	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, localRewardsTopic)
+	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, localSwapRewardsTopic)
 	suite.Require().NoError(err)
 
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
-		"rewardsTopic": grantRewardsEventSchema,
+		"swapRewardsTopic": grantRewardsEventSchema,
 	})
 	suite.Require().NoError(err)
 
@@ -179,10 +179,10 @@ func (suite *ServiceTestSuite) TestInitAndRunNextFetchRewardGrantsJob() {
 	textual, err := json.Marshal(msg)
 	suite.Require().NoError(err)
 
-	native, _, err := codecs["rewardsTopic"].NativeFromTextual(textual)
+	native, _, err := codecs["swapRewardsTopic"].NativeFromTextual(textual)
 	suite.Require().NoError(err)
 
-	binary, err := codecs["rewardsTopic"].BinaryFromNative(nil, native)
+	binary, err := codecs["swapRewardsTopic"].BinaryFromNative(nil, native)
 	suite.Require().NoError(err)
 
 	err = kafkaWriter.WriteMessages(ctx, kafka.Message{

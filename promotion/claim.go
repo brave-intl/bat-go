@@ -263,9 +263,9 @@ func (service *Service) FetchRewardsGrants(ctx context.Context) (*SwapRewardGran
 		return nil, segmentKafka.Message{}, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
-	codec, ok := service.codecs["rewardsTopic"]
+	codec, ok := service.codecs["swapRewardsTopic"]
 	if !ok {
-		return nil, segmentKafka.Message{}, fmt.Errorf("read message: could not find codec %s", rewardsTopic)
+		return nil, segmentKafka.Message{}, fmt.Errorf("read message: could not find codec %s", swapRewardsTopic)
 	}
 
 	native, _, err := codec.NativeFromBinary(message.Value)

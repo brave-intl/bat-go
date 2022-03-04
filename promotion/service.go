@@ -41,7 +41,7 @@ var (
 	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
 
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
-	rewardsTopic          = os.Getenv("ENV") + ".grant.swaprewards"
+	swapRewardsTopic      = os.Getenv("ENV") + ".grant.swaprewards"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
 	// countContributionsTotal counts the number of contributions made broken down by funding and type
@@ -126,7 +126,7 @@ func SetSuggestionTopic(newTopic string) {
 
 // SetRewardsTopic allows for a new topic to be set for testing
 func SetRewardsTopic(newTopic string) {
-	rewardsTopic = newTopic
+	swapRewardsTopic = newTopic
 }
 
 // SetAdminAttestationTopic set admin attestation topic
@@ -204,7 +204,7 @@ func (service *Service) InitKafka(ctx context.Context) error {
 			return errors.New("failed to initialize kafka could not find consumer group")
 		}
 
-		service.kafkaGrantRewardsReader, err = kafkautils.NewKafkaReader(ctx, groupID, rewardsTopic)
+		service.kafkaGrantRewardsReader, err = kafkautils.NewKafkaReader(ctx, groupID, swapRewardsTopic)
 		if err != nil {
 			return fmt.Errorf("failed to initialize kafka grant rewards reader: %w", err)
 		}
@@ -212,7 +212,7 @@ func (service *Service) InitKafka(ctx context.Context) error {
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
 		"suggestion":          suggestionEventSchema,
-		"rewardsTopic":        grantRewardsEventSchema,
+		"swapRewardsTopic":    grantRewardsEventSchema,
 		adminAttestationTopic: adminAttestationEventSchema,
 	})
 
