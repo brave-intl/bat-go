@@ -28,7 +28,6 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			ctx, logger = logging.SetupLogger(ctx)
 		}
-
 		var coinIDs = new(CoingeckoCoinList)
 		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
@@ -187,5 +186,64 @@ func GetMappingHandler(service *Service) handlers.AppHandler {
 		resp.SupportedVsCurrencies = ctx.Value(appctx.CoingeckoSupportedVsCurrenciesCTXKey).(map[string]bool)
 
 		return handlers.RenderContent(ctx, resp, w, http.StatusOK)
+	})
+}
+
+// GetCoinMarketsHandler - handler to get top currency data
+func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			vsCurrencyInput = r.URL.Query().Get("vsCurrency")
+			limitInput      = r.URL.Query().Get("limit")
+		)
+
+		// get logger from context
+		logger, err := appctx.GetLogger(ctx)
+		if err != nil {
+			ctx, logger = logging.SetupLogger(ctx)
+		}
+
+		var vsCurrency = new(CoingeckoVsCurrency)
+		if err = inputs.DecodeAndValidate(ctx, vsCurrency, []byte(vsCurrencyInput)); err != nil {
+			if errors.Is(err, ErrCoingeckoVsCurrencyInvalid) {
+				logger.Error().Err(err).Msg("invalid vs currency input from caller")
+				return handlers.ValidationError(
+					"Error validating vs currency url parameter",
+					map[string]interface{}{
+						"err":        err.Error(),
+						"vsCurrency": "invalid vs currency",
+					},
+				)
+			}
+			// degraded, unknown error when validating/decoding
+			logger.Error().Err(err).Msg("unforseen error in decode and validation")
+			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+		}
+
+		var limit = new(CoingeckoLimit)
+		if err = inputs.DecodeAndValidate(ctx, limit, []byte(limitInput)); err != nil {
+			if errors.Is(err, ErrCoingeckoLimitInvalid) {
+				logger.Error().Err(err).Msg("invalid limit input from caller")
+				return handlers.ValidationError(
+					"Error validating vs currency url parameter",
+					map[string]interface{}{
+						"err":   err.Error(),
+						"limit": "invalid limit",
+					},
+				)
+			}
+			logger.Error().Err(err).Msg("unforseen error in decode and validation")
+			return handlers.WrapError(err, "degraded: ", http.StatusInternalServerError)
+		}
+
+		data, err := service.GetCoinMarkets(ctx, *vsCurrency, *limit)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get top currencies")
+			return handlers.WrapError(err, "failed to get top currencies", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	})
 }

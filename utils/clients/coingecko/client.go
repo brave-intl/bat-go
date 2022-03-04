@@ -16,12 +16,18 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const (
+	coinMarketsPageSize      = 250
+	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
+)
+
 // Client abstracts over the underlying client
 type Client interface {
 	FetchSimplePrice(ctx context.Context, ids string, vsCurrencies string, include24hrChange bool) (*SimplePriceResponse, error)
 	FetchCoinList(ctx context.Context, includePlatform bool) (*CoinListResponse, error)
 	FetchSupportedVsCurrencies(ctx context.Context) (*SupportedVsCurrenciesResponse, error)
 	FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (*MarketChartResponse, time.Time, error)
+	FetchCoinMarkets(ctx context.Context, vsCurrency string, limit int) (*CoinMarketResponse, time.Time, error)
 }
 
 // HTTPClient wraps http.Client for interacting with the coingecko server
@@ -288,4 +294,121 @@ func (c *HTTPClient) FetchSupportedVsCurrencies(ctx context.Context) (*Supported
 	}
 
 	return &body, nil
+}
+
+type coinMarketParams struct {
+	baseParams
+	VsCurrency string `url:"vs_currency"`
+	Page       int    `url:"page"`
+	PerPage    int    `url:"per_page"`
+	Limit      int    `url:"-"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (p *coinMarketParams) GenerateQueryString() (url.Values, error) {
+	p.Page = 1
+	p.PerPage = coinMarketsPageSize
+	return query.Values(p)
+}
+
+// CoinMarket represents the market data for a single coin returned in
+// FetchCoinMarkets call to coingecko
+type CoinMarket struct {
+	ID                       string  `json:"id"`
+	Symbol                   string  `json:"symbol"`
+	Name                     string  `json:"name"`
+	Image                    string  `json:"image"`
+	MarketCap                int     `json:"market_cap"`
+	MarketCapRank            int     `json:"market_cap_rank"`
+	CurrentPrice             float64 `json:"current_price"`
+	PriceChange24h           float64 `json:"price_change_24h"`
+	PriceChangePercentage24h float64 `json:"price_change_percentage_24h"`
+	TotalVolume              float64 `json:"total_volume"`
+}
+
+// CoinMarketResponse is the coingecko response for FetchCoinMarkets
+type CoinMarketResponse []CoinMarket
+
+func (cmr *CoinMarketResponse) applyLimit(limit int) CoinMarketResponse {
+	return (*cmr)[:limit]
+}
+
+// FetchCoinMarkets fetches the market data for the top coins
+func (c *HTTPClient) FetchCoinMarkets(
+	ctx context.Context,
+	vsCurrency string,
+	limit int,
+) (*CoinMarketResponse, time.Time, error) {
+	updated := time.Now()
+	url := "/api/v3/coins/markets"
+	params := &coinMarketParams{
+		baseParams: c.baseParams,
+		VsCurrency: vsCurrency,
+		Limit:      limit,
+	}
+
+	cacheKey, err := c.cacheKey(ctx, url, params)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	conn := c.redis.Get()
+	defer closers.Log(ctx, conn)
+
+	var body CoinMarketResponse
+	var entry cacheEntry
+	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
+
+	// Check cache first before making request to Coingecko
+	if err == nil {
+		err = json.Unmarshal(entryBytes, &entry)
+		if err != nil {
+			return nil, updated, err
+		}
+
+		err = json.Unmarshal([]byte(entry.Payload), &body)
+		if err != nil {
+			return nil, updated, err
+		}
+
+		// Check if cache is still fresh
+		if time.Since(entry.LastUpdated).Hours() < float64(coinMarketsCacheTTLHours) {
+			body = (&body).applyLimit(params.Limit)
+			return &body, entry.LastUpdated, err
+		}
+	}
+	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	_, err = c.client.Do(ctx, req, &body)
+	if err != nil {
+		// attempt to use cache response on error if exists
+		if len(entry.Payload) > 0 {
+			body = (&body).applyLimit(params.Limit)
+			return &body, entry.LastUpdated, nil
+		}
+
+		return nil, updated, err
+	}
+
+	body = (&body).applyLimit(params.Limit)
+	bodyBytes, err := json.Marshal(&body)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	// Update the cache
+	entryBytes, err = json.Marshal(&cacheEntry{Payload: string(bodyBytes), LastUpdated: updated})
+	if err != nil {
+		return nil, updated, err
+	}
+
+	_, err = conn.Do("SET", cacheKey, entryBytes)
+	if err != nil {
+		return nil, updated, err
+	}
+
+	return &body, updated, nil
 }

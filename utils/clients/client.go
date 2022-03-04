@@ -283,6 +283,7 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 				return resp, errors.Wrap(err, ErrUnableToDecode)
 			}
 		}
+
 		return resp, nil
 	}
 
