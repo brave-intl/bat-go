@@ -1875,7 +1875,6 @@ func (pg *Postgres) RunNextFetchRewardGrantsJob(ctx context.Context, worker Swap
 	_, err = pg.RawDB().Exec(statement, grant.PromotionID, swapSentinelWalletID, grant.AddressID, grant.TransactionKey, grant.RewardAmount, claimType)
 
 	if err != nil {
-
 		var pErr *pq.Error
 		if errors.As(err, &pErr) && pErr.Code.Name() == "unique_violation" {
 			if err := service.kafkaGrantRewardsReader.CommitMessages(ctx, msg); err != nil {
