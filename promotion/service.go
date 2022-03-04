@@ -184,7 +184,7 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	if enableDrainRetryJob {
 		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
 		if groupID == "" {
-			return errors.New("failed not initialize kafka could not find consumer group")
+			return errors.New("failed not initialize kafka could not find promotions consumer group")
 		}
 
 		service.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
@@ -201,7 +201,7 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	if enableRewardGrantsJob {
 		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_REWARDS")
 		if groupID == "" {
-			return errors.New("failed to initialize kafka could not find consumer group")
+			return errors.New("failed to initialize kafka could not find rewards consumer group")
 		}
 
 		service.kafkaGrantRewardsReader, err = kafkautils.NewKafkaReader(ctx, groupID, swapRewardsTopic)
@@ -211,9 +211,9 @@ func (service *Service) InitKafka(ctx context.Context) error {
 	}
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"suggestion":          suggestionEventSchema,
-		"swapRewardsTopic":    grantRewardsEventSchema,
-		adminAttestationTopic: adminAttestationEventSchema,
+		"suggestion":            suggestionEventSchema,
+		"swapRewardsTopic":      grantRewardsEventSchema,
+		"adminAttestationTopic": adminAttestationEventSchema,
 	})
 
 	if err != nil {

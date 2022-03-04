@@ -237,8 +237,10 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 		suite.Require().NoError(err, "should have inserted claim drain row")
 	}
 
+	localAdminAttestationTopic := fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", uuid.NewV4().String())
+
 	// setup kafka topic and dialer
-	SetAdminAttestationTopic(fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", uuid.NewV4().String()))
+	SetAdminAttestationTopic(localAdminAttestationTopic)
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	c := context.WithValue(context.Background(), appctx.KafkaBrokersCTXKey, kafkaBrokers)
@@ -247,17 +249,17 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 
 	dialer, _, err := kafkautils.TLSDialer()
 	suite.Require().NoError(err)
-	conn, err := dialer.DialLeader(ctx, "tcp", strings.Split(kafkaBrokers, ",")[0], adminAttestationTopic, 0)
+	conn, err := dialer.DialLeader(ctx, "tcp", strings.Split(kafkaBrokers, ",")[0], localAdminAttestationTopic, 0)
 	suite.Require().NoError(err)
 
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: adminAttestationTopic, NumPartitions: 1, ReplicationFactor: 1})
+	err = conn.CreateTopics(kafka.TopicConfig{Topic: localAdminAttestationTopic, NumPartitions: 1, ReplicationFactor: 1})
 	suite.Require().NoError(err)
 
-	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, adminAttestationTopic)
+	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, localAdminAttestationTopic)
 	suite.Require().NoError(err)
 
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
-		adminAttestationTopic: adminAttestationEventSchema,
+		"adminAttestationTopic": adminAttestationEventSchema,
 	})
 
 	randomString := func() string {
@@ -278,10 +280,10 @@ func (suite *ServiceTestSuite) TestInitAndRunNextDrainRetryJob() {
 		textual, err := json.Marshal(msg)
 		suite.Require().NoError(err)
 
-		native, _, err := codecs[adminAttestationTopic].NativeFromTextual(textual)
+		native, _, err := codecs["adminAttestationTopic"].NativeFromTextual(textual)
 		suite.Require().NoError(err)
 
-		binary, err := codecs[adminAttestationTopic].BinaryFromNative(nil, native)
+		binary, err := codecs["adminAttestationTopic"].BinaryFromNative(nil, native)
 		suite.Require().NoError(err)
 
 		err = kafkaWriter.WriteMessages(ctx, kafka.Message{

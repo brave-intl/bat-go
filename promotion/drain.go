@@ -806,7 +806,7 @@ func (service *Service) FetchAdminAttestationWalletID(ctx context.Context) (*uui
 		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
 	}
 
-	codec, ok := service.codecs[adminAttestationTopic]
+	codec, ok := service.codecs["adminAttestationTopic"]
 	if !ok {
 		return nil, fmt.Errorf("read message: could not find codec %s", adminAttestationTopic)
 	}
