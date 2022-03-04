@@ -1089,9 +1089,10 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	}
 
 	_, err = tx.Exec(`
-		update claim_drain set
-			status = 'submitted'
-		where batch_id = $1`, batchID)
+		update claim_drain set status = 'submitted'	
+			where batch_id = $1 and 
+			      erred = false and 
+			      transaction_id is not null`, batchID)
 	if err != nil {
 		return attempted, err
 	}
