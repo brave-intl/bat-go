@@ -1071,7 +1071,7 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	// Test the Kafka Event was put into place
 	r := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:          strings.Split(kafkaBrokers, ","),
-		Topic:            voteTopic,
+		Topic:            localVoteTopic,
 		Dialer:           suite.service.kafkaDialer,
 		MaxWait:          time.Second,
 		RebalanceTimeout: time.Second,
