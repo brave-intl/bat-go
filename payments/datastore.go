@@ -17,8 +17,8 @@ import (
 type Transaction struct {
 	IdempotencyKey *uuid.UUID      `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"uuid"`
 	Amount         decimal.Decimal `json:"amount,omitempty" ion:"amount" valid:"numeric"`
-	To             string          `json:"to,omitempty" ion:"to" valid:"required"`
-	From           string          `json:"from,omitempty" ion:"from" valid:"required"`
+	To             *uuid.UUID      `json:"to,omitempty" ion:"to" valid:"required"`
+	From           *uuid.UUID      `json:"from,omitempty" ion:"from" valid:"required"`
 	Custodian      string          `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
 	State          string          `json:"-" ion:"state" valid:"in(prepared|submitted)"`
 	DocumentID     string          `json:"documentId,omitempty" ion:"id"`

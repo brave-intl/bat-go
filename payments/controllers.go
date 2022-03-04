@@ -6,6 +6,8 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
@@ -81,7 +83,10 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
-		// TODO: perform the custodian submission (channel to worker) if the number of authorizations is appropriate
+		for _, t := range req {
+			// perform the custodian submission (channel to worker) if the number of authorizations is appropriate
+			service.processTransaction <- t
+		}
 
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})
@@ -115,6 +120,26 @@ func StatusHandler(service *Service) handlers.AppHandler {
 		// TODO: get the submission response from qldb add to resp
 
 		// TODO: get the status from the custodian and add to resp
+		custodianTransaction, err := custodian.NewTransaction(
+			ctx, transaction.IdempotencyKey, transaction.To, transaction.From, altcurrency.BAT, transaction.Amount,
+		)
+
+		if err != nil {
+			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("could not create custodian transaction")
+			return handlers.WrapValidationError(err)
+		}
+
+		if c, ok := service.custodians[transaction.Custodian]; ok {
+			// TODO: store the full response from status call of transaction
+			_, err = c.GetTransactionsStatus(ctx, custodianTransaction)
+			if err != nil {
+				logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("failed to get transaction status")
+				return handlers.WrapError(err, "failed to get status", http.StatusInternalServerError)
+			}
+		} else {
+			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("invalid custodian")
+			return handlers.WrapValidationError(fmt.Errorf("invalid custodian"))
+		}
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})

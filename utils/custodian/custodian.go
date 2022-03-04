@@ -14,6 +14,15 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const (
+	// Uphold - custodian identifier for uphold
+	Uphold = "uphold"
+	// Gemini - custodian identifier for gemini
+	Gemini = "gemini"
+	// Bitflyer - custodian identifier for bitflyer
+	Bitflyer = "bitflyer"
+)
+
 // TransactionStatus - stringer repr of transaction status
 type TransactionStatus fmt.Stringer
 
@@ -109,13 +118,13 @@ func New(ctx context.Context, conf Config) (Custodian, error) {
 			&logger, ErrConfigValidation.Error(), fmt.Errorf("%w: %s", ErrConfigValidation, err.Error()))
 	}
 	switch conf.Provider {
-	case "uphold":
+	case Uphold:
 		logger.Debug().Msg("creating uphold custodian")
 		return newUpholdCustodian(ctx, conf)
-	case "gemini":
+	case Gemini:
 		logger.Debug().Msg("creating gemini custodian")
 		return newGeminiCustodian(ctx, conf)
-	case "bitflyer":
+	case Bitflyer:
 		logger.Debug().Msg("creating bitflyer custodian")
 		return newBitflyerCustodian(ctx, conf)
 	default:
