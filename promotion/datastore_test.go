@@ -1295,13 +1295,13 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurr
 			submitted += 1
 			suite.Require().Equal("submitted", ptr.String(drain.Status),
 				fmt.Sprintf("should be submitted got %s", ptr.String(drain.Status)))
-			suite.Require().Equal(batchID, drain.BatchID)
+			suite.Require().Equal(batchID, *drain.BatchID)
 			suite.Require().NotNil(drain.TransactionID)
 		}
 		// erred
 		if drain.Erred {
 			erred += 1
-			suite.Require().Equal(batchID, drain.BatchID)
+			suite.Require().Equal(batchID, *drain.BatchID)
 			suite.Require().Nil(drain.TransactionID)
 		}
 	}
