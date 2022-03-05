@@ -90,7 +90,7 @@ func TestReadMessage_WalletIDInvalidError(t *testing.T) {
 	defer ctrl.Finish()
 
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
-		adminAttestationTopic: adminAttestationEventSchema,
+		"adminAttestationTopic": adminAttestationEventSchema,
 	})
 	require.NoError(t, err)
 
@@ -102,10 +102,10 @@ func TestReadMessage_WalletIDInvalidError(t *testing.T) {
 	textual, err := json.Marshal(msg)
 	require.NoError(t, err)
 
-	native, _, err := codecs[adminAttestationTopic].NativeFromTextual(textual)
+	native, _, err := codecs["adminAttestationTopic"].NativeFromTextual(textual)
 	require.NoError(t, err)
 
-	binary, err := codecs[adminAttestationTopic].BinaryFromNative(nil, native)
+	binary, err := codecs["adminAttestationTopic"].BinaryFromNative(nil, native)
 	require.NoError(t, err)
 
 	message := kafka.Message{
@@ -137,7 +137,7 @@ func TestReadMessage_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
-		adminAttestationTopic: adminAttestationEventSchema,
+		"adminAttestationTopic": adminAttestationEventSchema,
 	})
 	require.NoError(t, err)
 
@@ -147,10 +147,10 @@ func TestReadMessage_Success(t *testing.T) {
 	textual, err := json.Marshal(msg)
 	require.NoError(t, err)
 
-	native, _, err := codecs[adminAttestationTopic].NativeFromTextual(textual)
+	native, _, err := codecs["adminAttestationTopic"].NativeFromTextual(textual)
 	require.NoError(t, err)
 
-	binary, err := codecs[adminAttestationTopic].BinaryFromNative(nil, native)
+	binary, err := codecs["adminAttestationTopic"].BinaryFromNative(nil, native)
 	require.NoError(t, err)
 
 	message := kafka.Message{
