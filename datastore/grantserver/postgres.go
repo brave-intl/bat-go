@@ -44,7 +44,8 @@ var (
 	CurrentMigrationVersion = uint(43)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
-		"eyeshade": 20,
+		"eyeshade":      20,
+		"subscriptions": 44,
 	}
 )
 

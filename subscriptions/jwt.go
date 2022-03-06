@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"os"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/kafka"
@@ -23,27 +24,8 @@ type JwtService interface {
 	MustVerify(j string, v interface{}) error
 }
 
-type jwtModule struct {
-	JAASTenantID string
-	JAASKeyID    string
-	PrivateKey   *rsa.PrivateKey
-}
-
-// func (s *Server) initJWTModule() error {
-// 	privateKey, err := getPrivKey(s.config.PrivateKey, s.config.PrivateKeyLocation)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	s.jwtModule = &jwtModule{
-// 		JAASKeyID:    s.config.JAASKeyID,
-// 		JAASTenantID: s.config.JAASTenantID,
-// 		PrivateKey:   privateKey,
-// 	}
-// 	return nil
-// }
-
-func (s Service) MakeJWT(c interface{}, ctx context.Context) (string, error) {
-	privKey, ok := ctx.Value(appctx.JAASPrivateKeyCTXKey).(rsa.PrivateKey)
+func MakeJWT(ctx context.Context, c interface{}) (string, error) {
+	privKey, ok := ctx.Value(appctx.JAASPrivateKeyCTXKey).(*rsa.PrivateKey)
 	if !ok {
 		return "", errors.New("Invalid private key in context")
 	}
@@ -82,7 +64,7 @@ func (s Service) MakeJWT(c interface{}, ctx context.Context) (string, error) {
 	return rawJWT, nil
 }
 
-func (s Service) MustVerify(j string, v interface{}, ctx context.Context) error {
+func MustVerify(ctx context.Context, j string, v interface{}) error {
 	parsedJWT, err := jwt.ParseSigned(j)
 	if err != nil {
 		return err
@@ -94,7 +76,7 @@ func (s Service) MustVerify(j string, v interface{}, ctx context.Context) error 
 		return errors.New("failed to parse JWT token: invalid number of signatures or algorithm specified")
 	}
 
-	privKey, ok := ctx.Value(appctx.JAASPrivateKeyCTXKey).(rsa.PrivateKey)
+	privKey, ok := ctx.Value(appctx.JAASPrivateKeyCTXKey).(*rsa.PrivateKey)
 	if !ok {
 		return errors.New("Invalid private key in context")
 	}
@@ -106,6 +88,7 @@ func getPrivKey(privateKeyRaw, privatKeyLocation string) (*rsa.PrivateKey, error
 	var err error
 	var priv []byte
 	if len(privateKeyRaw) == 0 {
+		os.Setenv("PRIVATE_KEY_LOCATION", privatKeyLocation)
 		priv, err = kafka.ReadFileFromEnvLoc("PRIVATE_KEY_LOCATION", true)
 		if err != nil {
 			privkey, err := rsa.GenerateKey(rand.Reader, 4096)

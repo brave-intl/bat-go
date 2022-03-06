@@ -5,22 +5,34 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/brave-intl/bat-go/datastore/grantserver"
 )
 
-type DataStore interface {
+type Datastore interface {
+	grantserver.Datastore
 	createRoom(r Room) error
+	joinRoom(r Room) error
 	increaseMau()
 }
 
 type Postgres struct {
-	*sqlx.DB
+	grantserver.Postgres
 }
 
 type Stat struct {
 	Name      string       `db:"name"`
 	CreatedAt sql.NullTime `db:"created_at"`
 	Count     int          `db:"count"`
+}
+
+func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
+	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	if pg != nil {
+		return &DatastoreWithPrometheus{
+			base: &Postgres{*pg}, instanceName: "subscriptions_datastore",
+		}, err
+	}
+	return nil, err
 }
 
 func (pg *Postgres) createRoom(r Room) error {
@@ -30,6 +42,16 @@ func (pg *Postgres) createRoom(r Room) error {
 		VALUES ($1, $2)
 		RETURNING *
 	`, r.Name, r.Tier)
+	return err
+}
+
+func (pg *Postgres) joinRoom(r Room) error {
+	createdRoom := Room{}
+	err := pg.Get(&createdRoom, `
+		UPDATE rooms SET head_count = head_count + 1
+		WHERE name = $1
+		RETURNING *
+	`, r.Name)
 	return err
 }
 

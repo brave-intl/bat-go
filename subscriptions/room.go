@@ -1,10 +1,12 @@
 package subscriptions
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
 
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/square/go-jose/jwt"
@@ -34,7 +36,12 @@ type RoomRefreshClaims struct {
 	Context   map[string]interface{} `json:"context"`
 }
 
-func (r Room) makeClaim(mauP bool, tenantID string, moderator bool, isGroupRoom bool, userID string) RoomClaims {
+func MakeClaim(ctx context.Context, r Room, mauP bool, moderator bool, isGroupRoom bool, userID string) (*RoomClaims, error) {
+	JAASTenantID, err := appctx.GetStringFromContext(ctx, appctx.JAASTenantIDCTXKey)
+	if err != nil {
+		return nil, err
+	}
+
 	userInfo := map[string]string{
 		"id":        uuid.New().String(),
 		"moderator": strconv.FormatBool(moderator),
@@ -44,10 +51,10 @@ func (r Room) makeClaim(mauP bool, tenantID string, moderator bool, isGroupRoom 
 		userInfo["email"] = fmt.Sprintf("%s@talk.brave.internal", userID)
 	}
 
-	customClaims := RoomClaims{
+	customClaims := &RoomClaims{
 		Claims: &jwt.Claims{
 			Issuer:    "chat",
-			Subject:   tenantID,
+			Subject:   JAASTenantID,
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Expiry:    jwt.NewNumericDate(time.Now().Add(time.Hour * time.Duration(3))),
@@ -66,10 +73,10 @@ func (r Room) makeClaim(mauP bool, tenantID string, moderator bool, isGroupRoom 
 			},
 		},
 	}
-	return customClaims
+	return customClaims, nil
 }
 
-func (r Room) makeRefreshClaim(moderator bool, isGroupRoom bool) RoomRefreshClaims {
+func MakeRefreshClaim(r Room, moderator bool, isGroupRoom bool) RoomRefreshClaims {
 	customClaims := RoomRefreshClaims{
 		Claims: &jwt.Claims{
 			Issuer:    "chat",

@@ -7,10 +7,11 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func init() {
-	RootCmd.AddCommand(subscriptionsCmd)
+	cmd.RootCmd.AddCommand(subscriptionsCmd)
 
 	// add grpc and rest commands
 	subscriptionsCmd.AddCommand(restCmd)
@@ -19,6 +20,15 @@ func init() {
 	cmd.ServeCmd.AddCommand(subscriptionsCmd)
 
 	// setup the flags
+	subscriptionsCmd.PersistentFlags().String("skus-service", "",
+		"the skus service address")
+	cmd.Must(viper.BindPFlag("skus-service", subscriptionsCmd.PersistentFlags().Lookup("skus-service")))
+	cmd.Must(viper.BindEnv("skus-service", "SKUS_SERVICE"))
+
+	subscriptionsCmd.PersistentFlags().String("skus-token", "",
+		"the skus service token")
+	cmd.Must(viper.BindPFlag("skus-token", subscriptionsCmd.PersistentFlags().Lookup("skus-service")))
+	cmd.Must(viper.BindEnv("skus-token", "SKUS_TOKEN"))
 }
 
 var (

@@ -128,8 +128,9 @@ const (
 
 	// Subscription related keys
 
-	// PaymentServerCTXKey - context key for address of payment service
-	PaymentServerCTXKey  CTXKey = "payments-service"
+	// SKUsServerCTXKey - context key for address of payment service
+	SKUsServerCTXKey     CTXKey = "skus-service"
+	SKUsTokenCTXKey      CTXKey = "skus-token"
 	JAASPrivateKeyCTXKey CTXKey = "jass-private-key"
 	JAASTenantIDCTXKey   CTXKey = "jass-tenant-id"
 	JAASKeyIDCTXKey      CTXKey = "jass-key-id"

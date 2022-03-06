@@ -18,6 +18,8 @@ import (
 	_ "github.com/brave-intl/bat-go/cmd/macaroon"
 	// pull in ratios module. setup code is in init
 	_ "github.com/brave-intl/bat-go/cmd/ratios"
+	// pull in subscriptions module. setup code is in init
+	_ "github.com/brave-intl/bat-go/cmd/subscriptions"
 )
 
 var (

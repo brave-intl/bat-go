@@ -63,6 +63,8 @@ services:
       - BITFLYER_TOKEN
       - "ALLOWED_ORIGINS=http://localhost:8080"
       - SKUS_WHITELIST
+      - SKUS_SERVICE="https://payment.bsg.bravesoftware.com"
+      - SKUS_TOKEN
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

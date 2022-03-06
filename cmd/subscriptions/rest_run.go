@@ -35,7 +35,8 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	// add our command line params to context
-	ctx = context.WithValue(ctx, appctx.PaymentServerCTXKey, viper.Get("payments-service"))
+	ctx = context.WithValue(ctx, appctx.SKUsServerCTXKey, viper.Get("skus-service"))
+	ctx = context.WithValue(ctx, appctx.SKUsTokenCTXKey, viper.Get("skus-token"))
 
 	// setup the service now
 	s, err := subscriptions.InitService(ctx)
@@ -45,7 +46,12 @@ func RestRun(command *cobra.Command, args []string) {
 
 	// do rest endpoints
 	r := cmd.SetupRouter(command.Context())
-	r.Get("/v1/rooms/{name}", middleware.InstrumentHandlerFunc("PostCreateRoomHandler", subscriptions.PostCreateRoomHandler(s)).ServeHTTP)
+	r.Mount("/", subscriptions.CreateRoomV1Router(s))
+
+	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initalize job workers")
+	}
 
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)
