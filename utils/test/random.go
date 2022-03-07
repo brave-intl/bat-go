@@ -24,6 +24,7 @@ func RandomStringWithLen(length int) string {
 	return string(s)
 }
 
+// RandomInt return a random int up to math.MaxInt32
 func RandomInt() int {
 	n, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
 	return int(n.Int64())
