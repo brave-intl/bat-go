@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -568,10 +569,10 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			if !reputable {
 				// use the cohort to determine the limit exceeded.
 				switch cohort {
-				case 4:
+				case reputation.CohortWithdrawalLimits:
 					// limited withdrawal
 					return nil, errWalletDrainLimitExceeded
-				case 0:
+				case reputation.CohortNil:
 					// service failure
 					return nil, errReputationServiceFailure
 				default:

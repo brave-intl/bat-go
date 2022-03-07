@@ -66,6 +66,15 @@ type IsDrainReputableResponse struct {
 	Justification string `json:"justification"`
 }
 
+var (
+	// CohortNil - bad cohort
+	CohortNil int = 0
+	// CohortOK - ok cohort
+	CohortOK = 1
+	// CohortWithdrawalLimits - limited cohort
+	CohortWithdrawalLimits = 4
+)
+
 // IsDrainReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
 // to claim a grant
@@ -88,16 +97,16 @@ func (c *HTTPClient) IsDrainReputable(
 		&body,
 	)
 	if err != nil {
-		return false, 0, err
+		return false, CohortNil, err
 	}
 
 	var resp IsDrainReputableResponse
 	_, err = c.client.Do(ctx, req, &resp)
 	if err != nil {
-		return false, 0, err
+		return false, CohortNil, err
 	}
 
-	return resp.Cohort == 1, resp.Cohort, nil
+	return resp.Cohort == CohortOK, resp.Cohort, nil
 }
 
 // IsWalletReputableResponse is what the reputation server
