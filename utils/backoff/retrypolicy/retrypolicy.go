@@ -54,7 +54,7 @@ func (p *policy) CalculateNextDelay() time.Duration {
 		return Done
 	}
 
-	elapsedTime := time.Now().Sub(p.startTime)
+	elapsedTime := time.Since(p.startTime)
 
 	if elapsedTime >= p.expirationInterval {
 		return Done
