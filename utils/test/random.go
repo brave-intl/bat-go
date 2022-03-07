@@ -4,6 +4,7 @@ package test
 
 import (
 	"crypto/rand"
+	"math"
 	"math/big"
 )
 
@@ -21,4 +22,9 @@ func RandomStringWithLen(length int) string {
 		s[i] = letters[n.Int64()]
 	}
 	return string(s)
+}
+
+func RandomInt() int {
+	n, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
+	return int(n.Int64())
 }
