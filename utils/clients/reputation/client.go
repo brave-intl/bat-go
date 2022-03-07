@@ -18,7 +18,7 @@ import (
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
-	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, string, error)
+	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -66,6 +66,15 @@ type IsDrainReputableResponse struct {
 	Justification string `json:"justification"`
 }
 
+var (
+	// CohortNil - bad cohort
+	CohortNil int = 0
+	// CohortOK - ok cohort
+	CohortOK = 1
+	// CohortWithdrawalLimits - limited cohort
+	CohortWithdrawalLimits = 4
+)
+
 // IsDrainReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
 // to claim a grant
@@ -73,7 +82,7 @@ func (c *HTTPClient) IsDrainReputable(
 	ctx context.Context,
 	paymentID, promotionID uuid.UUID,
 	withdrawalAmount decimal.Decimal,
-) (bool, string, error) {
+) (bool, int, error) {
 
 	var body = IsDrainReputableOpts{
 		WithdrawalAmount: withdrawalAmount.String(),
@@ -88,16 +97,16 @@ func (c *HTTPClient) IsDrainReputable(
 		&body,
 	)
 	if err != nil {
-		return false, "reputation-service-failure", err
+		return false, CohortNil, err
 	}
 
 	var resp IsDrainReputableResponse
 	_, err = c.client.Do(ctx, req, &resp)
 	if err != nil {
-		return false, "reputation-service-failures", err
+		return false, CohortNil, err
 	}
 
-	return resp.Cohort == 1, resp.Justification, nil
+	return resp.Cohort == CohortOK, resp.Cohort, nil
 }
 
 // IsWalletReputableResponse is what the reputation server
