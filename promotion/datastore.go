@@ -622,8 +622,8 @@ func (pg *Postgres) GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uui
 			claims
 		where
 			drained=true and
-			wallet_id in (select id from wallets where provider_linking_id = (select provider_linking_id from wallets where wallet_id = $1 limit 1)) and
-			promotion_id= (select promotion_id from claims where claim_id= $2 limit 1)
+			wallet_id in (select id from wallets where provider_linking_id = (select provider_linking_id from wallets where id = $1 limit 1)) and
+			promotion_id= (select promotion_id from claims where id= $2 limit 1)
 		group by
 			promotion_id;
 		`
@@ -1089,9 +1089,10 @@ func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTra
 	}
 
 	_, err = tx.Exec(`
-		update claim_drain set
-			status = 'submitted'
-		where batch_id = $1`, batchID)
+		update claim_drain set status = 'submitted'	
+			where batch_id = $1 and 
+			      erred = false and 
+			      transaction_id is not null`, batchID)
 	if err != nil {
 		return attempted, err
 	}

@@ -145,9 +145,7 @@ func (suite *ControllersTestSuite) TestGetHistoryHandler() {
 }
 
 func (suite *ControllersTestSuite) TestGetRelativeHandler() {
-
 	handler := ratios.GetRelativeHandler(suite.service)
-
 	respy := coingecko.SimplePriceResponse(map[string]map[string]decimal.Decimal{
 		"basic-attention-token": map[string]decimal.Decimal{"usd": decimal.Zero},
 	})
@@ -185,4 +183,49 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 
 	_, okUsd := v["usd"]
 	suite.Require().True(okUsd)
+}
+
+func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
+	handler := ratios.GetCoinMarketsHandler(suite.service)
+	coingeckoResp := coingecko.CoinMarketResponse(
+		[]coingecko.CoinMarket{
+			{
+				ID:                       "bitcoin",
+				Symbol:                   "btc",
+				Name:                     "Bitcoin",
+				Image:                    "https://assets.coingecko.com/coins/images/1/large/bitcoin.png?1547033579",
+				MarketCap:                728577821016,
+				MarketCapRank:            1,
+				CurrentPrice:             38400,
+				PriceChange24h:           558.39,
+				PriceChangePercentage24h: 1.4756,
+				TotalVolume:              41369367560,
+			},
+		},
+	)
+	suite.mockClient.EXPECT().
+		FetchCoinMarkets(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&coingeckoResp, time.Now(), nil)
+
+	// new request for coin markets handler
+	req, err := http.NewRequest("GET", "/v2/market/provider/coingecko?vsCurrency=usd&limit=1", nil)
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+
+	// add in our suite ctx
+	req = req.WithContext(suite.ctx)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	// validate response code matches
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	var resp = new(ratios.GetCoinMarketsResponse)
+	err = json.Unmarshal(rr.Body.Bytes(), resp)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(len(resp.Payload), 1)
+	suite.Require().Equal(resp.Payload[0].Symbol, "btc")
 }

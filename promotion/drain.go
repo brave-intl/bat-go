@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -559,17 +560,21 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			}
 
 			// perform reputation check for wallet, and error accordingly if there is a reputation failure
-			reputable, justification, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
+			reputable, cohort, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
 			if err != nil {
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
 				return nil, errReputationServiceFailure
 			}
 
 			if !reputable {
-				// pass along the justification in the response error
-				switch justification {
-				case "exceeded_withdrawal_limit":
+				// use the cohort to determine the limit exceeded.
+				switch cohort {
+				case reputation.CohortWithdrawalLimits:
+					// limited withdrawal
 					return nil, errWalletDrainLimitExceeded
+				case reputation.CohortNil:
+					// service failure
+					return nil, errReputationServiceFailure
 				default:
 					return nil, errWalletNotReputable
 				}

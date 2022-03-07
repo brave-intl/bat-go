@@ -43,19 +43,6 @@ func init() {
 	prometheus.MustRegister(bfBalanceGauge)
 }
 
-// InventoryResponse bitflyer inventory response
-type InventoryResponse struct {
-	AccountHash string      `json:"account_hash"`
-	Inventory   []Inventory `json:"inventory"`
-}
-
-// Inventory a bitflyer inventory response item representing an asset in the account inventory
-type Inventory struct {
-	CurrencyCode string  `json:"currency_code"`
-	Amount       float64 `json:"amount"`
-	Available    float64 `json:"available"`
-}
-
 // WatchBitflyerBalance periodically checks bitflyer inventory balance for BAT
 func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
 	client, err := New()
@@ -83,11 +70,12 @@ func WatchBitflyerBalance(ctx context.Context, duration time.Duration) error {
 					for _, inv := range result.Inventory {
 						if strings.ToLower(inv.CurrencyCode) == "bat" {
 							found = true
-							if inv.Amount < 1 {
+							if inv.Amount.LessThan(decimal.NewFromFloat(1.0)) {
 								logging.FromContext(ctx).Error().Err(errors.New("account is empty")).
 									Msg("bitflyer account error")
 							} else {
-								bfBalanceGauge.Set(inv.Amount)
+								tmp, _ := inv.Amount.Float64()
+								bfBalanceGauge.Set(tmp)
 							}
 							break
 						}
@@ -215,6 +203,19 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+// Inventory holds the balance for a particular currency
+type Inventory struct {
+	CurrencyCode string          `json:"currency_code"`
+	Amount       decimal.Decimal `json:"amount"`
+	Available    decimal.Decimal `json:"available"`
+}
+
+// InventoryResponse is the response to a balance inquery
+type InventoryResponse struct {
+	AccountHash string      `json:"account_hash"`
+	Inventory   []Inventory `json:"inventory"`
+}
+
 // DryRunOption holds options for dry running a transaction
 type DryRunOption struct {
 	RequestAPITransferStatus string `json:"request_api_transfer_status"`
@@ -255,6 +256,7 @@ func NewWithdrawsFromTxs(
 	txs []settlement.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
+	tolerance := decimal.NewFromFloat(0.00000001)
 	if !validSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
@@ -265,14 +267,15 @@ func NewWithdrawsFromTxs(
 		}
 		// exact is never true, equality check needed
 		f64, _ := bat.Float64()
-		if !decimal.NewFromFloat(f64).Equal(bat) {
+		delta := decimal.NewFromFloat(f64).Sub(bat).Abs()
+		if delta.GreaterThan(tolerance) {
 			return nil, fmt.Errorf("bat conversion did not work: %.8f is not equal %d", f64, bat)
 		}
 		withdrawals = append(withdrawals, WithdrawToDepositIDPayload{
 			CurrencyCode: "BAT",
 			Amount:       f64,
 			DepositID:    tx.Destination,
-			TransferID:   tx.TransferID(),
+			TransferID:   tx.BitflyerTransferID(),
 			SourceFrom:   sourceFrom,
 		})
 	}
@@ -287,6 +290,8 @@ type Client interface {
 	UploadBulkPayout(ctx context.Context, payload WithdrawToDepositIDBulkPayload) (*WithdrawToDepositIDBulkResponse, error)
 	// CheckPayoutStatus checks the status of a transaction
 	CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (*WithdrawToDepositIDBulkResponse, error)
+	// CheckInventory check available balance of bitflyer account
+	CheckInventory(ctx context.Context) (map[string]Inventory, error)
 	// RefreshToken refreshes the token belonging to the provided secret values
 	RefreshToken(ctx context.Context, payload TokenPayload) (*TokenResponse, error)
 	// SetAuthToken sets the auth token on underlying client object
@@ -510,6 +515,50 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 	c.SetAuthToken(body.AccessToken)
 
 	return &body, handleBitflyerError(err, resp)
+}
+
+// CheckInventory fetches the current balances of an account
+func (c *HTTPClient) CheckInventory(
+	ctx context.Context,
+) (map[string]Inventory, error) {
+	logger := logging.Logger(ctx, "CheckInventory")
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to check inventory")
+		}
+	}()
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
+	logger.Info().
+		Msg("Calling account inventory")
+
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "/api/link/v1/account/inventory", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.setupRequestHeaders(req)
+
+	var body InventoryResponse
+	resp, err := c.client.Do(ctx, req, &body)
+	err = handleBitflyerError(err, resp)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[string]Inventory)
+
+	for _, inv := range body.Inventory {
+		output[inv.CurrencyCode] = inv
+	}
+
+	logger.Info().
+		Str("Account Hash", body.AccountHash).
+		Str("Available JPY", output["JPY"].Available.String()).
+		Str("Available BAT", output["BAT"].Available.String()).
+		Msg("using updated token. make sure this value is in your env vars (BITFLYER_TOKEN) to avoid refreshes")
+	return output, err
 }
 
 func (c *HTTPClient) setupRequestHeaders(req *http.Request) {

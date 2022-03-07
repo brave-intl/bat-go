@@ -136,4 +136,20 @@ func (suite *CoingeckoTestSuite) TestFetchMarketChart() {
 	suite.Require().NoError(err, "should marshal second resp")
 
 	suite.Require().True(string(b) == string(b1) && t1.Equal(t), "didn't use cached response")
+
+}
+
+func (suite *CoingeckoTestSuite) TestFetchCoinMarkets() {
+	resp, t, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 1)
+	suite.Require().NoError(err, "should be able to fetch the coin markets")
+	suite.Require().Equal(1, len(*resp), "should have a response length of 1 for limit=1")
+	suite.Require().NotNil((*resp)[0].CurrentPrice, "should have a value for price")
+	suite.Require().NotEqual((*resp)[0].CurrentPrice, 0, "bitcoin is never going to 0")
+
+	// call again but with biggger limit
+	// in this case we should have more results, but only used cached response from redis
+	resp1, t1, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 10)
+	suite.Require().NoError(err, "should be able to fetch the coin markets")
+	suite.Require().Equal(10, len(*resp1), "should have a response length of 10 for limit=10")
+	suite.Require().Equal(t, t1, "the lastUpdated time should be equal because of cache usage")
 }

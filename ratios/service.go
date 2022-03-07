@@ -76,7 +76,6 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-
 	service := NewService(ctx, client, redis)
 
 	ctx, err = service.initializeCoingeckoCurrencies(ctx)
@@ -227,6 +226,37 @@ func (s *Service) GetHistory(ctx context.Context, coinID CoingeckoCoin, vsCurren
 
 	return &HistoryResponse{
 		Payload:     *chart,
+		LastUpdated: updated,
+	}, nil
+}
+
+// GetCoinMarketsResponse - the response structure for top currency calls
+type GetCoinMarketsResponse struct {
+	Payload     coingecko.CoinMarketResponse `json:"payload"`
+	LastUpdated time.Time                    `json:"lastUpdated"`
+}
+
+// GetCoinMarkets - respond to caller with top currencies
+func (s *Service) GetCoinMarkets(
+	ctx context.Context,
+	vsCurrency CoingeckoVsCurrency,
+	limit CoingeckoLimit,
+) (*GetCoinMarketsResponse, error) {
+
+	// get logger from context
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		ctx, logger = logging.SetupLogger(ctx)
+	}
+
+	payload, updated, err := s.coingecko.FetchCoinMarkets(ctx, vsCurrency.String(), limit.Int())
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to fetch coin markets data from coingecko")
+		return nil, fmt.Errorf("failed to fetch coin markets data from coingecko: %w", err)
+	}
+
+	return &GetCoinMarketsResponse{
+		Payload:     *payload,
 		LastUpdated: updated,
 	}, nil
 }
