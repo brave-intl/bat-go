@@ -179,7 +179,11 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 		return err
 	}
 	// create a map of the request transactions
-	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
+	transactionsMap, err := geminiMapTransactionsToID(settlementTransactions)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed validate and convert transactions")
+		return err
+	}
 
 	submittedTransactions, submitErr := geminisettlement.IterateRequest(
 		ctx,
@@ -202,11 +206,14 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 }
 
 // geminiMapTransactionsToID creates a map of guid's to transactions
-func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) map[string]settlement.Transaction {
+func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) (map[string]settlement.Transaction, error) {
 	transactionsMap := make(map[string]settlement.Transaction)
 	for _, atx := range transactions {
-		tx := atx.ToTransaction()
+		tx, err := atx.ToTransaction()
+		if err != nil {
+			return transactionsMap, err
+		}
 		transactionsMap[gemini.GenerateTxRef(&tx)] = tx
 	}
-	return transactionsMap
+	return transactionsMap, nil
 }

@@ -37,11 +37,11 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // IsDrainReputable mocks base method.
-func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, string, error) {
+func (m *MockClient) IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsDrainReputable", ctx, id, promotionID, withdrawAmount)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(string)
+	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
