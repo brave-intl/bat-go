@@ -1,4 +1,4 @@
-package payment
+package skus
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
-	stripe "github.com/stripe/stripe-go/v71"
-	"github.com/stripe/stripe-go/webhook"
+	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/webhook"
 )
 
 func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handler {

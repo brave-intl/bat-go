@@ -11,6 +11,7 @@ import (
 
 var (
 	special = map[string]string{
+		"dai":   "dai",
 		"imx":   "immutable-x",
 		"abat":  "aave-bat",
 		"abusd": "aave-busd",

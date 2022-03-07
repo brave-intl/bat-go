@@ -217,11 +217,7 @@ func (c *SimpleHTTPClient) NewRequest(
 }
 
 // Do the specified http request, decoding the JSON result into v
-func (c *SimpleHTTPClient) do(
-	ctx context.Context,
-	req *http.Request,
-	v interface{},
-) (*http.Response, error) {
+func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
 
 	// concurrent client request instrumentation
 	concurrentClientRequests.With(
@@ -287,6 +283,7 @@ func (c *SimpleHTTPClient) do(
 				return resp, errors.Wrap(err, ErrUnableToDecode)
 			}
 		}
+
 		return resp, nil
 	}
 
@@ -297,33 +294,28 @@ func (c *SimpleHTTPClient) do(
 
 // Do the specified http request, decoding the JSON result into v
 func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interface{}) (*http.Response, error) {
-	var (
-		code      int
-		resp, err = c.do(ctx, req, v)
-	)
-	if resp != nil {
-		// it is possible to have a nil resp from c.do...
-		code = resp.StatusCode
-	}
+	resp, err := c.do(ctx, req, v)
 	if err != nil {
 		// errors returned from c.do could be go errors or upstream api errors
 		if resp != nil {
 			// if there was an error from the service, read the response body
 			// and inject into error for later
-			b, err := ioutil.ReadAll(resp.Body)
+			b, _ := ioutil.ReadAll(resp.Body)
 			rb := string(b)
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-			return resp, NewHTTPError(err, req.URL.String(), "response", code, struct {
-				Body            interface{}
+			errorData := struct {
 				ResponseHeaders interface{}
+				Body            interface{}
 			}{
 				// put response body/headers in the err state data
-				Body:            rb,
 				ResponseHeaders: resp.Header,
-			})
+				Body:            rb,
+			}
+
+			return resp, NewHTTPError(err, req.URL.String(), "response", resp.StatusCode, errorData)
 		}
-		return resp, fmt.Errorf("failed c.do, no response body: %w", err)
+		return nil, fmt.Errorf("failed c.do, no response body: %w", err)
 	}
 	return resp, nil
 }

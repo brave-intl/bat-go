@@ -35,6 +35,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// CheckInventory mocks base method.
+func (m *MockClient) CheckInventory(ctx context.Context) (map[string]bitflyer.Inventory, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckInventory", ctx)
+	ret0, _ := ret[0].(map[string]bitflyer.Inventory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckInventory indicates an expected call of CheckInventory.
+func (mr *MockClientMockRecorder) CheckInventory(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckInventory", reflect.TypeOf((*MockClient)(nil).CheckInventory), ctx)
+}
+
 // CheckPayoutStatus mocks base method.
 func (m *MockClient) CheckPayoutStatus(ctx context.Context, payload bitflyer.CheckBulkStatusPayload) (*bitflyer.WithdrawToDepositIDBulkResponse, error) {
 	m.ctrl.T.Helper()

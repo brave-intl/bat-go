@@ -11,12 +11,14 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 )
 
 // Client abstracts over the underlying client
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
+	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -44,6 +46,67 @@ func New() (Client, error) {
 	}
 
 	return NewClientWithPrometheus(&HTTPClient{client}, "reputation_client"), nil
+}
+
+// IsDrainReputableOpts - the query string options for the is reputable api call
+type IsDrainReputableOpts struct {
+	WithdrawalAmount string `url:"withdrawal_amount"`
+	PromotionID      string `url:"promotion_id"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
+	return query.Values(iro)
+}
+
+// IsDrainReputableResponse is what the reputation server
+// will send back when we ask if a wallet is reputable
+type IsDrainReputableResponse struct {
+	Cohort        int    `json:"cohort"`
+	Justification string `json:"justification"`
+}
+
+var (
+	// CohortNil - bad cohort
+	CohortNil int = 0
+	// CohortOK - ok cohort
+	CohortOK = 1
+	// CohortWithdrawalLimits - limited cohort
+	CohortWithdrawalLimits = 4
+)
+
+// IsDrainReputable makes the request to the reputation server
+// and returns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsDrainReputable(
+	ctx context.Context,
+	paymentID, promotionID uuid.UUID,
+	withdrawalAmount decimal.Decimal,
+) (bool, int, error) {
+
+	var body = IsDrainReputableOpts{
+		WithdrawalAmount: withdrawalAmount.String(),
+		PromotionID:      promotionID.String(),
+	}
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v2/reputation/"+paymentID.String()+"/grants",
+		nil,
+		&body,
+	)
+	if err != nil {
+		return false, CohortNil, err
+	}
+
+	var resp IsDrainReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, CohortNil, err
+	}
+
+	return resp.Cohort == CohortOK, resp.Cohort, nil
 }
 
 // IsWalletReputableResponse is what the reputation server

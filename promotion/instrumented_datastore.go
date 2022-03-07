@@ -382,6 +382,20 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 	return _d.base.GetSumForTransactions(orderID)
 }
 
+// GetWithdrawalsAssociated implements Datastore
+func (_d DatastoreWithPrometheus) GetWithdrawalsAssociated(walletID *uuid.UUID, claimID *uuid.UUID) (up1 *uuid.UUID, d1 decimal.Decimal, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetWithdrawalsAssociated", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetWithdrawalsAssociated(walletID, claimID)
+}
+
 // InsertBAPReportEvent implements Datastore
 func (_d DatastoreWithPrometheus) InsertBAPReportEvent(ctx context.Context, paymentID uuid.UUID, amount decimal.Decimal) (up1 *uuid.UUID, err error) {
 	_since := time.Now()
@@ -450,20 +464,6 @@ func (_d DatastoreWithPrometheus) InsertSuggestion(credentials []cbr.CredentialR
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSuggestion", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.InsertSuggestion(credentials, suggestionText, suggestion)
-}
-
-// MarkBatchTransferSubmitted implements Datastore
-func (_d DatastoreWithPrometheus) MarkBatchTransferSubmitted(ctx context.Context, batchID *uuid.UUID) (err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "MarkBatchTransferSubmitted", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.MarkBatchTransferSubmitted(ctx, batchID)
 }
 
 // Migrate implements Datastore

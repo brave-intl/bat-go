@@ -51,6 +51,22 @@ func (mr *MockClientMockRecorder) FetchCoinList(ctx, includePlatform interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCoinList", reflect.TypeOf((*MockClient)(nil).FetchCoinList), ctx, includePlatform)
 }
 
+// FetchCoinMarkets mocks base method.
+func (m *MockClient) FetchCoinMarkets(ctx context.Context, vsCurrency string, limit int) (*coingecko.CoinMarketResponse, time.Time, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchCoinMarkets", ctx, vsCurrency, limit)
+	ret0, _ := ret[0].(*coingecko.CoinMarketResponse)
+	ret1, _ := ret[1].(time.Time)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// FetchCoinMarkets indicates an expected call of FetchCoinMarkets.
+func (mr *MockClientMockRecorder) FetchCoinMarkets(ctx, vsCurrency, limit interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCoinMarkets", reflect.TypeOf((*MockClient)(nil).FetchCoinMarkets), ctx, vsCurrency, limit)
+}
+
 // FetchMarketChart mocks base method.
 func (m *MockClient) FetchMarketChart(ctx context.Context, id, vsCurrency string, days float32) (*coingecko.MarketChartResponse, time.Time, error) {
 	m.ctrl.T.Helper()

@@ -926,7 +926,7 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	mockDrainWorker := NewMockDrainWorker(mockCtrl)
 
 	// One drain job should run
-	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Eq(walletID), testutils.DecEq(total)).Return(nil, errors.New("Worker failed"))
+	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Eq(walletID), testutils.DecEq(total), &claim.ID).Return(nil, errors.New("Worker failed"))
 	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
 	suite.Assert().Equal(true, attempted)
 	suite.Require().Error(err)
@@ -1031,7 +1031,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_Gemini_Claim() {
 
 	drainWorker := NewMockDrainWorker(ctrl)
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&transactionInfo, nil)
 
 	attempted, err := pg.RunNextDrainJob(context.Background(), drainWorker)
@@ -1190,10 +1190,12 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurr
 	err = walletDB.UpsertWallet(ctx, info)
 	suite.Require().NoError(err)
 
-	// setup claim drains
+	// setup 3 claim drains and 1 erred claim drain in batch
 	for i := 0; i < 3; i++ {
 		claimDrainFixtures(pg.RawDB(), batchID, walletID, false, false)
 	}
+	// setup one erred job as part of batch which should not get run by batch payment
+	claimDrainFixtures(pg.RawDB(), batchID, walletID, false, true)
 
 	transactionInfo := walletutils.TransactionInfo{}
 	transactionInfo.Status = "bitflyer-consolidate"
@@ -1201,7 +1203,7 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurr
 
 	drainWorker := NewMockDrainWorker(ctrl)
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&transactionInfo, nil).
 		Times(3)
 
@@ -1282,11 +1284,30 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurr
 	err = pg.RawDB().Select(&actual, `SELECT * FROM claim_drain`)
 	suite.Require().NoError(err, "should have retrieved drain job")
 
+	suite.Require().Equal(4, len(actual))
+
+	// assert we have 3 submitted and 1 erred claim drain
+	submitted := 0
+	erred := 0
 	for _, drain := range actual {
-		suite.Require().Equal("submitted", ptr.String(drain.Status),
-			fmt.Sprintf("should be submitted got %s", ptr.String(drain.Status)))
-		suite.Require().NotNil(drain.TransactionID)
+		// submitted
+		if !drain.Erred {
+			submitted += 1
+			suite.Require().Equal("submitted", ptr.String(drain.Status),
+				fmt.Sprintf("should be submitted got %s", ptr.String(drain.Status)))
+			suite.Require().Equal(batchID, *drain.BatchID)
+			suite.Require().NotNil(drain.TransactionID)
+		}
+		// erred
+		if drain.Erred {
+			erred += 1
+			suite.Require().Equal(batchID, *drain.BatchID)
+			suite.Require().Nil(drain.TransactionID)
+		}
 	}
+	suite.Require().Equal(3, submitted)
+	suite.Require().Equal(1, erred)
+
 	// shutdown bath payments job routine
 	cancel()
 }
@@ -1433,7 +1454,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 	ctx := context.Background()
 
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0)).
+		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0), gomock.Any()).
 		Return(&walletutils.TransactionInfo{}, nil)
 
 	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
