@@ -8,6 +8,9 @@ import (
 )
 
 type (
+	// Defines a retry function
+	RetryFunc func(ctx context.Context, operation Operation, retryPolicy retrypolicy.Retry, IsRetriable IsRetriable) (interface{}, error)
+
 	// Operation the operation to be executed with retry
 	Operation func() (interface{}, error)
 
