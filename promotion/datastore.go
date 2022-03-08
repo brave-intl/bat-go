@@ -1492,6 +1492,8 @@ func errToDrainCode(err error) (string, string, bool) {
 		errCode = "marshal_transfer"
 	} else if errors.Is(err, errorutils.ErrCreateTransferRequest) {
 		errCode = "create_transfer"
+	} else if errors.Is(err, errorutils.ErrForbiddenTransferRequest) {
+		errCode = "forbidden_transfer"
 	} else if errors.Is(err, errorutils.ErrSignTransferRequest) {
 		errCode = "sign_transfer"
 	} else if errors.Is(err, errorutils.ErrFailedClientRequest) {

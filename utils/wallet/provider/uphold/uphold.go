@@ -452,7 +452,7 @@ func handleUpholdError(err error) error {
 		if hs, ok := eb.Data().(clients.HTTPState); ok {
 			switch hs.Status {
 			case http.StatusForbidden:
-				return errorutils.New(err, errorutils.ErrForbiddenTransferRequest.Error(), 
+				return errorutils.New(err, errorutils.ErrForbiddenTransferRequest.Error(),
 					errorutils.Codified{
 						ErrCode: "uphold_forbidden",
 						Retry:   false,
