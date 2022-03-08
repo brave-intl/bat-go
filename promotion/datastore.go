@@ -617,7 +617,7 @@ func (pg *Postgres) GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uui
 	var (
 		stmt = `
 		select
-			promotion_id,sum(approximate_value+bonus) as withdrawal_amount
+			promotion_id,sum(approximate_value) as withdrawal_amount
 		from
 			claims
 		where
