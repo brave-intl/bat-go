@@ -72,6 +72,8 @@ type ParameterizedKeystoreVerifier struct {
 }
 
 const (
+	// HostHeader is the host header
+	HostHeader = "host"
 	// DigestHeader is the header where a digest of the body will be stored
 	DigestHeader = "digest"
 	// RequestTargetHeader is a pseudo header consisting of the HTTP method and request uri
@@ -143,6 +145,8 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 			}
 			req.Header.Add("Digest", d.String())
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
+		} else if header == HostHeader {
+			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", req.Host))...)
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
