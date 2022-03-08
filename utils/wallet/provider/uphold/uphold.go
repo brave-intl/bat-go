@@ -446,6 +446,29 @@ type denominationRecode struct {
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
 
+func handleUpholdError(err error) error {
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		if hs, ok := eb.Data().(clients.HTTPState); ok {
+			switch hs.Status {
+			case http.StatusForbidden:
+				return errorutils.New(err, errorutils.ErrForbiddenTransferRequest.Error(), 
+					errorutils.Codified{
+						ErrCode: "uphold_forbidden",
+						Retry:   false,
+					})
+			default:
+				return errorutils.New(err, errorutils.ErrCreateTransferRequest.Error(),
+					errorutils.Codified{
+						ErrCode: "uphold_transfer_failure",
+						Retry:   false,
+					})
+			}
+		}
+	}
+	return err
+}
+
 type transactionRequestRecode struct {
 	Denomination denominationRecode `json:"denomination"`
 	Destination  string             `json:"destination"`
@@ -463,7 +486,7 @@ func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decima
 
 	req, err := newRequest("POST", "/v0/me/cards/"+w.ProviderID+"/transactions?commit=true", bytes.NewBuffer(unsignedTransaction))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errorutils.ErrCreateTransferRequest, err.Error())
+		return nil, handleUpholdError(err)
 	}
 
 	var s httpsignature.SignatureParams

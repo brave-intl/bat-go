@@ -19,6 +19,8 @@ var (
 	ErrMarshalTransferRequest = errors.New("failed to marshal the transfer request")
 	// ErrCreateTransferRequest - failed to create the transfer request
 	ErrCreateTransferRequest = errors.New("failed to create the transfer request")
+	// ErrForbiddenTransferRequest - failed to create the transfer request
+	ErrForbiddenTransferRequest = errors.New("forbidden from creating the transfer request")
 	// ErrSignTransferRequest - failed to sign the transfer request
 	ErrSignTransferRequest = errors.New("failed to sign the transfer request")
 	// ErrFailedClientRequest - failed to perform client request

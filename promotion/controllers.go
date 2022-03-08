@@ -858,7 +858,7 @@ func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
 		}
 
 		resp.Drains = drainInfo
-		resp.Status = "success"
+		resp.Meta.Status = "success"
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
