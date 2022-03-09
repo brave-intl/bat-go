@@ -146,7 +146,15 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 			req.Header.Add("Digest", d.String())
 			out = append(out, []byte(fmt.Sprintf("%s: %s", "digest", d.String()))...)
 		} else if header == HostHeader {
-			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", req.Host))...)
+			// in some environments it seems that the HostTransfer middleware correctly sets
+			// the Host header to the xforwardedhost value
+			host := req.Header.Get(requestutils.HostHeaderKey)
+			if host == "" {
+				host = req.Host
+			} else {
+				host = strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
+			}
+			out = append(out, []byte(fmt.Sprintf("%s: %s", "host", host))...)
 		} else {
 			val := strings.Join(req.Header[http.CanonicalHeaderKey(header)], ", ")
 			out = append(out, []byte(fmt.Sprintf("%s: %s", header, val))...)
