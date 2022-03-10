@@ -125,7 +125,8 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 		for {
 			select {
 			case <-time.After(progressDuration):
-				// output most resent progress information
+				// output most recent progress information, but only if
+				// some progress has been made.
 				if last.Processed != 0 && last.Total-last.Processed != 0 && last.Total != 0 {
 					logger.Info().
 						Int("processed", last.Processed).

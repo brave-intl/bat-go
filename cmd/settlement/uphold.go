@@ -107,7 +107,7 @@ func UpholdUpload(
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	logger.Info("beginning uphold upload")
+	logger.Info().Msg("beginning uphold upload")
 
 	settlementJSON, err := ioutil.ReadFile(inputFile)
 	if err != nil {
