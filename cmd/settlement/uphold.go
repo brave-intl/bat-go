@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -94,6 +96,25 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	)
 }
 
+func recordProgress(f *os.File, settlementTransaction *settlement.Transaction) error {
+	var out []byte
+	out, err := json.Marshal(settlementTransaction)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal settlement transaction: %v", err)
+	}
+
+	// Append progress to the log
+	_, err = f.Write(append(out, '\n'))
+	if err != nil {
+		return fmt.Errorf("failed to write to output log: %v", err)
+	}
+	err = f.Sync()
+	if err != nil {
+		return fmt.Errorf("failed to sync output log to disk: %v", err)
+	}
+	return nil
+}
+
 // UpholdUpload uploads transactions to uphold
 func UpholdUpload(
 	ctx context.Context,
@@ -131,6 +152,7 @@ func UpholdUpload(
 
 	// Read from the transaction log
 	scanner := bufio.NewScanner(f)
+	isResubmit := false
 	for scanner.Scan() {
 		var tmp settlement.Transaction
 		err = json.Unmarshal(scanner.Bytes(), &tmp)
@@ -140,8 +162,52 @@ func UpholdUpload(
 		for i := 0; i < len(settlementState.Transactions); i++ {
 			// Only one transaction per channel is allowed per settlement
 			if settlementState.Transactions[i].Channel == tmp.Channel {
+				isResubmit = true
 				settlementState.Transactions[i] = tmp
 			}
+		}
+	}
+
+	// Optimization the case where we are rerunning by creating a truncated snapshot of the last state
+	if isResubmit {
+		backupFile := strings.TrimSuffix(logFile, filepath.Ext(logFile)) + "-backup.json"
+		backupF, err := os.OpenFile(backupFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to open backup file")
+		}
+
+		// Reset log offset to 0, append to the backup we just opened
+		f.Seek(0, 0)
+		nBytes, err := io.Copy(backupF, f)
+		if nBytes <= 0 || err != nil {
+			logger.Panic().Err(err).Msg("failed to backup log")
+		}
+		err = backupF.Sync()
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to sync backup log to disk")
+		}
+
+		tmpFile := strings.TrimSuffix(logFile, filepath.Ext(logFile)) + "-tmp.json"
+		tmpF, err := os.OpenFile(tmpFile, os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to create temporary file")
+		}
+
+		// Snapshot the fully caught up state into a temporary file
+		for i := 0; i < len(settlementState.Transactions); i++ {
+			err = recordProgress(tmpF, &settlementState.Transactions[i])
+			if err != nil {
+				logger.Panic().Err(err).Msg("failed to snapshot state")
+			}
+		}
+
+		// Replace our log file handle with the temporary file handle
+		f = tmpF
+
+		// Rename the temporary file, replacing the original log with the truncated snapshot
+		err = os.Rename(tmpFile, logFile)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to replace the log")
 		}
 	}
 
@@ -162,20 +228,9 @@ func UpholdUpload(
 			continue
 		}
 
-		var out []byte
-		out, err = json.Marshal(settlementTransaction)
+		err = recordProgress(f, settlementTransaction)
 		if err != nil {
-			logger.Panic().Err(err).Msg("failed to unmarshal settlement transaction")
-		}
-
-		// Append progress to the log
-		_, err = f.Write(append(out, '\n'))
-		if err != nil {
-			logger.Panic().Err(err).Msg("failed to write to output log")
-		}
-		err = f.Sync()
-		if err != nil {
-			logger.Panic().Err(err).Msg("failed to sync output log to disk")
+			logger.Panic().Err(err).Msg("failed to record progress")
 		}
 
 		err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction)
@@ -183,19 +238,9 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
 		}
 
-		out, err = json.Marshal(settlementTransaction)
+		err = recordProgress(f, settlementTransaction)
 		if err != nil {
-			logger.Panic().Err(err).Msg("failed to marshal prepared transaction")
-		}
-
-		// Append progress to the log
-		_, err = f.Write(append(out, '\n'))
-		if err != nil {
-			logger.Panic().Err(err).Msg("failed to write progress to output log")
-		}
-		err = f.Sync()
-		if err != nil {
-			logger.Panic().Err(err).Msg("failed to sync output log")
+			logger.Panic().Err(err).Msg("failed to record progress")
 		}
 
 		if !settlementTransaction.IsComplete() && !settlementTransaction.IsFailed() {
