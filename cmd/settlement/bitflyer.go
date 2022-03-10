@@ -9,15 +9,20 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/settlement"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
+	// Config is a configuration file to map provider + transaction type to the appropriate vault wallet
+	Config *settlement.Config
+
 	// BitflyerSettlementCmd creates the bitflyer subcommand
 	BitflyerSettlementCmd = &cobra.Command{
 		Use:   "bitflyer",
@@ -46,28 +51,54 @@ var (
 	}
 )
 
-// NewRefreshTokenPayloadFromViper creates the payload to refresh a bitflyer token from viper
-func NewRefreshTokenPayloadFromViper() *bitflyer.TokenPayload {
-	vpr := viper.GetViper()
-	clientID := vpr.GetString("bitflyer-client-id")
-	clientSecret := vpr.GetString("bitflyer-client-secret")
-	extraClientSecret := vpr.GetString("bitflyer-extra-client-secret")
+// ReadConfig sets up the config flag
+func ReadConfig(command *cobra.Command) *settlement.Config {
+	configPath, err := command.Flags().GetString("config")
+	cmd.Must(err)
+	config, err := settlement.ReadYamlConfig(configPath)
+	cmd.Must(err)
+	Config = config
+	return config
+}
+
+// NewRefreshTokenPayloadFromVault creates the payload to refresh a bitflyer token from vault
+func NewRefreshTokenPayloadFromVault(walletKey string) (*bitflyer.TokenPayload, error) {
+	wrappedClient, err := vaultsigner.Connect()
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return nil, err
+	}
+
+	clientID := response.Data["bitflyerclientid"].(string)
+	clientSecret := response.Data["bitflyerclientsecret"].(string)
+	extraClientSecret := response.Data["bitflyerextraclientsecret"].(string)
 	return &bitflyer.TokenPayload{
 		GrantType:         "client_credentials",
 		ClientID:          clientID,
 		ClientSecret:      clientSecret,
 		ExtraClientSecret: extraClientSecret,
-	}
+	}, nil
 }
 
 // GetBitflyerToken gets a new bitflyer token from cobra command
 func GetBitflyerToken(cmd *cobra.Command, args []string) error {
+	ReadConfig(cmd)
+
+	vaultKey := viper.GetViper().GetString("vault-wallet")
+
 	ctx := cmd.Context()
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
-	refreshTokenPayload := NewRefreshTokenPayloadFromViper()
+	refreshTokenPayload, err := NewRefreshTokenPayloadFromVault(vaultKey)
+	if err != nil {
+		return err
+	}
 	client, err := bitflyer.New()
 	if err != nil {
 		return err
@@ -91,6 +122,8 @@ func GetBitflyerToken(cmd *cobra.Command, args []string) error {
 
 // UploadBitflyerSettlement uploads bitflyer settlement
 func UploadBitflyerSettlement(cmd *cobra.Command, args []string) error {
+	ReadConfig(cmd)
+
 	input, err := cmd.Flags().GetString("input")
 	if err != nil {
 		return err
@@ -143,6 +176,8 @@ func ParseDryRun(cmd *cobra.Command) (*bitflyer.DryRunOption, error) {
 
 // CheckStatusBitflyerSettlement is the command runner for checking bitflyer transactions status
 func CheckStatusBitflyerSettlement(cmd *cobra.Command, args []string) error {
+	ReadConfig(cmd)
+
 	input, err := cmd.Flags().GetString("input")
 	if err != nil {
 		return err
@@ -190,6 +225,11 @@ func init() {
 		AddCommand(CheckStatusBitflyerSettlementCmd)
 	allBuilder := tokenBuilder.Concat(uploadCheckStatusBuilder)
 
+	tokenBuilder.Flag().String("vault-wallet", "",
+		"the name of the vault wallet for which the token should be refreshed").
+		Require().
+		Bind("vault-wallet")
+
 	uploadCheckStatusBuilder.Flag().String("input", "",
 		"the file or comma delimited list of files that should be utilized. both referrals and contributions should be done in one command in order to group the transactions appropriately").
 		Require().
@@ -210,26 +250,6 @@ func init() {
 		Bind("bitflyer-dryrun").
 		Env("BITFLYER_DRYRUN")
 
-	uploadCheckStatusBuilder.Flag().String("bitflyer-client-token", "",
-		"the token to be sent for auth on bitflyer").
-		Bind("bitflyer-client-token").
-		Env("BITFLYER_TOKEN")
-
-	tokenBuilder.Flag().String("bitflyer-client-id", "",
-		"tells bitflyer what the client id is during token generation").
-		Bind("bitflyer-client-id").
-		Env("BITFLYER_CLIENT_ID")
-
-	tokenBuilder.Flag().String("bitflyer-client-secret", "",
-		"tells bitflyer what the client secret during token generation").
-		Bind("bitflyer-client-secret").
-		Env("BITFLYER_CLIENT_SECRET")
-
-	tokenBuilder.Flag().String("bitflyer-extra-client-secret", "",
-		"tells bitflyer what the extra client secret is during token").
-		Bind("bitflyer-extra-client-secret").
-		Env("BITFLYER_EXTRA_CLIENT_SECRET")
-
 	allBuilder.Flag().String("bitflyer-server", "",
 		"the bitflyer domain to interact with").
 		Bind("bitflyer-server").
@@ -239,10 +259,9 @@ func init() {
 		"in order to avoid not knowing what the payout amount will be because of transfer limits").
 		Bind("exclude-limited")
 
-	allBuilder.Flag().String("bitflyer-source-from", "tipping",
-		"tells bitflyer where to draw funds from").
-		Bind("bitflyer-source-from").
-		Env("BITFLYER_SOURCE_FROM")
+	allBuilder.Flag().String("config", "config.yaml",
+		"config holds the mapping of wallet identifiers and secrets are to be held in vault").
+		Bind("config")
 }
 
 // BitflyerUploadSettlement marks the settlement file as complete
@@ -257,22 +276,6 @@ func BitflyerUploadSettlement(
 		_, logger = logging.SetupLogger(ctx)
 	}
 
-	bitflyerClient, err := bitflyer.New()
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create new bitflyer client")
-		return err
-	}
-	// set the auth token
-	if token != "" {
-		bitflyerClient.SetAuthToken(token)
-	} else {
-		refreshTokenPayload := NewRefreshTokenPayloadFromViper()
-		_, err := bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
-		if err != nil {
-			return err
-		}
-	}
-
 	bytes, err := ioutil.ReadFile(inPath)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to read bulk payout file")
@@ -284,6 +287,30 @@ func BitflyerUploadSettlement(
 	if err != nil {
 		logger.Error().Err(err).Msg("failed unmarshal bulk payout file")
 		return err
+	}
+
+	// introspect first transaction to determine transaction type for the entire batch
+	txType := preparedTransactions.AggregateTransactionBatches[0][0].Type
+	walletKey := "bitflyer-" + txType
+	vaultKey := Config.GetWalletKey(walletKey)
+
+	bitflyerClient, err := bitflyer.New()
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create new bitflyer client")
+		return err
+	}
+	// set the auth token
+	if token != "" {
+		bitflyerClient.SetAuthToken(token)
+	} else {
+		refreshTokenPayload, err := NewRefreshTokenPayloadFromVault(vaultKey)
+		if err != nil {
+			return err
+		}
+		_, err = bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
+		if err != nil {
+			return err
+		}
 	}
 
 	submittedTransactions, submitErr := bitflyersettlement.IterateRequest(

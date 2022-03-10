@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	// Config is a configuration file to map known wallet keys to unknown wallet keys
+	// Config is a configuration file to map provider + transaction type to the appropriate vault wallet
 	Config *settlement.Config
 
 	// VaultCmd adds a command to cobra for vault interfacing
