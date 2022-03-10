@@ -32,7 +32,7 @@ var (
 		Help: "A gauge of the current account balance in bitflyer",
 	})
 
-	validSourceFrom = map[string]bool{
+	ValidSourceFrom = map[string]bool{
 		"tipping":   true,
 		"adrewards": true,
 		"userdrain": true,
@@ -257,7 +257,7 @@ func NewWithdrawsFromTxs(
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	tolerance := decimal.NewFromFloat(0.00000001)
-	if !validSourceFrom[sourceFrom] {
+	if !ValidSourceFrom[sourceFrom] {
 		return nil, fmt.Errorf("valid `sourceFrom` value must be passed got: `%s`", sourceFrom)
 	}
 	for _, tx := range txs {

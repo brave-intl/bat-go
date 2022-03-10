@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/vaultsigner"
 	"github.com/spf13/cobra"
@@ -82,6 +83,26 @@ func init() {
 		"gemini-client-secret holds the uphold guid that we want to use to sign bulk transactions").
 		Bind("gemini-client-secret").
 		Env("GEMINI_CLIENT_SECRET")
+
+	importKeyBuilder.Flag().String("bitflyer-client-id", "",
+		"tells bitflyer what the client id is during token generation").
+		Bind("bitflyer-client-id").
+		Env("BITFLYER_CLIENT_ID")
+
+	importKeyBuilder.Flag().String("bitflyer-client-secret", "",
+		"tells bitflyer what the client secret during token generation").
+		Bind("bitflyer-client-secret").
+		Env("BITFLYER_CLIENT_SECRET")
+
+	importKeyBuilder.Flag().String("bitflyer-extra-client-secret", "",
+		"tells bitflyer what the extra client secret is during token").
+		Bind("bitflyer-extra-client-secret").
+		Env("BITFLYER_EXTRA_CLIENT_SECRET")
+
+	importKeyBuilder.Flag().String("bitflyer-source-from", "",
+		"tells bitflyer where to draw funds from").
+		Bind("bitflyer-source-from").
+		Env("BITFLYER_SOURCE_FROM")
 }
 
 // ImportKey pulls in keys from environment variables
@@ -94,6 +115,10 @@ func ImportKey(command *cobra.Command, args []string) error {
 	geminiClientID := viper.GetViper().GetString("gemini-client-id")
 	geminiClientKey := viper.GetViper().GetString("gemini-client-key")
 	geminiClientSecret := viper.GetViper().GetString("gemini-client-secret")
+	bitflyerClientID := viper.GetViper().GetString("bitflyer-client-id")
+	bitflyerClientSecret := viper.GetViper().GetString("bitflyer-client-secret")
+	bitflyerExtraClientSecret := viper.GetViper().GetString("bitflyer-extra-client-secret")
+	bitflyerSourceFrom := viper.GetViper().GetString("bitflyer-source-from")
 
 	wrappedClient, err := vaultsigner.Connect()
 	if err != nil {
@@ -130,6 +155,29 @@ func ImportKey(command *cobra.Command, args []string) error {
 				if err != nil {
 					return err
 				}
+			}
+		case "bitflyer":
+			if len(bitflyerClientID) == 0 {
+				return errors.New("must set bitflyer client id")
+			} else if len(bitflyerClientSecret) == 0 {
+				return errors.New("must set bitflyer client secret")
+			} else if len(bitflyerExtraClientSecret) == 0 {
+				return errors.New("must set bitflyer extra client secret")
+			} else if len(bitflyerSourceFrom) == 0 || !bitflyer.ValidSourceFrom[bitflyerSourceFrom] {
+				return errors.New("must set a valid bitflyer sourcefrom (tipping, adrewards, userdrain)")
+			}
+
+			err = bitflyerVaultImportValues(
+				command.Context(),
+				wrappedClient,
+				key,
+				bitflyerClientID,
+				bitflyerClientSecret,
+				bitflyerExtraClientSecret,
+				bitflyerSourceFrom,
+			)
+			if err != nil {
+				return err
 			}
 		default:
 			return errors.New("did not recognize option: " + key)
@@ -213,6 +261,38 @@ func geminiVaultImportValues(
 	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]interface{}{
 		"clientid":  geminiClientID,
 		"clientkey": geminiClientKey,
+	})
+	return err
+}
+
+func bitflyerVaultImportValues(
+	ctx context.Context,
+	wrappedClient *vaultsigner.WrappedClient,
+	key string,
+	bitflyerClientID string,
+	bitflyerClientSecret string,
+	bitflyerExtraClientSecret string,
+	bitflyerSourceFrom string,
+) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		return err
+	}
+	importName := Config.GetWalletKey(key)
+	if err := wrappedClient.GenerateMounts(); err != nil {
+		return err
+	}
+	logger.Info().
+		Str("provider", "bitflyer").
+		Str("config-key", key).
+		Str("vault-key", importName).
+		Msg("importing")
+
+	_, err = wrappedClient.Client.Logical().Write("wallets/"+importName, map[string]interface{}{
+		"bitflyerclientid":          bitflyerClientID,
+		"bitflyerclientsecret":      bitflyerClientSecret,
+		"bitflyerextraclientsecret": bitflyerExtraClientSecret,
+		"bitflyersourcefrom":        bitflyerSourceFrom,
 	})
 	return err
 }
