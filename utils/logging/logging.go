@@ -126,11 +126,13 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 			select {
 			case <-time.After(progressDuration):
 				// output most resent progress information
-				logger.Info().
-					Int("processed", last.Processed).
-					Int("pending", last.Total-last.Processed).
-					Int("total", last.Total).
-					Msg("progress update")
+				if last.Processed != 0 && last.Total-last.Processed != 0 && last.Total != 0 {
+					logger.Info().
+						Int("processed", last.Processed).
+						Int("pending", last.Total-last.Processed).
+						Int("total", last.Total).
+						Msg("progress update")
+				}
 			case last = <-progChan:
 				continue
 			}
