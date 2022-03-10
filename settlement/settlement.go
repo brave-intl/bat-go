@@ -41,7 +41,7 @@ type Transaction struct {
 	WalletProvider   string                   `json:"walletProvider"`
 	WalletProviderID string                   `json:"walletProviderId"`
 	Channel          string                   `json:"publisher"`
-	SignedTx         string                   `json:"signedTx"`
+	SignedTx         string                   `json:"-"`
 	Status           string                   `json:"status"`
 	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
 	TransferFee      decimal.Decimal          `json:"fee"`
