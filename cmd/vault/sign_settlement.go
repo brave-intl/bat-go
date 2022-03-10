@@ -95,21 +95,6 @@ func init() {
 		"when multiple input files are passed, merge all transactions and output one file per provider / transaction type ").
 		Bind("merge")
 
-	signSettlementBuilder.Flag().String("bitflyer-client-token", "",
-		"the token to be sent for auth on bitflyer").
-		Bind("bitflyer-client-token").
-		Env("BITFLYER_TOKEN")
-
-	signSettlementBuilder.Flag().String("bitflyer-client-id", "",
-		"tells bitflyer what the client id is during token generation").
-		Bind("bitflyer-client-id").
-		Env("BITFLYER_CLIENT_ID")
-
-	signSettlementBuilder.Flag().String("bitflyer-client-secret", "",
-		"tells bitflyer what the client secret during token generation").
-		Bind("bitflyer-client-secret").
-		Env("BITFLYER_CLIENT_SECRET")
-
 	signSettlementBuilder.Flag().Bool("exclude-limited", false,
 		"in order to avoid not knowing what the payout amount will be because of transfer limits").
 		Bind("exclude-limited")
@@ -236,7 +221,7 @@ func processSettlements(ctx context.Context, providers []string, outDir string, 
 			}
 			output := filepath.Join(outDir, walletKey+"-"+outBaseFile)
 
-			secretKey := Config.GetWalletKey(walletKey)
+			vaultKey := Config.GetWalletKey(walletKey)
 
 			sublog := logger.With().
 				Str("provider", provider).
@@ -245,13 +230,13 @@ func processSettlements(ctx context.Context, providers []string, outDir string, 
 				Int("settlements", len(settlements)).
 				Logger()
 
-			sublog.Info().Str("wallet", secretKey).Msg("attempting to sign settlements")
+			sublog.Info().Str("wallet", vaultKey).Msg("attempting to sign settlements")
 
 			err := artifactGenerators[provider](
 				sublog.WithContext(ctx),
 				output,
 				wrappedClient,
-				secretKey,
+				vaultKey,
 				settlements,
 			)
 
@@ -348,20 +333,6 @@ func createUpholdArtifact(
 	return nil
 }
 
-// NewRefreshTokenPayloadFromViper creates the payload to refresh a bitflyer token from viper
-func NewRefreshTokenPayloadFromViper() *bitflyer.TokenPayload {
-	vpr := viper.GetViper()
-	clientID := vpr.GetString("bitflyer-client-id")
-	clientSecret := vpr.GetString("bitflyer-client-secret")
-	extraClientSecret := vpr.GetString("bitflyer-extra-client-secret")
-	return &bitflyer.TokenPayload{
-		GrantType:         "client_credentials",
-		ClientID:          clientID,
-		ClientSecret:      clientSecret,
-		ExtraClientSecret: extraClientSecret,
-	}
-}
-
 func createBitflyerArtifact(
 	ctx context.Context,
 	outputFile string,
@@ -369,11 +340,26 @@ func createBitflyerArtifact(
 	walletKey string,
 	bitflyerOnlySettlements []settlement.Transaction,
 ) error {
+	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
+	if err != nil {
+		return err
+	}
+	clientID := response.Data["bitflyerclientid"].(string)
+	clientSecret := response.Data["bitflyerclientsecret"].(string)
+	extraClientSecret := response.Data["bitflyerextraclientsecret"].(string)
+	sourceFrom := response.Data["bitflyersourcefrom"].(string)
+
 	bitflyerClient, err := bitflyer.New()
 	if err != nil {
 		return err
 	}
-	refreshTokenPayload := NewRefreshTokenPayloadFromViper()
+	refreshTokenPayload := &bitflyer.TokenPayload{
+		GrantType:         "client_credentials",
+		ClientID:          clientID,
+		ClientSecret:      clientSecret,
+		ExtraClientSecret: extraClientSecret,
+	}
+
 	_, err = bitflyerClient.RefreshToken(ctx, *refreshTokenPayload)
 	if err != nil {
 		return err
@@ -381,7 +367,6 @@ func createBitflyerArtifact(
 
 	vpr := viper.GetViper()
 	exclude := vpr.GetBool("exclude-limited")
-	sourceFrom := vpr.GetString("bitflyer-source-from")
 
 	preparedTransactions, err := bitflyersettlement.PrepareRequests(
 		ctx,
