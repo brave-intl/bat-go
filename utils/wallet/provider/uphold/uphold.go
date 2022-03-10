@@ -454,7 +454,7 @@ func handleUpholdError(err error) error {
 			case http.StatusForbidden:
 				return errorutils.New(err, errorutils.ErrForbiddenTransferRequest.Error(),
 					errorutils.Codified{
-						ErrCode: "uphold_forbidden",
+						ErrCode: "uphold-forbidden_user-cannot-revieve-funds",
 						Retry:   false,
 					})
 			default:
