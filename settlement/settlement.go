@@ -295,7 +295,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(ctx, settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
-		logger.Info().Msg(fmt.Sprintf("invalid destination, skipping"))
+		logger.Info().Msg(fm"invalid destination, skipping")
 		settlement.Status = "failed"
 		return nil
 	} else if err != nil {
@@ -305,7 +305,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
 		// BAT transfers have TTL of zero, as do invalid transfers of XAU / LBA
 		if submitInfo.DestCurrency == "XAU" || submitInfo.DestCurrency == "LBA" {
-			logger.Info().Msg(fmt.Sprintf("quote returned is invalid, skipping"))
+			logger.Info().Msg("quote returned is invalid, skipping")
 			settlement.Status = "failed"
 			return nil
 		}
@@ -407,7 +407,7 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 
 				break
 			} else if errorutils.IsErrForbidden(err) {
-				logger.Error().Err(err).Msg(fmt.Sprintf("invalid destination, skipping"))
+				logger.Error().Err(err).Msg("invalid destination, skipping")
 				settlement.Status = "failed"
 				return nil
 			} else if errorutils.IsErrAlreadyExists(err) {
