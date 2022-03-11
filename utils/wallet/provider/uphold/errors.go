@@ -56,13 +56,19 @@ type upholdValidationErrors struct {
 type upholdError struct {
 	Message          string                 `json:"error,omitempty"`
 	Code             string                 `json:"code"`
+	Restrictions     []string               `json:"restrictions,omitempty"`
 	ValidationErrors upholdValidationErrors `json:"errors,omitempty"`
 	Data             json.RawMessage        `json:",omitempty"`
 }
 
 // Code - implement coded interface
 func (uhErr upholdError) GetCode() string {
-	return uhErr.Code
+	// forbidden case needs to append restrictions
+	code := uhErr.Code
+	if uhErr.Restrictions != nil && len(uhErr.Restrictions) > 0 {
+		code = fmt.Sprintf("%s_%s", code, uhErr.Restrictions[0])
+	}
+	return code
 }
 
 func (uhErr upholdError) NotFoundError() bool {

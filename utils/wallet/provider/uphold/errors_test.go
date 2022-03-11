@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestForbiddenRestriction(t *testing.T) {
+	errJSON := []byte(`{"code":"forbidden","restrictions":["user-cannot-recieve-funds"]}`)
+	var uhErr upholdError
+	err := json.Unmarshal(errJSON, &uhErr)
+	if err != nil {
+		t.Error("Unexpected error during uphold error unmarshal")
+	}
+
+	if !uhErr.ForbiddenError() {
+		t.Error("Expected resulting error to be for forbidden")
+	}
+	// check codified drain error is right
+	dc := NewDrainData(uhErr)
+	if code, _ := dc.DrainCode(); code != "uphold_forbidden_user-cannot-recieve-funds" {
+		t.Error("invalid resulting user drain code")
+	}
+}
+
 func TestInsufficientBalance(t *testing.T) {
 	errJSON := []byte(`{"code":"validation_failed","errors":{"denomination":{"code":"validation_failed","errors":{"amount":[{"code":"sufficient_funds","message":"Not enough funds for the specified amount"}]}}}}`)
 	var uhErr upholdError
