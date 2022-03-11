@@ -295,7 +295,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(ctx, settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
-		logger.Info().Msg(fm"invalid destination, skipping")
+		logger.Info().Msg("invalid destination, skipping")
 		settlement.Status = "failed"
 		return nil
 	} else if err != nil {
