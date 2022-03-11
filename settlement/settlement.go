@@ -254,12 +254,16 @@ func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wal
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = logging.SetupLogger(ctx)
+	}
 	if settlement.IsComplete() {
-		fmt.Printf("already complete, skipping submit for channel %s\n", settlement.Channel)
+		logger.Info().Msg(fmt.Sprintf("already complete, skipping submit for channel %s", settlement.Channel))
 		return nil
 	}
 	if settlement.IsFailed() {
-		fmt.Printf("already failed, skipping submit for channel %s\n", settlement.Channel)
+		logger.Info().Msg(fmt.Sprintf("already failed, skipping submit for channel %s", settlement.Channel))
 		return nil
 	}
 
@@ -274,7 +278,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 			settlement.ExchangeFee = upholdInfo.ExchangeFee
 
 			if settlement.IsComplete() {
-				fmt.Printf("transaction already complete for channel %s\n", settlement.Channel)
+				logger.Info().Msg(fmt.Sprintf("transaction already complete for channel %s", settlement.Channel))
 				return nil
 			}
 		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
@@ -282,7 +286,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 				return nil
 			}
 
-			fmt.Printf("already submitted, but quote has expired for channel %s\n", settlement.Channel)
+			logger.Info().Msg(fmt.Sprintf("already submitted, but quote has expired for channel %s", settlement.Channel))
 		} else {
 			return err
 		}
@@ -291,7 +295,7 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(ctx, settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
-		fmt.Printf("invalid destination, skipping\n")
+		logger.Info().Msg(fmt.Sprintf("invalid destination, skipping"))
 		settlement.Status = "failed"
 		return nil
 	} else if err != nil {
@@ -301,13 +305,13 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
 		// BAT transfers have TTL of zero, as do invalid transfers of XAU / LBA
 		if submitInfo.DestCurrency == "XAU" || submitInfo.DestCurrency == "LBA" {
-			fmt.Printf("quote returned is invalid, skipping\n")
+			logger.Info().Msg(fmt.Sprintf("quote returned is invalid, skipping"))
 			settlement.Status = "failed"
 			return nil
 		}
 	}
 
-	fmt.Printf("transaction for channel %s submitted, new quote acquired\n", settlement.Channel)
+	logger.Info().Msg(fmt.Sprintf("transaction for channel %s submitted, new quote acquired", settlement.Channel))
 
 	settlement.ProviderID = submitInfo.ID
 	settlement.Status = submitInfo.Status
@@ -345,7 +349,7 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries: %+v"
-			logger.Info().Msg(fmt.Sprintf("%s for channel %s\n", baseMsg, settlement.Channel))
+			logger.Info().Msg(fmt.Sprintf("%s for channel %s", baseMsg, settlement.Channel))
 			sentry.CaptureException(fmt.Errorf(baseMsg, map[string]string{
 				"tries":        strconv.Itoa(maxConfirmTries - tries),
 				"channel":      settlement.Channel,
@@ -357,11 +361,11 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 		}
 
 		if settlement.IsComplete() {
-			logger.Info().Msg(fmt.Sprintf("already complete, skipping confirm for destination %s\n", settlement.Destination))
+			logger.Info().Msg(fmt.Sprintf("already complete, skipping confirm for destination %s", settlement.Destination))
 			return nil
 		}
 		if settlement.IsFailed() {
-			logger.Info().Msg(fmt.Sprintf("already failed, skipping confirm for destination %s\n", settlement.Destination))
+			logger.Info().Msg(fmt.Sprintf("already failed, skipping confirm for destination %s", settlement.Destination))
 			return nil
 		}
 
@@ -375,14 +379,14 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 			settlement.ExchangeFee = upholdInfo.ExchangeFee
 
 			if !settlement.IsComplete() {
-				logger.Info().Msg(fmt.Sprintf("error transaction status is: %s\n", upholdInfo.Status))
+				logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
 			}
 
 			break
 
 		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
 			if time.Now().UTC().After(settlement.ValidUntil) {
-				logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s\n", settlement.Channel))
+				logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s", settlement.Channel))
 				return nil
 			}
 
@@ -403,7 +407,7 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 
 				break
 			} else if errorutils.IsErrForbidden(err) {
-				fmt.Printf("invalid destination, skipping\n")
+				logger.Error().Err(err).Msg(fmt.Sprintf("invalid destination, skipping"))
 				settlement.Status = "failed"
 				return nil
 			} else if errorutils.IsErrAlreadyExists(err) {
@@ -417,16 +421,16 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 					settlement.ExchangeFee = upholdInfo.ExchangeFee
 
 					if !settlement.IsComplete() {
-						logger.Info().Msg(fmt.Sprintf("error transaction status is: %s\n", upholdInfo.Status))
+						logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
 					}
 				}
 				settlement.Status = "complete"
 				break
 			} else {
-				logger.Info().Msg(fmt.Sprintf("error confirming: %s\n", err))
+				logger.Info().Msg(fmt.Sprintf("error confirming: %s", err))
 			}
 		} else {
-			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s\n", err))
+			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s", err))
 		}
 	}
 	return nil
