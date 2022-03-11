@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
@@ -42,14 +42,15 @@ type Transaction struct {
 	WalletProvider   string                   `json:"walletProvider"`
 	WalletProviderID string                   `json:"walletProviderId"`
 	Channel          string                   `json:"publisher"`
-	SignedTx         string                   `json:"-"`
-	Status           string                   `json:"status"`
-	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
-	TransferFee      decimal.Decimal          `json:"fee"`
-	Type             string                   `json:"type"`
-	ValidUntil       time.Time                `json:"validUntil,omitempty"`
-	DocumentID       string                   `json:"documentId,omitempty"`
-	Note             string                   `json:"note"`
+	// SignedTx is sensitive and should not be included in serialized values.
+	SignedTx     string          `json:"-"`
+	Status       string          `json:"status"`
+	SettlementID string          `json:"transactionId" valid:"uuidv4"`
+	TransferFee  decimal.Decimal `json:"fee"`
+	Type         string          `json:"type"`
+	ValidUntil   time.Time       `json:"validUntil,omitempty"`
+	DocumentID   string          `json:"documentId,omitempty"`
+	Note         string          `json:"note"`
 }
 
 // AntifraudTransaction is a "v2" transaction, creators only atm

@@ -131,7 +131,7 @@ func UpholdUpload(
 	}
 
 	// Read from the transaction log
-        logger.Info().Msg("scanning stateful logs to establish transaction status")
+	logger.Info().Msg("scanning stateful logs to establish transaction status")
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		var tmp settlement.Transaction
