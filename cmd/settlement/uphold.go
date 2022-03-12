@@ -17,6 +17,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cobra"
 )
 
@@ -98,7 +99,7 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 
 func recordProgress(f *os.File, settlementTransaction *settlement.Transaction) error {
 	var out []byte
-	out, err := json.Marshal(settlementTransaction)
+	out, err := jsoniter.Marshal(settlementTransaction)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal settlement transaction: %v", err)
 	}
@@ -141,7 +142,7 @@ func UpholdUpload(
 	}
 
 	var settlementState settlement.State
-	err = json.Unmarshal(settlementJSON, &settlementState)
+	err = jsoniter.Unmarshal(settlementJSON, &settlementState)
 	if err != nil {
 		logger.Panic().Err(err).Msg("failed to unmarshal input file")
 	}
@@ -157,7 +158,7 @@ func UpholdUpload(
 	isResubmit := false
 	for scanner.Scan() {
 		var tmp settlement.Transaction
-		err = json.Unmarshal(scanner.Bytes(), &tmp)
+		err = jsoniter.Unmarshal(scanner.Bytes(), &tmp)
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to scan the transaction log")
 		}
