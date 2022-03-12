@@ -183,6 +183,11 @@ func (tx Transaction) IsFailed() bool {
 	return tx.Status == "failed"
 }
 
+// IsProcessing returns true if the transaction status is processing
+func (tx Transaction) IsProcessing() bool {
+	return tx.Status == "processing"
+}
+
 // PrepareTransactions by embedding signed transactions into the settlement documents
 func PrepareTransactions(wallet *uphold.Wallet, settlements []Transaction, purpose string, beneficiary *uphold.Beneficiary) error {
 	for i := 0; i < len(settlements); i++ {

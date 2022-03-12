@@ -218,7 +218,9 @@ func UpholdUpload(
 
 	var total = len(settlementState.Transactions)
 
+	// Attempt to move all transactions into a processing state
 	allFinalized := true
+	someProcessing := false
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
 
@@ -248,12 +250,40 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to record progress")
 		}
 
-		if !settlementTransaction.IsComplete() && !settlementTransaction.IsFailed() {
+		// We will later attempt to resolve all processing to complete or failed
+		if settlementTransaction.IsProcessing() {
+			someProcessing = true
+		} else if !settlementTransaction.IsComplete() && !settlementTransaction.IsFailed() {
 			allFinalized = false
 		}
 
 		// perform progress logging
 		logging.SubmitProgress(ctx, i, total)
+	}
+
+	// While there are transactions in the processing state, attempt to resolve them to complete or failed
+	for someProcessing {
+		someProcessing = false
+		for i := 0; i < total; i++ {
+			settlementTransaction := &settlementState.Transactions[i]
+
+			if settlementTransaction.IsProcessing() {
+				// Confirm will first check if the transaction has already been confirmed
+				err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction)
+				if err != nil {
+					logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
+				}
+
+				err = recordProgress(f, settlementTransaction)
+				if err != nil {
+					logger.Panic().Err(err).Msg("failed to record progress")
+				}
+
+				if settlementTransaction.IsProcessing() {
+					someProcessing = true
+				}
+			}
+		}
 	}
 
 	if allFinalized {
