@@ -82,7 +82,7 @@ func RunUpholdUpload(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	progChan := logging.ReportProgress(ctx, progressDuration)
+	progChan := logging.UpholdReportProgress(ctx, progressDuration)
 	ctx = context.WithValue(ctx, appctx.ProgressLoggingCTXKey, progChan)
 
 	logFile := strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "-log.json"
@@ -128,6 +128,7 @@ func UpholdUpload(
 	if err != nil {
 		_, logger = logging.SetupLogger(ctx)
 	}
+	logger.Info().Msg("beginning uphold upload")
 
 	settlementJSON, err := ioutil.ReadFile(inputFile)
 	if err != nil {
@@ -151,6 +152,7 @@ func UpholdUpload(
 	}
 
 	// Read from the transaction log
+	logger.Info().Msg("scanning stateful logs to establish transaction status")
 	scanner := bufio.NewScanner(f)
 	isResubmit := false
 	for scanner.Scan() {
@@ -221,6 +223,9 @@ func UpholdUpload(
 	// Attempt to move all transactions into a processing state
 	allFinalized := true
 	someProcessing := false
+	progress := logging.UpholdProgressSet{
+		Progress: []logging.UpholdProgress{},
+	}
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
 
@@ -231,6 +236,7 @@ func UpholdUpload(
 		err = settlement.SubmitPreparedTransaction(ctx, settlementWallet, settlementTransaction)
 		if err != nil {
 			logger.Error().Err(err).Msg("unanticipated error")
+			settlementTransaction.FailureReason = fmt.Sprintf("unanticipated error: %e", err)
 			allFinalized = false
 			continue
 		}
@@ -257,8 +263,30 @@ func UpholdUpload(
 			allFinalized = false
 		}
 
+		// Progress is tracked on an error by error basis based on a string
+		// comparison of errors. Each iteration we need to see if the error
+		// message we received matches any messages we have already received. If
+		// yes, increment the count. If no, add this new error with count 1. If
+		// there was no error, increment or create a success progress entry.
+		for p := 0; p < len(progress.Progress)-1; p++ {
+			existingProgressEntry := progress.Progress[p]
+			progressMessage := settlementTransaction.FailureReason
+			if settlementTransaction.FailureReason == "" {
+				progressMessage = "Successes"
+			}
+
+			if existingProgressEntry.Message == progressMessage {
+				existingProgressEntry.Count++
+			} else if p == len(progress.Progress) {
+				progress.Progress = append(progress.Progress, logging.UpholdProgress{
+					Message: progressMessage,
+					Count:   1,
+				})
+			}
+		}
+
 		// perform progress logging
-		logging.SubmitProgress(ctx, i, total)
+		logging.UpholdSubmitProgress(ctx, progress)
 	}
 
 	// While there are transactions in the processing state, attempt to resolve them to complete or failed
