@@ -42,15 +42,14 @@ type Transaction struct {
 	WalletProvider   string                   `json:"walletProvider"`
 	WalletProviderID string                   `json:"walletProviderId"`
 	Channel          string                   `json:"publisher"`
-	// SignedTx is sensitive and should not be included in serialized values.
-	SignedTx     string          `json:"-"`
-	Status       string          `json:"status"`
-	SettlementID string          `json:"transactionId" valid:"uuidv4"`
-	TransferFee  decimal.Decimal `json:"fee"`
-	Type         string          `json:"type"`
-	ValidUntil   time.Time       `json:"validUntil,omitempty"`
-	DocumentID   string          `json:"documentId,omitempty"`
-	Note         string          `json:"note"`
+	SignedTx         string                   `json:"signedTx"`
+	Status           string                   `json:"status"`
+	SettlementID     string                   `json:"transactionId" valid:"uuidv4"`
+	TransferFee      decimal.Decimal          `json:"fee"`
+	Type             string                   `json:"type"`
+	ValidUntil       time.Time                `json:"validUntil,omitempty"`
+	DocumentID       string                   `json:"documentId,omitempty"`
+	Note             string                   `json:"note"`
 }
 
 // AntifraudTransaction is a "v2" transaction, creators only atm
