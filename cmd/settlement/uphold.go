@@ -177,7 +177,10 @@ func UpholdUpload(
 		}
 
 		// Reset log offset to 0, append to the backup we just opened
-		f.Seek(0, 0)
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			logger.Panic().Err(err).Msg("failed to seek log back to start")
+		}
 		nBytes, err := io.Copy(backupF, f)
 		if nBytes <= 0 || err != nil {
 			logger.Panic().Err(err).Msg("failed to backup log")
@@ -205,6 +208,8 @@ func UpholdUpload(
 		f = tmpF
 
 		// Rename the temporary file, replacing the original log with the truncated snapshot
+		// NOTE: this is only done after we've successfully written to the new temporary file to ensure
+		// that even in pathological cases we always have a valid log file to resume from
 		err = os.Rename(tmpFile, logFile)
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to replace the log")
