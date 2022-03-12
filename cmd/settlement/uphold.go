@@ -224,7 +224,10 @@ func UpholdUpload(
 	allFinalized := true
 	someProcessing := false
 	progress := logging.UpholdProgressSet{
-		Progress: []logging.UpholdProgress{},
+		Progress: []logging.UpholdProgress{logging.UpholdProgress{
+			Message: "Successes",
+			Count:   0,
+		}},
 	}
 	for i := 0; i < total; i++ {
 		settlementTransaction := &settlementState.Transactions[i]
@@ -268,7 +271,7 @@ func UpholdUpload(
 		// message we received matches any messages we have already received. If
 		// yes, increment the count. If no, add this new error with count 1. If
 		// there was no error, increment or create a success progress entry.
-		for p := 0; p < len(progress.Progress)-1; p++ {
+		for p := 0; p < len(progress.Progress); p++ {
 			existingProgressEntry := progress.Progress[p]
 			progressMessage := settlementTransaction.FailureReason
 			if settlementTransaction.FailureReason == "" {
