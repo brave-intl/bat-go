@@ -33,7 +33,7 @@ type Transaction struct {
 	Authority        string                   `json:"authority"`
 	Amount           decimal.Decimal          `json:"amount"`
 	ExchangeFee      decimal.Decimal          `json:"commission"`
-	FailureReason    string                   `json:"failureReason"`
+	FailureReason    string                   `json:"failureReason,omitempty"`
 	Currency         string                   `json:"currency"`
 	Destination      string                   `json:"address"`
 	Publisher        string                   `json:"owner"`
