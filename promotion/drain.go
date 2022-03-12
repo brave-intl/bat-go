@@ -884,7 +884,7 @@ func (service *Service) GetGeminiTxnStatus(ctx context.Context, txRef string) (*
 	switch strings.ToLower(ptr.String(payoutResult.Status)) {
 	case "completed":
 		return &walletutils.TransactionInfo{Status: "complete"}, nil
-	case "pending":
+	case "pending", "processing":
 		return &walletutils.TransactionInfo{Status: "pending"}, nil
 	case "failed":
 		return &walletutils.TransactionInfo{Status: "failed", Note: ptr.String(payoutResult.Reason)}, nil

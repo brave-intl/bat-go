@@ -291,6 +291,39 @@ func TestGetGeminiTxnStatus_Pending(t *testing.T) {
 	assert.Equal(t, "", actual.Note)
 }
 
+func TestGetGeminiTxnStatus_Processing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Ok",
+		Status: ptr.FromString("Processing"),
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "pending", actual.Status)
+	assert.Equal(t, "", actual.Note)
+}
+
 func TestGetGeminiTxnStatus_Failed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
