@@ -168,7 +168,7 @@ func UpholdUpload(
 		}
 	}
 
-	// Optimization the case where we are rerunning by creating a truncated snapshot of the last state
+	// Optimize the case where we are rerunning by creating a truncated snapshot of the last state
 	if isResubmit {
 		backupFile := strings.TrimSuffix(logFile, filepath.Ext(logFile)) + "-backup.json"
 		backupF, err := os.OpenFile(backupFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
