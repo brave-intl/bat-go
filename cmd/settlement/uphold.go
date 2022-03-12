@@ -317,7 +317,8 @@ func UpholdUpload(
 	if allFinalized {
 		logger.Info().Msg("all transactions finalized, writing out settlement file")
 	} else {
-		logger.Panic().Msg("not all transactions are finalized, rerun to resubmit")
+		logger.Error().Msg("not all transactions are finalized, rerun to resubmit")
+		return nil
 	}
 
 	transactionsMap := make(map[string][]settlement.Transaction)
