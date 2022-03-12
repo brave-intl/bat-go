@@ -33,6 +33,7 @@ type Transaction struct {
 	Authority        string                   `json:"authority"`
 	Amount           decimal.Decimal          `json:"amount"`
 	ExchangeFee      decimal.Decimal          `json:"commission"`
+	FailureReason    string                   `json:"failureReason"`
 	Currency         string                   `json:"currency"`
 	Destination      string                   `json:"address"`
 	Publisher        string                   `json:"owner"`
@@ -285,8 +286,9 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 			if time.Now().UTC().Before(settlement.ValidUntil) {
 				return nil
 			}
-
-			logger.Info().Msg(fmt.Sprintf("already submitted, but quote has expired for channel %s", settlement.Channel))
+			msg := fmt.Sprintf("already submitted, but quote has expired for channel %s", settlement.Channel)
+			logger.Info().Msg(msg)
+			settlement.FailureReason = msg
 		} else {
 			return err
 		}
@@ -295,8 +297,10 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	// post the settlement to uphold but do not confirm it
 	submitInfo, err := settlementWallet.SubmitTransaction(ctx, settlement.SignedTx, false)
 	if errorutils.IsErrInvalidDestination(err) {
-		logger.Info().Msg("invalid destination, skipping")
+		msg := "invalid destination, skipping"
+		logger.Info().Msg(msg)
 		settlement.Status = "failed"
+		settlement.FailureReason = msg
 		return nil
 	} else if err != nil {
 		return err
@@ -305,8 +309,10 @@ func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wal
 	if time.Now().UTC().Equal(settlement.ValidUntil) || time.Now().UTC().After(settlement.ValidUntil) {
 		// BAT transfers have TTL of zero, as do invalid transfers of XAU / LBA
 		if submitInfo.DestCurrency == "XAU" || submitInfo.DestCurrency == "LBA" {
-			logger.Info().Msg("quote returned is invalid, skipping")
+			msg := "quote returned is invalid, skipping"
+			logger.Info().Msg(msg)
 			settlement.Status = "failed"
+			settlement.FailureReason = msg
 			return nil
 		}
 	}

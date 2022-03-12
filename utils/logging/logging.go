@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -133,6 +134,55 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 						Int("pending", last.Total-last.Processed).
 						Int("total", last.Total).
 						Msg("progress update")
+				}
+			case last = <-progChan:
+				continue
+			}
+		}
+	}()
+	return progChan
+}
+
+// UpholdProgress - type to store the incremental progress of an Uphold transaction set
+type UpholdProgress struct {
+	Message string
+	Count   int
+}
+
+type UpholdProgressSet struct {
+	Progress []UpholdProgress
+}
+
+// SubmitProgress - helper to log progress
+func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
+	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan UpholdProgressSet)
+	if progOk {
+		progChan <- progressSet
+	}
+}
+
+// ReportProgress - goroutine watching for UpholdProgress updates for logging
+func UpholdReportProgress(ctx context.Context, progressDuration time.Duration) chan UpholdProgressSet {
+	// setup logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = SetupLogger(ctx)
+	}
+
+	// we will return the progress channel so the app
+	// can send us progress information as it processes
+	progChan := make(chan UpholdProgressSet)
+	var (
+		last UpholdProgressSet
+	)
+	go func() {
+		for {
+			select {
+			case <-time.After(progressDuration):
+				// output most recent progress information, but only if
+				// some progress has been made.
+				if len(last.Progress) > 0 {
+					logger.Info().Msg(fmt.Sprintf("progress update:\n%v", last.Progress))
 				}
 			case last = <-progChan:
 				continue
