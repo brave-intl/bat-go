@@ -222,7 +222,7 @@ func UpholdUpload(
 
 	// Attempt to move all transactions into a processing state
 	allFinalized := true
-  someProcessing := false
+	someProcessing := false
 	progress := logging.UpholdProgressSet{
 		Progress: []logging.UpholdProgress{},
 	}
