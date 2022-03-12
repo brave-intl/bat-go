@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -182,7 +183,12 @@ func UpholdReportProgress(ctx context.Context, progressDuration time.Duration) c
 				// output most recent progress information, but only if
 				// some progress has been made.
 				if len(last.Progress) > 0 {
-					logger.Info().Msg(fmt.Sprintf("progress update:\n%v", last.Progress))
+					prettyProgress, err := json.MarshalIndent(last.Progress, "", "  ")
+					if err == nil {
+						logger.Info().Msg(fmt.Sprintf("progress update:\n%s", prettyProgress))
+					} else {
+						logger.Error().Err(err).Msg("failed to prettify progress for logging")
+					}
 				}
 			case last = <-progChan:
 				continue
