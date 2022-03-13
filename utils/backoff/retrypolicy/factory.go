@@ -5,7 +5,6 @@ package retrypolicy
 import "time"
 
 var (
-
 	// DefaultRetry a default policy
 	DefaultRetry, _ = New(
 		WithInitialInterval(50*time.Millisecond),
