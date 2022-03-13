@@ -92,13 +92,13 @@ func AddWalletIDToContext(ctx context.Context, walletID uuid.UUID) {
 	}
 }
 
-// Progress - type to store the incremental progress of a task
+// Progress type to store the incremental progress of a task
 type Progress struct {
 	Processed int
 	Total     int
 }
 
-// SubmitProgress - helper to log progress
+// SubmitProgress helper to log progress
 func SubmitProgress(ctx context.Context, processed, total int) {
 	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan Progress)
 	if progOk {
@@ -109,7 +109,7 @@ func SubmitProgress(ctx context.Context, processed, total int) {
 	}
 }
 
-// ReportProgress - goroutine watching for Progress updates for logging
+// ReportProgress goroutine watching for Progress updates for logging
 func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Progress {
 	// setup logger
 	logger, err := appctx.GetLogger(ctx)
@@ -144,17 +144,18 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 	return progChan
 }
 
-// UpholdProgress - type to store the incremental progress of an Uphold transaction set
+// UpholdProgress type to store the incremental progress of an Uphold transaction set
 type UpholdProgress struct {
 	Message string
 	Count   int
 }
 
+// UpholdProgressSet type to store Uphold progress
 type UpholdProgressSet struct {
 	Progress []UpholdProgress
 }
 
-// SubmitProgress - helper to log progress
+// UpholdSubmitProgress helper to log progress
 func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
 	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan UpholdProgressSet)
 	if progOk {
@@ -162,7 +163,7 @@ func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
 	}
 }
 
-// ReportProgress - goroutine watching for UpholdProgress updates for logging
+// UpholdReportProgress goroutine watching for UpholdProgress updates for logging
 func UpholdReportProgress(ctx context.Context, progressDuration time.Duration) chan UpholdProgressSet {
 	// setup logger
 	logger, err := appctx.GetLogger(ctx)
