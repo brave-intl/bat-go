@@ -747,6 +747,14 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 
 	// for all the submitted, check they are all okay
 	for _, payout := range *resp {
+
+		logging.FromContext(ctx).Info().
+			Str("wallet_id", wallet.ID).
+			Str("payout_result", payout.Result).
+			Str("payout_status", ptr.StringOr(payout.Status, "unknown_status")).
+			Str("payout_reason", ptr.StringOr(payout.Reason, "no_reason")).
+			Msg("checking gemini submitted transactions")
+
 		if strings.ToLower(payout.Result) != "ok" {
 			return nil, fmt.Errorf("failed to transfer funds: gemini 'result' is not OK: %s",
 				ptr.StringOr(payout.Reason, "unknown reason"))
