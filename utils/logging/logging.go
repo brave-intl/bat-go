@@ -153,11 +153,12 @@ type UpholdProgress struct {
 	Count   int
 }
 
+// UpholdProgressSet - the set up uphold progresses
 type UpholdProgressSet struct {
 	Progress []UpholdProgress
 }
 
-// SubmitProgress - helper to log progress
+// UpholdSubmitProgress - helper to log progress
 func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
 	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan UpholdProgressSet)
 	if progOk {
@@ -165,7 +166,7 @@ func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
 	}
 }
 
-// ReportProgress - goroutine watching for UpholdProgress updates for logging
+// UpholdReportProgress - goroutine watching for UpholdProgress updates for logging
 func UpholdReportProgress(ctx context.Context, progressDuration time.Duration) chan UpholdProgressSet {
 	// setup logger
 	logger, err := appctx.GetLogger(ctx)

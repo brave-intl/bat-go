@@ -1,9 +1,8 @@
 package rewards
 
 import (
-
-	// pprof imports
 	"context"
+	// pprof imports
 	_ "net/http/pprof"
 	"time"
 
@@ -98,6 +97,7 @@ var (
 	}
 )
 
+// CommonRun - setup environment the same no matter how the service is run
 func CommonRun(command *cobra.Command, args []string) (context.Context, *zerolog.Logger) {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
