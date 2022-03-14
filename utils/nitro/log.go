@@ -67,7 +67,10 @@ type VsockLogServer struct {
 
 // NewVsockLogServer - create a new VsockLogServer
 func NewVsockLogServer(port int) VsockLogServer {
-	return VsockLogServer{uint32(port)}
+	if port < int(^uint32(0)) {
+		return VsockLogServer{uint32(port)}
+	}
+	return VsockLogServer{}
 }
 
 // Serve - interface implementation for Serve for VsockLogServer

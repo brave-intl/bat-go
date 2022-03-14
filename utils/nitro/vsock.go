@@ -48,7 +48,11 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 			return 0, 0, fmt.Errorf("port must be a valid uint32: %v", err)
 		}
 	}
-	return uint32(cid), uint32(port), nil
+
+	if cid <= int(^uint32(0)) && port <= int(^uint32(0)) {
+		return uint32(cid), uint32(port), nil
+	}
+	return uint32(0), uint32(0), nil
 }
 
 // Dial is a net.Dial wrapper which additionally allows connecting to vsock networks
