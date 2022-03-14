@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -61,8 +62,11 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if out == "" {
 		out = strings.TrimSuffix(input, filepath.Ext(input)) + "-finished.json"
 	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+
 	return GeminiUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"upload",
 		input,
 		sig,
@@ -92,8 +96,11 @@ func CheckStatusGeminiSettlement(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+
 	return GeminiUploadSettlement(
-		cmd.Context(),
+		ctx,
 		"checkstatus",
 		input,
 		sig,
@@ -172,7 +179,11 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 		return err
 	}
 	// create a map of the request transactions
-	transactionsMap := geminiMapTransactionsToID(settlementTransactions)
+	transactionsMap, err := geminiMapTransactionsToID(settlementTransactions)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed validate and convert transactions")
+		return err
+	}
 
 	submittedTransactions, submitErr := geminisettlement.IterateRequest(
 		ctx,
@@ -195,11 +206,14 @@ func GeminiUploadSettlement(ctx context.Context, action string, inPath string, s
 }
 
 // geminiMapTransactionsToID creates a map of guid's to transactions
-func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) map[string]settlement.Transaction {
+func geminiMapTransactionsToID(transactions []settlement.AntifraudTransaction) (map[string]settlement.Transaction, error) {
 	transactionsMap := make(map[string]settlement.Transaction)
 	for _, atx := range transactions {
-		tx := atx.ToTransaction()
+		tx, err := atx.ToTransaction()
+		if err != nil {
+			return transactionsMap, err
+		}
 		transactionsMap[gemini.GenerateTxRef(&tx)] = tx
 	}
-	return transactionsMap
+	return transactionsMap, nil
 }

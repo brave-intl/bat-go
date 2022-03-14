@@ -1,4 +1,4 @@
-package payment
+package skus
 
 import (
 	"context"
@@ -19,9 +19,9 @@ import (
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	stripe "github.com/stripe/stripe-go/v71"
-	"github.com/stripe/stripe-go/v71/checkout/session"
-	"github.com/stripe/stripe-go/v71/customer"
+	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/customer"
 	macaroon "gopkg.in/macaroon.v2"
 )
 

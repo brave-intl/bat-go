@@ -106,6 +106,8 @@ func TestHTTPSignedOnly(t *testing.T) {
 	handler = HTTPSignedOnly(&keystore)(http.HandlerFunc(fn2))
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
+	// Host is not in the header, but on the request itself
+	req.Host = "localhost"
 	assert.NoError(t, err)
 	err = s.Sign(privKey, crypto.Hash(0), req)
 	assert.NoError(t, err)
@@ -116,7 +118,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	verifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.ED25519,
-			Headers:   []string{"digest", "(request-target)", "date"},
+			Headers:   []string{"digest", "(request-target)", "date", "host"}, // make sure host is in signing string
 		},
 		Keystore: &keystore,
 		Opts:     crypto.Hash(0),
@@ -132,7 +134,7 @@ func TestHTTPSignedOnly(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code, "request without required date should fail")
 
-	s.Headers = []string{"digest", "(request-target)", "date"}
+	s.Headers = []string{"digest", "(request-target)", "date", "host"}
 
 	req, err = http.NewRequest("GET", "/hello-world", nil)
 	assert.NoError(t, err)

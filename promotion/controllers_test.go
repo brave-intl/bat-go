@@ -28,7 +28,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	mockreputation "github.com/brave-intl/bat-go/utils/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -289,6 +289,7 @@ func (suite *ControllersTestSuite) TestGetPromotions() {
 	suite.Assert().JSONEq(expectedOSX, rr.Body.String(), "unexpected result")
 }
 
+// ClaimPromotion helper that calls promotion endpoint and does assertions
 func (suite *ControllersTestSuite) ClaimPromotion(service *Service, w walletutils.Info, privKey crypto.Signer,
 	promotion *Promotion, blindedCreds []string, claimStatus int) *uuid.UUID {
 

@@ -209,6 +209,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 		if json.Unmarshal(body, &uhErr) != nil {
 			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
 		}
+		uhErr.RequestId = resp.Header.Get("Request-Id")
 		return nil, resp, uhErr
 	}
 	return body, resp, nil
@@ -419,11 +420,11 @@ type denomination struct {
 // Beneficiary includes information about the recipient of the transaction
 type Beneficiary struct {
 	Address struct {
-		City    string `json:"city"`
-		Country string `json:"country"`
-		Line1   string `json:"line1"`
-		State   string `json:"state"`
-		ZipCode string `json:"zipCode"`
+		City    string `json:"city,omitempty"`
+		Country string `json:"country,omitempty"`
+		Line1   string `json:"line1,omitempty"`
+		State   string `json:"state,omitempty"`
+		ZipCode string `json:"zipCode,omitempty"`
 	} `json:"address,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Relationship string `json:"relationship"`

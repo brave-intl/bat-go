@@ -52,6 +52,20 @@ func (_d ClientWithPrometheus) FetchCoinList(ctx context.Context, includePlatfor
 	return _d.base.FetchCoinList(ctx, includePlatform)
 }
 
+// FetchCoinMarkets implements Client
+func (_d ClientWithPrometheus) FetchCoinMarkets(ctx context.Context, vsCurrency string, limit int) (cp1 *CoinMarketResponse, t1 time.Time, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "FetchCoinMarkets", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.FetchCoinMarkets(ctx, vsCurrency, limit)
+}
+
 // FetchMarketChart implements Client
 func (_d ClientWithPrometheus) FetchMarketChart(ctx context.Context, id string, vsCurrency string, days float32) (mp1 *MarketChartResponse, t1 time.Time, err error) {
 	_since := time.Now()

@@ -2,6 +2,8 @@ package logging
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -128,12 +130,69 @@ func ReportProgress(ctx context.Context, progressDuration time.Duration) chan Pr
 		for {
 			select {
 			case <-time.After(progressDuration):
-				// output most resent progress information
-				logger.Info().
-					Int("processed", last.Processed).
-					Int("pending", last.Total-last.Processed).
-					Int("total", last.Total).
-					Msg("progress update")
+				// output most recent progress information, but only if
+				// some progress has been made.
+				if last.Processed != 0 && last.Total-last.Processed != 0 && last.Total != 0 {
+					logger.Info().
+						Int("processed", last.Processed).
+						Int("pending", last.Total-last.Processed).
+						Int("total", last.Total).
+						Msg("progress update")
+				}
+			case last = <-progChan:
+				continue
+			}
+		}
+	}()
+	return progChan
+}
+
+// UpholdProgress - type to store the incremental progress of an Uphold transaction set
+type UpholdProgress struct {
+	Message string
+	Count   int
+}
+
+type UpholdProgressSet struct {
+	Progress []UpholdProgress
+}
+
+// SubmitProgress - helper to log progress
+func UpholdSubmitProgress(ctx context.Context, progressSet UpholdProgressSet) {
+	progChan, progOk := ctx.Value(appctx.ProgressLoggingCTXKey).(chan UpholdProgressSet)
+	if progOk {
+		progChan <- progressSet
+	}
+}
+
+// ReportProgress - goroutine watching for UpholdProgress updates for logging
+func UpholdReportProgress(ctx context.Context, progressDuration time.Duration) chan UpholdProgressSet {
+	// setup logger
+	logger, err := appctx.GetLogger(ctx)
+	if err != nil {
+		_, logger = SetupLogger(ctx)
+	}
+
+	// we will return the progress channel so the app
+	// can send us progress information as it processes
+	progChan := make(chan UpholdProgressSet)
+	var (
+		last UpholdProgressSet
+	)
+	go func() {
+		for {
+			select {
+			case <-time.After(progressDuration):
+				// output most recent progress information, but only if
+				// some progress has been made.
+				if len(last.Progress) > 0 {
+					prettyProgress, err := json.MarshalIndent(last.Progress, "", "  ")
+					if err == nil {
+						logger.Info().Msg(fmt.Sprintf("progress update:\n%s", prettyProgress))
+					} else {
+						logger.Error().Err(err).Msg("failed to prettify progress for logging")
+					}
+				}
 			case last = <-progChan:
 				continue
 			}

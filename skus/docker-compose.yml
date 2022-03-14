@@ -1,7 +1,7 @@
 version: "3.4"
 
 networks:
-  payment:
+  skus:
     driver: bridge
 
 services:
@@ -10,19 +10,19 @@ services:
   # wants to "restart" the service running new code.  This is especially helpful
   # when you hook it up to `fswatch` type utilities, causing a re-run of `go run`
   # every time a file changes.
-  payment-dev-refresh:
-    container_name: payment-dev-refresh
+  skus-dev-refresh:
+    container_name: skus-dev-refresh
     image: golang:1.15
     ports:
       - "3353:3353"
       - "6061:6061"
-    command: "go run main.go serve payment rest"
+    command: "go run main.go serve skus rest"
     volumes:
       - ../:/src
       - ../test/secrets:/etc/kafka/secrets
     working_dir: /src
     networks:
-      - payment
+      - skus
       - grant
     depends_on:
       - postgres

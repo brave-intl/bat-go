@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -221,6 +222,9 @@ var (
 
 	// ErrCoingeckoDurationInvalid - indicates there is a validation issue with the duration
 	ErrCoingeckoDurationInvalid = errors.New("invalid duration")
+
+	// ErrCoingeckoLimitInvalid - indicates there is a validation issue with the Limit
+	ErrCoingeckoLimitInvalid = errors.New("invalid limit")
 )
 
 // Decode - implement decodable
@@ -236,4 +240,37 @@ func (cd *CoingeckoDuration) Validate(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %s is not valid", ErrCoingeckoDurationInvalid, cd.String())
+}
+
+// CoingeckoLimit - type for number of results per page
+// Note: we only will request the first page
+type CoingeckoLimit int
+
+// String - stringer implmentation
+func (cl *CoingeckoLimit) String() string {
+	return strconv.Itoa(int(*cl))
+}
+
+// Int - int conversion implmentation
+func (cl *CoingeckoLimit) Int() int {
+	return int(*cl)
+}
+
+// Decode - implement decodable
+func (cl *CoingeckoLimit) Decode(ctx context.Context, v []byte) error {
+	l, err := strconv.Atoi(string(v))
+	if err != nil {
+		return err
+	}
+
+	*cl = CoingeckoLimit(l)
+	return nil
+}
+
+// Validate - implement validatable
+func (cl *CoingeckoLimit) Validate(ctx context.Context) error {
+	if !(0 < cl.Int() && cl.Int() <= 250) {
+		return fmt.Errorf("%w: %s is not valid", ErrCoingeckoLimitInvalid, cl.String())
+	}
+	return nil
 }

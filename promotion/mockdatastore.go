@@ -144,6 +144,20 @@ func (mr *MockDatastoreMockRecorder) DrainClaim(drainID, claim, credentials, wal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaim", reflect.TypeOf((*MockDatastore)(nil).DrainClaim), drainID, claim, credentials, wallet, total, codedErr)
 }
 
+// DrainClaims mocks base method.
+func (m *MockDatastore) DrainClaims(drainClaims []DrainClaim) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DrainClaims", drainClaims)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DrainClaims indicates an expected call of DrainClaims.
+func (mr *MockDatastoreMockRecorder) DrainClaims(drainClaims interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainClaims", reflect.TypeOf((*MockDatastore)(nil).DrainClaims), drainClaims)
+}
+
 // EnqueueMintDrainJob mocks base method.
 func (m *MockDatastore) EnqueueMintDrainJob(ctx context.Context, walletID go_uuid.UUID, promotionIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()
@@ -388,6 +402,22 @@ func (mr *MockDatastoreMockRecorder) GetSumForTransactions(orderID interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSumForTransactions", reflect.TypeOf((*MockDatastore)(nil).GetSumForTransactions), orderID)
 }
 
+// GetWithdrawalsAssociated mocks base method.
+func (m *MockDatastore) GetWithdrawalsAssociated(walletID, claimID *go_uuid.UUID) (*go_uuid.UUID, decimal.Decimal, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWithdrawalsAssociated", walletID, claimID)
+	ret0, _ := ret[0].(*go_uuid.UUID)
+	ret1, _ := ret[1].(decimal.Decimal)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetWithdrawalsAssociated indicates an expected call of GetWithdrawalsAssociated.
+func (mr *MockDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWithdrawalsAssociated", reflect.TypeOf((*MockDatastore)(nil).GetWithdrawalsAssociated), walletID, claimID)
+}
+
 // InsertBAPReportEvent mocks base method.
 func (m *MockDatastore) InsertBAPReportEvent(ctx context.Context, paymentID go_uuid.UUID, amount decimal.Decimal) (*go_uuid.UUID, error) {
 	m.ctrl.T.Helper()
@@ -459,20 +489,6 @@ func (m *MockDatastore) InsertSuggestion(credentials []cbr.CredentialRedemption,
 func (mr *MockDatastoreMockRecorder) InsertSuggestion(credentials, suggestionText, suggestion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertSuggestion", reflect.TypeOf((*MockDatastore)(nil).InsertSuggestion), credentials, suggestionText, suggestion)
-}
-
-// MarkBatchTransferSubmitted mocks base method.
-func (m *MockDatastore) MarkBatchTransferSubmitted(ctx context.Context, batchID *go_uuid.UUID) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkBatchTransferSubmitted", ctx, batchID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkBatchTransferSubmitted indicates an expected call of MarkBatchTransferSubmitted.
-func (mr *MockDatastoreMockRecorder) MarkBatchTransferSubmitted(ctx, batchID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBatchTransferSubmitted", reflect.TypeOf((*MockDatastore)(nil).MarkBatchTransferSubmitted), ctx, batchID)
 }
 
 // Migrate mocks base method.
@@ -924,6 +940,22 @@ func (m *MockReadOnlyDatastore) GetPromotionsMissingIssuer(limit int) ([]go_uuid
 func (mr *MockReadOnlyDatastoreMockRecorder) GetPromotionsMissingIssuer(limit interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPromotionsMissingIssuer", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetPromotionsMissingIssuer), limit)
+}
+
+// GetWithdrawalsAssociated mocks base method.
+func (m *MockReadOnlyDatastore) GetWithdrawalsAssociated(walletID, claimID *go_uuid.UUID) (*go_uuid.UUID, decimal.Decimal, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWithdrawalsAssociated", walletID, claimID)
+	ret0, _ := ret[0].(*go_uuid.UUID)
+	ret1, _ := ret[1].(decimal.Decimal)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetWithdrawalsAssociated indicates an expected call of GetWithdrawalsAssociated.
+func (mr *MockReadOnlyDatastoreMockRecorder) GetWithdrawalsAssociated(walletID, claimID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWithdrawalsAssociated", reflect.TypeOf((*MockReadOnlyDatastore)(nil).GetWithdrawalsAssociated), walletID, claimID)
 }
 
 // Migrate mocks base method.

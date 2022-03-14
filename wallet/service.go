@@ -158,6 +158,9 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
 		}
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
 	return nil
@@ -188,6 +191,9 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
+		}
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
@@ -252,6 +258,9 @@ func (service *Service) LinkWallet(
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			status = http.StatusConflict
+		}
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
@@ -401,6 +410,9 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 			// we are not allowing draining to wallets that exceed the linking limits
 			// this will cause an error in the client prior to attempting draining
 			status = http.StatusTeapot
+		}
+		if errors.Is(err, ErrUnusualActivity) {
+			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}

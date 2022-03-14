@@ -291,6 +291,39 @@ func TestGetGeminiTxnStatus_Pending(t *testing.T) {
 	assert.Equal(t, "", actual.Note)
 }
 
+func TestGetGeminiTxnStatus_Processing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Ok",
+		Status: ptr.FromString("Processing"),
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "pending", actual.Status)
+	assert.Equal(t, "", actual.Note)
+}
+
 func TestGetGeminiTxnStatus_Failed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -351,9 +384,9 @@ func TestGetGeminiTxnStatus_Unknown(t *testing.T) {
 		geminiClient: geminiClient,
 	}
 
-	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
 
-	assert.Nil(t, txStatus)
+	assert.Nil(t, actual)
 	assert.Error(t, err, fmt.Errorf("failed to get txn status for %s: unknown status %s",
 		txRef, ptr.String(response.Status)).Error())
 }
@@ -379,10 +412,10 @@ func TestGetGeminiTxnStatus_Response_Nil(t *testing.T) {
 		geminiClient: geminiClient,
 	}
 
-	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
 
-	assert.Nil(t, txStatus)
-	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s", txRef).Error())
+	assert.Nil(t, actual)
+	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s: response nil", txRef).Error())
 }
 
 func TestGetGeminiTxnStatus_CheckStatus_Error(t *testing.T) {
@@ -408,13 +441,110 @@ func TestGetGeminiTxnStatus_CheckStatus_Error(t *testing.T) {
 		geminiClient: geminiClient,
 	}
 
-	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
 
-	assert.Nil(t, txStatus)
+	assert.Nil(t, actual)
 	assert.EqualError(t, err, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, clientError).Error())
 }
 
-func TestGetGeminiTxnStatus_ResponseError(t *testing.T) {
+func TestGetGeminiTxnStatus_CheckStatus_ErrorBundle(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	header := http.Header{}
+	header.Add(testutils.RandomString(), testutils.RandomString())
+	header.Add(testutils.RandomString(), testutils.RandomString())
+
+	path := testutils.RandomString()
+	status := http.StatusInternalServerError
+	message := testutils.RandomString()
+	errorData := struct {
+		ResponseHeaders interface{}
+		Body            interface{}
+	}{
+		ResponseHeaders: header,
+		Body:            testutils.RandomString(),
+	}
+
+	wrappedError := errors.New(testutils.RandomString())
+
+	errorBundle := clients.NewHTTPError(wrappedError, path, message, status, errorData)
+
+	clientError := fmt.Errorf("client error %w", errorBundle)
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(nil, clientError)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, actual)
+	assert.EqualError(t, err, fmt.Errorf("failed to check gemini txn status for %s: %w", txRef, clientError).Error())
+}
+
+func TestGetGeminiTxnStatus_CheckStatus_ErrorBundle_StatusNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	header := http.Header{}
+	header.Add(testutils.RandomString(), testutils.RandomString())
+	header.Add(testutils.RandomString(), testutils.RandomString())
+
+	path := testutils.RandomString()
+	status := http.StatusNotFound
+	message := testutils.RandomString()
+	errorData := struct {
+		ResponseHeaders interface{}
+		Body            interface{}
+	}{
+		ResponseHeaders: header,
+		Body:            testutils.RandomString(),
+	}
+
+	wrappedError := errors.New(testutils.RandomString())
+
+	errorBundle := clients.NewHTTPError(wrappedError, path, message, status, errorData)
+
+	clientError := fmt.Errorf("client error %w", errorBundle)
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(nil, clientError)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "failed", actual.Status)
+	assert.Equal(t, "GEMINI_NOT_FOUND", actual.Note)
+}
+
+func TestGetGeminiTxnStatus_ResponseError_NoReason(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -439,10 +569,42 @@ func TestGetGeminiTxnStatus_ResponseError(t *testing.T) {
 		geminiClient: geminiClient,
 	}
 
-	txStatus, err := service.GetGeminiTxnStatus(ctx, txRef)
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
 
-	assert.Nil(t, txStatus)
-	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s", txRef).Error())
+	assert.Nil(t, actual)
+	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s: unknown gemini response error", txRef).Error())
+}
+
+func TestGetGeminiTxnStatus_ResponseError_WithReason(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	apiKey := testutils.RandomString()
+	clientID := testutils.RandomString()
+	txRef := testutils.RandomString()
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, apiKey)
+	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, clientID)
+
+	response := &gemini.PayoutResult{
+		Result: "Error",
+		Reason: ptr.FromString(testutils.RandomString()),
+	}
+
+	geminiClient := mock_gemini.NewMockClient(ctrl)
+	geminiClient.EXPECT().
+		CheckTxStatus(ctx, apiKey, clientID, txRef).
+		Return(response, nil)
+
+	service := Service{
+		geminiClient: geminiClient,
+	}
+
+	actual, err := service.GetGeminiTxnStatus(ctx, txRef)
+
+	assert.Nil(t, actual)
+	assert.EqualError(t, err, fmt.Errorf("failed to get gemini txn status for %s: %s", txRef, *response.Reason).Error())
 }
 
 func TestSubmitBatchTransfer_UploadBulkPayout_NOINV(t *testing.T) {
@@ -616,10 +778,6 @@ func TestSubmitBatchTransfer_UploadBulkPayout_Bitflyer_Unauthorized_Retry(t *tes
 	bfClient.EXPECT().
 		UploadBulkPayout(ctx, gomock.Any()).
 		Return(&withdrawToDepositIDBulkResponse, nil)
-
-	datastore.EXPECT().
-		MarkBatchTransferSubmitted(ctx, batchID).
-		Return(nil)
 
 	s := Service{
 		bfClient:  bfClient,
