@@ -14,7 +14,11 @@ func TestServe(t *testing.T) {
 		t.Error("Unexpected error listening")
 	}
 	s := NewVsockLogServer(1234)
-	go s.Serve(&l)
+	go func() {
+		if err := s.Serve(l); err != nil {
+			t.Error("failed to serve log server")
+		}
+	}()
 
 	log := zerolog.New(NewVsockWriter("127.0.0.1:1234"))
 	log.Info().Msg("hello world")

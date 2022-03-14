@@ -43,6 +43,7 @@ var NitroServeCmd = &cobra.Command{
 	Run:   cmd.Perform("nitro", RunNitroServer),
 }
 
+// RunNitroServer - entrypoint to start up the nitro services
 func RunNitroServer(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	c := make(chan int, 1)
@@ -66,6 +67,7 @@ func RunNitroServer(cmd *cobra.Command, args []string) error {
 	}
 }
 
+// RunNitroServerInEnclave - start up the nitro server living inside the enclave
 func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	fmt.Println("running inside encalve")
 	ctx := cmd.Context()
@@ -84,6 +86,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// RunNitroServerOutsideEnclave - start up all the services which are outside
 func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	fmt.Println("running outside encalve")
 	ctx := cmd.Context()
@@ -129,12 +132,12 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		Str("environment", viper.GetString("environment")).
 		Msg("server starting")
 
-	go logserve.Serve(nil)
+	go logger.Error().Err(logserve.Serve(nil)).Msg("failed to start log server")
 
-	go nitro.ServeOpenProxy(
+	go logger.Error().Err(nitro.ServeOpenProxy(
 		uint32(egressport),
 		10*time.Second,
-	)
+	)).Msg("failed to start proxy server")
 
 	return server.ListenAndServe()
 }

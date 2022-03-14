@@ -9,11 +9,13 @@ import (
 	"github.com/mdlayher/vsock"
 )
 
+// VsockWriter - structure definition of a vsock writer
 type VsockWriter struct {
 	socket net.Conn
 	addr   string
 }
 
+// NewVsockWriter - create a new vsock writer
 func NewVsockWriter(addr string) *VsockWriter {
 	return &VsockWriter{
 		socket: nil,
@@ -21,6 +23,7 @@ func NewVsockWriter(addr string) *VsockWriter {
 	}
 }
 
+// Connect - interface implementation for connect method for VsockWriter
 func (w *VsockWriter) Connect() error {
 	if w.socket == nil {
 		s, err := Dial("tcp", w.addr)
@@ -32,6 +35,7 @@ func (w *VsockWriter) Connect() error {
 	return nil
 }
 
+// Close - interface implementation of closer for VsockWriter
 func (w VsockWriter) Close() error {
 	if w.socket != nil {
 		return w.socket.Close()
@@ -39,6 +43,7 @@ func (w VsockWriter) Close() error {
 	return nil
 }
 
+// Write -interface implementation of writer for VsockWriter
 func (w VsockWriter) Write(p []byte) (n int, err error) {
 	if w.socket == nil {
 		err = w.Connect()
@@ -55,14 +60,17 @@ func (w VsockWriter) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// VsockLogServer - implementation of a log server over vsock
 type VsockLogServer struct {
 	port uint32
 }
 
+// NewVsockLogServer - create a new VsockLogServer
 func NewVsockLogServer(port int) VsockLogServer {
 	return VsockLogServer{uint32(port)}
 }
 
+// Serve - interface implementation for Serve for VsockLogServer
 func (s VsockLogServer) Serve(l net.Listener) error {
 	if l == nil {
 		var err error
@@ -95,6 +103,8 @@ func handleLogConn(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		os.Stdout.Write(buf[:size])
+		if _, err := os.Stdout.Write(buf[:size]); err != nil {
+			log.Printf("failed to write: %s", err.Error())
+		}
 	}
 }
