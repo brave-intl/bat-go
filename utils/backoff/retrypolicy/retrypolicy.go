@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
-// Done is returned when CalculateNextDelay is done
+// Done is returned when CalculateNextDelay has reached it delay retry limit
 const Done time.Duration = -1
 
 type (
-	// CalculateNextDelay implementations of this method should return the next delay duration
+	// Retry api
 	Retry interface {
+		// CalculateNextDelay implementations should return the next delay interval
 		CalculateNextDelay() time.Duration
 	}
 
@@ -94,7 +95,7 @@ func (p *policy) CalculateNextDelay() time.Duration {
 	return time.Duration(nextInterval)
 }
 
-// Option to set the initial interval
+// WithInitialInterval sets the initial interval
 func WithInitialInterval(initialInterval time.Duration) Option {
 	return func(p *policy) error {
 		p.initialInterval = initialInterval
@@ -102,7 +103,7 @@ func WithInitialInterval(initialInterval time.Duration) Option {
 	}
 }
 
-// Option to set the coefficient used to calculate next interval
+// WithBackoffCoefficient sets the coefficient used to calculate next interval
 func WithBackoffCoefficient(backoffCoefficient float64) Option {
 	return func(p *policy) error {
 		p.backoffCoefficient = backoffCoefficient
@@ -110,7 +111,7 @@ func WithBackoffCoefficient(backoffCoefficient float64) Option {
 	}
 }
 
-// Option to set the maximum time that can be calculated for next interval
+// WithMaximumInterval sets the maximum time that can be calculated for next interval
 func WithMaximumInterval(maximumInterval time.Duration) Option {
 	return func(p *policy) error {
 		p.maximumInterval = maximumInterval
@@ -118,7 +119,7 @@ func WithMaximumInterval(maximumInterval time.Duration) Option {
 	}
 }
 
-// Option to set the maximum elapsed time an operation should be tried for
+// WithExpirationInterval sets the maximum elapsed time an operation should be tried for
 func WithExpirationInterval(expirationInterval time.Duration) Option {
 	return func(p *policy) error {
 		p.expirationInterval = expirationInterval
@@ -126,7 +127,7 @@ func WithExpirationInterval(expirationInterval time.Duration) Option {
 	}
 }
 
-// Option to set the maximum number of times an operation will be tried
+// WithMaximumAttempts sets the maximum number of times an operation will be tried
 func WithMaximumAttempts(maximumAttempts int) Option {
 	return func(p *policy) error {
 		p.maximumAttempt = maximumAttempts
