@@ -33,26 +33,23 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 	}
 
 	// default to port 80 if none is specified
-	port := 80
+	port := uint64(80)
 	matches := vsockAddrRegex.FindStringSubmatch(parts[0])
 	if len(matches) < 2 {
 		return 0, 0, NotVsockAddrError{}
 	}
-	cid, err := strconv.Atoi(matches[1])
-	if err != nil || cid < 0 {
+	cid, err := strconv.ParseUint(matches[1], 10, 32)
+	if err != nil {
 		return 0, 0, fmt.Errorf("cid must be a valid uint32: %v", err)
 	}
 	if len(parts) == 2 {
-		port, err = strconv.Atoi(parts[1])
-		if err != nil || port < 0 {
+		port, err = strconv.ParseUint(parts[1], 10, 32)
+		if err != nil {
 			return 0, 0, fmt.Errorf("port must be a valid uint32: %v", err)
 		}
 	}
 
-	if cid <= int(^uint32(0)) && port <= int(^uint32(0)) {
-		return uint32(cid), uint32(port), nil
-	}
-	return uint32(0), uint32(0), nil
+	return uint32(cid), uint32(port), nil
 }
 
 // Dial is a net.Dial wrapper which additionally allows connecting to vsock networks

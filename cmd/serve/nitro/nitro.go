@@ -117,11 +117,11 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	if len(logaddr) != 2 {
 		return fmt.Errorf("address must include port")
 	}
-	logport, err := strconv.Atoi(logaddr[1])
-	if err != nil || logport < 0 {
+	logport, err := strconv.ParseUint(logaddr[1], 10, 32)
+	if err != nil {
 		return fmt.Errorf("port must be a valid uint32: %v", err)
 	}
-	logserve := nitro.NewVsockLogServer(logport)
+	logserve := nitro.NewVsockLogServer(uint32(logport))
 
 	logger.Info().
 		Str("version", ctx.Value(appctx.VersionCTXKey).(string)).
