@@ -104,7 +104,7 @@ func TestRetry(t *testing.T) {
 
 	operation := func() (interface{}, error) {
 		if count < attempts {
-			count += 1
+			count++
 			return nil, errors.New(testutils.RandomString())
 		}
 		// return on third attempt
