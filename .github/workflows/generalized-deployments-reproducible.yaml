@@ -25,4 +25,4 @@ jobs:
     - name: Set REPRODUCIBLE to get a reproducible build
       run: echo "REPRODUCIBLE=true" >> $GITHUB_ENV
     - name: Generalized Deployments
-      uses: brave-intl/general-docker-build-pipeline-action@v1.0.7
+      uses: brave-intl/general-docker-build-pipeline-action@e02c52541372ad5f0b7423fec3dc7f1e34b7f084
