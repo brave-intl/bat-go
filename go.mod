@@ -35,7 +35,7 @@ require (
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.10.1
 	github.com/square/go-jose v2.6.0+incompatible
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	github.com/stripe/stripe-go/v72 v72.92.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
