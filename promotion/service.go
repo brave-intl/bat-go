@@ -33,11 +33,6 @@ import (
 const localEnv = "local"
 
 var (
-	// toggle for drain retry job
-	enableDrainRetryJob = isDrainRetryJobEnabled()
-	// toggle for gemini check status
-	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
-
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
 
@@ -77,31 +72,6 @@ var (
 		[]string{"platform", "type", "legacy"},
 	)
 )
-
-func isDrainRetryJobEnabled() bool {
-	var toggle = false
-	if os.Getenv("DRAIN_RETRY_JOB_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("DRAIN_RETRY_JOB_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
-
-// remove once gemini enabled
-func isRunNextGeminiCheckStatus() bool {
-	var toggle = false
-	if os.Getenv("GEMINI_CHECK_STATUS_ENABLED") != "" {
-		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_CHECK_STATUS_ENABLED"))
-		if err != nil {
-			return false
-		}
-	}
-	return toggle
-}
 
 // SetSuggestionTopic allows for a new topic to be suggested
 func SetSuggestionTopic(newTopic string) {
@@ -156,17 +126,14 @@ func (service *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
-	// toggle for drain retry job
-	if enableDrainRetryJob {
-		groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
-		if groupID == "" {
-			return errors.New("failed not initialize kafka could not find consumer group")
-		}
+	groupID := os.Getenv("KAFKA_CONSUMER_GROUP_PROMOTIONS")
+	if groupID == "" {
+		return errors.New("failed not initialize kafka could not find consumer group")
+	}
 
-		service.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
-		if err != nil {
-			return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
-		}
+	service.kafkaAdminAttestationReader, err = kafkautils.NewKafkaReader(ctx, groupID, adminAttestationTopic)
+	if err != nil {
+		return fmt.Errorf("failed to initialize kafka attestation reader: %w", err)
 	}
 
 	service.codecs, err = kafkautils.GenerateCodecs(map[string]string{
@@ -338,26 +305,16 @@ func InitService(
 			Cadence: time.Second,
 			Workers: 1,
 		},
-	}
-
-	// toggle for drain  retry job
-	if enableDrainRetryJob {
-		service.jobs = append(service.jobs,
-			srv.Job{
-				Func:    service.RunNextDrainRetryJob,
-				Cadence: 5 * time.Second,
-				Workers: 1,
-			})
-	}
-
-	// toggle for gemini check status
-	if enableGeminiCheckStatus {
-		service.jobs = append(service.jobs,
-			srv.Job{
-				Func:    service.RunNextGeminiCheckStatus,
-				Cadence: time.Second,
-				Workers: 1,
-			})
+		{
+			Func:    service.RunNextDrainRetryJob,
+			Cadence: 5 * time.Second,
+			Workers: 1,
+		},
+		{
+			Func:    service.RunNextGeminiCheckStatus,
+			Cadence: time.Second,
+			Workers: 1,
+		},
 	}
 
 	var enableLinkingDraining bool

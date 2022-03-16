@@ -17,7 +17,6 @@ services:
     environment:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
-      - DRAIN_RETRY_JOB_ENABLED=true
       - ENV=local
       - DEBUG=1
       - BAT_SETTLEMENT_ADDRESS
@@ -91,7 +90,6 @@ services:
     environment:
       - PPROF_ENABLED=true
       - ENABLE_LINKING_DRAINING=true
-      - DRAIN_RETRY_JOB_ENABLED=true
       - ENV=local
       - PKG
       - RUN
