@@ -73,7 +73,7 @@ func WatchGeminiBalance(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		// check every 10 min
-		case <-time.After(10 * 60 * time.Second):
+		case <-time.After(2 * 60 * time.Second):
 			// create the gemini payload
 			payload, err := json.Marshal(NewBalancesPayload(nil))
 			if err != nil {
