@@ -209,7 +209,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 		if json.Unmarshal(body, &uhErr) != nil {
 			return nil, resp, fmt.Errorf("Error %d, %s", resp.StatusCode, body)
 		}
-		uhErr.RequestId = resp.Header.Get("Request-Id")
+		uhErr.RequestID = resp.Header.Get("Request-Id")
 		return nil, resp, uhErr
 	}
 	return body, resp, nil

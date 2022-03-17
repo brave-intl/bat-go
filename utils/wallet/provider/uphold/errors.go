@@ -58,7 +58,7 @@ type upholdError struct {
 	Code             string                 `json:"code"`
 	ValidationErrors upholdValidationErrors `json:"errors,omitempty"`
 	Data             json.RawMessage        `json:",omitempty"`
-	RequestId        string                 `json:"requestId,omitempty"`
+	RequestID        string                 `json:"requestId,omitempty"`
 }
 
 // Code - implement coded interface
