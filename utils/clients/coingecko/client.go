@@ -393,7 +393,6 @@ func (c *HTTPClient) FetchCoinMarkets(
 		return nil, updated, err
 	}
 
-	body = (&body).applyLimit(params.Limit)
 	bodyBytes, err := json.Marshal(&body)
 	if err != nil {
 		return nil, updated, err
@@ -410,5 +409,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		return nil, updated, err
 	}
 
+	// Apply the limit only after caching the all the results
+	body = (&body).applyLimit(params.Limit)
 	return &body, updated, nil
 }

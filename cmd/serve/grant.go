@@ -441,7 +441,7 @@ func GrantServer(
 			}
 		}()
 		go func() {
-			if err := bitflyer.WatchBitflyerBalance(ctx, 10*time.Minute); err != nil {
+			if err := bitflyer.WatchBitflyerBalance(ctx, 2*time.Minute); err != nil {
 				logger.Error().Err(err).Msg("error launching bitflyer balance watch")
 			}
 		}()
