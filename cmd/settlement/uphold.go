@@ -224,7 +224,7 @@ func UpholdUpload(
 	allFinalized := true
 	someProcessing := false
 	progress := logging.UpholdProgressSet{
-		Progress: []logging.UpholdProgress{logging.UpholdProgress{
+		Progress: []logging.UpholdProgress{{
 			Message: "Successes",
 			Count:   0,
 		}},

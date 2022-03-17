@@ -15,8 +15,10 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/datastore"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -938,6 +940,9 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
+
+	logger := logging.Logger(ctx, "RunNextOrderJob")
+
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
@@ -985,7 +990,21 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	attempted = true
 	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
 	if err != nil {
-		// FIXME certain errors are not recoverable
+		// is this a cbr client error
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, eb) {
+			// pull out the data and see if this is an http client error
+			if hs, ok := eb.Data().(clients.HTTPState); ok {
+				// this is an http client error from cbr
+				// get more details about the failure
+				logger.Error().Err(eb.Cause()).Str("status", fmt.Sprintf("%d", hs.Status)).Str(
+					"body", fmt.Sprintf("%+v", hs.Body)).Msg("failed to call SignOrderCreds")
+				return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
+					hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
+			}
+		}
+
+		// Unknown error
 		return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
 			job.ID, job.OrderID, err)
 	}
