@@ -4,6 +4,7 @@ FROM golang:1.17-alpine as builder
 RUN apk update
 RUN apk add -U --no-cache ca-certificates && update-ca-certificates
 RUN apk add make
+RUN apk add build-base
 
 ARG VERSION
 ARG BUILD_TIME
