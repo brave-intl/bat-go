@@ -1,10 +1,11 @@
-FROM golang:1.17-alpine as builder
+FROM golang:1.16-alpine as builder
 
 # put certs in builder image
 RUN apk update
 RUN apk add -U --no-cache ca-certificates && update-ca-certificates
 RUN apk add make
 RUN apk add build-base
+RUN apk add git
 
 ARG VERSION
 ARG BUILD_TIME
