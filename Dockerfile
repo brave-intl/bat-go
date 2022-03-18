@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${COMMIT}" \
     -o bat-go main.go
 
-FROM scratch as artifact
+FROM alpine3.15 as artifact
 # put certs in artifact from builder
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /src/bat-go /bin/
