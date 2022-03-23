@@ -65,8 +65,7 @@ type QueryStringBody interface {
 type SimpleHTTPClient struct {
 	BaseURL   *url.URL
 	AuthToken string
-
-	client *http.Client
+	client    *http.Client
 }
 
 // New returns a new SimpleHTTPClient
@@ -99,16 +98,15 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 		return nil, err
 	}
 
-	var proxy func(*http.Request) (*url.URL, error)
+	var proxy func(*http.Request) (*url.URL, error) = nil
 	if len(proxyURL) != 0 {
 		proxiedURL, err := url.Parse(proxyURL)
 		if err != nil {
 			panic("HTTP_PROXY is not a valid proxy URL")
 		}
 		proxy = http.ProxyURL(proxiedURL)
-	} else {
-		proxy = nil
 	}
+
 	return &SimpleHTTPClient{
 		BaseURL:   baseURL,
 		AuthToken: authToken,
@@ -122,11 +120,7 @@ func NewWithProxy(name string, serverURL string, authToken string, proxyURL stri
 	}, nil
 }
 
-func (c *SimpleHTTPClient) request(
-	method string,
-	resolvedURL string,
-	buf io.Reader,
-) (*http.Request, error) {
+func (c *SimpleHTTPClient) request(method string, resolvedURL string, buf io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, resolvedURL, buf)
 	if err != nil {
 		switch err.(type) {
@@ -304,16 +298,13 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 			rb := string(b)
 			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
 
-			errorData := struct {
-				ResponseHeaders interface{}
-				Body            interface{}
-			}{
-				// put response body/headers in the err state data
+			// put response body/headers in the err state data
+			errorData := ErrorData{
 				ResponseHeaders: resp.Header,
 				Body:            rb,
 			}
 
-			return resp, NewHTTPError(err, req.URL.String(), "response", resp.StatusCode, errorData)
+			return resp, NewHTTPError(err, req.URL.String(), err.Error(), resp.StatusCode, errorData)
 		}
 		return nil, fmt.Errorf("failed c.do, no response body: %w", err)
 	}
