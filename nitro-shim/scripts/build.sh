@@ -1,7 +1,7 @@
 #!/bin/bash
 
-and_run="${1}"
-docker_image="${2}"
+docker_image="${1}"
+and_run="${2}"
 
 set -euxo pipefail
 
