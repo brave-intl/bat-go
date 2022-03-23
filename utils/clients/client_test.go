@@ -14,7 +14,7 @@ import (
 func TestDo_ErrorWithResponse(t *testing.T) {
 	errorMsg := testutils.RandomString()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusInternalServerError)
 		_, err := w.Write([]byte(errorMsg))
 		assert.NoError(t, err)
 	}))
@@ -34,11 +34,11 @@ func TestDo_ErrorWithResponse(t *testing.T) {
 	assert.NotNil(t, response)
 
 	actual := err.(*errors.ErrorBundle)
-	assert.Equal(t, "response", actual.Error())
+	assert.Equal(t, "protocol error", actual.Error())
 	assert.NotNil(t, actual.Cause(), ErrUnableToDecode)
 
 	httpState := actual.Data().(HTTPState)
-	assert.Equal(t, httpState.Status, http.StatusOK)
+	assert.Equal(t, http.StatusInternalServerError, httpState.Status)
 	assert.Equal(t, ts.URL, httpState.Path)
 	assert.Contains(t, fmt.Sprintf("+%v", httpState.Body), errorMsg)
 }
