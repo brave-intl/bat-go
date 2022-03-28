@@ -6,10 +6,11 @@ package status_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
+
 	"github.com/brave-intl/bat-go/settlement/automation/status"
 	"github.com/brave-intl/bat-go/settlement/automation/test"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"strings"
 
 	"github.com/brave-intl/bat-go/utils/ptr"
 

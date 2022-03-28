@@ -6,12 +6,13 @@ package submit_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/brave-intl/bat-go/utils/logging"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/logging"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/settlement/automation/submit"

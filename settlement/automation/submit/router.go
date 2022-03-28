@@ -2,6 +2,7 @@ package submit
 
 import (
 	"fmt"
+
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 )
 

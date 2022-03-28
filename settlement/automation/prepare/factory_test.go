@@ -6,15 +6,16 @@ package prepare_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/brave-intl/bat-go/settlement/automation/prepare"
-	"github.com/brave-intl/bat-go/settlement/automation/test"
-	"github.com/brave-intl/bat-go/utils/logging"
-	testutils "github.com/brave-intl/bat-go/utils/test"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/settlement/automation/prepare"
+	"github.com/brave-intl/bat-go/settlement/automation/test"
+	"github.com/brave-intl/bat-go/utils/logging"
+	testutils "github.com/brave-intl/bat-go/utils/test"
 
 	"github.com/brave-intl/bat-go/utils/ptr"
 
