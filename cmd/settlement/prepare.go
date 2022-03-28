@@ -29,8 +29,8 @@ func init() {
 // StartPrepareWorker initializes and starts the prepare worker
 func StartPrepareWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get(""))
-	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get(""))
+	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get("REDIS_URL"))
+	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
 
 	loggingutils.FromContext(ctx).Info().Msg("starting prepare consumer")
 

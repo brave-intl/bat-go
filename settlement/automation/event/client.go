@@ -27,7 +27,7 @@ type Client struct {
 	*redis.Client
 }
 
-// NewRedisClient created a new instance of redis client
+// NewRedisClient creates a new instance of redis client
 func NewRedisClient(redisURL string) (*Client, error) {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
