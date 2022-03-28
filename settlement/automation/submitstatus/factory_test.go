@@ -106,7 +106,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 	ctx, done := context.WithCancel(ctx)
 
 	// start prepare consumer
-	go submitstatus.StartConsumer(ctx)
+	go submitstatus.StartConsumer(ctx) // nolint
 
 	// assert message has been processed. once messages are consumed by submit status
 	// these should be routed to the check status stream

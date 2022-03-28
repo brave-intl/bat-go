@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	// start submit status worker
+	// SubmitStatusWorkerCmd starts the submit status worker.
 	SubmitStatusWorkerCmd = &cobra.Command{
 		Short: "starts settlement submit status worker",
 		Use:   "submit-status-worker",
@@ -26,7 +26,7 @@ func init() {
 	SettlementCmd.AddCommand(SubmitStatusWorkerCmd)
 }
 
-// SubmitStatusWorkerCmd initializes and starts the submit status worker
+// StartSubmitStatusWorker initializes and starts the submit status worker.
 func StartSubmitStatusWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get(""))

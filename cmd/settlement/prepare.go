@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	// start prepare worker
+	// PrepareWorkerCmd starts prepare worker
 	PrepareWorkerCmd = &cobra.Command{
 		Short: "starts settlement prepare worker",
 		Use:   "prepare-worker",

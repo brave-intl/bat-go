@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	// start check status worker
+	// CheckStatusWorkerCmd starts check status worker
 	CheckStatusWorkerCmd = &cobra.Command{
 		Short: "starts settlement check status worker",
 		Use:   "check-status-worker",
