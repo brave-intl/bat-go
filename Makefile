@@ -30,6 +30,7 @@ mock:
 	mockgen -source=./utils/clients/coingecko/client.go -destination=utils/clients/coingecko/mock/mock.go -package=mock_coingecko
 	mockgen -source=./utils/clients/payment/client.go -destination=utils/clients/payment/mock/client.go -package=mockpayment
 	mockgen -source=./utils/backoff/retrypolicy/retrypolicy.go -destination=utils/backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
+	mockgen -source=./settlement/automation/event/consumer.go -destination=settlement/automation/event/mock/consumer.go -package=mockevent
 
 instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go

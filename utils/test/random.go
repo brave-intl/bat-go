@@ -1,6 +1,5 @@
+// Package test provides some basic helpers to generate random values for testing only
 package test
-
-// This file provides some basic helpers to generate random values for testing only
 
 import (
 	"crypto/rand"
