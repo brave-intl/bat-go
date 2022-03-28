@@ -40,7 +40,7 @@ func StartPrepareWorker(command *cobra.Command, args []string) {
 		return
 	}
 
-	shutdown := make(chan os.Signal)
+	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	<-shutdown
