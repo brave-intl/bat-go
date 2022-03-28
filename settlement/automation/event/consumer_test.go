@@ -5,6 +5,10 @@ package event_test
 
 import (
 	"context"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/settlement/automation/test"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -12,9 +16,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
-	"os"
-	"testing"
-	"time"
 )
 
 type ConsumerTestSuite struct {

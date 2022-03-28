@@ -3,11 +3,12 @@ package test
 import (
 	"context"
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	"github.com/stretchr/testify/require"
-	"os"
-	"testing"
 )
 
 // StreamsTearDown cleanup redis streams

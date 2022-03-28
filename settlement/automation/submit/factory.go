@@ -3,6 +3,7 @@ package submit
 import (
 	"context"
 	"fmt"
+
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
