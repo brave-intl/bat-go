@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/brave-intl/bat-go/settlement/automation/custodian"
+
+	"net/http"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
-	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"

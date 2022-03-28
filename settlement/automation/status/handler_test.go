@@ -2,8 +2,9 @@ package status
 
 import (
 	"fmt"
-	"github.com/brave-intl/bat-go/utils/clients/payment"
 	"testing"
+
+	"github.com/brave-intl/bat-go/utils/clients/payment"
 )
 
 func TestStatus_Handle_TransactionStatus_Nil(t *testing.T) {

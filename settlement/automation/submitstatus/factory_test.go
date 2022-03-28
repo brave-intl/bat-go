@@ -3,6 +3,7 @@ package submitstatus_test
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/brave-intl/bat-go/settlement/automation/submitstatus"
 	"github.com/brave-intl/bat-go/utils/logging"
 
