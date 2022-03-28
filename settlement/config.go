@@ -42,7 +42,7 @@ func ReadYamlConfig(configPath string) (*Config, error) {
 	// Init new YAML decode
 	d := yaml.NewDecoder(file)
 
-	// Start YAML decoding from file
+	// start YAML decoding from file
 	if err := d.Decode(&config); err != nil {
 		return nil, err
 	}
