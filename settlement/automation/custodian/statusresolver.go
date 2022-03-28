@@ -5,27 +5,36 @@ import (
 )
 
 const (
-	// custodians
-	Gemini   = "gemini"
-	Uphold   = "uphold"
+	// Gemini custodian
+	Gemini = "gemini"
+	// Uphold custodian
+	Uphold = "uphold"
+	// Bitflyer custodian
 	Bitflyer = "bitflyer"
 
-	// states
+	// Complete represents the transactions state Complete
 	Complete = TransactionState("complete")
-	Pending  = TransactionState("pending")
-	Failed   = TransactionState("failed")
-	Errored  = TransactionState("errored")
+	// Pending represents the transactions state Pending
+	Pending = TransactionState("pending")
+	// Failed represents the transactions state Failed
+	Failed = TransactionState("failed")
+	// Errored represents the transactions state Errored
+	Errored = TransactionState("errored")
 )
 
 type (
+	// TransactionState implement
 	TransactionState string
-	StatusResolver   func(transactionStatus payment.TransactionStatus) (TransactionState, error)
+	// StatusResolver implement
+	StatusResolver func(transactionStatus payment.TransactionStatus) (TransactionState, error)
 )
 
+// CheckCustodianStatusResponse implement
 func CheckCustodianStatusResponse(transactionStatus payment.TransactionStatus) (TransactionState, error) {
 	return Complete, nil
 }
 
+// CheckCustodianSubmitResponse implement
 func CheckCustodianSubmitResponse(transactionStatus payment.TransactionStatus) (TransactionState, error) {
 	return Complete, nil
 }

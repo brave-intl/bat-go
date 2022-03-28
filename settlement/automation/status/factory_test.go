@@ -92,7 +92,7 @@ func (suite *StatusTestSuite) TestStatus() {
 	ctx, done := context.WithCancel(ctx)
 
 	// start prepare consumer
-	go status.StartConsumer(ctx)
+	go status.StartConsumer(ctx) // nolint
 
 	// assert all messaged have been processed
 	for {

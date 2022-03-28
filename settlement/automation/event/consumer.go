@@ -13,33 +13,35 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// busyGroup when a consumer group with the same name already exists redis returns a BUSYGROUP error
+// busyGroup when a consumer group with the same name already exists redis returns a BUSYGROUP error.
 const busyGroup = "BUSYGROUP"
 
-// Default values used by batchConsumerConfig
+// Default values used by BatchConsumerConfig.
 const (
-	// start is the id we begin processing at
+	// start is the id we begin processing at.
 	start = "0"
-	// count is the maximum number of messages to read from the stream
+	// count is the maximum number of messages to read from the stream.
 	count = 10
-	// block is the time.Duration a consumer should block when the stream is empty
+	// block is the time.Duration a consumer should block when the stream is empty.
 	block = 0
-	//minIdleTime is the minimum time a message can should be idle before being claimed for reprocess
+	//minIdleTime is the minimum time a message can should be idle before being claimed for reprocess.
 	minIdleTime = 5 * time.Second
-	// retryDelay is the minimum delay before polling the pending stream for non ack messages
+	// retryDelay is the minimum delay before polling the pending stream for non ack messages.
 	retryDelay = time.Minute * 1
 )
 
 type (
-	batchConsumer struct {
+	// BatchConsumer defines the dependence's for a batch consumer.
+	BatchConsumer struct {
 		redis           *Client
-		config          batchConsumerConfig
+		config          BatchConsumerConfig
 		handler         Handler
 		router          Router
 		deadLetterQueue string
 	}
 
-	batchConsumerConfig struct {
+	// BatchConsumerConfig defines the configuration to be used by the event.BatchConsumer.
+	BatchConsumerConfig struct {
 		streamName    string
 		consumerID    uuid.UUID
 		consumerGroup string
@@ -50,18 +52,19 @@ type (
 		retryDelay    time.Duration
 	}
 
-	// Handler defines a message handler
+	// Handler defines a message handler.
 	Handler interface {
 		Handle(ctx context.Context, messages []Message) error
 	}
 
-	// Router defines a router function
+	// Router defines a router function.
 	Router func(message *Message) error
 )
 
-func NewBatchConsumer(redis *Client, config batchConsumerConfig, handler Handler, router Router,
-	deadLetterQueue string) (*batchConsumer, error) {
-	return &batchConsumer{
+// NewBatchConsumer return a new instance batch consumer.
+func NewBatchConsumer(redis *Client, config BatchConsumerConfig, handler Handler, router Router,
+	deadLetterQueue string) (*BatchConsumer, error) {
+	return &BatchConsumer{
 		redis:           redis,
 		config:          config,
 		handler:         handler,
@@ -70,7 +73,8 @@ func NewBatchConsumer(redis *Client, config batchConsumerConfig, handler Handler
 	}, nil
 }
 
-func (b *batchConsumer) Consume(ctx context.Context) error {
+// Consume connects or creates a new consumer group and starts processing the event.Message's.
+func (b *BatchConsumer) Consume(ctx context.Context) error {
 	logging.FromContext(ctx).UpdateContext(func(c zerolog.Context) zerolog.Context {
 		return c.Str("consumer_id", b.config.consumerID.String()).
 			Str("consumer_group", b.config.consumerGroup).
@@ -90,7 +94,7 @@ func (b *batchConsumer) Consume(ctx context.Context) error {
 }
 
 // process reads messages from the stream for processing
-func (b *batchConsumer) process(ctx context.Context) {
+func (b *BatchConsumer) process(ctx context.Context) {
 
 	xReadGroupArgs := &redis.XReadGroupArgs{
 		Streams:  []string{b.config.streamName, ">"},
@@ -219,7 +223,7 @@ func (b *batchConsumer) process(ctx context.Context) {
 }
 
 // retry is responsible for consuming messaged that have failed to process first time
-func (b *batchConsumer) retry(ctx context.Context) {
+func (b *BatchConsumer) retry(ctx context.Context) {
 
 	xAutoClaimArgs := &redis.XAutoClaimArgs{
 		Stream:   b.config.streamName,
@@ -303,12 +307,12 @@ func (b *batchConsumer) retry(ctx context.Context) {
 	}
 }
 
-// Option func to build batchConsumerConfig
-type Option func(config *batchConsumerConfig) error
+// Option func to build BatchConsumerConfig
+type Option func(config *BatchConsumerConfig) error
 
-// NewBatchConsumerConfig return a new instance of batchConsumerConfig
-func NewBatchConsumerConfig(options ...Option) (*batchConsumerConfig, error) {
-	config := &batchConsumerConfig{
+// NewBatchConsumerConfig return a new instance of BatchConsumerConfig
+func NewBatchConsumerConfig(options ...Option) (*BatchConsumerConfig, error) {
+	config := &BatchConsumerConfig{
 		start:       start,
 		count:       count,
 		block:       block,
@@ -325,7 +329,7 @@ func NewBatchConsumerConfig(options ...Option) (*batchConsumerConfig, error) {
 
 // WithStreamName sets the stream name
 func WithStreamName(streamName string) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.streamName = streamName
 		return nil
 	}
@@ -333,7 +337,7 @@ func WithStreamName(streamName string) Option {
 
 // WithConsumerID sets the consumer id
 func WithConsumerID(consumerID uuid.UUID) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.consumerID = consumerID
 		return nil
 	}
@@ -341,7 +345,7 @@ func WithConsumerID(consumerID uuid.UUID) Option {
 
 // WithConsumerGroup sets the consumer group
 func WithConsumerGroup(consumerGroup string) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.consumerGroup = consumerGroup
 		return nil
 	}
@@ -349,7 +353,7 @@ func WithConsumerGroup(consumerGroup string) Option {
 
 // WithStart sets position to start processing messages. Default 0
 func WithStart(start string) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.start = start
 		return nil
 	}
@@ -357,7 +361,7 @@ func WithStart(start string) Option {
 
 // WithCount sets the maximum number of messages to read from the stream. Default 10
 func WithCount(count int64) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.count = count
 		return nil
 	}
@@ -365,7 +369,7 @@ func WithCount(count int64) Option {
 
 // WithBlock sets the time.Duration a consumer should block when the stream is empty. Default 0
 func WithBlock(block time.Duration) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.block = block
 		return nil
 	}
@@ -374,7 +378,7 @@ func WithBlock(block time.Duration) Option {
 // WithMinIdleTime sets the minimum time to wait before a message a pending/failed message
 // can be auto claimed for reprocess. Default 5 * time.Second
 func WithMinIdleTime(minIdleTime time.Duration) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.minIdleTime = minIdleTime
 		return nil
 	}
@@ -382,7 +386,7 @@ func WithMinIdleTime(minIdleTime time.Duration) Option {
 
 // WithRetryDelay sets the minimum delay before polling the pending stream for non ack messages. Default 1 * time.Minute
 func WithRetryDelay(retryDelay time.Duration) Option {
-	return func(b *batchConsumerConfig) error {
+	return func(b *BatchConsumerConfig) error {
 		b.retryDelay = retryDelay
 		return nil
 	}

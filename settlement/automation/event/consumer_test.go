@@ -123,21 +123,21 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Error() {
-
+	// TODO
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_Data_Error() {
-
+	// TODO
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_CreateNewMessage_Error() {
-
+	// TODO
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_AttachRouter_Success() {
-
+	// TODO
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_AttachRouter_Error() {
-
+	// TODO
 }
