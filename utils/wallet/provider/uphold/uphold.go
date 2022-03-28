@@ -412,7 +412,7 @@ func (w *Wallet) GetWalletInfo() walletutils.Info {
 	return w.Info
 }
 
-type denomination struct {
+type Denomination struct {
 	Amount   decimal.Decimal          `json:"amount"`
 	Currency *altcurrency.AltCurrency `json:"currency"`
 }
@@ -431,7 +431,7 @@ type Beneficiary struct {
 }
 
 type transactionRequest struct {
-	Denomination denomination `json:"denomination"`
+	Denomination Denomination `json:"denomination"`
 	Destination  string       `json:"destination"`
 	Message      string       `json:"message,omitempty"`
 	Purpose      string       `json:"purpose,omitempty"`
@@ -456,7 +456,7 @@ type transactionRequestRecode struct {
 }
 
 func (w *Wallet) signTransfer(altc altcurrency.AltCurrency, probi decimal.Decimal, destination string, message string, purpose string, beneficiary *Beneficiary) (*http.Request, error) {
-	transferReq := transactionRequest{Denomination: denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message, Purpose: purpose, Beneficiary: beneficiary}
+	transferReq := transactionRequest{Denomination: Denomination{Amount: altc.FromProbi(probi), Currency: &altc}, Destination: destination, Message: message, Purpose: purpose, Beneficiary: beneficiary}
 	unsignedTransaction, err := json.Marshal(&transferReq)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrMarshalTransferRequest, err.Error())
@@ -516,7 +516,7 @@ func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurren
 		return nil, errorutils.New(err, "failed to submit the transfer", nil)
 	}
 
-	var uhResp upholdTransactionResponse
+	var uhResp UpholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyUnmarshal, err.Error())
@@ -659,20 +659,20 @@ func (w *Wallet) VerifyAnonCardTransaction(ctx context.Context, transactionB64 s
 	return txInfo, nil
 }
 
-type upholdTransactionResponseDestinationNodeUser struct {
+type UpholdTransactionResponseDestinationNodeUser struct {
 	ID string `json:"id"`
 }
 
-type upholdTransactionResponseDestinationNode struct {
+type UpholdTransactionResponseDestinationNode struct {
 	Type string                                       `json:"type"`
 	ID   string                                       `json:"id"`
-	User upholdTransactionResponseDestinationNodeUser `json:"user"`
+	User UpholdTransactionResponseDestinationNodeUser `json:"user"`
 }
 
-type upholdTransactionResponseDestination struct {
+type UpholdTransactionResponseDestination struct {
 	Type        string                                   `json:"type"`
 	CardID      string                                   `json:"CardId,omitempty"`
-	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Node        UpholdTransactionResponseDestinationNode `json:"node,omitempty"`
 	Currency    string                                   `json:"currency"`
 	Amount      decimal.Decimal                          `json:"amount"`
 	ExchangeFee decimal.Decimal                          `json:"commission"`
@@ -680,22 +680,22 @@ type upholdTransactionResponseDestination struct {
 	IsMember    bool                                     `json:"isMember"`
 }
 
-type upholdTransactionResponseParams struct {
+type UpholdTransactionResponseParams struct {
 	TTL int64 `json:"ttl"`
 }
 
-type upholdTransactionResponse struct {
+type UpholdTransactionResponse struct {
 	Status       string                               `json:"status"`
 	ID           string                               `json:"id"`
-	Denomination denomination                         `json:"denomination"`
-	Destination  upholdTransactionResponseDestination `json:"destination"`
-	Origin       upholdTransactionResponseDestination `json:"origin"`
-	Params       upholdTransactionResponseParams      `json:"params"`
+	Denomination Denomination                         `json:"denomination"`
+	Destination  UpholdTransactionResponseDestination `json:"destination"`
+	Origin       UpholdTransactionResponseDestination `json:"origin"`
+	Params       UpholdTransactionResponseParams      `json:"params"`
 	CreatedAt    string                               `json:"createdAt"`
 	Message      string                               `json:"message"`
 }
 
-func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.TransactionInfo {
+func (resp UpholdTransactionResponse) ToTransactionInfo() *walletutils.TransactionInfo {
 	var txInfo walletutils.TransactionInfo
 	txInfo.Probi = resp.Denomination.Currency.ToProbi(resp.Denomination.Amount)
 	{
@@ -778,7 +778,7 @@ func (w *Wallet) SubmitTransaction(ctx context.Context, transactionB64 string, c
 		return nil, err
 	}
 
-	var uhResp upholdTransactionResponse
+	var uhResp UpholdTransactionResponse
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
 		return nil, err
@@ -800,7 +800,7 @@ func (w *Wallet) ConfirmTransaction(ctx context.Context, id string) (*walletutil
 		return nil, err
 	}
 
-	var uhResp upholdTransactionResponse
+	var uhResp UpholdTransactionResponse
 	err = json.Unmarshal(body, &uhResp)
 	if err != nil {
 		return nil, err
@@ -826,7 +826,7 @@ func (w *Wallet) GetTransaction(ctx context.Context, id string) (*walletutils.Tr
 		return nil, err
 	}
 
-	var uhResp upholdTransactionResponse
+	var uhResp UpholdTransactionResponse
 	err = json.Unmarshal(body, &uhResp)
 	if err != nil {
 		return nil, err
@@ -890,7 +890,7 @@ func (w *Wallet) ListTransactions(ctx context.Context, limit int, startDate time
 		}
 		totalTransactions = int(tmp)
 
-		var uhResp []upholdTransactionResponse
+		var uhResp []UpholdTransactionResponse
 		err = json.Unmarshal(body, &uhResp)
 		if err != nil {
 			return nil, err

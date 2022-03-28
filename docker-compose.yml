@@ -64,7 +64,8 @@ services:
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
       - "ALLOWED_ORIGINS=http://localhost:8080"
-      - SKUS_WHITELIST
+      - SKUS_WHITELIST-
+      - "REDIS_URL=redis://grant-redis:6379"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations
@@ -134,6 +135,7 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
+      - "REDIS_URL=redis://grant-redis:6379"
     volumes:
       - ./test/secrets:/etc/kafka/secrets
       - ./migrations:/src/migrations

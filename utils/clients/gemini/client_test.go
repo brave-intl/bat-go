@@ -1,5 +1,5 @@
-//go:build integration && vpn
-// +build integration,vpn
+//go:build integration
+// +build integration
 
 package gemini
 
@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -129,4 +130,14 @@ func (suite *GeminiTestSuite) preparePrivateRequest(payload interface{}) string 
 	suite.Require().NoError(err, "payload must be able to be serialized")
 
 	return base64.StdEncoding.EncodeToString(payloadSerialized)
+}
+
+func (suite *GeminiTestSuite) TestGenerateGeminiTXRef() {
+	settlementTx := settlement.Transaction{
+		SettlementID: "a2c325e7-7706-47cf-a83c-aafa2c178660", //claim_drain.transaction_id,
+		Type:         "drain",
+		Destination:  "61b9dcb5-20b9-4ce0-bb25-b257df35d8c7", //claim_drain.deposit_destination
+		Channel:      "wallet",
+	}
+	fmt.Println(GenerateTxRef(&settlementTx))
 }
