@@ -91,7 +91,7 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 	ctx, done := context.WithCancel(ctx)
 
 	// start prepare consumer
-	go prepare.StartConsumer(ctx)
+	go prepare.StartConsumer(ctx) // nolint
 
 	// assert message has been processed. once ads messages are consumed by prepare
 	// these should be routed to the submit stream
@@ -158,7 +158,7 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	ctx, done := context.WithCancel(ctx)
 
 	// start prepare consumer
-	go prepare.StartConsumer(ctx)
+	go prepare.StartConsumer(ctx) // nolint
 
 	// assert message has been processed. once ads messages are consumed by prepare
 	// these should be routed to the notify stream

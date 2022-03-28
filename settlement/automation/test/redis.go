@@ -10,6 +10,7 @@ import (
 	"testing"
 )
 
+// StreamsTearDown cleanup redis streams
 func StreamsTearDown(t *testing.T) {
 	redisURL := os.Getenv("REDIS_URL")
 	require.NotNil(t, redisURL)
@@ -46,7 +47,7 @@ func (c *channelHandler) Handle(ctx context.Context, messages []event.Message) e
 
 // StartTestBatchConsumer helper to start a new batch consumer.
 // Handled messages are written to provided channel.
-func StartTestBatchConsumer(t *testing.T, ctx context.Context, redisClient *event.Client, stream string,
+func StartTestBatchConsumer(t *testing.T, ctx context.Context, redisClient *event.Client, stream string, // nolint
 	actualC chan event.Message) {
 	t.Helper()
 	StartTestBatchConsumerWithRouter(t, ctx, redisClient, stream, fmt.Sprintf("test-consumer-group-%s",
@@ -55,7 +56,7 @@ func StartTestBatchConsumer(t *testing.T, ctx context.Context, redisClient *even
 
 // StartTestBatchConsumerWithRouter helper to start a new batch consumer.
 // Handled messages are written to provided channel.
-func StartTestBatchConsumerWithRouter(t *testing.T, ctx context.Context, redisClient *event.Client, stream,
+func StartTestBatchConsumerWithRouter(t *testing.T, ctx context.Context, redisClient *event.Client, stream, // nolint
 	consumerGroup, DLQ string, router event.Router, actualC chan event.Message) {
 	t.Helper()
 

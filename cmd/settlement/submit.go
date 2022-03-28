@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	// start submit worker
+	// SubmitWorkerCmd starts submit worker
 	SubmitWorkerCmd = &cobra.Command{
 		Short: "starts settlement submit worker",
 		Use:   "submit-worker",

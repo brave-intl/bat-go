@@ -12,6 +12,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// StartConsumer initializes and starts the check status consumer
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
