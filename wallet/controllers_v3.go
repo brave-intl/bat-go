@@ -11,6 +11,7 @@ import (
 
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -271,6 +272,9 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 
 		err = s.LinkGeminiWallet(ctx, *id.UUID(), glr.VerificationToken, glr.DepositID)
 		if err != nil {
+			if errors.Is(err, gemini.ErrInvalidCountry) {
+				return handlers.WrapError(err, "region not supported", http.StatusBadRequest)
+			}
 			return handlers.WrapError(err, "error linking wallet", http.StatusBadRequest)
 		}
 
