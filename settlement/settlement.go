@@ -373,68 +373,44 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 			return nil
 		}
 
-		// first check if the transaction has already been confirmed
-		upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
+		var settlementInfo *wallet.TransactionInfo
+		settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
 		if err == nil {
-			settlement.Status = upholdInfo.Status
-			settlement.Currency = upholdInfo.DestCurrency
-			settlement.Amount = upholdInfo.DestAmount
-			settlement.TransferFee = upholdInfo.TransferFee
-			settlement.ExchangeFee = upholdInfo.ExchangeFee
+			settlement.Status = settlementInfo.Status
+			settlement.Currency = settlementInfo.DestCurrency
+			settlement.Amount = settlementInfo.DestAmount
+			settlement.TransferFee = settlementInfo.TransferFee
+			settlement.ExchangeFee = settlementInfo.ExchangeFee
 
-			if !settlement.IsComplete() {
-				logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
+			// do a sanity check that the uphold transaction confirmed referenced matches the settlement object
+			err = checkTransactionAgainstSettlement(settlement, settlementInfo)
+			if err != nil {
+				return err
 			}
 
 			break
-
-		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().UTC().After(settlement.ValidUntil) {
-				logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s", settlement.Channel))
-				return nil
-			}
-
-			var settlementInfo *wallet.TransactionInfo
-			settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
+		} else if errorutils.IsErrForbidden(err) {
+			logger.Error().Err(err).Msg("invalid destination, skipping")
+			settlement.Status = "failed"
+			return nil
+		} else if errorutils.IsErrAlreadyExists(err) {
+			// NOTE we've observed the uphold API LB timing out while the request is eventually processed
+			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 			if err == nil {
-				settlement.Status = settlementInfo.Status
-				settlement.Currency = settlementInfo.DestCurrency
-				settlement.Amount = settlementInfo.DestAmount
-				settlement.TransferFee = settlementInfo.TransferFee
-				settlement.ExchangeFee = settlementInfo.ExchangeFee
+				settlement.Status = upholdInfo.Status
+				settlement.Currency = upholdInfo.DestCurrency
+				settlement.Amount = upholdInfo.DestAmount
+				settlement.TransferFee = upholdInfo.TransferFee
+				settlement.ExchangeFee = upholdInfo.ExchangeFee
 
-				// do a sanity check that the uphold transaction confirmed referenced matches the settlement object
-				err = checkTransactionAgainstSettlement(settlement, settlementInfo)
-				if err != nil {
-					return err
+				if !settlement.IsComplete() {
+					logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
 				}
-
-				break
-			} else if errorutils.IsErrForbidden(err) {
-				logger.Error().Err(err).Msg("invalid destination, skipping")
-				settlement.Status = "failed"
-				return nil
-			} else if errorutils.IsErrAlreadyExists(err) {
-				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
-				upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
-				if err == nil {
-					settlement.Status = upholdInfo.Status
-					settlement.Currency = upholdInfo.DestCurrency
-					settlement.Amount = upholdInfo.DestAmount
-					settlement.TransferFee = upholdInfo.TransferFee
-					settlement.ExchangeFee = upholdInfo.ExchangeFee
-
-					if !settlement.IsComplete() {
-						logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
-					}
-				}
-				settlement.Status = "complete"
-				break
-			} else {
-				logger.Info().Msg(fmt.Sprintf("error confirming: %s", err))
 			}
+			settlement.Status = "complete"
+			break
 		} else {
-			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s", err))
+			logger.Info().Msg(fmt.Sprintf("error confirming: %s", err))
 		}
 	}
 	return nil
