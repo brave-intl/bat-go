@@ -195,7 +195,7 @@ services:
       - grant
   kafka:
     container_name: grant-kafka
-    image: confluentinc/cp-kafka:5.2.2 # kafka version 2.2.1
+    image: confluentinc/cp-kafka:latest # kafka version 2.2.1
     ports:
       - "29092:29092"
     environment:
