@@ -13,7 +13,6 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -503,12 +502,7 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 		// no logger, setup
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-			r = r.WithContext(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.DrainSuggestionV2")
 
 		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {
@@ -577,12 +571,7 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 		// no logger, setup
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-			r = r.WithContext(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.DrainSuggestion")
 
 		err = requestutils.ReadJSON(r.Body, &req)
 		if err != nil {

@@ -729,10 +729,7 @@ func MakeVote(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		logger, err := appctx.GetLogger(r.Context())
-		if err != nil {
-			_, logger = logging.SetupLogger(r.Context())
-		}
+		logger := logging.Logger(ctx, "skus.MakeVote")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {

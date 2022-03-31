@@ -41,10 +41,7 @@ var (
 
 func getChoices(ctx context.Context, ratio decimal.Decimal) []float64 {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "rewards.getChoices")
 
 	// if we have DefaultACChoices in the context, just return that.
 	if acChoices, ok := ctx.Value(appctx.DefaultACChoicesCTXKey).([]float64); ok {

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 
-	loggingutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 // Panic calls Close on the specified closer, panicing on error
 func Panic(c io.Closer) {
-	_, logger := loggingutils.SetupLogger(context.Background())
+	logger := logging.Logger(ctx, "closers.Panic")
 	if c == nil {
 		return
 	}

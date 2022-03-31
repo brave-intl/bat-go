@@ -276,11 +276,7 @@ func (service *Service) LinkWallet(
 
 // SetupService - setup the wallet microservice
 func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.SetupService")
 
 	// setup the service now
 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")

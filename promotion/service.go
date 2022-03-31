@@ -227,10 +227,7 @@ func InitService(
 ) (*Service, error) {
 
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.InitService")
 
 	// register metrics with prometheus
 	err = prometheus.Register(countGrantsClaimedBatTotal)
@@ -432,10 +429,7 @@ func (service *Service) RunNextDrainRetryJob(ctx context.Context) (bool, error) 
 // RunNextPromotionMissingIssuer takes the next job and completes it
 func (service *Service) RunNextPromotionMissingIssuer(ctx context.Context) (bool, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.RunNextPromotionMissingIssuer")
 
 	// create issuer for all of the promotions without an issuer
 	uuids, err := service.RoDatastore.GetPromotionsMissingIssuer(100)

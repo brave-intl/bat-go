@@ -485,17 +485,13 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 func (c *HTTPClient) CheckInventory(
 	ctx context.Context,
 ) (map[string]Inventory, error) {
-	logger := logging.Logger(ctx, "CheckInventory")
+	logger := logging.Logger(ctx, "bitflyer.CheckInventory")
 
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error().Str("panic", fmt.Sprintf("%+v", r)).Msg("failed to check inventory")
 		}
 	}()
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
 	logger.Info().
 		Msg("Calling account inventory")
 
@@ -564,10 +560,7 @@ func handleBitflyerError(e error, resp *http.Response) error {
 // TokenPayloadFromCtx - given some context, create our bf token payload
 func TokenPayloadFromCtx(ctx context.Context) TokenPayload {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "bitflyer.TokenPayloadFromCtx")
 	// get bf creds from context
 	clientID, err := appctx.GetStringFromContext(ctx, appctx.BitflyerClientIDCTXKey)
 	if err != nil {

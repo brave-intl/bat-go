@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 )
@@ -34,10 +33,7 @@ func (s *Service) Jobs() []srv.Job {
 // InitService creates a service using the passed context
 func InitService(ctx context.Context) (*Service, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "rewards.InitService")
 
 	// get from ratios the current bat rate
 	client, err := ratios.NewWithContext(ctx)
@@ -52,10 +48,7 @@ func InitService(ctx context.Context) (*Service, error) {
 // GetParameters - respond to caller with the rewards parameters
 func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "rewards.GetParameters")
 
 	rateData, err := s.ratios.FetchRate(ctx, "BAT", currency.String())
 	if err != nil {

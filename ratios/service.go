@@ -40,10 +40,7 @@ func (s *Service) Jobs() []srv.Job {
 // InitService creates a service using the passed context
 func InitService(ctx context.Context) (context.Context, *Service, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "ratios.InitService")
 
 	redisAddr, err := appctx.GetStringFromContext(ctx, appctx.RatiosRedisAddrCTXKey)
 	if err != nil {
@@ -135,10 +132,7 @@ type RelativeResponse struct {
 // GetRelative - respond to caller with the relative exchange rates
 func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vsCurrencies CoingeckoVsCurrencyList, duration CoingeckoDuration) (*RelativeResponse, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "ratios.GetRelative")
 
 	// record coin / currency usage
 	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin(coinIDs), []CoingeckoVsCurrency(vsCurrencies))
@@ -208,10 +202,7 @@ type HistoryResponse struct {
 // GetHistory - respond to caller with historical exchange rates
 func (s *Service) GetHistory(ctx context.Context, coinID CoingeckoCoin, vsCurrency CoingeckoVsCurrency, duration CoingeckoDuration) (*HistoryResponse, error) {
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "ratios.GetHistory")
 
 	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin{coinID}, []CoingeckoVsCurrency{vsCurrency})
 	if err != nil {
@@ -244,10 +235,7 @@ func (s *Service) GetCoinMarkets(
 ) (*GetCoinMarketsResponse, error) {
 
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "ratios.GetCoinMarkets")
 
 	payload, updated, err := s.coingecko.FetchCoinMarkets(ctx, vsCurrency.String(), limit.Int())
 	if err != nil {
