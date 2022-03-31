@@ -15,6 +15,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	bitflyersettlement "github.com/brave-intl/bat-go/settlement/bitflyer"
 	geminisettlement "github.com/brave-intl/bat-go/settlement/gemini"
+	upholdsettlement "github.com/brave-intl/bat-go/settlement/uphold"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -314,6 +315,12 @@ func createUpholdArtifact(
 		return errors.New("invalid wallet name")
 	}
 
+	// Ensure that there is only one payment for a given Uphold wallet by combining
+	// multiples if they exist.
+	flattenedTransactions := upholdsettlement.FlattenPaymentsByWalletProviderID(
+		&upholdOnlySettlements,
+	)
+
 	signer, err := wrappedClient.GenerateEd25519Signer(walletKey)
 	if err != nil {
 		return err
@@ -329,12 +336,12 @@ func createUpholdArtifact(
 	}
 	settlementWallet := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: signer}
 
-	err = settlement.PrepareTransactions(settlementWallet, upholdOnlySettlements, "payout", &uphold.Beneficiary{Relationship: "business"})
+	err = settlement.PrepareTransactions(settlementWallet, flattenedTransactions, "payout", &uphold.Beneficiary{Relationship: "business"})
 	if err != nil {
 		return err
 	}
 
-	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: upholdOnlySettlements}
+	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: flattenedTransactions}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {
