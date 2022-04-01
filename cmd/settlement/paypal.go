@@ -282,7 +282,7 @@ func PaypalWriteMassPayCSV(ctx context.Context, outPath string, metadata *[]payp
 	if err != nil {
 		return err
 	}
-	defer closers.Panic(f)
+	defer closers.Panic(ctx, f)
 	_, err = f.WriteString(data)
 	if err != nil {
 		return err

@@ -1,7 +1,6 @@
 package validators
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/asaskevich/govalidator"
@@ -120,7 +119,7 @@ func TestArrayFillings(t *testing.T) {
 			t.Error("an error was found", err)
 		}
 		if !isValid {
-			t.Error(fmt.Sprintf("body is invalid: %#v", body))
+			t.Errorf("body is invalid: %#v", body)
 		}
 	}
 	run(TestRequest{

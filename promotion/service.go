@@ -230,7 +230,7 @@ func InitService(
 	logger := logging.Logger(ctx, "promotion.InitService")
 
 	// register metrics with prometheus
-	err = prometheus.Register(countGrantsClaimedBatTotal)
+	err := prometheus.Register(countGrantsClaimedBatTotal)
 	if ae, ok := err.(prometheus.AlreadyRegisteredError); ok {
 		countGrantsClaimedBatTotal = ae.ExistingCollector.(*prometheus.CounterVec)
 	}

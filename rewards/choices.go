@@ -50,7 +50,7 @@ func getChoices(ctx context.Context, ratio decimal.Decimal) []float64 {
 
 	// find the price increment given our ratio
 	var (
-		index int = -1
+		index = -1
 	)
 
 	var rate, exact = ratio.Float64()

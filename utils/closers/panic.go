@@ -9,7 +9,7 @@ import (
 )
 
 // Panic calls Close on the specified closer, panicing on error
-func Panic(c io.Closer) {
+func Panic(ctx context.Context, c io.Closer) {
 	logger := logging.Logger(ctx, "closers.Panic")
 	if c == nil {
 		return

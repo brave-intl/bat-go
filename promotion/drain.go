@@ -774,7 +774,7 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		logger.Debug().Msg("MintGrant: creating the claim to destination")
 		// create a new claim for the wallet deposit account for total
 		// this is a legacy claimed claim
-		_, err = service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
+		_, err := service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
 		if err != nil {
 			var pgErr *pq.Error
 			if errors.As(err, &pgErr) {

@@ -136,7 +136,7 @@ func (sp *SignatureParams) BuildSigningString(req *http.Request) (out []byte, er
 			}
 
 			if req.Body != nil {
-				body, err := requestutils.Read(req.Body)
+				body, err := requestutils.Read(context.Background(), req.Body)
 				if err != nil {
 					return out, err
 				}

@@ -21,6 +21,7 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			coinIDsInput      = chi.URLParam(r, "coinIDs")
 			vsCurrenciesInput = chi.URLParam(r, "vsCurrencies")
 			durationInput     = chi.URLParam(r, "duration")
+			err               error
 		)
 
 		// get logger from context
@@ -96,6 +97,7 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			coinIDInput     = chi.URLParam(r, "coinID")
 			vsCurrencyInput = chi.URLParam(r, "vsCurrency")
 			durationInput   = chi.URLParam(r, "duration")
+			err             error
 		)
 
 		// get logger from context
@@ -193,6 +195,7 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 		var (
 			vsCurrencyInput = r.URL.Query().Get("vsCurrency")
 			limitInput      = r.URL.Query().Get("limit")
+			err             error
 		)
 
 		// get logger from context

@@ -67,7 +67,7 @@ func encapsulate(req *http.Request) (*HTTPSignedRequest, error) {
 
 	// TODO implement pseudo-header
 
-	bodyBytes, err := requestutils.Read(req.Body)
+	bodyBytes, err := requestutils.Read(req.Context(), req.Body)
 	if err != nil {
 		return nil, err
 	}

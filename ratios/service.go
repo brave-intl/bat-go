@@ -135,7 +135,7 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 	logger := logging.Logger(ctx, "ratios.GetRelative")
 
 	// record coin / currency usage
-	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin(coinIDs), []CoingeckoVsCurrency(vsCurrencies))
+	err := s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin(coinIDs), []CoingeckoVsCurrency(vsCurrencies))
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to record coin / currency statistics")
 	}
@@ -204,7 +204,7 @@ func (s *Service) GetHistory(ctx context.Context, coinID CoingeckoCoin, vsCurren
 	// get logger from context
 	logger := logging.Logger(ctx, "ratios.GetHistory")
 
-	err = s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin{coinID}, []CoingeckoVsCurrency{vsCurrency})
+	err := s.RecordCoinsAndCurrencies(ctx, []CoingeckoCoin{coinID}, []CoingeckoVsCurrency{vsCurrency})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to record coin / currency statistics")
 	}

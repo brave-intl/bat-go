@@ -58,7 +58,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	// get datastore from context
 	if db, ok = ctx.Value(appctx.DatastoreCTXKey).(Datastore); !ok {
 		logger.Error().Msg("unable to get datastore from context")
-		return handlers.WrapError(err, "misconfigured datastore", http.StatusServiceUnavailable)
+		return handlers.WrapError(errors.New("unable to get datastore"), "misconfigured datastore", http.StatusServiceUnavailable)
 	}
 
 	var info = &walletutils.Info{
@@ -81,7 +81,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	info.ProviderID = uwallet.GetWalletInfo().ProviderID
 
 	// get wallet from datastore
-	err = db.InsertWallet(ctx, info)
+	err := db.InsertWallet(ctx, info)
 	if err != nil {
 		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create uphold wallet")
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
@@ -568,7 +568,7 @@ func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			Str("walletID", walletID).
 			Str("custodian", custodian).
 			Msg("unlinking wallet from custodian")
-		err = s.UnlinkWallet(ctx, walletID, custodian)
+		err := s.UnlinkWallet(ctx, walletID, custodian)
 		if err != nil {
 			if errors.Is(err, ErrUnlinkingsExceeded) {
 				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
@@ -593,7 +593,7 @@ func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Requ
 		logger := logging.Logger(ctx, "wallet.IncreaseLinkingLimitV3")
 
 		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
-		err = s.IncreaseLinkingLimit(ctx, custodianID)
+		err := s.IncreaseLinkingLimit(ctx, custodianID)
 		if err != nil {
 			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
 			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)

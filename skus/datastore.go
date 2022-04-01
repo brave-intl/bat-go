@@ -892,7 +892,7 @@ func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx
 	logger.Debug().Msg("about to set errored to true for this vote")
 
 	var statement = `update vote_drain set erred=true where id=$1`
-	_, err = tx.ExecContext(ctx, statement, vr.ID)
+	_, err := tx.ExecContext(ctx, statement, vr.ID)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to update vote_drain")
@@ -908,7 +908,7 @@ func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) 
 	logger.Debug().Msg("about to set processed to true for this vote")
 
 	var statement = `update vote_drain set processed=true where id=$1`
-	_, err = tx.ExecContext(ctx, statement, vr.ID)
+	_, err := tx.ExecContext(ctx, statement, vr.ID)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to update processed=true for vote drain job")

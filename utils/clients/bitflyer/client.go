@@ -362,7 +362,7 @@ func (c *HTTPClient) FetchQuote(
 			})
 		}
 	}
-	return &body, handleBitflyerError(err, resp)
+	return &body, handleBitflyerError(ctx, err, resp)
 }
 
 // PriceTokenInfo holds info from the price token
@@ -435,7 +435,7 @@ func (c *HTTPClient) UploadBulkPayout(ctx context.Context, payload WithdrawToDep
 	var withdrawToDepositIDBulkResponse WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &withdrawToDepositIDBulkResponse)
 
-	return &withdrawToDepositIDBulkResponse, handleBitflyerError(err, resp)
+	return &withdrawToDepositIDBulkResponse, handleBitflyerError(ctx, err, resp)
 }
 
 // CheckPayoutStatus checks bitflyer transaction status
@@ -450,7 +450,7 @@ func (c *HTTPClient) CheckPayoutStatus(ctx context.Context, payload CheckBulkSta
 	var body WithdrawToDepositIDBulkResponse
 	resp, err := c.client.Do(ctx, req, &body)
 
-	return &body, handleBitflyerError(err, resp)
+	return &body, handleBitflyerError(ctx, err, resp)
 }
 
 // RefreshToken gets a new token from bitflyer
@@ -478,7 +478,7 @@ func (c *HTTPClient) RefreshToken(ctx context.Context, payload TokenPayload) (*T
 	}
 	c.SetAuthToken(body.AccessToken)
 
-	return &body, handleBitflyerError(err, resp)
+	return &body, handleBitflyerError(ctx, err, resp)
 }
 
 // CheckInventory fetches the current balances of an account
@@ -503,7 +503,7 @@ func (c *HTTPClient) CheckInventory(
 
 	var body InventoryResponse
 	resp, err := c.client.Do(ctx, req, &body)
-	err = handleBitflyerError(err, resp)
+	err = handleBitflyerError(ctx, err, resp)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +526,7 @@ func (c *HTTPClient) setupRequestHeaders(req *http.Request) {
 	req.Header.Set("content-type", "application/json")
 }
 
-func handleBitflyerError(e error, resp *http.Response) error {
+func handleBitflyerError(ctx context.Context, e error, resp *http.Response) error {
 	if resp == nil {
 		return e
 	}
@@ -536,7 +536,7 @@ func handleBitflyerError(e error, resp *http.Response) error {
 		return e
 	}
 
-	b, err := requestutils.Read(resp.Body)
+	b, err := requestutils.Read(ctx, resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read body of bitflyer response to handle err: %w", err)
 	}
@@ -599,5 +599,5 @@ func (c *HTTPClient) FetchBalance(ctx context.Context) (*InventoryResponse, erro
 		return nil, fmt.Errorf("fetch balance error: could not execute request: %w", err)
 	}
 
-	return inventoryResponse, handleBitflyerError(err, response)
+	return inventoryResponse, handleBitflyerError(ctx, err, response)
 }
