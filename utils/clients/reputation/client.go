@@ -71,6 +71,8 @@ var (
 	CohortNil int = 0
 	// CohortOK - ok cohort
 	CohortOK = 1
+	// CohortTooYoung - too young cohort
+	CohortTooYoung = 2
 	// CohortWithdrawalLimits - limited cohort
 	CohortWithdrawalLimits = 4
 )
@@ -106,7 +108,7 @@ func (c *HTTPClient) IsDrainReputable(
 		return false, CohortNil, err
 	}
 
-	return resp.Cohort == CohortOK, resp.Cohort, nil
+	return resp.Cohort == CohortOK || resp.Cohort == CohortTooYoung, resp.Cohort, nil
 }
 
 // IsWalletReputableResponse is what the reputation server
