@@ -71,6 +71,14 @@ type Datastore interface {
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
+
+	// GetOrderTimeLimitedV2Creds
+	GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool) (*[]TimeLimitedV2Creds, error)
+	// GetOrderTimeLimitedV2CredsByItemID retrieves an order credential by item id
+	GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*TimeLimitedV2Creds, error)
+	// RunNextTypedOrderJob
+	RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error)
+
 	// RunNextOrderJob
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 
@@ -830,6 +838,100 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 	return nil, nil
 }
 
+// GetOrderTimeLimitedV2Creds returns the order credentials for a OrderID
+func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool) (*[]TimeLimitedV2Creds, error) {
+	// each "order item" is a different record
+	orderCreds := []TimeLimitedV2Creds{}
+	timeAwareCreds := []TimeAwareSubIssuedCreds{}
+
+	// get all of the credentials related to the order_id
+	query := `
+		select
+			order_id, item_id
+			metadata->>'validFrom' as valid_from,
+			metadata->>'validTo' as valid_to,
+			issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		from order_creds
+		where
+			order_id = $1
+			and valid_from is not null
+			and valid_to is not null
+	`
+
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.RawDB().Select(&timeAwareCreds, query, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// convert our time aware creds into result
+	itemCredMap := map[uuid.UUID][]TimeAwareSubIssuedCreds{}
+	for i := range timeAwareCreds {
+		if _, ok := itemCredMap[timeAwareCreds[i].ItemID]; !ok {
+			itemCredMap[timeAwareCreds[i].ItemID] = []TimeAwareSubIssuedCreds{}
+		}
+		itemCredMap[timeAwareCreds[i].ItemID] = append(itemCredMap[timeAwareCreds[i].ItemID], timeAwareCreds[i])
+	}
+
+	for _, v := range itemCredMap {
+		if len(v) > 0 {
+			orderCreds = append(orderCreds, TimeLimitedV2Creds{
+				OrderID:     v[0].OrderID,
+				IssuerID:    v[0].IssuerID,
+				Credentials: v,
+			})
+		}
+	}
+
+	if len(orderCreds) > 0 {
+		return &orderCreds, nil
+	}
+
+	return nil, nil
+}
+
+// GetOrderTimeLimitedV2CredsByItemID returns the order credentials for a OrderID by the itemID
+func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*TimeLimitedV2Creds, error) {
+	// each "order item" is a different record
+	orderCreds := TimeLimitedV2Creds{}
+	timeAwareCreds := []TimeAwareSubIssuedCreds{}
+
+	// get all of the credentials related to the order_id
+	query := `
+		select
+			order_id, item_id
+			metadata->>'validFrom' as valid_from,
+			metadata->>'validTo' as valid_to,
+			issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		from order_creds
+		where
+			order_id = $1
+			and item_id = $2
+			and valid_from is not null
+			and valid_to is not null
+	`
+
+	if isSigned {
+		query += " and signed_creds is not null"
+	}
+
+	err := pg.RawDB().Select(&timeAwareCreds, query, orderID, itemID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(timeAwareCreds) > 0 {
+		orderCreds.OrderID = timeAwareCreds[0].OrderID
+		orderCreds.IssuerID = timeAwareCreds[0].IssuerID
+		orderCreds.Credentials = timeAwareCreds
+	}
+
+	return &orderCreds, nil
+}
+
 // DeleteOrderCreds deletes the order credentials for a OrderID
 func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 
@@ -966,6 +1068,12 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 	return nil
 }
 
+// RunNextTypedOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
+func (pg *Postgres) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error) {
+	// TODO: implement for new type of credential (time-aware)
+	return false, errorutils.ErrNotImplemented
+}
+
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
 	tx, err := pg.RawDB().Beginx()
@@ -994,6 +1102,7 @@ FROM
 		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
 		FROM order_creds
 		WHERE batch_proof is null
+		and credential_type is null
 		FOR UPDATE skip locked
 		limit 1
 	) order_cred

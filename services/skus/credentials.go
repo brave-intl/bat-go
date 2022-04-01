@@ -132,6 +132,27 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
+// TimeAwareSubIssuedCreds - sub issued time aware credentials
+type TimeAwareSubIssuedCreds struct {
+	OrderID      uuid.UUID                  `json:"-" db:"order_id"`
+	ItemID       uuid.UUID                  `json:"-" db:"item_id"`
+	IssuerID     uuid.UUID                  `json:"-" db:"issuer_id"`
+	ValidFrom    *time.Time                 `json:"validFrom" db:"valid_from"`
+	ValidTo      *time.Time                 `json:"validTo" db:"valid_to"`
+	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
+	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
+	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
+	PublicKey    *string                    `json:"publicKey" db:"public_key"`
+}
+
+// TimeLimitedV2Creds encapsulates the credentials to be signed in response to a completed order
+type TimeLimitedV2Creds struct {
+	ID          uuid.UUID                 `json:"id" db:"item_id"`
+	OrderID     uuid.UUID                 `json:"orderId" db:"order_id"`
+	IssuerID    uuid.UUID                 `json:"issuerId" db:"issuer_id"`
+	Credentials []TimeAwareSubIssuedCreds `json:"credentials"`
+}
+
 // CreateOrderCreds if the order is complete
 func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := service.Datastore.GetOrder(orderID)
