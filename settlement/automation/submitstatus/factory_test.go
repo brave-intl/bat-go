@@ -3,8 +3,9 @@ package submitstatus_test
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/brave-intl/bat-go/settlement/automation/submitstatus"
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	"github.com/brave-intl/bat-go/utils/logging"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
@@ -51,7 +52,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 		documentID := testutils.RandomString()
 		transaction := payment.Transaction{
 			IdempotencyKey: uuid.NewV4(),
-			Custodian:      ptr.FromString(testutils.RandomString()),
+			Custodian:      ptr.FromString(transactionstatus.Gemini),
 			Amount:         decimal.New(1, 0),
 			To:             uuid.NewV4(),
 			From:           uuid.NewV4(),
@@ -64,7 +65,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 		message := event.Message{
 			ID:        uuid.NewV4(),
 			Timestamp: time.Now(),
-			Type:      event.Grants,
+			Type:      event.Ads,
 			Routing: &event.Routing{
 				Position: 0,
 				Slip: []event.Step{
@@ -102,7 +103,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx, done := context.WithCancel(ctx)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
 	go submitstatus.StartConsumer(ctx) // nolint
@@ -116,7 +117,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 	for i := 0; i < len(messages); i++ {
 		actual := <-actualC
 		expected, ok := messages[actual.ID.String()]
-		suite.True(ok)
+		suite.Require().True(ok)
 		suite.assertMessage(expected, actual, event.CheckStatusStream)
 	}
 	// stop consumers
@@ -131,11 +132,17 @@ func (suite *SubmitStatusTestSuite) stubSubmitStatusEndpoint(messages map[string
 		// return the transaction for associated documentID with custodian response
 		w.WriteHeader(http.StatusOK)
 
+		payoutResult, err := json.Marshal(gemini.PayoutResult{
+			Result: "Ok",
+			Status: ptr.FromString("completed"),
+		})
+		suite.Require().NoError(err)
+
 		transactionStatus := payment.TransactionStatus{
-			CustodianSubmissionResponse: ptr.FromString(testutils.RandomString()),
+			CustodianSubmissionResponse: ptr.FromString(string(payoutResult)),
 			Transaction: payment.Transaction{
 				IdempotencyKey: uuid.NewV4(),
-				Custodian:      ptr.FromString(testutils.RandomString()),
+				Custodian:      ptr.FromString(transactionstatus.Gemini),
 				Amount:         decimal.New(1, 0),
 				To:             uuid.NewV4(),
 				From:           uuid.NewV4(),
@@ -161,11 +168,11 @@ func (suite *SubmitStatusTestSuite) assertMessage(expected, actual event.Message
 
 	var expectedTransactions payment.Transaction
 	err := json.Unmarshal([]byte(actual.Body), &expectedTransactions)
-	suite.NoError(err)
+	suite.Require().NoError(err)
 
 	var actualTransaction payment.Transaction
 	err = json.Unmarshal([]byte(actual.Body), &actualTransaction)
-	suite.NoError(err)
+	suite.Require().NoError(err)
 
 	suite.assertTransaction(expectedTransactions, actualTransaction)
 }

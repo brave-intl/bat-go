@@ -57,7 +57,7 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Success() {
 
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx, done := context.WithCancel(ctx)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	messages := make(map[uuid.UUID]event.Message)
 	for i := 0; i < 5; i++ {
@@ -138,7 +138,7 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
 
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx, done := context.WithCancel(ctx)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	messages := make(map[uuid.UUID]event.Message)
 	for i := 0; i < 5; i++ {
@@ -178,6 +178,8 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
 	err = consumer.Consume(ctx)
 	suite.NoError(err)
 
+	timer := time.Now().Add(10 * time.Second)
+
 	for {
 		DLQCount, err := redis.XLen(ctx, suite.DLQ).Result()
 		suite.Require().NoError(err)
@@ -192,6 +194,10 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
 			suite.NoError(err)
 			suite.Require().Equal(int64(len(messages)), streamCount)
 
+			break
+		}
+		if time.Now().After(timer) {
+			suite.Fail("test timeout")
 			break
 		}
 	}
