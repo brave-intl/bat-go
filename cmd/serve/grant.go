@@ -334,6 +334,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
 	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
 	r.Mount("/v1/orders", skus.Router(skusService))
+	r.Mount("/v2/orders", skus.RouterV2(skusService))
 	// for skus webhook integrations
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
 	r.Mount("/v1/votes", skus.VoteRouter(skusService))

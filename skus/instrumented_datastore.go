@@ -239,6 +239,34 @@ func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemI
 	return _d.base.GetOrderCredsByItemID(orderID, itemID, isSigned)
 }
 
+// GetOrderTimeLimitedV2Creds implements Datastore
+func (_d DatastoreWithPrometheus) GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool) (tap1 *[]TimeLimitedV2Creds, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderTimeLimitedV2Creds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetOrderTimeLimitedV2Creds(orderID, isSigned)
+}
+
+// GetOrderTimeLimitedV2CredsByItemID implements Datastore
+func (_d DatastoreWithPrometheus) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (tp1 *TimeLimitedV2Creds, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderTimeLimitedV2CredsByItemID", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetOrderTimeLimitedV2CredsByItemID(orderID, itemID, isSigned)
+}
+
 // GetPagedMerchantTransactions implements Datastore
 func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (tap1 *[]Transaction, i1 int, err error) {
 	_since := time.Now()
@@ -468,6 +496,20 @@ func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker Or
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextOrderJob", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RunNextOrderJob(ctx, worker)
+}
+
+// RunNextTypedOrderJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (b1 bool, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextTypedOrderJob", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.RunNextTypedOrderJob(ctx, credType, worker)
 }
 
 // SetOrderTrialDays implements Datastore

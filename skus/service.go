@@ -772,8 +772,9 @@ func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
 }
 
 const (
-	singleUse   = "single-use"
-	timeLimited = "time-limited"
+	singleUse     = "single-use"
+	timeLimited   = "time-limited"
+	timeLimitedV2 = "time-limited-v2"
 )
 
 var errInvalidCredentialType = errors.New("invalid credential type on order")
@@ -803,6 +804,8 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 		return s.GetSingleUseCreds(ctx, order)
 	case timeLimited:
 		return s.GetTimeLimitedCreds(ctx, order)
+	case timeLimitedV2:
+		return s.GetTimeLimitedV2Creds(ctx, order)
 	}
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
@@ -828,6 +831,34 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		if (*creds)[i].SignedCreds == nil {
 			status = http.StatusAccepted
 			break
+		}
+	}
+	return *creds, status, nil
+}
+
+// GetTimeLimitedV2Creds get an order's v2 time limited creds
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeLimitedV2Creds, int, error) {
+
+	if order == nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
+	}
+
+	creds, err := s.Datastore.GetOrderTimeLimitedV2Creds(order.ID, false)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if creds == nil {
+		return nil, http.StatusNotFound, fmt.Errorf("Credentials do not exist")
+	}
+
+	status := http.StatusOK
+	for i := 0; i < len(*creds); i++ {
+		for j := 0; j < len((*creds)[i].Credentials); j++ {
+			if (*creds)[i].Credentials[j].SignedCreds == nil {
+				status = http.StatusAccepted
+				break
+			}
 		}
 	}
 	return *creds, status, nil
