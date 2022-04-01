@@ -24,9 +24,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -53,7 +50,7 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 	suite.Require().NoError(err)
 
 	// stub payment service with expectedTransactions responses
-	server := stubPrepareEndpoint(suite.T())
+	server := suite.stubPrepareEndpoint()
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -104,7 +101,7 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 		actual := <-actualC
 		expected, ok := messages[actual.ID.String()]
 		suite.True(ok)
-		assertMessage(suite.T(), expected, actual, event.SubmitStream)
+		suite.assertMessage(expected, actual, event.SubmitStream)
 	}
 
 	// stop consumers
@@ -120,7 +117,7 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	suite.Require().NoError(err)
 
 	// stub payment service with expectedTransactions responses
-	server := stubPrepareEndpoint(suite.T())
+	server := suite.stubPrepareEndpoint()
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -171,24 +168,24 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 		actual := <-actualC
 		expected, ok := messages[actual.ID.String()]
 		suite.True(ok)
-		assertMessage(suite.T(), expected, actual, event.NotifyStream)
+		suite.assertMessage(expected, actual, event.NotifyStream)
 	}
 	// stop consumers
 	done()
 }
 
-func stubPrepareEndpoint(t *testing.T) *httptest.Server {
-	t.Helper()
+func (suite *PrepareTestSuite) stubPrepareEndpoint() *httptest.Server {
+	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/v1/payments/prepare", r.URL.Path)
+		suite.Require().Equal(http.MethodPost, r.Method)
+		suite.Require().Equal("/v1/payments/prepare", r.URL.Path)
 
 		w.WriteHeader(http.StatusCreated)
 
 		var transactions []payment.Transaction
 		err := json.NewDecoder(r.Body).Decode(&transactions)
-		require.NoError(t, err)
+		suite.Require().NoError(err)
 
 		for i := 0; i < len(transactions); i++ {
 			transactions[i].Custodian = ptr.FromString(transactionstatus.Gemini)
@@ -196,7 +193,7 @@ func stubPrepareEndpoint(t *testing.T) *httptest.Server {
 		}
 
 		payload, err := json.Marshal(transactions)
-		require.NoError(t, err)
+		suite.Require().NoError(err)
 
 		_, err = w.Write(payload)
 	}))
@@ -204,22 +201,22 @@ func stubPrepareEndpoint(t *testing.T) *httptest.Server {
 	return ts
 }
 
-func assertMessage(t *testing.T, expected, actual event.Message, stream string) {
-	assert.Equal(t, expected.ID, actual.ID)
-	assert.Equal(t, stream, actual.CurrentStep().Stream)
-	assert.NotNil(t, actual.Routing)
+func (suite *PrepareTestSuite) assertMessage(expected, actual event.Message, stream string) {
+	suite.Equal(expected.ID, actual.ID)
+	suite.Equal(stream, actual.CurrentStep().Stream)
+	suite.NotNil(actual.Routing)
 
 	var expectedTransactions payment.Transaction
 	err := json.Unmarshal([]byte(actual.Body), &expectedTransactions)
-	require.NoError(t, err)
+	suite.Require().NoError(err)
 
 	var actualTransaction payment.Transaction
 	err = json.Unmarshal([]byte(actual.Body), &actualTransaction)
-	require.NoError(t, err)
+	suite.Require().NoError(err)
 
-	assert.Equal(t, expectedTransactions.From, actualTransaction.From)
-	assert.Equal(t, expectedTransactions.To, actualTransaction.To)
-	assert.Equal(t, expectedTransactions.Amount, actualTransaction.Amount)
-	assert.Equal(t, transactionstatus.Gemini, *actualTransaction.Custodian)
-	assert.NotNil(t, actualTransaction.DocumentID)
+	suite.Require().Equal(expectedTransactions.From, actualTransaction.From)
+	suite.Require().Equal(expectedTransactions.To, actualTransaction.To)
+	suite.Require().Equal(expectedTransactions.Amount, actualTransaction.Amount)
+	suite.Require().Equal(transactionstatus.Gemini, *actualTransaction.Custodian)
+	suite.Require().NotNil(actualTransaction.DocumentID)
 }
