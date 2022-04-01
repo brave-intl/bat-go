@@ -2,10 +2,11 @@ package settlement
 
 import (
 	"context"
-	"github.com/brave-intl/bat-go/settlement/automation/prepare"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/brave-intl/bat-go/settlement/automation/prepare"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"

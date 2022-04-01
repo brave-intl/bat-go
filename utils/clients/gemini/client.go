@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
+	"github.com/brave-intl/bat-go/utils/ptr"
+
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -23,6 +26,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
+)
+
+const (
+	// Gemini transactions states
+	completed  = "completed"
+	pending    = "pending"
+	processing = "processing"
+	failed     = "failed"
 )
 
 var (
@@ -233,6 +244,21 @@ type PayoutResult struct {
 	Destination *string          `json:"destination"`
 	Status      *string          `json:"status"`
 	Reason      *string          `json:"reason"`
+}
+
+func (pr *PayoutResult) CheckStatus() transactionstatus.State {
+	if strings.ToLower(pr.Result) == "error" {
+		return transactionstatus.Errored
+	}
+	switch transactionstatus.State(strings.ToLower(ptr.String(pr.Status))) {
+	case completed:
+		return transactionstatus.Complete
+	case pending, processing:
+		return transactionstatus.Pending
+	case failed:
+		return transactionstatus.Failed
+	}
+	return transactionstatus.Unknown
 }
 
 // Balance holds balance info

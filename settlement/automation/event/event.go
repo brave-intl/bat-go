@@ -59,19 +59,37 @@ type (
 	}
 )
 
-// NewMessageFromString creates a new instance of message from string dataKey.
+// NewMessage returns a new event.Message given an event.MessageType and a body.
+// The provided body will be serialized into a string.
+// The returned event.Message will have an empty Headers and no Routing.
+func NewMessage(messageType MessageType, body interface{}) (*Message, error) {
+	message := Message{
+		ID:        uuid.NewV4(),
+		Type:      messageType,
+		Timestamp: time.Now(),
+		Headers:   make(Headers),
+	}
+	err := message.SetBody(body)
+	if err != nil {
+		return nil, fmt.Errorf("event message: error creating new message: %w", err)
+	}
+	return &message, nil
+}
+
+// NewMessageFromString returns a new event.Message deserialized from the given data.
+// Data must be valid event.Message json.
 func NewMessageFromString(data string) (*Message, error) {
-	var message Message
-	err := json.Unmarshal([]byte(data), &message)
+	message := new(Message)
+	err := json.Unmarshal([]byte(data), message)
 	if err != nil {
 		return nil, fmt.Errorf("event message: error creating new message: %w", err)
 	}
 
 	if message.Headers == nil {
-		message.Headers = Headers{}
+		message.Headers = make(Headers)
 	}
 
-	return &message, nil
+	return message, nil
 }
 
 // SetBody sets the body of the message.

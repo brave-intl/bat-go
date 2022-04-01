@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
+
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/brave-intl/bat-go/settlement"
@@ -173,7 +175,21 @@ type WithdrawToDepositIDResponse struct {
 }
 
 // CategorizeStatus checks the status of a withdrawal response and categorizes it
+// TODO Remove this once the transition to using settlement service
 func (withdrawResponse WithdrawToDepositIDResponse) CategorizeStatus() string {
+	switch withdrawResponse.Status {
+	case "SUCCESS", "EXECUTED":
+		return "complete"
+	case "NOT_FOUND", "NO_INV", "INVALID_MEMO", "NOT_FOUNTD", "INVALID_AMOUNT", "NOT_ALLOWED_TO_SEND", "NOT_ALLOWED_TO_RECV", "LOCKED_BY_QUICK_DEPOSIT", "SESSION_SEND_LIMIT", "SESSION_TIME_OUT", "EXPIRED", "NOPOSITION", "OTHER_ERROR", "MONTHLY_SEND_LIMIT":
+		return "failed"
+	case "CREATED", "PENDING":
+		return "pending"
+	}
+	return "unknown"
+}
+
+// CheckStatus checks the status of a withdrawal response and categorizes it
+func (withdrawResponse WithdrawToDepositIDResponse) CheckStatus() transactionstatus.State {
 	switch withdrawResponse.Status {
 	case "SUCCESS", "EXECUTED":
 		return "complete"

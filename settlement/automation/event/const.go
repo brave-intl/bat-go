@@ -12,6 +12,11 @@ const (
 	CheckStatusStream         = "check-status-settlement"
 	CheckStatusConsumerGroup  = "check-status-consumer-group-settlement"
 	ErroredStream             = "errored-settlement"
+	DeadLetterQueue           = "dlq-settlement"
+)
+
+const (
+	Deadletter = MessageType("dead-letter")
 )
 
 // Settlement MessageType
@@ -20,6 +25,3 @@ const (
 	Ads      = MessageType("ads")
 	Creators = MessageType("creators")
 )
-
-// DeadLetterQueue general deadletter queue for settlement
-const DeadLetterQueue = "settlement-dlq"

@@ -2,13 +2,14 @@ package middleware
 
 import (
 	"context"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/gomodule/redigo/redis"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/gomodule/redigo/redis"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRateLimiterMemoryMiddleware(t *testing.T) {

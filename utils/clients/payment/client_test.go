@@ -92,8 +92,8 @@ func TestSubmit(t *testing.T) {
 func TestStatus(t *testing.T) {
 	documentID := uuid.NewV4().String()
 	expected := TransactionStatus{
-		CustodianSubmissionResponse: testutils.RandomString(),
-		CustodianStatusResponse:     testutils.RandomString(),
+		CustodianSubmissionResponse: ptr.FromString(testutils.RandomString()),
+		CustodianStatusResponse:     ptr.FromString(testutils.RandomString()),
 		Transaction: Transaction{
 			IdempotencyKey: uuid.NewV4(),
 			Custodian:      ptr.FromString(testutils.RandomString()),

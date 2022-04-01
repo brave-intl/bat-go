@@ -1,14 +1,17 @@
 //go:build integration
 // +build integration
 
-package status_test
+package checkstatus_test
 
 import (
 	"context"
 	"encoding/json"
 	"strings"
 
-	"github.com/brave-intl/bat-go/settlement/automation/status"
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+
+	"github.com/brave-intl/bat-go/settlement/automation/checkstatus"
 	"github.com/brave-intl/bat-go/settlement/automation/test"
 	"github.com/brave-intl/bat-go/utils/logging"
 
@@ -26,8 +29,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -44,6 +45,8 @@ func (suite *StatusTestSuite) SetupTest() {
 }
 
 func (suite *StatusTestSuite) TestStatus() {
+	test.StreamsTearDown(suite.T())
+
 	redisURL := os.Getenv("REDIS_URL")
 	suite.Require().NotNil(redisURL)
 
@@ -57,6 +60,7 @@ func (suite *StatusTestSuite) TestStatus() {
 		documentID := testutils.RandomString()
 		transaction := payment.Transaction{
 			IdempotencyKey: uuid.NewV4(),
+			Custodian:      ptr.FromString(transactionstatus.Gemini),
 			Amount:         decimal.New(1, 0),
 			To:             uuid.NewV4(),
 			From:           uuid.NewV4(),
@@ -64,23 +68,31 @@ func (suite *StatusTestSuite) TestStatus() {
 		}
 
 		body, err := json.Marshal(transaction)
-		suite.NoError(err)
+		suite.Require().NoError(err)
 
 		message := event.Message{
 			ID:        uuid.NewV4(),
 			Timestamp: time.Now(),
 			Type:      event.Grants,
-			Body:      string(body),
+			Routing: &event.Routing{
+				Slip: []event.Step{
+					{
+						Stream:  event.CheckStatusStream,
+						OnError: event.ErroredStream,
+					},
+				},
+			},
+			Body: string(body),
 		}
 
 		messages[documentID] = message
 
 		err = redis.Send(context.Background(), message, event.CheckStatusStream)
-		suite.NoError(err)
+		suite.Require().NoError(err)
 	}
 
 	// stub payment service with expected response
-	server := stubStatusEndpoint(suite.T(), messages)
+	server := suite.stubStatusEndpoint(messages)
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -93,41 +105,56 @@ func (suite *StatusTestSuite) TestStatus() {
 	ctx, done := context.WithCancel(ctx)
 
 	// start prepare consumer
-	go status.StartConsumer(ctx) // nolint
+	go checkstatus.StartConsumer(ctx) // nolint
 
-	// assert all messaged have been processed
+	// keep checking until all messages have been acknowledged before asserting
 	for {
-		xLen, err := redis.XLen(ctx, event.CheckStatusStream).Result()
-		suite.NoError(err)
-		xPending, _ := redis.XPending(ctx, event.CheckStatusStream,
-			event.CheckStatusConsumerGroup).Result()
-		if xPending != nil && xLen == 5 && xPending.Count == 0 {
+		xPending, err := redis.XPending(ctx, event.CheckStatusStream, event.CheckStatusConsumerGroup).Result()
+		suite.Require().NoError(err)
+		// check all messages have been ack before asserting
+		if xPending != nil && xPending.Count == int64(0) {
+			// assert all messages were successfully written to stream
+			streamCount, err := redis.XLen(ctx, event.CheckStatusStream).Result()
+			suite.NoError(err)
+			suite.Require().Equal(int64(len(messages)), streamCount)
+
+			// assert the dlq is empty
+			DLQCount, err := redis.XLen(ctx, event.DeadLetterQueue).Result()
+			suite.NoError(err)
+			suite.Equal(int64(0), DLQCount)
+
 			break
 		}
 	}
-	// stop consumers
 	done()
 }
 
-func stubStatusEndpoint(t *testing.T, messages map[string]event.Message) *httptest.Server {
-	t.Helper()
+func (suite *StatusTestSuite) stubStatusEndpoint(messages map[string]event.Message) *httptest.Server {
+	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
+		suite.Equal(http.MethodGet, r.Method)
 
 		// assert we received the documentID
 		documentID := strings.Split(r.URL.Path, "/")[3]
 		_, ok := messages[documentID]
-		assert.True(t, ok)
+		suite.True(ok)
 
 		// return the transaction for associated documentID with custodian response
 		w.WriteHeader(http.StatusOK)
 
+		payoutResult := gemini.PayoutResult{
+			Result: "Ok",
+			Status: ptr.FromString("completed"),
+		}
+
+		pr, err := json.Marshal(payoutResult)
+
 		transactionStatus := payment.TransactionStatus{
-			CustodianStatusResponse: testutils.RandomString(),
+			CustodianStatusResponse: ptr.FromString(string(pr)),
 			Transaction: payment.Transaction{
 				IdempotencyKey: uuid.NewV4(),
-				Custodian:      ptr.FromString(testutils.RandomString()),
+				Custodian:      ptr.FromString(transactionstatus.Gemini),
 				Amount:         decimal.New(1, 0),
 				To:             uuid.NewV4(),
 				From:           uuid.NewV4(),
@@ -136,10 +163,10 @@ func stubStatusEndpoint(t *testing.T, messages map[string]event.Message) *httpte
 		}
 
 		payload, err := json.Marshal(transactionStatus)
-		assert.NoError(t, err)
+		suite.NoError(err)
 
 		_, err = w.Write(payload)
-		assert.NoError(t, err)
+		suite.NoError(err)
 	}))
 
 	return ts
