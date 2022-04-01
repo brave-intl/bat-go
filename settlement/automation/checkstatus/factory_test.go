@@ -102,13 +102,14 @@ func (suite *StatusTestSuite) TestStatus() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx, done := context.WithCancel(ctx)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
 	go checkstatus.StartConsumer(ctx) // nolint
 
-	// keep checking until all messages have been acknowledged before asserting
+	timer := time.Now().Add(10 * time.Second)
 	for {
+		// keep checking until all messages have been acknowledged before asserting
 		xPending, err := redis.XPending(ctx, event.CheckStatusStream, event.CheckStatusConsumerGroup).Result()
 		suite.Require().NoError(err)
 		// check all messages have been ack before asserting
@@ -123,6 +124,10 @@ func (suite *StatusTestSuite) TestStatus() {
 			suite.NoError(err)
 			suite.Equal(int64(0), DLQCount)
 
+			break
+		}
+		if time.Now().After(timer) {
+			suite.Fail("test timeout")
 			break
 		}
 	}

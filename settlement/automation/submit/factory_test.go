@@ -23,8 +23,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -97,7 +95,7 @@ func (suite *SubmitTestSuite) TestSubmit() {
 	}
 
 	// stub payment service with expected response
-	server := stubSubmitEndpoint(suite.T(), transactions)
+	server := suite.stubSubmitEndpoint(transactions)
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -107,7 +105,7 @@ func (suite *SubmitTestSuite) TestSubmit() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx, done := context.WithCancel(ctx)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
 	go submit.StartConsumer(ctx) // nolint
@@ -122,28 +120,28 @@ func (suite *SubmitTestSuite) TestSubmit() {
 		actual := <-actualC
 		expected, ok := messages[actual.ID.String()]
 		suite.True(ok)
-		assertMessage(suite.T(), expected, actual, event.SubmitStatusStream)
+		suite.assertMessage(expected, actual, event.SubmitStatusStream)
 	}
 	// stop consumers
 	done()
 }
 
-func stubSubmitEndpoint(t *testing.T, transactions map[string]payment.Transaction) *httptest.Server {
-	t.Helper()
+func (suite *SubmitTestSuite) stubSubmitEndpoint(transactions map[string]payment.Transaction) *httptest.Server {
+	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// assert
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/v1/payments/submit", r.URL.Path)
+		suite.Require().Equal(http.MethodPost, r.Method)
+		suite.Require().Equal("/v1/payments/submit", r.URL.Path)
 
 		var txns []payment.Transaction
 		err := json.NewDecoder(r.Body).Decode(&txns)
-		require.NoError(t, err)
+		suite.Require().NoError(err)
 
 		for _, actual := range txns {
 			expected := transactions[actual.IdempotencyKey.String()]
-			assertTransaction(t, expected, actual)
+			suite.assertTransaction(expected, actual)
 		}
 
 		// response
@@ -153,27 +151,27 @@ func stubSubmitEndpoint(t *testing.T, transactions map[string]payment.Transactio
 	return ts
 }
 
-func assertMessage(t *testing.T, expected, actual event.Message, stream string) {
-	assert.Equal(t, expected.ID, actual.ID)
-	assert.Equal(t, stream, actual.CurrentStep().Stream)
-	assert.Equal(t, expected.Routing.Slip, actual.Routing.Slip)
-	assert.Equal(t, expected.Routing.ErrorHandling, actual.Routing.ErrorHandling)
+func (suite *SubmitTestSuite) assertMessage(expected, actual event.Message, stream string) {
+	suite.Require().Equal(expected.ID, actual.ID)
+	suite.Require().Equal(stream, actual.CurrentStep().Stream)
+	suite.Require().Equal(expected.Routing.Slip, actual.Routing.Slip)
+	suite.Require().Equal(expected.Routing.ErrorHandling, actual.Routing.ErrorHandling)
 
 	var expectedTransactions payment.Transaction
 	err := json.Unmarshal([]byte(actual.Body), &expectedTransactions)
-	require.NoError(t, err)
+	suite.Require().NoError(err)
 
 	var actualTransaction payment.Transaction
 	err = json.Unmarshal([]byte(actual.Body), &actualTransaction)
-	require.NoError(t, err)
+	suite.Require().NoError(err)
 
-	assertTransaction(t, expectedTransactions, actualTransaction)
+	suite.assertTransaction(expectedTransactions, actualTransaction)
 }
 
-func assertTransaction(t *testing.T, expected, actual payment.Transaction) {
-	assert.Equal(t, expected.From, actual.From)
-	assert.Equal(t, expected.To, actual.To)
-	assert.Equal(t, expected.Amount, actual.Amount)
-	assert.NotNil(t, actual.Custodian)
-	assert.NotNil(t, expected.DocumentID)
+func (suite *SubmitTestSuite) assertTransaction(expected, actual payment.Transaction) {
+	suite.Equal(expected.From, actual.From)
+	suite.Equal(expected.To, actual.To)
+	suite.Equal(expected.Amount, actual.Amount)
+	suite.NotNil(actual.Custodian)
+	suite.NotNil(expected.DocumentID)
 }
