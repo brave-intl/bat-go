@@ -39,6 +39,7 @@ type channelHandler struct {
 	actualC chan event.Message
 }
 
+// Handle implements a test handler that writes the received messages a channel
 func (c *channelHandler) Handle(ctx context.Context, messages []event.Message) error {
 	for _, message := range messages {
 		c.actualC <- message

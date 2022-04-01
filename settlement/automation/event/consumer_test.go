@@ -5,13 +5,13 @@ package event_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/settlement/automation/test"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
@@ -27,9 +27,9 @@ type ConsumerTestSuite struct {
 
 func TestConsumerTestSuite(t *testing.T) {
 	suite.Run(t, &ConsumerTestSuite{
-		stream:        "test-dlq",
-		consumerGroup: "test-consumer-group",
-		DLQ:           "test-dlq",
+		stream:        testutils.RandomString(),
+		consumerGroup: testutils.RandomString(),
+		DLQ:           testutils.RandomString(),
 	})
 }
 
@@ -42,9 +42,12 @@ func (suite *ConsumerTestSuite) SetupTest() {
 
 	_, err = rc.Do(context.Background(), "DEL", suite.stream).Result()
 	suite.NoError(err)
+
+	_, err = rc.Do(context.Background(), "DEL", suite.DLQ).Result()
+	suite.NoError(err)
 }
 
-func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
+func (suite *ConsumerTestSuite) TestConsumer_Process_Success() {
 	redisURL := os.Getenv("REDIS_URL")
 	suite.Require().NotNil(redisURL)
 
@@ -54,7 +57,6 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
 
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx, done := context.WithCancel(ctx)
 
 	messages := make(map[uuid.UUID]event.Message)
@@ -78,7 +80,7 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
 		messages[message.ID] = message
 
 		err = redis.Send(context.Background(), message, suite.stream)
-		suite.NoError(err)
+		suite.Require().NoError(err)
 	}
 
 	router := func(message *event.Message) error {
@@ -89,8 +91,7 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
 	go test.StartTestBatchConsumerWithRouter(suite.T(), ctx, redis,
 		suite.stream, suite.consumerGroup, suite.DLQ, router, actualC)
 
-	// assert the messages have been processed
-
+	// assert messages processed match the sent messages
 	var actual event.Message
 	for i := 0; i < len(messages); i++ {
 		actual = <-actualC
@@ -103,31 +104,101 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Success() {
 		suite.Equal(expected.Body, actual.Body)
 	}
 
-	// assert all messages ack from stream and dlq is empty
-	for {
-		xPending, _ := redis.XPending(ctx, suite.stream, suite.consumerGroup).Result()
+	// assert all messages were successfully written to stream
+	streamCount, err := redis.XLen(ctx, suite.stream).Result()
+	suite.NoError(err)
+	suite.Equal(int64(len(messages)), streamCount)
 
-		xLen, err := redis.XLen(ctx, suite.stream).Result()
-		suite.NoError(err)
+	// assert all messages have been ack and none pending for stream and consumer group
+	xPending, err := redis.XPending(ctx, suite.stream, suite.consumerGroup).Result()
+	suite.NoError(err)
+	suite.Equal(int64(0), xPending.Count)
 
-		DLQLen, err := redis.XLen(ctx, suite.DLQ).Result()
-		suite.NoError(err)
-
-		if xPending != nil && xPending.Count == 0 && xLen == int64(len(messages)) {
-			break
-		}
-
-		suite.Equal(0, DLQLen)
-	}
+	// assert the dlq is empty
+	DLQCount, err := redis.XLen(ctx, suite.DLQ).Result()
+	suite.NoError(err)
+	suite.Equal(int64(0), DLQCount)
 
 	done()
 }
 
-func (suite *ConsumerTestSuite) TestConsumer_Process_Handle_Error() {
-	// TODO
+type errorHandler struct{}
+
+func (e errorHandler) Handle(ctx context.Context, messages []event.Message) error {
+	return errors.New("handler error")
 }
 
-func (suite *ConsumerTestSuite) TestConsumer_Process_Data_Error() {
+func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
+	redisURL := os.Getenv("REDIS_URL")
+	suite.NotNil(redisURL)
+
+	// create newHandler redis client and clear streams
+	redis, err := event.NewRedisClient(redisURL)
+	suite.Require().NoError(err)
+
+	ctx := context.Background()
+	ctx, _ = logging.SetupLogger(ctx)
+	ctx, done := context.WithCancel(ctx)
+
+	messages := make(map[uuid.UUID]event.Message)
+	for i := 0; i < 5; i++ {
+		message := event.Message{
+			ID:        uuid.NewV4(),
+			Timestamp: time.Now(),
+			Type:      event.MessageType(testutils.RandomString()),
+			Routing: &event.Routing{
+				Position: 0,
+				Slip: []event.Step{
+					{
+						Stream:  testutils.RandomString(),
+						OnError: testutils.RandomString(),
+					},
+				},
+			},
+			Body: testutils.RandomString(),
+		}
+
+		messages[message.ID] = message
+
+		err = redis.Send(context.Background(), message, suite.stream)
+		suite.Require().NoError(err)
+	}
+
+	consumerConfig, err := event.NewBatchConsumerConfig(event.WithStreamName(suite.stream),
+		event.WithConsumerGroup(suite.consumerGroup), event.WithMinIdleTime(10*time.Millisecond),
+		event.WithRetryDelay(1*time.Millisecond),
+		event.WithMaxRetry(2))
+	suite.Require().NoError(err)
+
+	handler := errorHandler{}
+
+	consumer, err := event.NewBatchConsumer(redis, *consumerConfig, handler, nil, suite.DLQ)
+	suite.Require().NoError(err)
+
+	err = consumer.Consume(ctx)
+	suite.NoError(err)
+
+	for {
+		DLQCount, err := redis.XLen(ctx, suite.DLQ).Result()
+		suite.Require().NoError(err)
+		// assert failed messages in dlq
+		if DLQCount == int64(5) {
+			xPending, err := redis.XPending(ctx, suite.stream, suite.consumerGroup).Result()
+			suite.Require().NoError(err)
+			suite.Equal(int64(0), xPending.Count)
+
+			// assert all messages were successfully written to stream
+			streamCount, err := redis.XLen(ctx, suite.stream).Result()
+			suite.NoError(err)
+			suite.Require().Equal(int64(len(messages)), streamCount)
+
+			break
+		}
+	}
+	done()
+}
+
+func (suite *ConsumerTestSuite) TestConsumer_Process_DataKey_Error() {
 	// TODO
 }
 

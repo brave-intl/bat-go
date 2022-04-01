@@ -2,9 +2,12 @@ package event
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 
 	"github.com/rs/zerolog"
 
@@ -27,7 +30,9 @@ const (
 	//minIdleTime is the minimum time a message can should be idle before being claimed for reprocess.
 	minIdleTime = 5 * time.Second
 	// retryDelay is the minimum delay before polling the pending stream for non ack messages.
-	retryDelay = time.Minute * 1
+	retryDelay = 1 * time.Minute
+	// maxRetry is the maximum number of times a pending message should be retried
+	maxRetry = 5
 )
 
 type (
@@ -50,6 +55,7 @@ type (
 		block         time.Duration
 		minIdleTime   time.Duration
 		retryDelay    time.Duration
+		maxRetry      int64
 	}
 
 	// Handler defines a message handler.
@@ -110,19 +116,20 @@ func (b *BatchConsumer) process(ctx context.Context) {
 		case <-ctx.Done():
 			if err := ctx.Err(); err != nil {
 				logging.FromContext(ctx).Error().
-					Err(fmt.Errorf("error context cancelled: %w", err)).
+					Err(fmt.Errorf("error reading stream: %w", err)).
 					Msg("batch consumer")
 			}
 			return
 		default:
+
 			streams, err := b.redis.XReadGroup(ctx, xReadGroupArgs).Result()
 			if err != nil {
 				logging.FromContext(ctx).Error().
-					Err(fmt.Errorf("error reading stream: %w", err)).
+					Err(fmt.Errorf("error reading messages: %w", err)).
 					Msg("batch consumer")
 			}
 
-			// check we have messages to process
+			// check we have xMessages to process
 			if len(streams) < 1 {
 				continue
 			}
@@ -132,15 +139,24 @@ func (b *BatchConsumer) process(ctx context.Context) {
 
 			for _, xMessage := range streams[0].Messages {
 
-				logging.FromContext(ctx).Info().Msgf("processing message: xMessageID %s", xMessage.ID)
+				logging.FromContext(ctx).Info().
+					Str("x_message_id", xMessage.ID).
+					Msg("batch consumer processing")
 
 				d, ok := xMessage.Values[dataKey]
 				if !ok {
-					err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+
+					logging.FromContext(ctx).Error().
+						Str("x_message_id", xMessage.ID).
+						Err(fmt.Errorf("error retrieving message data: %w", err)).
+						Msg("batch consumer processing")
+
+					err := b.sendDeadLetter(ctx, xMessage)
 					if err != nil {
 						logging.FromContext(ctx).Error().
-							Err(fmt.Errorf("error retrieving dataKey for messageID %s: %w", xMessage.ID, err)).
-							Msg("batch consumer")
+							Str("x_message_id", xMessage.ID).
+							Err(errors.New("error sending message to dlq")).
+							Msg("batch consumer retry")
 					}
 					continue
 				}
@@ -153,17 +169,17 @@ func (b *BatchConsumer) process(ctx context.Context) {
 					if err != nil || len(message.Body) == 0 {
 
 						logging.FromContext(ctx).Error().
-							Err(fmt.Errorf("error creating new message for messageID %s: %w", xMessage.ID, err)).
-							Msg("batch consumer")
+							Str("x_message_id", xMessage.ID).
+							Err(fmt.Errorf("error creating new message: %w", err)).
+							Msg("batch consumer processing")
 
-						err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+						err := b.sendDeadLetter(ctx, xMessage)
 						if err != nil {
 							logging.FromContext(ctx).Error().
-								Err(fmt.Errorf("error sending messageID %s to dlq: %w", message.ID, err)).
-								Msg("batch consumer")
+								Str("x_message_id", xMessage.ID).
+								Err(errors.New("error sending message to dlq")).
+								Msg("batch consumer retry")
 						}
-
-						// skip further processing
 						continue
 					}
 
@@ -176,14 +192,17 @@ func (b *BatchConsumer) process(ctx context.Context) {
 						if err != nil {
 
 							logging.FromContext(ctx).Error().
-								Err(fmt.Errorf("error adding router for messageID %s: %w", message.ID, err)).
-								Msg("batch consumer")
+								Str("x_message_id", xMessage.ID).
+								Str("message_id", message.ID.String()).
+								Err(fmt.Errorf("error adding router: %w", err)).
+								Msg("batch consumer processing")
 
-							err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+							err := b.sendDeadLetter(ctx, xMessage)
 							if err != nil {
 								logging.FromContext(ctx).Error().
-									Err(fmt.Errorf("error sending messageID %s to dlq: %w", message.ID, err)).
-									Msg("batch consumer")
+									Str("x_message_id", xMessage.ID).
+									Err(errors.New("error sending message to dlq")).
+									Msg("batch consumer retry")
 							}
 							continue
 						}
@@ -193,30 +212,41 @@ func (b *BatchConsumer) process(ctx context.Context) {
 
 				default:
 					logging.FromContext(ctx).Error().
-						Err(fmt.Errorf("error invalid data type for %s", xMessage.ID)).
-						Msg("batch consumer")
+						Str("x_message_id", xMessage.ID).
+						Err(fmt.Errorf("error invalid message data type %s", s)).
+						Msg("batch consumer processing")
 
-					err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+					err := b.sendDeadLetter(ctx, xMessage)
 					if err != nil {
 						logging.FromContext(ctx).Error().
-							Err(fmt.Errorf("error sending messageID %s to dlq: %w", xMessage.ID, err)).
-							Msg("batch consumer")
+							Str("x_message_id", xMessage.ID).
+							Err(errors.New("error sending message to dlq")).
+							Msg("batch consumer retry")
 					}
 				}
+			}
+
+			// check we have messages to process
+			if len(messages) < 1 {
+				continue
 			}
 
 			err = b.handler.Handle(ctx, messages)
 			if err != nil {
 				logging.FromContext(ctx).Error().
+					Strs("message_ids", b.getIDs(messages)).
 					Err(fmt.Errorf("error handling messages: %w", err)).
-					Msg("error processing message")
+					Msg("batch consumer processing")
+				// dont ack the messages so they can be retried
 				continue
 			}
 
 			if _, err := b.redis.XAck(ctx, b.config.streamName, b.config.consumerGroup, xMessageIDs...).Result(); err != nil {
+				// log the error and allow it to retry until we max out our retry attempts
 				logging.FromContext(ctx).Error().
-					Err(fmt.Errorf("error ack messages: %w", err)).
-					Msg("error ack messages")
+					Strs("message_ids", b.getIDs(messages)).
+					Err(errors.New("failed to ack message")).
+					Msg("batch consumer processing")
 			}
 		}
 	}
@@ -225,13 +255,13 @@ func (b *BatchConsumer) process(ctx context.Context) {
 // retry is responsible for consuming messaged that have failed to process first time
 func (b *BatchConsumer) retry(ctx context.Context) {
 
-	xAutoClaimArgs := &redis.XAutoClaimArgs{
-		Stream:   b.config.streamName,
-		Group:    b.config.consumerGroup,
-		Consumer: b.config.consumerID.String(),
-		MinIdle:  b.config.minIdleTime,
-		Start:    b.config.start,
-		Count:    b.config.count,
+	xPendingExtArgs := &redis.XPendingExtArgs{
+		Stream: b.config.streamName,
+		Group:  b.config.consumerGroup,
+		Idle:   b.config.minIdleTime,
+		Start:  "-",
+		End:    "+",
+		Count:  b.config.count,
 	}
 
 	timer := time.NewTimer(b.config.retryDelay)
@@ -241,25 +271,88 @@ func (b *BatchConsumer) retry(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			if err := ctx.Err(); err != nil {
-				logging.FromContext(ctx).Error().Err(err).Msg("error reading from stream")
+				logging.FromContext(ctx).Error().
+					Err(fmt.Errorf("error reading stream: %w", err)).
+					Msg("batch consumer retry")
 			}
 			return
-		case <-timer.C:
+		default:
 
-			xMessages, _, err := b.redis.XAutoClaim(ctx, xAutoClaimArgs).Result()
+			xPending, err := b.redis.XPendingExt(ctx, xPendingExtArgs).Result()
 			if err != nil {
-				logging.FromContext(ctx).Error().Err(err).Msg("error decoding message")
+				logging.FromContext(ctx).Error().
+					Err(fmt.Errorf("error getting pending messages: %w", err)).
+					Msg("batch consumer retry")
 				continue
 			}
 
-			// if message has high retry send to dlq otherwise process
+			// nothing pending
+			numPending := len(xPending)
+			if numPending == 0 {
+				continue
+			}
+
+			xPendingID := make([]string, numPending)
+			xPendingRetryCount := make(map[string]int64, numPending)
+
+			for i := 0; i < numPending; i++ {
+				xPendingID[i] = xPending[i].ID
+				xPendingRetryCount[xPending[i].ID] = xPending[i].RetryCount
+			}
+
+			xMessages, err := b.redis.XClaim(ctx, &redis.XClaimArgs{
+				Stream:   b.config.streamName,
+				Group:    b.config.consumerGroup,
+				Consumer: b.config.consumerID.String(),
+				MinIdle:  b.config.minIdleTime,
+				Messages: xPendingID,
+			}).Result()
+
+			if err != nil {
+				logging.FromContext(ctx).Error().
+					Strs("x_pending_ids", xPendingID).
+					Err(fmt.Errorf("error claiming pending messages: %w", err)).
+					Msg("batch consumer retry")
+			}
+
 			for _, xMessage := range xMessages {
+				// a message may have been claimed by another consumer after calling xPending
+				// so check if we claimed it successfully before further processing if not skip it
+				retryCount, ok := xPendingRetryCount[xMessage.ID]
+				if !ok {
+					continue
+				}
+
+				// if we have reached max retries for this message then send to dlq
+				if retryCount > b.config.maxRetry {
+					logging.FromContext(ctx).Error().
+						Str("x_message_id", xMessage.ID).
+						Err(errors.New("max retries reached")).
+						Msg("batch consumer retry")
+
+					err := b.sendDeadLetter(ctx, xMessage)
+					if err != nil {
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Err(errors.New("error sending message to dlq")).
+							Msg("batch consumer retry")
+					}
+					continue
+				}
 
 				d, ok := xMessage.Values[dataKey]
 				if !ok {
-					err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+					logging.FromContext(ctx).Error().
+						Str("x_message_id", xMessage.ID).
+						Err(fmt.Errorf("error retrieving message data: %w", err)).
+						Msg("batch consumer retry")
+
+					err := b.sendDeadLetter(ctx, xMessage)
 					if err != nil {
-						logging.FromContext(ctx).Error().Err(err).Msg("error decoding message")
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Err(errors.New("error sending message to dlq")).
+							Msg("batch consumer retry")
 					}
 					continue
 				}
@@ -269,10 +362,17 @@ func (b *BatchConsumer) retry(ctx context.Context) {
 
 					message, err := NewMessageFromString(s)
 					if err != nil {
-						logging.FromContext(ctx).Error().Err(err).Msg("error decoding message")
-						err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Err(fmt.Errorf("error creating new message: %w", err)).
+							Msg("batch consumer retry")
+
+						err := b.sendDeadLetter(ctx, xMessage)
 						if err != nil {
-							logging.FromContext(ctx).Error().Err(err).Msg("error decoding message")
+							logging.FromContext(ctx).Error().
+								Str("x_message_id", xMessage.ID).
+								Err(errors.New("error sending message to dlq")).
+								Msg("batch consumer retry")
 						}
 						continue
 					}
@@ -283,22 +383,36 @@ func (b *BatchConsumer) retry(ctx context.Context) {
 
 					err = b.handler.Handle(ctx, []Message{*message})
 					if err != nil {
-						logging.FromContext(ctx).Error().Err(err).Msg("error processing message")
-						// dont ack
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Str("message_id", message.ID.String()).
+							Err(fmt.Errorf("error handling message: %w", err)).
+							Msg("batch consumer retry")
+						// dont ack the message and keep retrying until we max out our retry attempts
 						continue
 					}
 
 					if _, err := b.redis.XAck(ctx, b.config.streamName, b.config.consumerGroup, xMessage.ID).Result(); err != nil {
-						logging.FromContext(ctx).Error().Err(err).Msg("error ack messages")
+						// log the error and allow it to retry until we max out our retry attempts
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Str("message_id", message.ID.String()).
+							Err(errors.New("failed to ack message")).
+							Msg("batch consumer retry")
 					}
 
 				default:
 					logging.FromContext(ctx).Error().
-						Err(fmt.Errorf("error invalid dataKey type messageID %s", xMessage.ID)).Msg("processing message")
+						Str("x_message_id", xMessage.ID).
+						Err(fmt.Errorf("error invalid message data type %s", s)).
+						Msg("batch consumer retry")
 
-					err := b.redis.SendRawMessage(ctx, xMessage.Values, b.deadLetterQueue)
+					err := b.sendDeadLetter(ctx, xMessage)
 					if err != nil {
-						logging.FromContext(ctx).Error().Err(err).Msg("error decoding message")
+						logging.FromContext(ctx).Error().
+							Str("x_message_id", xMessage.ID).
+							Err(errors.New("error sending message to dlq")).
+							Msg("batch consumer retry")
 					}
 				}
 			}
@@ -307,10 +421,53 @@ func (b *BatchConsumer) retry(ctx context.Context) {
 	}
 }
 
-// Option func to build BatchConsumerConfig
+// sendDeadLetter creates a new deadletter Message with the given xMessage then send and ack the message.
+// Informs sentry a message has failed to process
+func (b *BatchConsumer) sendDeadLetter(ctx context.Context, xMessage redis.XMessage) error {
+
+	deadletter, err := NewMessage(Deadletter, xMessage.Values)
+	if err != nil {
+		return fmt.Errorf("error creating new message: %w", err)
+	}
+
+	err = b.redis.Send(ctx, *deadletter, b.deadLetterQueue)
+	if err != nil {
+		return fmt.Errorf("error sending message: %w", err)
+	}
+
+	_, err = b.redis.XAck(ctx, b.config.streamName, b.config.consumerGroup, xMessage.ID).Result()
+	if err != nil {
+		return fmt.Errorf("error acknowledging message: %w", err)
+	}
+
+	defer func() {
+		var exception = fmt.Errorf("error sending %s message to dql: %w", xMessage.ID, err)
+		// only log successful dlq attempt
+		if err == nil {
+			exception = fmt.Errorf("message %s sent to dql", xMessage.ID)
+			logging.FromContext(ctx).Error().
+				Str("x_message_id", xMessage.ID).
+				Err(exception).
+				Msg("batch consumer retry")
+		}
+		sentry.CaptureException(exception)
+	}()
+
+	return nil
+}
+
+func (b *BatchConsumer) getIDs(messages []Message) []string {
+	ids := make([]string, len(messages))
+	for i := 0; i < len(messages); i++ {
+		ids[i] = messages[i].ID.String()
+	}
+	return ids
+}
+
+// Option func to build BatchConsumerConfig.
 type Option func(config *BatchConsumerConfig) error
 
-// NewBatchConsumerConfig return a new instance of BatchConsumerConfig
+// NewBatchConsumerConfig return a new instance of BatchConsumerConfig.
 func NewBatchConsumerConfig(options ...Option) (*BatchConsumerConfig, error) {
 	config := &BatchConsumerConfig{
 		start:       start,
@@ -318,6 +475,7 @@ func NewBatchConsumerConfig(options ...Option) (*BatchConsumerConfig, error) {
 		block:       block,
 		minIdleTime: minIdleTime,
 		retryDelay:  retryDelay,
+		maxRetry:    maxRetry,
 	}
 	for _, option := range options {
 		if err := option(config); err != nil {
@@ -327,7 +485,7 @@ func NewBatchConsumerConfig(options ...Option) (*BatchConsumerConfig, error) {
 	return config, nil
 }
 
-// WithStreamName sets the stream name
+// WithStreamName sets the stream name.
 func WithStreamName(streamName string) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.streamName = streamName
@@ -335,7 +493,7 @@ func WithStreamName(streamName string) Option {
 	}
 }
 
-// WithConsumerID sets the consumer id
+// WithConsumerID sets the consumer id.
 func WithConsumerID(consumerID uuid.UUID) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.consumerID = consumerID
@@ -343,7 +501,7 @@ func WithConsumerID(consumerID uuid.UUID) Option {
 	}
 }
 
-// WithConsumerGroup sets the consumer group
+// WithConsumerGroup sets the consumer group.
 func WithConsumerGroup(consumerGroup string) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.consumerGroup = consumerGroup
@@ -351,7 +509,7 @@ func WithConsumerGroup(consumerGroup string) Option {
 	}
 }
 
-// WithStart sets position to start processing messages. Default 0
+// WithStart sets position to start processing messages. Default 0.
 func WithStart(start string) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.start = start
@@ -359,7 +517,7 @@ func WithStart(start string) Option {
 	}
 }
 
-// WithCount sets the maximum number of messages to read from the stream. Default 10
+// WithCount sets the maximum number of messages to read from the stream. Default 10.
 func WithCount(count int64) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.count = count
@@ -367,7 +525,7 @@ func WithCount(count int64) Option {
 	}
 }
 
-// WithBlock sets the time.Duration a consumer should block when the stream is empty. Default 0
+// WithBlock sets the time.Duration a consumer should block when the stream is empty. Default 0.
 func WithBlock(block time.Duration) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.block = block
@@ -376,7 +534,7 @@ func WithBlock(block time.Duration) Option {
 }
 
 // WithMinIdleTime sets the minimum time to wait before a message a pending/failed message
-// can be auto claimed for reprocess. Default 5 * time.Second
+// can be auto claimed for reprocess. Default 5 * time.Second.
 func WithMinIdleTime(minIdleTime time.Duration) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.minIdleTime = minIdleTime
@@ -384,10 +542,18 @@ func WithMinIdleTime(minIdleTime time.Duration) Option {
 	}
 }
 
-// WithRetryDelay sets the minimum delay before polling the pending stream for non ack messages. Default 1 * time.Minute
+// WithRetryDelay sets the minimum delay before polling the pending stream for non ack messages. Default 1 * time.Minute.
 func WithRetryDelay(retryDelay time.Duration) Option {
 	return func(b *BatchConsumerConfig) error {
 		b.retryDelay = retryDelay
+		return nil
+	}
+}
+
+// WithMaxRetry sets the maximum number of times a pending message should be retried. Default 5.
+func WithMaxRetry(maxRetry int64) Option {
+	return func(b *BatchConsumerConfig) error {
+		b.maxRetry = maxRetry
 		return nil
 	}
 }

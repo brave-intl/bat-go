@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/settlement/automation/custodian"
 	"github.com/brave-intl/bat-go/settlement/automation/event"
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
@@ -21,19 +21,19 @@ var (
 )
 
 type submitStatus struct {
-	redis       *event.Client
-	payment     payment.Client
-	retry       backoff.RetryFunc
-	checkStatus custodian.StatusResolver
+	redis   *event.Client
+	payment payment.Client
+	retry   backoff.RetryFunc
+	resolve transactionstatus.Resolver
 }
 
 func newHandler(redis *event.Client, payment payment.Client, retry backoff.RetryFunc,
-	checkStatus custodian.StatusResolver) *submitStatus {
+	resolver transactionstatus.Resolver) *submitStatus {
 	return &submitStatus{
-		redis:       redis,
-		payment:     payment,
-		retry:       retry,
-		checkStatus: checkStatus,
+		redis:   redis,
+		payment: payment,
+		retry:   retry,
+		resolve: resolver,
 	}
 }
 
@@ -66,13 +66,13 @@ func (s *submitStatus) Handle(ctx context.Context, messages []event.Message) err
 			return fmt.Errorf("submit status handler: error converting transaction status: %w", err)
 		}
 
-		status, err := s.checkStatus(*transactionStatus)
+		status, err := s.resolve(*transactionStatus)
 		if err != nil {
 			return fmt.Errorf("submit status handler: error checking custodian submit status: %w", err)
 		}
 
 		switch status {
-		case custodian.Complete:
+		case transactionstatus.Complete:
 			err := message.Advance()
 			if err != nil {
 				return fmt.Errorf("submit status handler: error advancing message %s: %w", message.ID, err)
@@ -83,13 +83,13 @@ func (s *submitStatus) Handle(ctx context.Context, messages []event.Message) err
 				return fmt.Errorf("submit status handler: error routing message to errored stream %s: %w", message.ID, err)
 			}
 
-		case custodian.Pending:
+		case transactionstatus.Pending:
 			err := s.redis.Send(ctx, message, message.CurrentStep().Stream)
 			if err != nil {
 				return fmt.Errorf("submit status handler: error sending message: %w", err)
 			}
 
-		case custodian.Failed:
+		case transactionstatus.Failed:
 			err := message.IncrementErrorAttempt()
 			if err != nil {
 				return fmt.Errorf("submit status handler: error incrementing error attempt: %w", err)

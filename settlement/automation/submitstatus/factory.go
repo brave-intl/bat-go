@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/settlement/automation/custodian"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
@@ -31,7 +30,7 @@ func StartConsumer(ctx context.Context) error {
 		return fmt.Errorf("start submit status consumer: error creating redis client: %w", err)
 	}
 
-	handler := newHandler(redis, payment.New(paymentURL), backoff.Retry, custodian.CheckCustodianSubmitResponse)
+	handler := newHandler(redis, payment.New(paymentURL), backoff.Retry, checkCustodianSubmitResponse)
 
 	consumer, err := event.NewBatchConsumer(redis, *consumerConfig, handler, submitStatusRouter, event.DeadLetterQueue)
 	if err != nil {

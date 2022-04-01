@@ -56,12 +56,3 @@ func (r *Client) Send(ctx context.Context, message Message, stream string) error
 	}
 	return nil
 }
-
-// SendRawMessage wraps the message in dataKey field and sends to stream
-func (r *Client) SendRawMessage(ctx context.Context, message map[string]interface{}, stream string) error {
-	_, err := r.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: map[string]interface{}{dataKey: message}}).Result()
-	if err != nil {
-		return fmt.Errorf("redis client: error adding raw message to redis stream: %w", err)
-	}
-	return nil
-}
