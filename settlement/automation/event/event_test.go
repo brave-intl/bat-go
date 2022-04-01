@@ -10,7 +10,25 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMessage_NewMessageFromString(t *testing.T) {
+func TestNewMessage(t *testing.T) {
+	msgType := MessageType(testutils.RandomString())
+	data := testutils.RandomString()
+
+	actual, err := NewMessage(msgType, data)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, actual.ID)
+	assert.Equal(t, Headers{}, actual.Headers)
+	assert.WithinDuration(t, time.Now(), actual.Timestamp, 1*time.Second)
+	assert.Nil(t, actual.Routing)
+
+	var body string
+	err = json.Unmarshal([]byte(actual.Body), &body)
+	assert.NoError(t, err)
+	assert.Equal(t, data, body)
+}
+
+func TestNewMessageFromString(t *testing.T) {
 	expected := createMessage()
 
 	bytes, err := json.Marshal(expected)
@@ -24,7 +42,7 @@ func TestMessage_NewMessageFromString(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
-func TestMessage_SetBody(t *testing.T) {
+func TestSetBody(t *testing.T) {
 	body := testutils.RandomString()
 
 	message := &Message{
@@ -41,7 +59,7 @@ func TestMessage_SetBody(t *testing.T) {
 	assert.Equal(t, string(expected), message.Body)
 }
 
-func TestMessage_CurrentStep(t *testing.T) {
+func TestCurrentStep(t *testing.T) {
 	expected := testutils.RandomInt()
 	message := &Message{
 		Routing: &Routing{
@@ -51,7 +69,7 @@ func TestMessage_CurrentStep(t *testing.T) {
 	assert.Equal(t, expected, message.Routing.Position)
 }
 
-func TestMessage_Advance_Error(t *testing.T) {
+func TestAdvance_Error(t *testing.T) {
 	position := testutils.RandomInt()
 	message := &Message{
 		Routing: &Routing{
@@ -66,7 +84,7 @@ func TestMessage_Advance_Error(t *testing.T) {
 	assert.Equal(t, position, message.Routing.Position)
 }
 
-func TestMessage_Advance(t *testing.T) {
+func TestAdvance(t *testing.T) {
 	position := 0
 	message := &Message{
 		Routing: &Routing{
@@ -91,7 +109,7 @@ func TestMessage_Advance(t *testing.T) {
 	assert.Equal(t, position+1, message.Routing.Position)
 }
 
-func TestMessage_IncrementErrorAttempt_Error(t *testing.T) {
+func TestIncrementErrorAttempt_Error(t *testing.T) {
 	maxRetries := 0
 	message := &Message{
 		Routing: &Routing{
@@ -106,7 +124,7 @@ func TestMessage_IncrementErrorAttempt_Error(t *testing.T) {
 	assert.EqualError(t, err, ErrMaxRetriesExceeded.Error())
 }
 
-func TestMessage_IncrementErrorAttempt(t *testing.T) {
+func TestIncrementErrorAttempt(t *testing.T) {
 	maxRetries := 1
 	message := &Message{
 		Routing: &Routing{
@@ -123,7 +141,7 @@ func TestMessage_IncrementErrorAttempt(t *testing.T) {
 	assert.Equal(t, 1, message.Routing.ErrorHandling.Attempt)
 }
 
-func TestMessage_MarshalBinary(t *testing.T) {
+func TestMarshalBinary(t *testing.T) {
 	message := createMessage()
 
 	expected, err := json.Marshal(message)
@@ -135,7 +153,7 @@ func TestMessage_MarshalBinary(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
-func TestMessage_UnmarshalBinary(t *testing.T) {
+func TestUnmarshalBinary(t *testing.T) {
 	expected := createMessage()
 
 	data, err := json.Marshal(expected)

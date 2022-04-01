@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
@@ -36,6 +38,16 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
+)
+
+const (
+	// These values represent valid uphold transaction states
+	completed  = "completed"
+	pending    = "pending"
+	processing = "processing"
+	waiting    = "waiting"
+	cancelled  = "cancelled"
+	failed     = "failed"
 )
 
 // Wallet a wallet information using Uphold as the provider
@@ -693,6 +705,18 @@ type UpholdTransactionResponse struct {
 	Params       UpholdTransactionResponseParams      `json:"params"`
 	CreatedAt    string                               `json:"createdAt"`
 	Message      string                               `json:"message"`
+}
+
+func (resp UpholdTransactionResponse) CheckStatus() transactionstatus.State {
+	switch strings.ToLower(resp.Status) {
+	case completed:
+		return transactionstatus.Complete
+	case pending, processing, waiting:
+		return transactionstatus.Pending
+	case cancelled, failed:
+		return transactionstatus.Failed
+	}
+	return transactionstatus.Unknown
 }
 
 func (resp UpholdTransactionResponse) ToTransactionInfo() *walletutils.TransactionInfo {

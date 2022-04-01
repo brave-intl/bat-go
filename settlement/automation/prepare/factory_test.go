@@ -19,8 +19,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/ptr"
 
-	"github.com/brave-intl/bat-go/settlement/automation/custodian"
 	"github.com/brave-intl/bat-go/settlement/automation/event"
+	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 
@@ -191,7 +191,7 @@ func stubPrepareEndpoint(t *testing.T) *httptest.Server {
 		require.NoError(t, err)
 
 		for i := 0; i < len(transactions); i++ {
-			transactions[i].Custodian = ptr.FromString(custodian.Gemini)
+			transactions[i].Custodian = ptr.FromString(transactionstatus.Gemini)
 			transactions[i].DocumentID = ptr.FromString(testutils.RandomString())
 		}
 
@@ -220,6 +220,6 @@ func assertMessage(t *testing.T, expected, actual event.Message, stream string) 
 	assert.Equal(t, expectedTransactions.From, actualTransaction.From)
 	assert.Equal(t, expectedTransactions.To, actualTransaction.To)
 	assert.Equal(t, expectedTransactions.Amount, actualTransaction.Amount)
-	assert.Equal(t, custodian.Gemini, *actualTransaction.Custodian)
+	assert.Equal(t, transactionstatus.Gemini, *actualTransaction.Custodian)
 	assert.NotNil(t, actualTransaction.DocumentID)
 }

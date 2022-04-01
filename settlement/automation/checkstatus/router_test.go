@@ -1,4 +1,4 @@
-package status
+package checkstatus
 
 import (
 	"fmt"
@@ -32,7 +32,7 @@ func TestRouter_HasRouter(t *testing.T) {
 		Body: testutils.RandomString(),
 	}
 
-	err := statusRouter(&expected)
+	err := checkStatusRouter(&expected)
 	assert.NoError(t, err)
 
 	// assert no route added
@@ -46,6 +46,6 @@ func TestRouter_HasNoRouter(t *testing.T) {
 		Type:      event.Grants,
 		Body:      testutils.RandomString(),
 	}
-	err := statusRouter(&expected)
-	assert.EqualError(t, err, fmt.Sprintf("status router: error no route attached for messageID %s", expected.ID))
+	err := checkStatusRouter(&expected)
+	assert.EqualError(t, err, fmt.Sprintf("check status router: error no route attached for messageID %s", expected.ID))
 }

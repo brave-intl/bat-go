@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/brave-intl/bat-go/settlement/automation/status"
+	"github.com/brave-intl/bat-go/settlement/automation/checkstatus"
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
@@ -35,7 +35,7 @@ func StartCheckStatusWorker(command *cobra.Command, args []string) {
 
 	loggingutils.FromContext(ctx).Info().Msg("starting check status worker")
 
-	err := status.StartConsumer(ctx)
+	err := checkstatus.StartConsumer(ctx)
 	if err != nil {
 		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting consumer")
 		return

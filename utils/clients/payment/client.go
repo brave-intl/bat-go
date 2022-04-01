@@ -34,9 +34,9 @@ type (
 		// Transaction contains the details of the transaction
 		Transaction Transaction `json:"transaction"`
 		// CustodianSubmissionResponse raw response when transaction was submitted
-		CustodianSubmissionResponse interface{} `json:"submissionResponse,omitempty"`
+		CustodianSubmissionResponse *string `json:"submissionResponse,omitempty"`
 		// CustodianStatusResponse raw response for check status
-		CustodianStatusResponse interface{} `json:"statusResponse,omitempty"`
+		CustodianStatusResponse *string `json:"statusResponse,omitempty"`
 	}
 )
 

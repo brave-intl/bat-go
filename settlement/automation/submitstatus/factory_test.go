@@ -22,8 +22,6 @@ import (
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -61,7 +59,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 		}
 
 		body, err := json.Marshal(transaction)
-		suite.NoError(err)
+		suite.Require().NoError(err)
 
 		message := event.Message{
 			ID:        uuid.NewV4(),
@@ -90,11 +88,11 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 		messages[message.ID.String()] = message
 
 		err = redis.Send(context.Background(), message, event.SubmitStatusStream)
-		suite.NoError(err)
+		suite.Require().NoError(err)
 	}
 
 	// stub payment service with expected response
-	server := stubSubmitStatusEndpoint(suite.T(), messages)
+	server := suite.stubSubmitStatusEndpoint(messages)
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -119,22 +117,22 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 		actual := <-actualC
 		expected, ok := messages[actual.ID.String()]
 		suite.True(ok)
-		assertMessage(suite.T(), expected, actual, event.CheckStatusStream)
+		suite.assertMessage(expected, actual, event.CheckStatusStream)
 	}
 	// stop consumers
 	done()
 }
 
-func stubSubmitStatusEndpoint(t *testing.T, messages map[string]event.Message) *httptest.Server {
-	t.Helper()
+func (suite *SubmitStatusTestSuite) stubSubmitStatusEndpoint(messages map[string]event.Message) *httptest.Server {
+	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
+		suite.Equal(http.MethodGet, r.Method)
 		// return the transaction for associated documentID with custodian response
 		w.WriteHeader(http.StatusOK)
 
 		transactionStatus := payment.TransactionStatus{
-			CustodianSubmissionResponse: testutils.RandomString(),
+			CustodianSubmissionResponse: ptr.FromString(testutils.RandomString()),
 			Transaction: payment.Transaction{
 				IdempotencyKey: uuid.NewV4(),
 				Custodian:      ptr.FromString(testutils.RandomString()),
@@ -146,36 +144,36 @@ func stubSubmitStatusEndpoint(t *testing.T, messages map[string]event.Message) *
 		}
 
 		payload, err := json.Marshal(transactionStatus)
-		assert.NoError(t, err)
+		suite.Require().NoError(err)
 
 		_, err = w.Write(payload)
-		assert.NoError(t, err)
+		suite.Require().NoError(err)
 	}))
 
 	return ts
 }
 
-func assertMessage(t *testing.T, expected, actual event.Message, stream string) {
-	assert.Equal(t, expected.ID, actual.ID)
-	assert.Equal(t, stream, actual.CurrentStep().Stream)
-	assert.Equal(t, expected.Routing.Slip, actual.Routing.Slip)
-	assert.Equal(t, expected.Routing.ErrorHandling, actual.Routing.ErrorHandling)
+func (suite *SubmitStatusTestSuite) assertMessage(expected, actual event.Message, stream string) {
+	suite.Equal(expected.ID, actual.ID)
+	suite.Equal(stream, actual.CurrentStep().Stream)
+	suite.Equal(expected.Routing.Slip, actual.Routing.Slip)
+	suite.Equal(expected.Routing.ErrorHandling, actual.Routing.ErrorHandling)
 
 	var expectedTransactions payment.Transaction
 	err := json.Unmarshal([]byte(actual.Body), &expectedTransactions)
-	require.NoError(t, err)
+	suite.NoError(err)
 
 	var actualTransaction payment.Transaction
 	err = json.Unmarshal([]byte(actual.Body), &actualTransaction)
-	require.NoError(t, err)
+	suite.NoError(err)
 
-	assertTransaction(t, expectedTransactions, actualTransaction)
+	suite.assertTransaction(expectedTransactions, actualTransaction)
 }
 
-func assertTransaction(t *testing.T, expected, actual payment.Transaction) {
-	assert.Equal(t, expected.From, actual.From)
-	assert.Equal(t, expected.To, actual.To)
-	assert.Equal(t, expected.Amount, actual.Amount)
-	assert.NotNil(t, actual.Custodian)
-	assert.NotNil(t, expected.DocumentID)
+func (suite *SubmitStatusTestSuite) assertTransaction(expected, actual payment.Transaction) {
+	suite.Equal(expected.From, actual.From)
+	suite.Equal(expected.To, actual.To)
+	suite.Equal(expected.Amount, actual.Amount)
+	suite.NotNil(actual.Custodian)
+	suite.NotNil(expected.DocumentID)
 }
