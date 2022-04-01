@@ -335,11 +335,7 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 }
 
 func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.bitFlyerRequestIDSpent")
 	// get pg from context
 	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
 	if !ok {
@@ -1000,12 +996,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 // helper to make logger easier
 func logger(ctx context.Context) *zerolog.Logger {
 	// get logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		_, logger = logging.SetupLogger(ctx)
-	}
-	return logger
+	return logging.Logger(ctx, "wallet")
 }
 
 // helper to create a tx

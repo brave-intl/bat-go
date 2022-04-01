@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -260,10 +259,7 @@ func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wal
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "settlement.SubmitPreparedTransaction")
 	if settlement.IsComplete() {
 		logger.Info().Msg(fmt.Sprintf("already complete, skipping submit for channel %s", settlement.Channel))
 		return nil
@@ -353,10 +349,7 @@ func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wa
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be submitted in subsequent runs.
 func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "settlement.ConfirmPreparedTransaction")
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries: %+v"

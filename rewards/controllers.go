@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -18,9 +17,8 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 
 		var (
 			currencyInput = r.URL.Query().Get("currency")
-
-			// response structure
-			parameters *ParametersV1
+			parameters    *ParametersV1
+			err           error
 		)
 
 		if currencyInput == "" {
@@ -28,10 +26,7 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 		}
 
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "rewards.GetParametersHandler")
 
 		// in here we need to validate our currency
 		var currency = new(BaseCurrency)
