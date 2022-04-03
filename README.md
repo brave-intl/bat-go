@@ -1,6 +1,7 @@
 # pass "go" and collect 200 BAT
 
 ![CI](https://github.com/brave-intl/bat-go/workflows/CI/badge.svg)
+ [![Twitter](https://img.shields.io/twitter/follow/brave.svg?logo=twitter)](https://twitter.com/brave)
 
 ## Developer Setup
 
