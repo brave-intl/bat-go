@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/altcurrency"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -260,10 +259,7 @@ func CheckPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wal
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be submitted during an initial run can be submitted in subsequent runs.
 func SubmitPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "settlement.SubmitPreparedTransaction")
 	if settlement.IsComplete() {
 		logger.Info().Msg(fmt.Sprintf("already complete, skipping submit for channel %s", settlement.Channel))
 		return nil
@@ -352,11 +348,17 @@ func SubmitPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wa
 // ConfirmPreparedTransaction confirms a single settlement transaction with uphold
 //   It is designed to be idempotent across multiple runs, in case of network outage transactions that
 //   were unable to be confirmed during an initial run can be submitted in subsequent runs.
-func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wallet, settlement *Transaction) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+func ConfirmPreparedTransaction(
+	ctx context.Context,
+	settlementWallet *uphold.Wallet,
+	settlement *Transaction,
+	isResubmit bool,
+) error {
+	var (
+		settlementInfo *wallet.TransactionInfo
+		err            error
+	)
+	logger := logging.Logger(ctx, "settlement.ConfirmPreparedTransaction")
 	for tries := maxConfirmTries; tries >= 0; tries-- {
 		if tries == 0 {
 			baseMsg := "could not confirm settlement payout after multiple tries: %+v"
@@ -380,68 +382,69 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 			return nil
 		}
 
-		// first check if the transaction has already been confirmed
-		upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
-		if err == nil {
-			settlement.Status = upholdInfo.Status
-			settlement.Currency = upholdInfo.DestCurrency
-			settlement.Amount = upholdInfo.DestAmount
-			settlement.TransferFee = upholdInfo.TransferFee
-			settlement.ExchangeFee = upholdInfo.ExchangeFee
-
-			if !settlement.IsComplete() {
-				logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
-			}
-
-			break
-
-		} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
-			if time.Now().UTC().After(settlement.ValidUntil) {
-				logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s", settlement.Channel))
-				return nil
-			}
-
-			var settlementInfo *wallet.TransactionInfo
-			settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
+		if isResubmit {
+			// first check if the transaction has already been confirmed
+			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 			if err == nil {
-				settlement.Status = settlementInfo.Status
-				settlement.Currency = settlementInfo.DestCurrency
-				settlement.Amount = settlementInfo.DestAmount
-				settlement.TransferFee = settlementInfo.TransferFee
-				settlement.ExchangeFee = settlementInfo.ExchangeFee
+				settlement.Status = upholdInfo.Status
+				settlement.Currency = upholdInfo.DestCurrency
+				settlement.Amount = upholdInfo.DestAmount
+				settlement.TransferFee = upholdInfo.TransferFee
+				settlement.ExchangeFee = upholdInfo.ExchangeFee
 
-				// do a sanity check that the uphold transaction confirmed referenced matches the settlement object
-				err = checkTransactionAgainstSettlement(settlement, settlementInfo)
-				if err != nil {
-					return err
+				if !settlement.IsComplete() {
+					logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
 				}
 
 				break
-			} else if errorutils.IsErrForbidden(err) {
-				logger.Error().Err(err).Msg("invalid destination, skipping")
-				settlement.Status = "failed"
-				return nil
-			} else if errorutils.IsErrAlreadyExists(err) {
-				// NOTE we've observed the uphold API LB timing out while the request is eventually processed
-				upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
-				if err == nil {
-					settlement.Status = upholdInfo.Status
-					settlement.Currency = upholdInfo.DestCurrency
-					settlement.Amount = upholdInfo.DestAmount
-					settlement.TransferFee = upholdInfo.TransferFee
-					settlement.ExchangeFee = upholdInfo.ExchangeFee
 
-					if !settlement.IsComplete() {
-						logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
-					}
+			} else if errorutils.IsErrNotFound(err) { // unconfirmed transactions appear as "not found"
+				if time.Now().UTC().After(settlement.ValidUntil) {
+					logger.Info().Msg(fmt.Sprintf("quote has expired, must resubmit transaction for channel %s", settlement.Channel))
+					return nil
 				}
-				settlement.Status = "complete"
-				break
-			} else {
-				logger.Info().Msg(fmt.Sprintf("error confirming: %s", err))
 			}
 		} else {
 			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s", err))
+		}
+
+		settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
+		if err == nil {
+			settlement.Status = settlementInfo.Status
+			settlement.Currency = settlementInfo.DestCurrency
+			settlement.Amount = settlementInfo.DestAmount
+			settlement.TransferFee = settlementInfo.TransferFee
+			settlement.ExchangeFee = settlementInfo.ExchangeFee
+
+			// do a sanity check that the uphold transaction confirmed referenced matches the settlement object
+			err = checkTransactionAgainstSettlement(settlement, settlementInfo)
+			if err != nil {
+				return err
+			}
+
+			break
+		} else if errorutils.IsErrForbidden(err) {
+			logger.Error().Err(err).Msg("invalid destination, skipping")
+			settlement.Status = "failed"
+			return nil
+		} else if errorutils.IsErrAlreadyExists(err) {
+			// NOTE we've observed the uphold API LB timing out while the request is eventually processed
+			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
+			if err == nil {
+				settlement.Status = upholdInfo.Status
+				settlement.Currency = upholdInfo.DestCurrency
+				settlement.Amount = upholdInfo.DestAmount
+				settlement.TransferFee = upholdInfo.TransferFee
+				settlement.ExchangeFee = upholdInfo.ExchangeFee
+
+				if !settlement.IsComplete() {
+					logger.Info().Msg(fmt.Sprintf("error transaction status is: %s", upholdInfo.Status))
+				}
+			}
+			settlement.Status = "complete"
+			break
+		} else {
+			logger.Info().Msg(fmt.Sprintf("error confirming: %s", err))
 		}
 	}
 	return nil
@@ -452,7 +455,7 @@ func ConfirmPreparedTransaction(ctx context.Context, settlementWallet *uphold.Wa
 //   were unable to be confirmed during an initial run can be confirmed in subsequent runs.
 func ConfirmPreparedTransactions(ctx context.Context, settlementWallet *uphold.Wallet, settlements []Transaction) error {
 	for i := 0; i < len(settlements); i++ {
-		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i])
+		err := ConfirmPreparedTransaction(ctx, settlementWallet, &settlements[i], false)
 		if err != nil {
 			return err
 		}

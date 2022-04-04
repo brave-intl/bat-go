@@ -16,7 +16,6 @@ import (
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/datastore"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/inputs"
@@ -889,14 +888,11 @@ FOR UPDATE
 // MarkVoteErrored - Update a vote to show it has errored, designed to run on a transaction so
 // a batch number of votes can be processed.
 func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "skus.MarkVoteErrored")
 	logger.Debug().Msg("about to set errored to true for this vote")
 
 	var statement = `update vote_drain set erred=true where id=$1`
-	_, err = tx.ExecContext(ctx, statement, vr.ID)
+	_, err := tx.ExecContext(ctx, statement, vr.ID)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to update vote_drain")
@@ -908,14 +904,11 @@ func (pg *Postgres) MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx
 // CommitVote - Update a vote to show it has been processed, designed to run on a transaction so
 // a batch number of votes can be processed.
 func (pg *Postgres) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "skus.CommitVote")
 	logger.Debug().Msg("about to set processed to true for this vote")
 
 	var statement = `update vote_drain set processed=true where id=$1`
-	_, err = tx.ExecContext(ctx, statement, vr.ID)
+	_, err := tx.ExecContext(ctx, statement, vr.ID)
 
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to update processed=true for vote drain job")

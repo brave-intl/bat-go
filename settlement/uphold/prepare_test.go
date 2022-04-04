@@ -1,6 +1,7 @@
 package uphold
 
 import (
+	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/shopspring/decimal"
+	"gotest.tools/assert"
 )
 
 // TestGroupSettlements tests GroupSettlements
@@ -23,10 +25,20 @@ func TestGroupSettlements(t *testing.T) {
 // TestFlattenPaymentsByWalletProviderID tests FlattenPaymentsByWalletProviderID
 func TestFlattenPaymentsByWalletProviderID(t *testing.T) {
 	settlements, wantedSettlements := generateFixedSettlementsSliceAndResultsSlice()
-	result := FlattenPaymentsByWalletProviderID(&settlements)
-	if !reflect.DeepEqual(result, wantedSettlements) {
-		t.Fatalf("Wanted: %#v\nFound: %#v", wantedSettlements, result)
+	results := FlattenPaymentsByWalletProviderID(&settlements)
+	foundMatches := 0
+	for _, result := range results {
+		for _, wantedSettlement := range wantedSettlements {
+			fmt.Printf("wanted WalletProviderID: %s\nfound WalletProviderID: %s\n", wantedSettlement.WalletProviderID, result.WalletProviderID)
+			if wantedSettlement.WalletProviderID == result.WalletProviderID {
+				fmt.Printf("wanted Amount: %s\nfound Amount: %s\n", wantedSettlement.Amount, result.Amount)
+				if wantedSettlement.Amount.Equal(result.Amount) {
+					foundMatches++
+				}
+			}
+		}
 	}
+	assert.Equal(t, foundMatches, len(wantedSettlements))
 }
 
 func generateRandomSettlementsAndResultMap() ([]settlement.Transaction, map[string][]settlement.Transaction) {

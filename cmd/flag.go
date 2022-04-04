@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	id int = 0
+	id int
 )
 
 // FlagBuilder creates a flag builder

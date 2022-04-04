@@ -33,13 +33,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 		altCurrency = altcurrency.BAT
 	)
 
-	// no logger, setup
-	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.CreateUpholdWalletV3")
 
 	// decode and validate the request body
 	if err := inputs.DecodeAndValidateReader(ctx, ucReq, r.Body); err != nil {
@@ -64,7 +58,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	// get datastore from context
 	if db, ok = ctx.Value(appctx.DatastoreCTXKey).(Datastore); !ok {
 		logger.Error().Msg("unable to get datastore from context")
-		return handlers.WrapError(err, "misconfigured datastore", http.StatusServiceUnavailable)
+		return handlers.WrapError(errors.New("unable to get datastore"), "misconfigured datastore", http.StatusServiceUnavailable)
 	}
 
 	var info = &walletutils.Info{
@@ -87,7 +81,7 @@ func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppE
 	info.ProviderID = uwallet.GetWalletInfo().ProviderID
 
 	// get wallet from datastore
-	err = db.InsertWallet(ctx, info)
+	err := db.InsertWallet(ctx, info)
 	if err != nil {
 		logger.Error().Err(err).Str("id", info.ID).Msg("unable to create uphold wallet")
 		return handlers.WrapError(err, "error writing wallet to storage", http.StatusServiceUnavailable)
@@ -118,11 +112,7 @@ func CreateBraveWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppEr
 	)
 
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.CreateBraveWalletV3")
 
 	if err := inputs.DecodeAndValidateReader(ctx, bcr, r.Body); err != nil {
 		return bcr.HandleErrors(err)
@@ -167,11 +157,7 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 			blr = new(BitFlyerLinkingRequest)
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.CreateBitflyerWalletV3")
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -228,11 +214,7 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			glr = new(GeminiLinkingRequest)
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.LinkGeminiDepositAccountV3")
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -292,11 +274,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 			cuw = new(LinkUpholdDepositAccountRequest)
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.LinkUpholdDepositAccountV3")
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -359,11 +337,7 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var ctx = r.Context()
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.GetWalletV3")
 
 	var id = new(inputs.ID)
 	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -409,11 +383,7 @@ func GetWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var ctx = r.Context()
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.RecoverWalletV3")
 
 	var pk = new(inputs.PublicKey)
 	if err := inputs.DecodeAndValidateString(ctx, pk, chi.URLParam(r, "publicKey")); err != nil {
@@ -459,11 +429,7 @@ func RecoverWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError 
 func GetUpholdWalletBalanceV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var ctx = r.Context()
 	// get logger from context
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.GetUpholdWalletBalanceV3")
 	// get the payment id from the URL request
 	var id = new(inputs.ID)
 	if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -534,11 +500,7 @@ func LinkBraveDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.R
 			lbw = new(LinkBraveDepositAccountRequest)
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.LinkBraveDepositAccountV3")
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -600,17 +562,13 @@ func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 			custodian = chi.URLParam(r, "custodian")
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.UnlinkWalletV3")
 
 		logger.Debug().
 			Str("walletID", walletID).
 			Str("custodian", custodian).
 			Msg("unlinking wallet from custodian")
-		err = s.UnlinkWallet(ctx, walletID, custodian)
+		err := s.UnlinkWallet(ctx, walletID, custodian)
 		if err != nil {
 			if errors.Is(err, ErrUnlinkingsExceeded) {
 				logger.Warn().Err(err).Str("walletID", walletID).Msg("failed to unlink wallet")
@@ -632,14 +590,10 @@ func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Requ
 			custodianID = chi.URLParam(r, "custodian_id")
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.IncreaseLinkingLimitV3")
 
 		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
-		err = s.IncreaseLinkingLimit(ctx, custodianID)
+		err := s.IncreaseLinkingLimit(ctx, custodianID)
 		if err != nil {
 			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
 			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
@@ -660,11 +614,7 @@ func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *
 			custodianID       = r.URL.Query().Get("custodianId")
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.GetLinkingInfoV3")
 
 		if r.URL.Query().Get("paymentId") != "" {
 			// get payment id
@@ -710,11 +660,7 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 			custodian = new(CustodianName)
 		)
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.DisconnectCustodianLinkV3")
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {

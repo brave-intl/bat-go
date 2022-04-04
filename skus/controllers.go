@@ -145,7 +145,7 @@ func CreateKey(service *Service) handlers.AppHandler {
 		reqMerchant := chi.URLParam(r, "merchantID")
 
 		var req CreateKeyRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -192,7 +192,7 @@ func DeleteKey(service *Service) handlers.AppHandler {
 		}
 
 		var req DeleteKeyRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -259,7 +259,7 @@ func CreateOrder(service *Service) handlers.AppHandler {
 		sublogger := logging.Logger(ctx, "payments").With().Str("func", "CreateOrderHandler").Logger()
 
 		var req CreateOrderRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -324,7 +324,7 @@ func SetOrderTrialDays(service *Service) handlers.AppHandler {
 		}
 
 		var input SetOrderTrialDaysInput
-		err := requestutils.ReadJSON(r.Body, &input)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &input)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -428,7 +428,7 @@ type CreateTransactionRequest struct {
 func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateTransactionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -477,7 +477,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 func CreateUpholdTransaction(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateTransactionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -536,7 +536,7 @@ func CreateAnonCardTransaction(service *Service) handlers.AppHandler {
 			Str("func", "CreateAnonCardTransaction").
 			Logger()
 		var req CreateAnonCardTransactionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -571,7 +571,7 @@ type CreateOrderCredsRequest struct {
 func CreateOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderCredsRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -723,23 +723,23 @@ type VoteRequest struct {
 // MakeVote is the handler for making a vote using credentials
 func MakeVote(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var req VoteRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		var (
+			req VoteRequest
+			ctx = r.Context()
+		)
+		err := requestutils.ReadJSON(ctx, r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		logger, err := appctx.GetLogger(r.Context())
-		if err != nil {
-			_, logger = logging.SetupLogger(r.Context())
-		}
+		logger := logging.Logger(ctx, "skus.MakeVote")
 
 		_, err = govalidator.ValidateStruct(req)
 		if err != nil {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.Vote(r.Context(), req.Credentials, req.Vote)
+		err = service.Vote(ctx, req.Credentials, req.Vote)
 		if err != nil {
 			switch err.(type) {
 			case govalidator.Error:
@@ -843,7 +843,7 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 
 		var req = new(VerifyCredentialRequestV1)
 
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to read request")
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
@@ -887,7 +887,7 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 				http.StatusInternalServerError)
 		}
 
-		b, err := requestutils.Read(r.Body)
+		b, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
 			sublogger.Error().Err(err).Msg("failed to read request body")
 			return handlers.WrapError(err, "error reading request body", http.StatusServiceUnavailable)

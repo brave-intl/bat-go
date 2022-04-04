@@ -68,7 +68,7 @@ type IsDrainReputableResponse struct {
 
 var (
 	// CohortNil - bad cohort
-	CohortNil int = 0
+	CohortNil int
 	// CohortOK - ok cohort
 	CohortOK = 1
 	// CohortTooYoung - too young cohort

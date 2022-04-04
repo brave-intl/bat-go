@@ -23,10 +23,7 @@ func IPRateLimiterWithStore(
 	burst int,
 	store throttled.GCRAStore,
 ) func(next http.Handler) http.Handler {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "middleware.IPRateLimiterWithStore")
 
 	return func(next http.Handler) http.Handler {
 		quota := throttled.RateQuota{
@@ -66,10 +63,7 @@ func IPRateLimiterWithStore(
 // user from a single IP address can make using a simple
 // in-memory store that will not synchronize across instances.
 func RateLimiter(ctx context.Context, perMin int) func(next http.Handler) http.Handler {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "middleware.RateLimiter")
 	store, err := memstore.New(65536)
 	if err != nil {
 		logger.Fatal().Err(err)

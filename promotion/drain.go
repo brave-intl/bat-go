@@ -47,11 +47,7 @@ var (
 // Drain ad suggestions into verified wallet
 func (service *Service) Drain(ctx context.Context, credentials []CredentialBinding, walletID uuid.UUID) (*uuid.UUID, error) {
 
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.Drain")
 
 	var batchID = uuid.NewV4()
 
@@ -325,11 +321,7 @@ func (botl *bitflyerOverTransferLimit) DrainCode() (string, bool) {
 // SubmitBatchTransfer after validating that all the credential bindings
 func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error {
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.SubmitBatchTransfer")
 
 	// TODO: when nitro enablement we will perform tx submissions here
 	// but for now we will perform the bf client bulk upload
@@ -494,11 +486,7 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 // RedeemAndTransferFunds after validating that all the credential bindings
 func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*walletutils.TransactionInfo, error) {
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.RedeemAndTransferFunds")
 
 	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
 	if err != nil {
@@ -777,11 +765,7 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 // MintGrant create a new grant for the wallet specified with the total specified
 func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promotions ...uuid.UUID) error {
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.MintGrant")
 
 	// for all of the promotion ids (limit of 4 wallets can be linked)
 	// attempt to create a claim.  If we run into a unique key constraint, this means that
@@ -791,7 +775,7 @@ func (service *Service) MintGrant(ctx context.Context, walletID uuid.UUID, total
 		logger.Debug().Msg("MintGrant: creating the claim to destination")
 		// create a new claim for the wallet deposit account for total
 		// this is a legacy claimed claim
-		_, err = service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
+		_, err := service.Datastore.CreateClaim(pID, walletID.String(), total, decimal.Zero, true)
 		if err != nil {
 			var pgErr *pq.Error
 			if errors.As(err, &pgErr) {
