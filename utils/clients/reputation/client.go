@@ -18,7 +18,7 @@ import (
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
-	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, int, error)
+	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -62,7 +62,7 @@ func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
 // IsDrainReputableResponse is what the reputation server
 // will send back when we ask if a wallet is reputable
 type IsDrainReputableResponse struct {
-	Cohort        int    `json:"cohort"`
+	Cohorts       []int  `json:"cohorts"`
 	Justification string `json:"justification"`
 }
 
@@ -84,7 +84,7 @@ func (c *HTTPClient) IsDrainReputable(
 	ctx context.Context,
 	paymentID, promotionID uuid.UUID,
 	withdrawalAmount decimal.Decimal,
-) (bool, int, error) {
+) (bool, []int, error) {
 
 	var body = IsDrainReputableOpts{
 		WithdrawalAmount: withdrawalAmount.String(),
@@ -99,16 +99,24 @@ func (c *HTTPClient) IsDrainReputable(
 		&body,
 	)
 	if err != nil {
-		return false, CohortNil, err
+		return false, []int{CohortNil}, err
 	}
 
 	var resp IsDrainReputableResponse
 	_, err = c.client.Do(ctx, req, &resp)
 	if err != nil {
-		return false, CohortNil, err
+		return false, []int{CohortNil}, err
 	}
 
-	return resp.Cohort == CohortOK || resp.Cohort == CohortTooYoung, resp.Cohort, nil
+	// okay to be too young for drain reputable
+	// must also be ok
+
+	for _, v := range resp.Cohorts {
+		if v == CohortOK {
+			return true, resp.Cohorts, nil
+		}
+	}
+	return false, resp.Cohorts, nil
 }
 
 // IsWalletReputableResponse is what the reputation server

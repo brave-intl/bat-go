@@ -38,6 +38,20 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 	}
 }
 
+// CheckInventory implements Client
+func (_d ClientWithPrometheus) CheckInventory(ctx context.Context) (m1 map[string]Inventory, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckInventory", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CheckInventory(ctx)
+}
+
 // CheckPayoutStatus implements Client
 func (_d ClientWithPrometheus) CheckPayoutStatus(ctx context.Context, payload CheckBulkStatusPayload) (wp1 *WithdrawToDepositIDBulkResponse, err error) {
 	_since := time.Now()
@@ -92,20 +106,6 @@ func (_d ClientWithPrometheus) RefreshToken(ctx context.Context, payload TokenPa
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "RefreshToken", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.RefreshToken(ctx, payload)
-}
-
-// CheckInventory implements Client
-func (_d ClientWithPrometheus) CheckInventory(ctx context.Context) (inv map[string]Inventory, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CheckInventory", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.CheckInventory(ctx)
 }
 
 // SetAuthToken implements Client

@@ -560,7 +560,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			}
 
 			// perform reputation check for wallet, and error accordingly if there is a reputation failure
-			reputable, cohort, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
+			reputable, cohorts, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
 			if err != nil {
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
 				return nil, errReputationServiceFailure
@@ -568,18 +568,19 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 			if !reputable {
 				// use the cohort to determine the limit exceeded.
-				switch cohort {
-				case reputation.CohortWithdrawalLimits:
-					// limited withdrawal
-					return nil, errWalletDrainLimitExceeded
-				case reputation.CohortNil:
-					// service failure
-					return nil, errReputationServiceFailure
-				default:
-					return nil, errWalletNotReputable
+				for _, cohort := range cohorts {
+					switch cohort {
+					case reputation.CohortWithdrawalLimits:
+						// limited withdrawal
+						return nil, errWalletDrainLimitExceeded
+					case reputation.CohortNil:
+						// service failure
+						return nil, errReputationServiceFailure
+					}
 				}
+				// not reputable
+				return nil, errWalletNotReputable
 			}
-
 		} else {
 			// legacy behavior
 			// perform reputation check for wallet, and error accordingly if there is a reputation failure
