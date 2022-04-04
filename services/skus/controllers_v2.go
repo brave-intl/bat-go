@@ -32,7 +32,7 @@ func RouterV2(service *Service) chi.Router {
 
 // CreateOrderCredsV2Request includes the item ID and blinded credentials which to be signed
 type CreateOrderCredsV2Request struct {
-	ItemID       uuid.UUID `json:"itemId" valid:"-"`
+	ItemID       uuid.UUID `json:"itemId" valid:"uuid"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
