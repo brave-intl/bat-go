@@ -9,6 +9,7 @@ import (
 	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestGroupSettlements tests GroupSettlements
@@ -24,9 +25,7 @@ func TestGroupSettlements(t *testing.T) {
 func TestFlattenPaymentsByWalletProviderID(t *testing.T) {
 	settlements, wantedSettlements := generateFixedSettlementsSliceAndResultsSlice()
 	result := FlattenPaymentsByWalletProviderID(&settlements)
-	if !reflect.DeepEqual(result, wantedSettlements) {
-		t.Fatalf("Wanted: %#v\nFound: %#v", wantedSettlements, result)
-	}
+	assert.ElementsMatch(t, result, wantedSettlements)
 }
 
 func generateRandomSettlementsAndResultMap() ([]settlement.Transaction, map[string][]settlement.Transaction) {
