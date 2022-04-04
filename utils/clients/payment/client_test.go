@@ -2,19 +2,20 @@ package payment
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	testutils "github.com/brave-intl/bat-go/utils/test"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"net/http"
-	"net/http/httptest"
-	"testing"
 )
 
 func TestPrepare(t *testing.T) {
@@ -50,7 +51,7 @@ func TestPrepare(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := New(ts.URL)
+	client := New(ts.URL, httpsignature.ParameterizedSignator{})
 	actual, err := client.Prepare(context.Background(), expected)
 	assert.Nil(t, err)
 
@@ -68,13 +69,32 @@ func TestSubmit(t *testing.T) {
 		}
 	}
 
+	keyID := uuid.NewV4().String()
+
+	key, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	assert.NoError(t, err)
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.Equal(t, "/v1/payments/submit", r.URL.Path)
 
+		sp := httpsignature.SignatureParams{
+			KeyID:     keyID,
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		}
+
+		// check headers
+		assert.NotEmpty(t, r.Header["Digest"])
+		assert.NotEmpty(t, r.Header["Signature"])
+
+		valid, err := sp.Verify(key, crypto.Hash(0), r)
+		assert.NoError(t, err)
+		assert.True(t, valid)
+
 		// assert we received the expected transactions
 		var transactions []Transaction
-		err := json.NewDecoder(r.Body).Decode(&transactions)
+		err = json.NewDecoder(r.Body).Decode(&transactions)
 
 		require.NoError(t, err)
 		assert.Equal(t, expected, transactions)
@@ -84,9 +104,40 @@ func TestSubmit(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := New(ts.URL)
-	err := client.Submit(context.Background(), expected)
+	pc := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{
+			KeyID:     keyID,
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		},
+		Signator: privateKey,
+		Opts:     crypto.Hash(0),
+	}
+
+	client := New(ts.URL, pc)
+	err = client.Submit(context.Background(), expected)
 	assert.Nil(t, err)
+}
+
+func TestSubmit_SignatureError(t *testing.T) {
+	expected := []Transaction{
+		{IdempotencyKey: uuid.NewV4(),
+			Amount: decimal.New(1, 0),
+			To:     uuid.NewV4(),
+			From:   uuid.NewV4(),
+		},
+	}
+
+	// cause signing error
+	pc := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{},
+	}
+
+	client := New(testutils.RandomString(), pc)
+	err := client.Submit(context.Background(), expected)
+
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "error signing http request")
 }
 
 func TestStatus(t *testing.T) {
@@ -118,7 +169,7 @@ func TestStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := New(ts.URL)
+	client := New(ts.URL, httpsignature.ParameterizedSignator{})
 	actual, err := client.Status(context.Background(), documentID)
 	assert.Nil(t, err)
 
@@ -151,7 +202,7 @@ func TestUnwrapPaymentError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := New(ts.URL)
+	client := New(ts.URL, httpsignature.ParameterizedSignator{})
 	res, err := client.Status(context.Background(), uuid.NewV4().String())
 	assert.Nil(t, res)
 	assert.NotNil(t, err)

@@ -2,19 +2,23 @@ package checkstatus
 
 import (
 	"context"
+	"crypto"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/crypto/ed25519"
 )
 
 // StartConsumer initializes and starts the check status consumer
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
+	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingCTXKey).(string)
 
 	consumerConfig, err := event.NewBatchConsumerConfig(
 		event.WithStreamName(event.CheckStatusStream),
@@ -29,7 +33,17 @@ func StartConsumer(ctx context.Context) error {
 		return fmt.Errorf("start check status consumer: error creating redis client: %w", err)
 	}
 
-	handler := newHandler(redis, payment.New(paymentURL), backoff.Retry, checkCustodianStatusResponse)
+	ps := httpsignature.ParameterizedSignator{
+		SignatureParams: httpsignature.SignatureParams{
+			KeyID:     uuid.NewV4().String(),
+			Algorithm: httpsignature.ED25519,
+			Headers:   []string{"digest", "(request-target)"},
+		},
+		Signator: ed25519.PrivateKey(httpSigningKey),
+		Opts:     crypto.Hash(0),
+	}
+
+	handler := newHandler(redis, payment.New(paymentURL, ps), backoff.Retry, checkCustodianStatusResponse)
 
 	consumer, err := event.NewBatchConsumer(redis, *consumerConfig, handler, checkStatusRouter, event.DeadLetterQueue)
 	if err != nil {

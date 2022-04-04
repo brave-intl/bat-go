@@ -130,8 +130,9 @@ const (
 
 	// RedisSettlementURLCTXKey context key for redis settlement url
 	RedisSettlementURLCTXKey CTXKey = "redis_settlement_url"
-	// PaymentServiceURLCTXKey context key payment service url
-	PaymentServiceURLCTXKey CTXKey = "payment_service_url"
+
+	PaymentServiceURLCTXKey         CTXKey = "payment_service_url"
+	PaymentServiceHTTPSingingCTXKey CTXKey = "payment_service_signing_key"
 )
 
 var (

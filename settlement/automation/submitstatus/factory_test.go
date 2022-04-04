@@ -3,6 +3,7 @@ package submitstatus_test
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/brave-intl/bat-go/settlement/automation/submitstatus"
 	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -93,7 +94,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 	}
 
 	// stub payment service with expected response
-	server := suite.stubSubmitStatusEndpoint(messages)
+	server := suite.stubSubmitStatusEndpoint()
 	defer server.Close()
 
 	paymentURL := server.URL
@@ -124,7 +125,7 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 	done()
 }
 
-func (suite *SubmitStatusTestSuite) stubSubmitStatusEndpoint(messages map[string]event.Message) *httptest.Server {
+func (suite *SubmitStatusTestSuite) stubSubmitStatusEndpoint() *httptest.Server {
 	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

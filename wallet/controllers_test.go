@@ -336,8 +336,6 @@ func (suite *WalletControllersTestSuite) unlinkCardV3(
 	suite.Require().NoError(err, "wallet claim unlink request creation failed")
 
 	rctx := chi.NewRouteContext()
-	fmt.Printf("info: %+v\n", info)
-	fmt.Printf("info id: %+v\n", info.ID)
 	rctx.URLParams.Add("payment_id", info.ID)
 	rctx.URLParams.Add("custodian", "uphold")
 	ctx := req.Context()

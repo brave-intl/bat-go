@@ -32,19 +32,19 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type StatusTestSuite struct {
+type CheckStatusTestSuite struct {
 	suite.Suite
 }
 
 func TestStatusTestSuite(t *testing.T) {
-	suite.Run(t, new(StatusTestSuite))
+	suite.Run(t, new(CheckStatusTestSuite))
 }
 
-func (suite *StatusTestSuite) SetupTest() {
+func (suite *CheckStatusTestSuite) SetupTest() {
 	test.StreamsTearDown(suite.T())
 }
 
-func (suite *StatusTestSuite) TestStatus() {
+func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	test.StreamsTearDown(suite.T())
 
 	redisURL := os.Getenv("REDIS_URL")
@@ -134,7 +134,7 @@ func (suite *StatusTestSuite) TestStatus() {
 	done()
 }
 
-func (suite *StatusTestSuite) stubStatusEndpoint(messages map[string]event.Message) *httptest.Server {
+func (suite *CheckStatusTestSuite) stubStatusEndpoint(messages map[string]event.Message) *httptest.Server {
 	suite.T().Helper()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

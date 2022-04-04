@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )
@@ -51,13 +52,15 @@ type Error struct {
 }
 
 type paymentClient struct {
-	httpClient *clients.SimpleHTTPClient
+	httpClient            *clients.SimpleHTTPClient
+	parameterizedSignator httpsignature.ParameterizedSignator
 }
 
 // New returns a new instance of payment client
-func New(baseURL string) Client {
+func New(baseURL string, parameterizedSignator httpsignature.ParameterizedSignator) Client {
 	simpleHTTPClient, _ := clients.New(baseURL, "")
-	return NewClientWithPrometheus(&paymentClient{httpClient: simpleHTTPClient},
+	return NewClientWithPrometheus(&paymentClient{httpClient: simpleHTTPClient,
+		parameterizedSignator: parameterizedSignator},
 		"payment_client")
 }
 
@@ -82,6 +85,12 @@ func (pc *paymentClient) Submit(ctx context.Context, transactions []Transaction)
 	request, err := pc.httpClient.NewRequest(ctx, http.MethodPost, "/v1/payments/submit", transactions, nil)
 	if err != nil {
 		return err
+	}
+
+	err = pc.parameterizedSignator.Sign(pc.parameterizedSignator.Signator,
+		pc.parameterizedSignator.Opts, request)
+	if err != nil {
+		return fmt.Errorf("error signing http request: %w", err)
 	}
 
 	_, err = pc.httpClient.Do(ctx, request, nil)
