@@ -299,6 +299,7 @@ func UpholdUpload(
 			settlementTransaction := &settlementState.Transactions[i]
 
 			if settlementTransaction.IsProcessing() {
+				logger.Info().Msg("reattempting to confirm transaction in progress")
 				// Confirm will first check if the transaction has already been confirmed
 				err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction, true)
 				if err != nil {
@@ -326,16 +327,19 @@ func UpholdUpload(
 
 	transactionsMap := make(map[string][]settlement.Transaction)
 	for i := 0; i < len(settlementState.Transactions); i++ {
+		logger.Info().Msg("redacting transactions in log files")
 		// Redact signed transactions
 		settlementState.Transactions[i].SignedTx = ""
 
 		// Group by status
+		logger.Info().Msg("grouping transactions by status")
 		status := settlementState.Transactions[i].Status
 		transactionsMap[status] = append(transactionsMap[status], settlementState.Transactions[i])
 	}
 
 	for key, txs := range transactionsMap {
 		outputFile := outputFilePrefix + "-" + key + ".json"
+		logger.Info().Msg(fmt.Sprintf("writing out transactions to %s for eyeshade", outputFile))
 
 		// Write out transactions ready to be submitted to eyeshade
 		out, err := json.MarshalIndent(txs, "", "    ")
