@@ -7,6 +7,7 @@ const (
 	SubmitStream              = "submit-settlement"
 	SubmitConsumerGroup       = "submit-consumer-group-settlement"
 	NotifyStream              = "notify-settlement"
+	NotifyConsumerGroup       = "notify-consumer-group-settlement"
 	SubmitStatusStream        = "submit-status-settlement"
 	SubmitStatusConsumerGroup = "submit-status-consumer-group-settlement"
 	CheckStatusStream         = "check-status-settlement"
