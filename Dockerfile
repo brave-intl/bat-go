@@ -6,6 +6,7 @@ RUN apk add -U --no-cache ca-certificates && update-ca-certificates
 RUN apk add make
 RUN apk add build-base
 RUN apk add git
+RUN apk add bash
 
 ARG VERSION
 ARG BUILD_TIME
