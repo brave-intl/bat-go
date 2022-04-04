@@ -40,7 +40,7 @@ type CreateOrderCredsV2Request struct {
 func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderCredsV2Request
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
