@@ -52,6 +52,22 @@ func (mr *MockClientMockRecorder) IsDrainReputable(ctx, id, promotionID, withdra
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDrainReputable", reflect.TypeOf((*MockClient)(nil).IsDrainReputable), ctx, id, promotionID, withdrawAmount)
 }
 
+// IsLinkingReputable mocks base method.
+func (m *MockClient) IsLinkingReputable(ctx context.Context, id uuid.UUID) (bool, []int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsLinkingReputable", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].([]int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// IsLinkingReputable indicates an expected call of IsLinkingReputable.
+func (mr *MockClientMockRecorder) IsLinkingReputable(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsLinkingReputable", reflect.TypeOf((*MockClient)(nil).IsLinkingReputable), ctx, id)
+}
+
 // IsWalletAdsReputable mocks base method.
 func (m *MockClient) IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error) {
 	m.ctrl.T.Helper()

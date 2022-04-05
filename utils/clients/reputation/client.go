@@ -19,6 +19,7 @@ type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
+	IsLinkingReputable(ctx context.Context, id uuid.UUID) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -59,9 +60,9 @@ func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
 	return query.Values(iro)
 }
 
-// IsDrainReputableResponse is what the reputation server
+// IsReputableResponse is what the reputation server
 // will send back when we ask if a wallet is reputable
-type IsDrainReputableResponse struct {
+type IsReputableResponse struct {
 	Cohorts []int `json:"cohorts"`
 }
 
@@ -75,6 +76,42 @@ var (
 	// CohortWithdrawalLimits - limited cohort
 	CohortWithdrawalLimits = 4
 )
+
+// IsLinkingReputable makes the request to the reputation server
+// and returns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsLinkingReputable(
+	ctx context.Context,
+	paymentID uuid.UUID,
+) (bool, []int, error) {
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v2/reputation/"+paymentID.String()+"/grants",
+		nil,
+		nil,
+	)
+	if err != nil {
+		return false, []int{CohortNil}, err
+	}
+
+	var resp IsReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, []int{CohortNil}, err
+	}
+
+	// okay to be too young for drain reputable
+	// must also be ok
+
+	for _, v := range resp.Cohorts {
+		if v == CohortOK {
+			return true, resp.Cohorts, nil
+		}
+	}
+	return false, resp.Cohorts, nil
+}
 
 // IsDrainReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
@@ -101,7 +138,7 @@ func (c *HTTPClient) IsDrainReputable(
 		return false, []int{CohortNil}, err
 	}
 
-	var resp IsDrainReputableResponse
+	var resp IsReputableResponse
 	_, err = c.client.Do(ctx, req, &resp)
 	if err != nil {
 		return false, []int{CohortNil}, err
