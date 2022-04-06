@@ -280,6 +280,7 @@ func UpholdUpload(
 
 			if existingProgressEntry.Message == progressMessage {
 				progress.Progress[p].Count++
+				break
 			} else if p == len(progress.Progress)-1 {
 				progress.Progress = append(progress.Progress, logging.UpholdProgress{
 					Message: progressMessage,
