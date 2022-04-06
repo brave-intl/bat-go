@@ -590,13 +590,20 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
 		}
 		// we have a client, check the value for ID
-		reputable, err := repClient.IsWalletAdsReputable(ctx, walletID, "")
+		reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID)
 		if err != nil {
 			sublogger.Warn().Err(err).Msg("failed to check reputation")
 			return fmt.Errorf("failed to check wallet rep: %w", err)
 		}
 
-		if !reputable {
+		var isTooYoung = false
+		for _, v := range cohorts {
+			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
+				break
+			}
+		}
+
+		if !reputable && !isTooYoung {
 			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
 			return ErrUnusualActivity
 		}

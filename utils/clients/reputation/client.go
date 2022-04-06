@@ -18,7 +18,8 @@ import (
 type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
-	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, int, error)
+	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
+	IsLinkingReputable(ctx context.Context, id uuid.UUID) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -59,11 +60,10 @@ func (iro *IsDrainReputableOpts) GenerateQueryString() (url.Values, error) {
 	return query.Values(iro)
 }
 
-// IsDrainReputableResponse is what the reputation server
+// IsReputableResponse is what the reputation server
 // will send back when we ask if a wallet is reputable
-type IsDrainReputableResponse struct {
-	Cohort        int    `json:"cohort"`
-	Justification string `json:"justification"`
+type IsReputableResponse struct {
+	Cohorts []int `json:"cohorts"`
 }
 
 var (
@@ -71,9 +71,47 @@ var (
 	CohortNil int
 	// CohortOK - ok cohort
 	CohortOK = 1
+	// CohortTooYoung - too young cohort
+	CohortTooYoung = 2
 	// CohortWithdrawalLimits - limited cohort
 	CohortWithdrawalLimits = 4
 )
+
+// IsLinkingReputable makes the request to the reputation server
+// and returns whether a paymentId has enough reputation
+// to claim a grant
+func (c *HTTPClient) IsLinkingReputable(
+	ctx context.Context,
+	paymentID uuid.UUID,
+) (bool, []int, error) {
+
+	req, err := c.client.NewRequest(
+		ctx,
+		"GET",
+		"v2/reputation/"+paymentID.String()+"/grants",
+		nil,
+		nil,
+	)
+	if err != nil {
+		return false, []int{CohortNil}, err
+	}
+
+	var resp IsReputableResponse
+	_, err = c.client.Do(ctx, req, &resp)
+	if err != nil {
+		return false, []int{CohortNil}, err
+	}
+
+	// okay to be too young for drain reputable
+	// must also be ok
+
+	for _, v := range resp.Cohorts {
+		if v == CohortOK {
+			return true, resp.Cohorts, nil
+		}
+	}
+	return false, resp.Cohorts, nil
+}
 
 // IsDrainReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
@@ -82,7 +120,7 @@ func (c *HTTPClient) IsDrainReputable(
 	ctx context.Context,
 	paymentID, promotionID uuid.UUID,
 	withdrawalAmount decimal.Decimal,
-) (bool, int, error) {
+) (bool, []int, error) {
 
 	var body = IsDrainReputableOpts{
 		WithdrawalAmount: withdrawalAmount.String(),
@@ -97,16 +135,24 @@ func (c *HTTPClient) IsDrainReputable(
 		&body,
 	)
 	if err != nil {
-		return false, CohortNil, err
+		return false, []int{CohortNil}, err
 	}
 
-	var resp IsDrainReputableResponse
+	var resp IsReputableResponse
 	_, err = c.client.Do(ctx, req, &resp)
 	if err != nil {
-		return false, CohortNil, err
+		return false, []int{CohortNil}, err
 	}
 
-	return resp.Cohort == CohortOK, resp.Cohort, nil
+	// okay to be too young for drain reputable
+	// must also be ok
+
+	for _, v := range resp.Cohorts {
+		if v == CohortOK {
+			return true, resp.Cohorts, nil
+		}
+	}
+	return false, resp.Cohorts, nil
 }
 
 // IsWalletReputableResponse is what the reputation server
