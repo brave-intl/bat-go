@@ -249,7 +249,7 @@ func UpholdUpload(
 			logger.Panic().Err(err).Msg("failed to record progress")
 		}
 
-		err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction)
+		err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction, isResubmit)
 		if err != nil {
 			logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
 		}
@@ -300,7 +300,7 @@ func UpholdUpload(
 
 			if settlementTransaction.IsProcessing() {
 				// Confirm will first check if the transaction has already been confirmed
-				err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction)
+				err = settlement.ConfirmPreparedTransaction(ctx, settlementWallet, settlementTransaction, true)
 				if err != nil {
 					logger.Panic().Err(err).Msg("failed to confirm prepared transaction")
 				}

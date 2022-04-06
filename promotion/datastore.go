@@ -1016,12 +1016,7 @@ ORDER BY created_at DESC
 // RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error) {
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
-
+	logger := logging.Logger(ctx, "promotion.RunNextBatchPaymentsJob")
 	// create a tx
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
@@ -1554,11 +1549,7 @@ var txStatusToStatus = map[string]string{
 func (pg *Postgres) RunNextDrainJob(ctx context.Context, worker DrainWorker) (bool, error) {
 
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.RunNextDrainJob")
 
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
@@ -1728,11 +1719,7 @@ const (
 func (pg *Postgres) RunNextMintDrainJob(ctx context.Context, worker MintWorker) (bool, error) {
 
 	// setup a logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "promotion.RunNextMintDrainJob")
 
 	// get and parse the correct transfer promotion id to create claims on
 	braveTransferPromotionIDs, ok := ctx.Value(appctx.BraveTransferPromotionIDCTXKey).([]string)

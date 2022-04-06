@@ -117,7 +117,7 @@ func infoToResponseV3(info *walletutils.Info) ResponseV3 {
 		return ResponseV3{}
 	}
 
-	var altCurrency string = convertAltCurrency(info.AltCurrency)
+	var altCurrency = convertAltCurrency(info.AltCurrency)
 
 	if info.ProviderLinkingID == nil {
 		linkingID = ""

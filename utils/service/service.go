@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	sentry "github.com/getsentry/sentry-go"
@@ -28,10 +27,7 @@ type JobService interface {
 
 // JobWorker - a job worker
 func JobWorker(ctx context.Context, job func(context.Context) (bool, error), duration time.Duration) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "service.JobWorker")
 	for {
 		_, err := job(ctx)
 		if err != nil {

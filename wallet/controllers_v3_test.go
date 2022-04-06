@@ -97,12 +97,12 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		nil,
 	)
 
-	mockReputation.EXPECT().IsWalletAdsReputable(
+	mockReputation.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
-		gomock.Any(), // flag
 	).Return(
 		true,
+		[]int{},
 		nil,
 	)
 
@@ -407,12 +407,12 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	ctx = context.WithValue(ctx, appctx.ReputationClientCTXKey, mockReputation)
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, "-P1D")
 
-	mockReputation.EXPECT().IsWalletAdsReputable(
+	mockReputation.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
-		gomock.Any(), // flag
 	).Return(
 		true,
+		[]int{},
 		nil,
 	)
 
@@ -477,12 +477,12 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		w = httptest.NewRecorder()
 	)
 
-	mockReputationClient.EXPECT().IsWalletAdsReputable(
+	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
-		gomock.Any(), // flag
 	).Return(
 		true,
+		[]int{},
 		nil,
 	)
 
@@ -616,12 +616,12 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		nil,
 	)
 
-	mockReputationClient.EXPECT().IsWalletAdsReputable(
+	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
-		gomock.Any(), // flag
 	).Return(
 		true,
+		[]int{},
 		nil,
 	)
 

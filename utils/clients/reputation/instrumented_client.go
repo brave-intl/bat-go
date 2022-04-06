@@ -41,7 +41,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // IsDrainReputable implements Client
-func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUID, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (b1 bool, i1 int, err error) {
+func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUID, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (b1 bool, ia1 []int, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -52,6 +52,20 @@ func (_d ClientWithPrometheus) IsDrainReputable(ctx context.Context, id uuid.UUI
 		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "IsDrainReputable", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.IsDrainReputable(ctx, id, promotionID, withdrawAmount)
+}
+
+// IsLinkingReputable implements Client
+func (_d ClientWithPrometheus) IsLinkingReputable(ctx context.Context, id uuid.UUID) (b1 bool, ia1 []int, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "IsLinkingReputable", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.IsLinkingReputable(ctx, id)
 }
 
 // IsWalletAdsReputable implements Client

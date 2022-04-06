@@ -163,10 +163,7 @@ func rollbackTx(ds Datastore, tx *sqlx.Tx, wrap string, err error) error {
 
 // RunNextVoteDrainJob - Attempt to drain the vote queue
 func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "skus.RunNextVoteDrainJob")
 
 	select {
 	case <-ctx.Done():
@@ -241,10 +238,7 @@ func (service *Service) RunNextVoteDrainJob(ctx context.Context) (bool, error) {
 func (service *Service) Vote(
 	ctx context.Context, credentials []CredentialBinding, voteText string) error {
 
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "skus.Vote")
 
 	var vote Vote
 	// decode and validate the inputs

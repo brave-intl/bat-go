@@ -190,7 +190,7 @@ func submit(logger *zerolog.Logger, req *http.Request) ([]byte, *http.Response, 
 		return nil, resp, err
 	}
 
-	body, err := requestutils.Read(resp.Body)
+	body, err := requestutils.Read(logger.WithContext(context.Background()), resp.Body)
 	if err != nil {
 		return nil, resp, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyRead, err.Error())
 	}

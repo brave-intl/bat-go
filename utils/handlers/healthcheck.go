@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
@@ -19,10 +18,7 @@ type HealthCheckResponse struct {
 
 // RenderJSON - helper to render a HealthCheckResponse as Json to an http.ResponseWriter
 func (hcr HealthCheckResponse) RenderJSON(ctx context.Context, w http.ResponseWriter) error {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		_, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "handlers.HealthCheckResponse.RenderJSON")
 	body, err := json.Marshal(hcr)
 	if err != nil {
 		return fmt.Errorf("failed to marshal response in render json: %w", err)
@@ -39,10 +35,7 @@ func HealthCheckHandler(version, buildTime, commit string) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			var ctx = r.Context()
-			logger, err := appctx.GetLogger(ctx)
-			if err != nil {
-				ctx, logger = logging.SetupLogger(ctx)
-			}
+			logger := logging.Logger(ctx, "handlers.HealthCheckHandler")
 
 			hcr := HealthCheckResponse{
 				Commit:    commit,

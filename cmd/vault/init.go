@@ -70,7 +70,7 @@ func Initialize(command *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer closers.Panic(f)
+		defer closers.Panic(command.Context(), f)
 
 		// Vault only accepts keys in binary format, so we normalize the format
 		var entity openpgp.EntityList
@@ -134,13 +134,13 @@ func Initialize(command *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer closers.Panic(out)
+		defer closers.Panic(command.Context(), out)
 
 		encOut, err := openpgp.Encrypt(out, entityList, nil, &openpgp.FileHints{IsBinary: true}, nil)
 		if err != nil {
 			return err
 		}
-		defer closers.Panic(encOut)
+		defer closers.Panic(command.Context(), encOut)
 
 		_, err = encOut.Write([]byte(key))
 		if err != nil {
