@@ -409,6 +409,7 @@ func ConfirmPreparedTransaction(
 
 		settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
 		if err == nil {
+			logger.Info().Msg(fmt.Sprintf("transaction confirmed for destination: %s", settlement.Destination))
 			settlement.Status = settlementInfo.Status
 			settlement.Currency = settlementInfo.DestCurrency
 			settlement.Amount = settlementInfo.DestAmount
