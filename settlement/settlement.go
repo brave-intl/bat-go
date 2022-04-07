@@ -383,6 +383,7 @@ func ConfirmPreparedTransaction(
 		}
 
 		if isResubmit {
+			logger.Info().Msg(fmt.Sprintf("attempting resubmission of transaction for destination: %s", settlement.Destination))
 			// first check if the transaction has already been confirmed
 			upholdInfo, err := settlementWallet.GetTransaction(ctx, settlement.ProviderID)
 			if err == nil {
@@ -404,12 +405,11 @@ func ConfirmPreparedTransaction(
 					return nil
 				}
 			}
-		} else {
-			logger.Info().Msg(fmt.Sprintf("error retrieving referenced transaction: %s", err))
 		}
 
 		settlementInfo, err = settlementWallet.ConfirmTransaction(ctx, settlement.ProviderID)
 		if err == nil {
+			logger.Info().Msg(fmt.Sprintf("transaction confirmed for destination: %s", settlement.Destination))
 			settlement.Status = settlementInfo.Status
 			settlement.Currency = settlementInfo.DestCurrency
 			settlement.Amount = settlementInfo.DestAmount
