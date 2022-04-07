@@ -179,8 +179,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// perform an Account Validation call to gemini to get the accountID
 	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
-		return handlers.WrapError(
-			errors.New("invalid linking_info"), "unable to validate gemini account", http.StatusBadRequest)
+		return fmt.Errorf("failed to validate account: %w", err)
 	}
 
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
@@ -277,11 +276,7 @@ func (service *Service) LinkWallet(
 
 // SetupService - setup the wallet microservice
 func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *Service) {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.SetupService")
 
 	// setup the service now
 	db, err := NewWritablePostgres(viper.GetString("datastore"), false, "wallet_db")

@@ -29,7 +29,7 @@ var (
 
 // InstrumentKafka - setup instrumentation and metrics around our kafka connection
 func InstrumentKafka(ctx context.Context) {
-	_, logger := logging.SetupLogger(ctx)
+	logger := logging.Logger(ctx, "kafka.InstrumentKafka")
 
 	cert, ok := ctx.Value(appctx.Kafka509CertCTXKey).(*x509.Certificate)
 	if !ok {

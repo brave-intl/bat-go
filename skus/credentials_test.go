@@ -1,7 +1,6 @@
 package skus
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -75,13 +74,13 @@ func TestIssuerID(t *testing.T) {
 		}
 
 		if v.MerchantID != merchantIDPrime {
-			t.Error(
-				fmt.Sprintf("merchantID does not match decoded: %s != %s", v.MerchantID, merchantIDPrime))
+			t.Errorf(
+				"merchantID does not match decoded: %s != %s", v.MerchantID, merchantIDPrime)
 		}
 
 		if v.SKU != skuPrime {
-			t.Error(
-				fmt.Sprintf("sku does not match decoded: %s != %s", v.SKU, skuPrime))
+			t.Errorf(
+				"sku does not match decoded: %s != %s", v.SKU, skuPrime)
 		}
 	}
 }

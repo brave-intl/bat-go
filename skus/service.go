@@ -143,13 +143,13 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 	service.jobs = []srv.Job{
 		{
 			Func:    service.RunNextVoteDrainJob,
-			Cadence: 5 * time.Second,
+			Cadence: 2 * time.Second,
 			Workers: 1,
 		},
 		{
 			Func:    service.RunNextOrderJob,
-			Cadence: 1 * time.Second,
-			Workers: 1,
+			Cadence: 500 * time.Millisecond,
+			Workers: 3,
 		},
 	}
 

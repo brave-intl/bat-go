@@ -29,7 +29,7 @@ type Reader struct {
 
 // NewKafkaReader - creates a new kafka reader for groupID and topic
 func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader, error) {
-	_, logger := logging.SetupLogger(ctx)
+	logger := logging.Logger(ctx, "kafka.NewKafkaReader")
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {
@@ -167,7 +167,7 @@ func readFileFromEnvLoc(env string, required bool) ([]byte, error) {
 
 // InitKafkaWriter - create a kafka writer given a topic
 func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.Dialer, error) {
-	_, logger := logging.SetupLogger(ctx)
+	logger := logging.Logger(ctx, "kafka.InitKafkaWriter")
 
 	dialer, x509Cert, err := TLSDialer()
 	if err != nil {

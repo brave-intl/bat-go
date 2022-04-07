@@ -21,13 +21,12 @@ func GetRelativeHandler(service *Service) handlers.AppHandler {
 			coinIDsInput      = chi.URLParam(r, "coinIDs")
 			vsCurrenciesInput = chi.URLParam(r, "vsCurrencies")
 			durationInput     = chi.URLParam(r, "duration")
+			err               error
 		)
 
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "ratios.GetRelativeHandler")
+
 		var coinIDs = new(CoingeckoCoinList)
 		if err = inputs.DecodeAndValidate(ctx, coinIDs, []byte(coinIDsInput)); err != nil {
 			if errors.Is(err, ErrCoingeckoCoinInvalid) {
@@ -98,13 +97,11 @@ func GetHistoryHandler(service *Service) handlers.AppHandler {
 			coinIDInput     = chi.URLParam(r, "coinID")
 			vsCurrencyInput = chi.URLParam(r, "vsCurrency")
 			durationInput   = chi.URLParam(r, "duration")
+			err             error
 		)
 
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "ratios.GetHistoryHandler")
 
 		var coinID = new(CoingeckoCoin)
 		if err = inputs.DecodeAndValidate(ctx, coinID, []byte(coinIDInput)); err != nil {
@@ -198,13 +195,11 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 		var (
 			vsCurrencyInput = r.URL.Query().Get("vsCurrency")
 			limitInput      = r.URL.Query().Get("limit")
+			err             error
 		)
 
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			ctx, logger = logging.SetupLogger(ctx)
-		}
+		logger := logging.Logger(ctx, "ratios.GetCoinMarketsHandler")
 
 		var vsCurrency = new(CoingeckoVsCurrency)
 		if err = inputs.DecodeAndValidate(ctx, vsCurrency, []byte(vsCurrencyInput)); err != nil {

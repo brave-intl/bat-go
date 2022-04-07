@@ -259,7 +259,7 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 		return nil, err
 	}
 	status := resp.StatusCode
-	defer closers.Panic(resp.Body)
+	defer closers.Panic(ctx, resp.Body)
 
 	if okDebug && debug {
 		// if debug is set, then dump response
@@ -272,7 +272,7 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 	}
 
 	// helpful if you want to read the body as it is
-	bodyBytes, _ := requestutils.Read(resp.Body)
+	bodyBytes, _ := requestutils.Read(ctx, resp.Body)
 	_ = resp.Body.Close() // must close
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 

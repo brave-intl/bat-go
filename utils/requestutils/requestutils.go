@@ -26,14 +26,14 @@ var (
 )
 
 // ReadWithLimit reads an io reader with a limit and closes
-func ReadWithLimit(body io.Reader, limit int64) ([]byte, error) {
-	defer closers.Panic(body.(io.Closer))
+func ReadWithLimit(ctx context.Context, body io.Reader, limit int64) ([]byte, error) {
+	defer closers.Panic(ctx, body.(io.Closer))
 	return ioutil.ReadAll(io.LimitReader(body, limit))
 }
 
 // Read an io reader
-func Read(body io.Reader) ([]byte, error) {
-	jsonString, err := ReadWithLimit(body, payloadLimit10MB)
+func Read(ctx context.Context, body io.Reader) ([]byte, error) {
+	jsonString, err := ReadWithLimit(ctx, body, payloadLimit10MB)
 	if err != nil {
 		return nil, errorutils.Wrap(err, "error reading body")
 	}
@@ -41,8 +41,8 @@ func Read(body io.Reader) ([]byte, error) {
 }
 
 // ReadJSON reads a request body according to an interface and limits the size to 10MB
-func ReadJSON(body io.Reader, intr interface{}) error {
-	jsonString, err := Read(body)
+func ReadJSON(ctx context.Context, body io.Reader, intr interface{}) error {
+	jsonString, err := Read(ctx, body)
 	if err != nil {
 		return err
 	}

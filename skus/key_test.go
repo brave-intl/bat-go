@@ -199,12 +199,12 @@ func TestMerchantSignedMiddleware(t *testing.T) {
 	secretKey, err := cryptography.DecryptMessage(byteEncryptionKey, encrypted, nonce)
 	assert.NoError(t, err)
 
-	kID, attenuatedSecret, err := cryptography.Attenuate(rootID, secretKey, expectedCaveats)
+	iD, attenuatedSecret, err := cryptography.Attenuate(rootID, secretKey, expectedCaveats)
 	assert.NoError(t, err)
 
 	var sp httpsignature.SignatureParams
 	sp.Algorithm = httpsignature.HS2019
-	sp.KeyID = kID
+	sp.KeyID = iD
 	sp.Headers = []string{"(request-target)", "host", "date", "digest", "content-length", "content-type"}
 
 	ps := httpsignature.ParameterizedSignator{

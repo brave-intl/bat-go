@@ -335,11 +335,7 @@ func txGetUsedLinkingSlots(ctx context.Context, tx *sqlx.Tx, providerLinkingID s
 }
 
 func bitFlyerRequestIDSpent(ctx context.Context, requestID string) bool {
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		ctx, logger = logging.SetupLogger(ctx)
-	}
+	logger := logging.Logger(ctx, "wallet.bitFlyerRequestIDSpent")
 	// get pg from context
 	db, ok := ctx.Value(appctx.DatastoreCTXKey).(Datastore)
 	if !ok {
@@ -594,13 +590,20 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 			return fmt.Errorf("invalid wallet id, not uuid: %w", err)
 		}
 		// we have a client, check the value for ID
-		reputable, err := repClient.IsWalletAdsReputable(ctx, walletID, "")
+		reputable, cohorts, err := repClient.IsLinkingReputable(ctx, walletID)
 		if err != nil {
 			sublogger.Warn().Err(err).Msg("failed to check reputation")
 			return fmt.Errorf("failed to check wallet rep: %w", err)
 		}
 
-		if !reputable {
+		var isTooYoung = false
+		for _, v := range cohorts {
+			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
+				break
+			}
+		}
+
+		if !reputable && !isTooYoung {
 			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
 			return ErrUnusualActivity
 		}
@@ -1000,12 +1003,7 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 // helper to make logger easier
 func logger(ctx context.Context) *zerolog.Logger {
 	// get logger
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		// no logger, setup
-		_, logger = logging.SetupLogger(ctx)
-	}
-	return logger
+	return logging.Logger(ctx, "wallet")
 }
 
 // helper to create a tx

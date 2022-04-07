@@ -13,7 +13,6 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -230,7 +229,7 @@ type ClaimResponse struct {
 func ClaimPromotion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClaimRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -452,7 +451,7 @@ type SuggestionRequest struct {
 func MakeSuggestion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req SuggestionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -503,14 +502,9 @@ func DrainSuggestionV2(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 		// no logger, setup
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-			r = r.WithContext(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.DrainSuggestionV2")
 
-		err = requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -577,14 +571,9 @@ func DrainSuggestion(service *Service) handlers.AppHandler {
 		ctx := r.Context()
 		// no logger, setup
 		// get logger from context
-		logger, err := appctx.GetLogger(ctx)
-		if err != nil {
-			// no logger, setup
-			ctx, logger = logging.SetupLogger(ctx)
-			r = r.WithContext(ctx)
-		}
+		logger := logging.Logger(ctx, "wallet.DrainSuggestion")
 
-		err = requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -647,7 +636,7 @@ type CreatePromotionResponse struct {
 func CreatePromotion(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreatePromotionRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -691,7 +680,7 @@ type ClobberedClaimsRequest struct {
 func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -720,7 +709,7 @@ type BatLossPayload struct {
 func PostReportWalletEvent(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req BatLossPayload
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -780,7 +769,7 @@ type BapReportResp struct {
 func PostReportBAPEvent(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req BapReportPayload
-		err := requestutils.ReadJSON(r.Body, &req)
+		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
@@ -858,7 +847,7 @@ func GetCustodianDrainInfo(service *Service) handlers.AppHandler {
 		}
 
 		resp.Drains = drainInfo
-		resp.Status = "success"
+		resp.Meta.Status = "success"
 
 		return handlers.RenderContent(r.Context(), resp, w, http.StatusOK)
 	})
@@ -881,7 +870,7 @@ func PatchDrainJobErred(service *Service) handlers.AppHandler {
 		}
 
 		var drainJobRequest DrainJobRequest
-		err = requestutils.ReadJSON(r.Body, &drainJobRequest)
+		err = requestutils.ReadJSON(r.Context(), r.Body, &drainJobRequest)
 		if err != nil {
 			return handlers.WrapError(errors.New("could not decode request body"), "patch drain job",
 				http.StatusBadRequest)
