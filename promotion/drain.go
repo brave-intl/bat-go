@@ -254,7 +254,7 @@ type DrainPoll struct {
 
 // DrainWorker attempts to work on a drain job by redeeming the credentials and transferring funds
 type DrainWorker interface {
-	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*walletutils.TransactionInfo, error)
+	RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, drainJob DrainJob) (*walletutils.TransactionInfo, error)
 }
 
 // DrainRetryWorker - reads walletID
@@ -484,11 +484,12 @@ func (service *Service) SubmitBatchTransfer(ctx context.Context, batchID *uuid.U
 }
 
 // RedeemAndTransferFunds after validating that all the credential bindings
-func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*walletutils.TransactionInfo, error) {
+func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, drainJob DrainJob) (*walletutils.TransactionInfo, error) {
+
 	// setup a logger
 	logger := logging.Logger(ctx, "promotion.RedeemAndTransferFunds")
 
-	wallet, err := service.wallet.Datastore.GetWallet(ctx, walletID)
+	wallet, err := service.wallet.Datastore.GetWallet(ctx, drainJob.WalletID)
 	if err != nil {
 		logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to get wallet")
 		return nil, err
@@ -525,7 +526,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 	// check to see if we skip the cbr redemption case
 	if skipRedeem, _ := appctx.GetBoolFromContext(ctx, appctx.SkipRedeemCredentialsCTXKey); !skipRedeem {
 		// failed to redeem credentials
-		if err = service.cbClient.RedeemCredentials(ctx, credentials, walletID.String()); err != nil {
+		if err = service.cbClient.RedeemCredentials(ctx, credentials, drainJob.WalletID.String()); err != nil {
 			logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to redeem credentials")
 			return nil, fmt.Errorf("failed to redeem credentials: %w", err)
 		}
@@ -536,7 +537,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		if ok, _ := appctx.GetBoolFromContext(ctx, appctx.ReputationWithdrawalOnDrainCTXKey); ok {
 			// tally up all prior claims on this promotion for all linked provider accounts associated
 			// as the "withdrawalAmount"
-			promotionID, withdrawalAmount, err := service.Datastore.GetWithdrawalsAssociated(&walletID, claimID)
+			promotionID, withdrawalAmount, err := service.Datastore.GetWithdrawalsAssociated(&drainJob.WalletID, drainJob.ClaimID)
 			if err != nil {
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to lookup associated withdrawals")
 				return nil, fmt.Errorf("failed to lookup associated withdrawals: %w", err)
@@ -548,7 +549,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 			}
 
 			// perform reputation check for wallet, and error accordingly if there is a reputation failure
-			reputable, cohorts, err := service.reputationClient.IsDrainReputable(ctx, walletID, *promotionID, withdrawalAmount)
+			reputable, cohorts, err := service.reputationClient.IsDrainReputable(ctx, drainJob.WalletID, *promotionID, withdrawalAmount)
 			if err != nil {
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
 				return nil, errReputationServiceFailure
@@ -572,7 +573,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		} else {
 			// legacy behavior
 			// perform reputation check for wallet, and error accordingly if there is a reputation failure
-			reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, "")
+			reputable, err := service.reputationClient.IsWalletAdsReputable(ctx, drainJob.WalletID, "")
 			if err != nil {
 				logger.Error().Err(err).Msg("RedeemAndTransferFunds: failed to check reputation of wallet")
 				return nil, errReputationServiceFailure
@@ -586,7 +587,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 
 	if *wallet.UserDepositAccountProvider == "uphold" {
 		// FIXME should use idempotency key
-		tx, err := service.hotWallet.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(total), wallet.UserDepositDestination)
+		tx, err := service.hotWallet.Transfer(ctx, altcurrency.BAT, altcurrency.BAT.ToProbi(drainJob.Total), wallet.UserDepositDestination)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transfer funds: %w", err)
 		}
@@ -595,9 +596,9 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 		}
 		return tx, err
 	} else if *wallet.UserDepositAccountProvider == "bitflyer" {
-		return redeemAndTransferBitflyerFunds(ctx, service, wallet, total)
+		return redeemAndTransferBitflyerFunds(ctx, service, wallet, drainJob.Total)
 	} else if *wallet.UserDepositAccountProvider == "gemini" {
-		return redeemAndTransferGeminiFunds(ctx, service, wallet, total)
+		return redeemAndTransferGeminiFunds(ctx, service, drainJob.Total, drainJob)
 	} else if *wallet.UserDepositAccountProvider == "brave" {
 		// update the mint job for this walletID
 		promoTotal := map[string]decimal.Decimal{}
@@ -619,7 +620,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 				return nil, fmt.Errorf("failed to get promotion id as uuid: %w", err)
 			}
 			// update the mint_drain_promotion table with the corresponding total redeemed
-			err = service.Datastore.SetMintDrainPromotionTotal(ctx, walletID, promotionID, v)
+			err = service.Datastore.SetMintDrainPromotionTotal(ctx, drainJob.WalletID, promotionID, v)
 			if err != nil {
 				return nil, fmt.Errorf("failed to set append total funds: %w", err)
 			}
@@ -659,8 +660,7 @@ func redeemAndTransferBitflyerFunds(
 	return tx, nil
 }
 
-func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet *walletutils.Info,
-	total decimal.Decimal) (*walletutils.TransactionInfo, error) {
+func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, total decimal.Decimal, drainJob DrainJob) (*walletutils.TransactionInfo, error) {
 
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
@@ -672,16 +672,21 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 	channel := "wallet"
 	transferID := uuid.NewV4().String()
 
+	depositDestination := ptr.String(drainJob.DepositDestination)
+	if depositDestination == "" {
+		return nil, fmt.Errorf("error deposit destination is nil for drain job %s", drainJob.ID.String())
+	}
+
 	tx := new(walletutils.TransactionInfo)
 	tx.ID = transferID
-	tx.Destination = wallet.UserDepositDestination
+	tx.Destination = depositDestination
 	tx.DestAmount = total
 	tx.Status = txnStatusGeminiPending
 
 	settlementTx := settlement.Transaction{
 		SettlementID: transferID,
 		Type:         txType,
-		Destination:  wallet.UserDepositDestination,
+		Destination:  depositDestination,
 		Channel:      channel,
 	}
 
@@ -691,7 +696,7 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 			TxRef:       gemini.GenerateTxRef(&settlementTx),
 			Amount:      total,
 			Currency:    "BAT",
-			Destination: wallet.UserDepositDestination,
+			Destination: depositDestination,
 			Account:     &account,
 		},
 	}
@@ -722,7 +727,7 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 			errorData := eb.DataToString()
 			logging.FromContext(ctx).Error().
 				Err(eb.Cause()).
-				Str("wallet_id", wallet.ID).
+				Interface("wallet_id", drainJob.WalletID).
 				Str("error_bundle", errorData).
 				Msg("failed to transfer funds gemini")
 		}
@@ -738,7 +743,8 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, wallet 
 	for _, payout := range *resp {
 
 		logging.FromContext(ctx).Info().
-			Str("wallet_id", wallet.ID).
+			Interface("wallet_id", drainJob.WalletID).
+			Str("tx_ref", payout.TxRef).
 			Str("payout_result", payout.Result).
 			Str("payout_status", ptr.StringOr(payout.Status, "unknown_status")).
 			Str("payout_reason", ptr.StringOr(payout.Reason, "no_reason")).
