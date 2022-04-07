@@ -1598,7 +1598,7 @@ limit 1`
 		ctx = context.WithValue(ctx, appctx.SkipRedeemCredentialsCTXKey, true)
 	}
 
-	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job.WalletID, job.Total, job.ClaimID)
+	txn, err := worker.RedeemAndTransferFunds(ctx, credentials, job)
 	if err != nil || txn == nil {
 		// log the error from redeem and transfer
 		logger.Error().Err(err).

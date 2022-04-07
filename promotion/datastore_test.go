@@ -926,7 +926,7 @@ func (suite *PostgresTestSuite) TestDrainClaim() {
 	mockDrainWorker := NewMockDrainWorker(mockCtrl)
 
 	// One drain job should run
-	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Eq(walletID), testutils.DecEq(total), &claim.ID).Return(nil, errors.New("Worker failed"))
+	mockDrainWorker.EXPECT().RedeemAndTransferFunds(gomock.Any(), gomock.Eq(credentials), gomock.Any()).Return(nil, errors.New("Worker failed"))
 	attempted, err := pg.RunNextDrainJob(context.Background(), mockDrainWorker)
 	suite.Assert().Equal(true, attempted)
 	suite.Require().Error(err)
@@ -1031,7 +1031,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_Gemini_Claim() {
 
 	drainWorker := NewMockDrainWorker(ctrl)
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&transactionInfo, nil)
 
 	attempted, err := pg.RunNextDrainJob(context.Background(), drainWorker)
@@ -1203,7 +1203,7 @@ func (suite *PostgresTestSuite) TestRunNextBatchPaymentsJob_NextDrainJob_Concurr
 
 	drainWorker := NewMockDrainWorker(ctrl)
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		RedeemAndTransferFunds(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&transactionInfo, nil).
 		Times(3)
 
@@ -1454,7 +1454,7 @@ func (suite *PostgresTestSuite) TestRunNextDrainJob_CBRBypass_ManualRetry() {
 	ctx := context.Background()
 
 	drainWorker.EXPECT().
-		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, walletID, decimal.New(1, 0), gomock.Any()).
+		RedeemAndTransferFunds(isCBRBypass(ctx), credentialRedemptions, gomock.Any()).
 		Return(&walletutils.TransactionInfo{}, nil)
 
 	attempted, err := pg.RunNextDrainJob(ctx, drainWorker)
