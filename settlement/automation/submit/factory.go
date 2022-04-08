@@ -19,7 +19,7 @@ import (
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
-	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingCTXKey).(string)
+	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingKeyCTXKey).(string)
 
 	consumerConfig, err := event.NewBatchConsumerConfig(
 		event.WithStreamName(event.SubmitStream),

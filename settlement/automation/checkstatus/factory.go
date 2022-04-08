@@ -18,7 +18,7 @@ import (
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
-	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingCTXKey).(string)
+	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingKeyCTXKey).(string)
 
 	consumerConfig, err := event.NewBatchConsumerConfig(
 		event.WithStreamName(event.CheckStatusStream),
@@ -53,7 +53,7 @@ func StartConsumer(ctx context.Context) error {
 	// start consumer
 	err = consumer.Consume(ctx)
 	if err != nil {
-		return fmt.Errorf("start check status consumer: error starting prespare consumer: %w", err)
+		return fmt.Errorf("start check status consumer: error starting consumer: %w", err)
 	}
 
 	return nil

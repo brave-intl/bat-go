@@ -2,24 +2,22 @@ package settlement
 
 import (
 	"context"
-	"os"
-	"os/signal"
-	"syscall"
-
 	"github.com/brave-intl/bat-go/settlement/automation/prepare"
-
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
-	// PrepareWorkerCmd starts prepare worker
-	PrepareWorkerCmd = &cobra.Command{
-		Short: "starts settlement prepare worker",
-		Use:   "prepare-worker",
-		Run:   StartPrepareWorker,
+	// NotifyWorkerCmd starts notify worker
+	NotifyWorkerCmd = &cobra.Command{
+		Short: "starts settlement notify worker",
+		Use:   "notify-worker",
+		Run:   StartNotifyWorker,
 	}
 )
 
@@ -27,18 +25,18 @@ func init() {
 	SettlementCmd.AddCommand(PrepareWorkerCmd)
 }
 
-// StartPrepareWorker initializes and starts prepare worker
-func StartPrepareWorker(command *cobra.Command, args []string) {
+// StartNotifyWorker initializes and starts notify worker
+func StartNotifyWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get("REDIS_ADDRESS"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, viper.Get("PAYMENT_SERVICE_HTTP_SIGN_KEY"))
 
-	loggingutils.FromContext(ctx).Info().Msg("starting prepare consumer")
+	loggingutils.FromContext(ctx).Info().Msg("starting notify consumer")
 
 	err := prepare.StartConsumer(ctx)
 	if err != nil {
-		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting prepare consumer")
+		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting notify consumer")
 		return
 	}
 
@@ -47,7 +45,7 @@ func StartPrepareWorker(command *cobra.Command, args []string) {
 
 	<-shutdown
 
-	loggingutils.FromContext(ctx).Info().Msg("shutting down prepare consumer")
+	loggingutils.FromContext(ctx).Info().Msg("shutting down notify consumer")
 
 	close(shutdown)
 }

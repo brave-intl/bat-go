@@ -1,20 +1,19 @@
-package notify
+package errored
 
 import (
 	"context"
 	"crypto"
-	"crypto/ed25519"
 	"fmt"
-
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/crypto/ed25519"
 )
 
-// StartConsumer initializes and start notify consumer
+// StartConsumer initializes and start errored consumer
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
@@ -25,12 +24,12 @@ func StartConsumer(ctx context.Context) error {
 		event.WithConsumerID(uuid.NewV4()),
 		event.WithConsumerGroup(event.NotifyConsumerGroup))
 	if err != nil {
-		return fmt.Errorf("start notify consumer: error creating batch consumer config: %w", err)
+		return fmt.Errorf("start errored consumer: error creating batch consumer config: %w", err)
 	}
 
 	redis, err := event.NewRedisClient(redisURL)
 	if err != nil {
-		return fmt.Errorf("start notify consumer: error creating redis client: %w", err)
+		return fmt.Errorf("start errored consumer: error creating redis client: %w", err)
 	}
 
 	ps := httpsignature.ParameterizedSignator{
@@ -45,15 +44,15 @@ func StartConsumer(ctx context.Context) error {
 
 	handler := newHandler(redis, payment.New(paymentURL, ps), backoff.Retry)
 
-	consumer, err := event.NewBatchConsumer(redis, *consumerConfig, handler, notifyRouter, event.DeadLetterQueue)
+	consumer, err := event.NewBatchConsumer(redis, *consumerConfig, handler, erroredRouter, event.DeadLetterQueue)
 	if err != nil {
-		return fmt.Errorf("start notify consumer: error creating new batch consumer: %w", err)
+		return fmt.Errorf("start errored consumer: error creating new batch consumer: %w", err)
 	}
 
 	// start the consumer
 	err = consumer.Consume(ctx)
 	if err != nil {
-		return fmt.Errorf("start notify consumer: error starting consumer: %w", err)
+		return fmt.Errorf("start errored consumer: error starting consumer: %w", err)
 	}
 
 	return nil

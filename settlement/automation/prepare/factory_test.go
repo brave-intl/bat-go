@@ -86,6 +86,7 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, testutils.RandomString())
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
@@ -153,6 +154,7 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, testutils.RandomString())
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer

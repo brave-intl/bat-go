@@ -164,7 +164,7 @@ type Datastore interface {
 	GetCustodianDrainInfo(paymentID *uuid.UUID) ([]CustodianDrain, error)
 	// RunNextBatchPaymentsJob to sign claim credentials if there is a claim waiting
 	RunNextBatchPaymentsJob(ctx context.Context, worker BatchTransferWorker) (bool, error)
-	// UpdateDrainJobErred - manually update drain job for retry
+	// UpdateDrainJobAsRetriable UpdateDrainJobErred - manually update drain job for retry
 	UpdateDrainJobAsRetriable(ctx context.Context, walletID uuid.UUID) error
 }
 
