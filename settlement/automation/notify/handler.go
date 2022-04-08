@@ -1,3 +1,7 @@
+/*
+	This is just setup for testing
+*/
+
 package notify
 
 import (
