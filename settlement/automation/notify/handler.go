@@ -5,18 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"net/http"
 	"sync"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
 	"github.com/brave-intl/bat-go/utils/backoff"
-	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/utils/clients/payment"
-)
-
-var (
-	retryPolicy        = retrypolicy.DefaultRetry
-	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden}
 )
 
 type notify struct {
@@ -81,17 +74,4 @@ func (n *notify) sendTransactionsReadyNotification(ctx context.Context) error {
 	transactions = make([]payment.Transaction, 0)
 
 	return nil
-}
-
-func canRetry(nonRetriableErrors []int) func(error) bool {
-	return func(err error) bool {
-		if paymentError, err := payment.UnwrapPaymentError(err); err == nil {
-			for _, httpStatusCode := range nonRetriableErrors {
-				if paymentError.Code == httpStatusCode {
-					return false
-				}
-			}
-		}
-		return true
-	}
 }
