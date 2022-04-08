@@ -2,7 +2,7 @@ package settlement
 
 import (
 	"context"
-	"github.com/brave-intl/bat-go/settlement/automation/prepare"
+	"github.com/brave-intl/bat-go/settlement/automation/notify"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
@@ -34,7 +34,7 @@ func StartNotifyWorker(command *cobra.Command, args []string) {
 
 	loggingutils.FromContext(ctx).Info().Msg("starting notify consumer")
 
-	err := prepare.StartConsumer(ctx)
+	err := notify.StartConsumer(ctx)
 	if err != nil {
 		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting notify consumer")
 		return
