@@ -1,6 +1,7 @@
 package nitro
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -115,6 +116,7 @@ type openProxy struct {
 
 // ServeOpenProxy creates a new open HTTP proxy listening on the specified vsock port
 func ServeOpenProxy(
+	ctx context.Context,
 	port uint32,
 	connectTimeout time.Duration,
 ) error {
@@ -127,7 +129,7 @@ func ServeOpenProxy(
 	if err != nil {
 		return fmt.Errorf("listening on vsock port failed: %v", err)
 	}
-	defer closers.Panic(l)
+	defer closers.Panic(ctx, l)
 
 	return server.Serve(l)
 }
@@ -146,7 +148,7 @@ func (op openProxy) httpProxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer closers.Panic(resp.Body)
+	defer closers.Panic(r.Context(), resp.Body)
 	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
@@ -179,12 +181,12 @@ func (op openProxy) httpConnectProxyHandler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	go bidirectionalCopy(conn, upstream)
+	go bidirectionalCopy(r.Context(), conn, upstream)
 }
 
-func bidirectionalCopy(a net.Conn, b net.Conn) {
-	defer closers.Panic(a)
-	defer closers.Panic(b)
+func bidirectionalCopy(ctx context.Context, a net.Conn, b net.Conn) {
+	defer closers.Panic(ctx, a)
+	defer closers.Panic(ctx, b)
 
 	var wg sync.WaitGroup
 	// Per https://datatracker.ietf.org/doc/html/rfc7231#section-4.3.6

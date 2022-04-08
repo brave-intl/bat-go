@@ -1,6 +1,7 @@
 package nitro
 
 import (
+	"context"
 	"log"
 	"net"
 	"os"
@@ -62,12 +63,16 @@ func (w VsockWriter) Write(p []byte) (n int, err error) {
 
 // VsockLogServer - implementation of a log server over vsock
 type VsockLogServer struct {
-	port uint32
+	baseCtx context.Context
+	port    uint32
 }
 
 // NewVsockLogServer - create a new VsockLogServer
-func NewVsockLogServer(port uint32) VsockLogServer {
-	return VsockLogServer{port}
+func NewVsockLogServer(ctx context.Context, port uint32) VsockLogServer {
+	return VsockLogServer{
+		baseCtx: ctx,
+		port:    port,
+	}
 }
 
 // Serve - interface implementation for Serve for VsockLogServer
@@ -78,7 +83,7 @@ func (s VsockLogServer) Serve(l net.Listener) error {
 		if err != nil {
 			log.Panicln(err)
 		}
-		defer closers.Panic(l)
+		defer closers.Panic(s.baseCtx, l)
 	}
 	log.Printf("Listening to connections on vsock port %d\n", s.port)
 
@@ -88,13 +93,13 @@ func (s VsockLogServer) Serve(l net.Listener) error {
 			log.Panicln(err)
 		}
 
-		go handleLogConn(conn)
+		go handleLogConn(s.baseCtx, conn)
 	}
 }
 
-func handleLogConn(conn net.Conn) {
+func handleLogConn(ctx context.Context, conn net.Conn) {
 	log.Println("Accepted connection.")
-	defer closers.Panic(conn)
+	defer closers.Panic(ctx, conn)
 	defer log.Println("Closed connection.")
 
 	for {

@@ -121,7 +121,7 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("port must be a valid uint32: %v", err)
 	}
-	logserve := nitro.NewVsockLogServer(uint32(logport))
+	logserve := nitro.NewVsockLogServer(ctx, uint32(logport))
 
 	logger.Info().
 		Str("version", ctx.Value(appctx.VersionCTXKey).(string)).
@@ -135,6 +135,7 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	go logger.Error().Err(logserve.Serve(nil)).Msg("failed to start log server")
 
 	go logger.Error().Err(nitro.ServeOpenProxy(
+		ctx,
 		uint32(egressport),
 		10*time.Second,
 	)).Msg("failed to start proxy server")

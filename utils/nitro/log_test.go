@@ -1,6 +1,7 @@
 package nitro
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ func TestServe(t *testing.T) {
 	if err != nil {
 		t.Error("Unexpected error listening")
 	}
-	s := NewVsockLogServer(1234)
+	s := NewVsockLogServer(context.Background(), 1234)
 	go func() {
 		if err := s.Serve(l); err != nil {
 			t.Error("failed to serve log server")
