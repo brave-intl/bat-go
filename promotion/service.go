@@ -26,7 +26,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -36,7 +36,7 @@ var (
 	// toggle for drain retry job
 	enableDrainRetryJob = isDrainRetryJobEnabled()
 	// toggle for gemini check status
-	enableGeminiCheckStatus = isRunNextGeminiCheckStatus()
+	enableGemini = isGeminiEnabled()
 
 	suggestionTopic       = os.Getenv("ENV") + ".grant.suggestion"
 	adminAttestationTopic = fmt.Sprintf("admin_attestation_events.%s.repsys.upstream", os.Getenv("ENV"))
@@ -90,12 +90,11 @@ func isDrainRetryJobEnabled() bool {
 	return toggle
 }
 
-// remove once gemini enabled
-func isRunNextGeminiCheckStatus() bool {
+func isGeminiEnabled() bool {
 	var toggle = false
-	if os.Getenv("GEMINI_CHECK_STATUS_ENABLED") != "" {
+	if os.Getenv("GEMINI_ENABLED") != "" {
 		var err error
-		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_CHECK_STATUS_ENABLED"))
+		toggle, err = strconv.ParseBool(os.Getenv("GEMINI_ENABLED"))
 		if err != nil {
 			return false
 		}
@@ -348,7 +347,7 @@ func InitService(
 	}
 
 	// toggle for gemini check status
-	if enableGeminiCheckStatus {
+	if enableGemini {
 		service.jobs = append(service.jobs,
 			srv.Job{
 				Func:    service.RunNextGeminiCheckStatus,
