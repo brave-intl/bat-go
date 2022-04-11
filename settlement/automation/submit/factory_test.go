@@ -1,16 +1,18 @@
 //go:build integration
-// +build integration
 
 package submit_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 
 	"github.com/brave-intl/bat-go/utils/logging"
 
@@ -100,19 +102,24 @@ func (suite *SubmitTestSuite) TestSubmit() {
 
 	paymentURL := server.URL
 
+	_, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	hexPrivateKey := hex.EncodeToString(privateKey)
+
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, testutils.RandomString())
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, hexPrivateKey)
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
 	go submit.StartConsumer(ctx) // nolint
 
 	// assert message has been processed. once messages are consumed by submit
-	// these should be routed to the submit status stream
+	// these should be routed to submit status stream
 	actualC := make(chan event.Message, len(messages))
 	// start a test consumer to read from submit status stream
 	go test.StartTestBatchConsumer(suite.T(), ctx, redis, event.SubmitStatusStream, actualC)
@@ -135,6 +142,8 @@ func (suite *SubmitTestSuite) stubSubmitEndpoint(transactions map[string]payment
 		// assert
 		suite.Require().Equal(http.MethodPost, r.Method)
 		suite.Require().Equal("/v1/payments/submit", r.URL.Path)
+		suite.Require().NotEmpty(r.Header["Digest"])
+		suite.Require().NotEmpty(r.Header["Signature"])
 
 		var txns []payment.Transaction
 		err := json.NewDecoder(r.Body).Decode(&txns)

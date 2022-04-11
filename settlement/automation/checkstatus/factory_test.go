@@ -5,7 +5,9 @@ package checkstatus_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"strings"
 
 	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
@@ -97,12 +99,17 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 
 	paymentURL := server.URL
 
+	_, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	hexPrivateKey := hex.EncodeToString(privateKey)
+
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, testutils.RandomString())
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, hexPrivateKey)
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
@@ -111,8 +118,8 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	timer := time.Now().Add(10 * time.Second)
 	for {
 		// keep checking until all messages have been acknowledged before asserting
-		xPending, err := redis.XPending(ctx, event.CheckStatusStream, event.CheckStatusConsumerGroup).Result()
-		suite.Require().NoError(err)
+		xPending, _ := redis.XPending(ctx, event.CheckStatusStream, event.CheckStatusConsumerGroup).Result()
+
 		// check all messages have been ack before asserting
 		if xPending != nil && xPending.Count == int64(0) {
 			// assert all messages were successfully written to stream

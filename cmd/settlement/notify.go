@@ -28,9 +28,9 @@ func init() {
 // StartNotifyWorker initializes and starts notify worker
 func StartNotifyWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get("REDIS_ADDRESS"))
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, viper.Get("REDIS_ADDRESS"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
-	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, viper.Get("PAYMENT_SERVICE_HTTP_SIGN_KEY"))
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, viper.Get("PAYMENT_SERVICE_SIGNATOR_PRIVATE_KEY_HEX"))
 
 	loggingutils.FromContext(ctx).Info().Msg("starting notify consumer")
 

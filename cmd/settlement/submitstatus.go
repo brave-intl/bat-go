@@ -29,9 +29,9 @@ func init() {
 // StartSubmitStatusWorker initializes and starts submit status worker.
 func StartSubmitStatusWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, viper.Get("REDIS_ADDRESS"))
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, viper.Get("REDIS_ADDRESS"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
-	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, viper.Get("PAYMENT_SERVICE_SIGNATOR_PRIVATE_KEY_HEX"))
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, viper.Get("PAYMENT_SERVICE_SIGNATOR_PRIVATE_KEY_HEX"))
 
 	loggingutils.FromContext(ctx).Info().Msg("starting submit status worker")
 

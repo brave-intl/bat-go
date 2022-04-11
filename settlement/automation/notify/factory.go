@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/settlement/automation/event"
@@ -16,9 +17,9 @@ import (
 
 // StartConsumer initializes and start notify consumer
 func StartConsumer(ctx context.Context) error {
-	redisURL := ctx.Value(appctx.RedisSettlementURLCTXKey).(string)
+	redisURL := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
-	httpSigningKey := ctx.Value(appctx.PaymentServiceHTTPSingingKeyCTXKey).(string)
+	httpSigningKeyHex := ctx.Value(appctx.PaymentServiceHTTPSingingKeyHexCTXKey).(string)
 
 	consumerConfig, err := event.NewBatchConsumerConfig(
 		event.WithStreamName(event.NotifyStream),
@@ -33,13 +34,18 @@ func StartConsumer(ctx context.Context) error {
 		return fmt.Errorf("start notify consumer: error creating redis client: %w", err)
 	}
 
+	privateKey, err := hex.DecodeString(httpSigningKeyHex)
+	if err != nil {
+		return fmt.Errorf("start notify consumer: error decoding payment service signing key: %w", err)
+	}
+
 	ps := httpsignature.ParameterizedSignator{
 		SignatureParams: httpsignature.SignatureParams{
 			KeyID:     uuid.NewV4().String(),
 			Algorithm: httpsignature.ED25519,
 			Headers:   []string{"digest", "(request-target)"},
 		},
-		Signator: ed25519.PrivateKey(httpSigningKey),
+		Signator: ed25519.PrivateKey(privateKey),
 		Opts:     crypto.Hash(0),
 	}
 

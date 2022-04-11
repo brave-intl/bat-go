@@ -2,7 +2,9 @@ package submitstatus_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
 
 	"github.com/brave-intl/bat-go/settlement/automation/submitstatus"
 	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
@@ -99,12 +101,17 @@ func (suite *SubmitStatusTestSuite) TestSubmitStatus() {
 
 	paymentURL := server.URL
 
+	_, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	hexPrivateKey := hex.EncodeToString(privateKey)
+
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.RedisSettlementURLCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
-	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyCTXKey, testutils.RandomString())
+	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, hexPrivateKey)
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer
