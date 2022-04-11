@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package checkstatus_test
 
@@ -52,8 +51,14 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	redisURL := os.Getenv("REDIS_URL")
 	suite.Require().NotNil(redisURL)
 
+	redisUsername := os.Getenv("REDIS_USERNAME")
+	suite.Require().NotNil(redisUsername)
+
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	suite.Require().NotNil(redisPassword)
+
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL)
+	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	// create and send messages to check status stream
@@ -108,8 +113,11 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, hexPrivateKey)
+
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 
 	// start prepare consumer

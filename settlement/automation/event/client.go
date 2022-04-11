@@ -29,15 +29,16 @@ type Client struct {
 }
 
 // NewRedisClient creates a new instance of redis client
-func NewRedisClient(redisURL string) (*Client, error) {
-	opt, err := redis.ParseURL(redisURL)
+func NewRedisClient(address, username, password string) (*Client, error) {
+	opt, err := redis.ParseURL(address)
 	if err != nil {
 		return nil, fmt.Errorf("redis client: error creating new redis client: %w", err)
 	}
 	return &Client{
 		Client: redis.NewClient(&redis.Options{
 			Addr:            opt.Addr,
-			Password:        "",
+			Username:        username,
+			Password:        password,
 			DB:              0,
 			ReadTimeout:     readTimeout,
 			MaxRetries:      maxRetries,

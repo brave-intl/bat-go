@@ -37,7 +37,13 @@ func (suite *ConsumerTestSuite) SetupTest() {
 	redisURL := os.Getenv("REDIS_URL")
 	suite.NotNil(redisURL)
 
-	rc, err := event.NewRedisClient(redisURL)
+	redisUsername := os.Getenv("REDIS_USERNAME")
+	suite.Require().NotNil(redisUsername)
+
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	suite.Require().NotNil(redisPassword)
+
+	rc, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	suite.NoError(err)
 
 	_, err = rc.Do(context.Background(), "DEL", suite.stream).Result()
@@ -51,8 +57,14 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Success() {
 	redisURL := os.Getenv("REDIS_URL")
 	suite.Require().NotNil(redisURL)
 
+	redisUsername := os.Getenv("REDIS_USERNAME")
+	suite.Require().NotNil(redisUsername)
+
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	suite.Require().NotNil(redisPassword)
+
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL)
+	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	ctx := context.Background()
@@ -132,8 +144,14 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
 	redisURL := os.Getenv("REDIS_URL")
 	suite.NotNil(redisURL)
 
+	redisUsername := os.Getenv("REDIS_USERNAME")
+	suite.Require().NotNil(redisUsername)
+
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	suite.Require().NotNil(redisPassword)
+
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL)
+	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	ctx := context.Background()

@@ -18,6 +18,8 @@ import (
 // StartConsumer initializes and start notify consumer
 func StartConsumer(ctx context.Context) error {
 	redisURL := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
+	redisUsername := ctx.Value(appctx.SettlementRedisUsernameCTXKey).(string)
+	redisPassword := ctx.Value(appctx.SettlementRedisPasswordCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
 	httpSigningKeyHex := ctx.Value(appctx.PaymentServiceHTTPSingingKeyHexCTXKey).(string)
 
@@ -29,7 +31,7 @@ func StartConsumer(ctx context.Context) error {
 		return fmt.Errorf("start notify consumer: error creating batch consumer config: %w", err)
 	}
 
-	redis, err := event.NewRedisClient(redisURL)
+	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	if err != nil {
 		return fmt.Errorf("start notify consumer: error creating redis client: %w", err)
 	}

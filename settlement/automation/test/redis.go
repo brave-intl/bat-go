@@ -16,7 +16,13 @@ func StreamsTearDown(t *testing.T) {
 	redisURL := os.Getenv("REDIS_URL")
 	require.NotNil(t, redisURL)
 
-	rc, err := event.NewRedisClient(redisURL)
+	redisUsername := os.Getenv("REDIS_USERNAME")
+	require.NotNil(t, redisUsername)
+
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	require.NotNil(t, redisPassword)
+
+	rc, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
 	require.NoError(t, err)
 
 	_, err = rc.Do(context.Background(), "DEL", event.PrepareStream).Result()

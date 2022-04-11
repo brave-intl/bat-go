@@ -128,8 +128,9 @@ const (
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 
-	// SettlementRedisAddressCTXKey context key for redis settlement url
-	SettlementRedisAddressCTXKey CTXKey = "redis_settlement_url"
+	SettlementRedisAddressCTXKey  CTXKey = "redis_settlement_url"
+	SettlementRedisUsernameCTXKey CTXKey = "redis_settlement_username"
+	SettlementRedisPasswordCTXKey CTXKey = "redis_settlement_password"
 
 	PaymentServiceURLCTXKey               CTXKey = "payment_service_url"
 	PaymentServiceHTTPSingingKeyHexCTXKey CTXKey = "payment_service_signing_key_hex"
