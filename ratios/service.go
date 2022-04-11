@@ -178,7 +178,11 @@ func (s *Service) GetRelative(ctx context.Context, coinIDs CoingeckoCoinList, vs
 
 			current := out[coinIDs[0].String()][vsCurrencies[0].String()]
 			previous := chart.Prices[0][1]
-			change := current.Sub(previous).Div(previous).Mul(decimal.NewFromFloat(100))
+			change := decimal.Zero
+			// division by error when previous is zero
+			if !previous.IsZero() {
+				change = current.Sub(previous).Div(previous).Mul(decimal.NewFromFloat(100))
+			}
 
 			out[coinIDs[0].String()][vsCurrencies[0].String()+"_timeframe_change"] = change
 		}
