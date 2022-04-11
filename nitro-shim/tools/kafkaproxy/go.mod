@@ -1,6 +1,6 @@
 module github.com/brave-experiments/ia2-parent/kafkaproxy
 
-go 1.17
+go 1.18
 
 replace nitro-shim/utils v0.0.0 => ../utils
 
