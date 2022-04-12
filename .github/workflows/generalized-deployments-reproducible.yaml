@@ -1,6 +1,7 @@
 on:
   push:
     branches:
+      - nitro-utils
       - master
       - dev
       - prod
