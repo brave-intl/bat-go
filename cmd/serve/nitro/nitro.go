@@ -2,7 +2,6 @@ package nitro
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,38 +32,29 @@ func init() {
 	cmd.Must(viper.BindPFlag("log-address", NitroServeCmd.PersistentFlags().Lookup("log-address")))
 	cmd.Must(viper.BindEnv("log-address", "LOG_ADDRESS"))
 
+	NitroServeCmd.AddCommand(OutsideNitroServeCmd)
+	NitroServeCmd.AddCommand(InsideNitroServeCmd)
 	cmd.ServeCmd.AddCommand(NitroServeCmd)
+}
+
+// OutsideNitroServeCmd the nitro serve command
+var OutsideNitroServeCmd = &cobra.Command{
+	Use:   "outside-enclave",
+	Short: "subcommand to serve a nitro micro-service",
+	Run:   cmd.Perform("outside-enclave", RunNitroServerOutsideEnclave),
+}
+
+// InsideNitroServeCmd the nitro serve command
+var InsideNitroServeCmd = &cobra.Command{
+	Use:   "inside-enclave",
+	Short: "subcommand to serve a nitro micro-service",
+	Run:   cmd.Perform("inside-enclave", RunNitroServerInEnclave),
 }
 
 // NitroServeCmd the nitro serve command
 var NitroServeCmd = &cobra.Command{
 	Use:   "nitro",
 	Short: "subcommand to serve a nitro micro-service",
-	Run:   cmd.Perform("nitro", RunNitroServer),
-}
-
-// RunNitroServer - entrypoint to start up the nitro services
-func RunNitroServer(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-	c := make(chan int, 1)
-
-	go func() {
-		b := make([]byte, 1)
-		n, err := rand.Read(b)
-		if err != nil {
-			logger, err := appctx.GetLogger(ctx)
-			if err != nil {
-				logger.Error().Err(err).Msg("Unexpected error while reading rand")
-			}
-		}
-		c <- n
-	}()
-	select {
-	case <-c:
-		return RunNitroServerOutsideEnclave(cmd, args)
-	case <-time.After(1 * time.Second):
-		return RunNitroServerInEnclave(cmd, args)
-	}
 }
 
 // RunNitroServerInEnclave - start up the nitro server living inside the enclave
