@@ -12,7 +12,8 @@ and_run="${3}"
 
 set -euxo pipefail
 
-docker_image=$(docker images | grep "${docker_image_base}" | awk -v s="${service}" '{printf "%s%s:%s", $1, s, $2}')
+# get the latest docker image of the base image we are looking for
+docker_image=$(docker images --format "{{.Repository}} {{.Tag}} {{.CreatedAt}}" | sort -rk 3 | awk -v s="${service}" '{printf "%s%s:%s", $1, s, $2}' | grep "${docker_image_base}")
 
 nitro-cli build-enclave --docker-uri ${docker_image} --output-file nitro-image.eif
 
