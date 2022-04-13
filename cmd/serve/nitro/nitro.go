@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/nitro"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -67,10 +68,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	writer := nitro.NewVsockWriter(logaddr)
 	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
 
-	logger, err := appctx.GetLogger(ctx)
-	if err != nil {
-		return err
-	}
+	logger := logging.Logger(ctx, "payments")
 
 	logger.Info().Msg("Last of the enclaves")
 	return nil
