@@ -4,8 +4,8 @@ docker_image_base="${1}"
 
 # service var is the service we wish to run in the enclave
 service=""
-if [ "${2}" != "" ]; then 
-    service = "/${2}"
+if [ "${2}" != "" ]; then
+    service="/${2}"
 fi
 
 and_run="${3}"
