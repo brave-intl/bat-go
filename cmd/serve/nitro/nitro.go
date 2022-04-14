@@ -70,7 +70,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	logger := logging.Logger(ctx, "payments")
 
-	logger.Info().Msg("Last of the enclaves")
+	for {
+		<-time.After(5 * time.Second)
+		logger.Info().Msg("Last of the enclaves")
+	}
 	return nil
 }
 
