@@ -1,6 +1,7 @@
 package nitro
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -8,9 +9,14 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/cmd"
+	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/nitro"
+	"github.com/go-chi/chi"
+	chiware "github.com/go-chi/chi/middleware"
+	"github.com/mdlayher/vsock"
+	"github.com/rs/zerolog/hlog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -63,24 +69,52 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	fmt.Println("running inside encalve")
 	ctx := cmd.Context()
 
-	//logaddr := viper.GetString("log-address")
-
-	//writer := nitro.NewVsockWriter(logaddr)
-	// ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
+	logaddr := viper.GetString("log-address")
+	writer := nitro.NewVsockWriter(logaddr)
+	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
 	// special logger with writer
-	_, logger := logging.SetupLogger(ctx)
-
-	// POC web server inside enclave
+	ctx, logger := logging.SetupLogger(ctx)
+	// setup router
+	ctx, r := setupRouter(ctx)
+	// setup listener
 	addr := viper.GetString("address")
-	http.HandleFunc("/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
-	go func() {
-		logger.Error().Err(http.ListenAndServe(addr, nil)).Msg("server stopped")
-	}()
-
-	for {
-		<-time.After(5 * time.Second)
-		logger.Info().Msg("Last of the enclaves")
+	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
+	if err != nil {
+		logger.Panic().Err(err).Msg("invalid --address")
 	}
+
+	// setup vsock listener
+	l, err := vsock.Listen(uint32(port))
+	if err != nil {
+		logger.Panic().Err(err).Msg("listening on vsock port failed")
+	}
+	// setup server
+	srv := http.Server{
+		Handler:      chi.ServerBaseContext(ctx, r),
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 20 * time.Second,
+	}
+	// run the server in another routine
+	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
+	return nil
+}
+
+func setupRouter(ctx context.Context) (context.Context, *chi.Mux) {
+	// base service logger
+	logger := logging.Logger(ctx, "payments")
+	// base router
+	r := chi.NewRouter()
+	// middlewares
+	r.Use(chiware.RequestID)
+	r.Use(middleware.RequestIDTransfer)
+	r.Use(hlog.NewHandler(*logger))
+	r.Use(hlog.UserAgentHandler("user_agent"))
+	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(chiware.Timeout(15 * time.Second))
+	// routes
+	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	return ctx, r
 }
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside
