@@ -5,8 +5,8 @@ go 1.18
 replace nitro-shim/utils v0.0.0 => ../utils
 
 require (
-	github.com/brave-experiments/ia2 v0.3.0
-	github.com/segmentio/kafka-go v0.4.30
+	github.com/brave-experiments/ia2 v0.4.1
+	github.com/segmentio/kafka-go v0.4.31
 	nitro-shim/utils v0.0.0
 )
 
