@@ -67,14 +67,13 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	writer := nitro.NewVsockWriter(logaddr)
 	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
-
-	logger := logging.Logger(ctx, "payments")
+	// special logger with writer
+	_, logger := logging.SetupLogger(ctx)
 
 	for {
 		<-time.After(5 * time.Second)
 		logger.Info().Msg("Last of the enclaves")
 	}
-	return nil
 }
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside
