@@ -72,7 +72,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 
 	// POC web server inside enclave
 	addr := viper.GetString("address")
-	http.HandleFunc("/health-check", nitro.EnclaveHealthCheck)
+	http.HandleFunc("/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	go func() {
 		logger.Error().Err(http.ListenAndServe(addr, nil)).Msg("server stopped")
 	}()
