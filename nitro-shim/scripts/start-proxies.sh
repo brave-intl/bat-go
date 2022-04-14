@@ -7,7 +7,7 @@ CID=""
 for i in `seq 0 5`
 do
         sleep 20
-        CID=$(nitro-cli describe-enclaves | jq -r .EnclaveCID)
+        CID=$(nitro-cli describe-enclaves | jq -r .[].EnclaveCID)
         if [ "${CID}" == "" ]; then
                 continue
         fi
