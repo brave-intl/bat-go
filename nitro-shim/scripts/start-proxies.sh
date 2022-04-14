@@ -16,8 +16,8 @@ done
 
 # at this point the enclave is up
 # setup inbound traffic proxy
-IN_ADDRS=":8080"
-OUT_ADDRS="${CID}:8080"
+export IN_ADDRS=":8080"
+export OUT_ADDRS="${CID}:8080"
 
 # next startup the proxy
 /enclave/viproxy > /tmp/viproxy.log &
