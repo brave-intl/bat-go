@@ -20,8 +20,8 @@ docker_image_tag=$(docker images --format "{{.Repository}} {{.Tag}} {{.CreatedAt
 
 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${docker_image}
 
-# wait for a few seconds
-sleep 20
+# wait for a few minutes
+sleep 120
 
 nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
 

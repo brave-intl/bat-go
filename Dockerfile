@@ -27,7 +27,7 @@ COPY --from=builder /src/bat-go /bin/
 
 FROM base as payments
 # put certs in artifact from builder
-CMD ["bat-go", "serve", "nitro", "inside-enclave", "--log-address", "vm(3):2345", "--egress-address", "vm(3):1234", "--upstream-url", "http://0.0.0.0:3456"]
+CMD ["bat-go", "serve", "nitro", "inside-enclave", "--log-address", "vm(3):2345", "--egress-address", "vm(3):1234", "--upstream-url", "http://0.0.0.0:8080"]
 
 FROM base as artifact
 # put certs in artifact from builder
