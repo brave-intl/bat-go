@@ -3,6 +3,7 @@ package nitro
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -69,6 +70,13 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
 	// special logger with writer
 	_, logger := logging.SetupLogger(ctx)
+
+	// POC web server inside enclave
+	addr := viper.GetString("address")
+	http.HandleFunc("/health-check", nitro.EnclaveHealthCheck)
+	go func() {
+		logger.Error().Err(http.ListenAndServe(addr, nil)).Msg("server stopped")
+	}()
 
 	for {
 		<-time.After(5 * time.Second)
