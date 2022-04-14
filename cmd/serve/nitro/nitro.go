@@ -1,7 +1,6 @@
 package nitro
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -64,10 +63,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	fmt.Println("running inside encalve")
 	ctx := cmd.Context()
 
-	logaddr := viper.GetString("log-address")
+	//logaddr := viper.GetString("log-address")
 
-	writer := nitro.NewVsockWriter(logaddr)
-	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
+	//writer := nitro.NewVsockWriter(logaddr)
+	// ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
 	// special logger with writer
 	_, logger := logging.SetupLogger(ctx)
 
