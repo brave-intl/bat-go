@@ -27,6 +27,6 @@ docker_image_tag=$(docker images --format "{{.Repository}} {{.Tag}} {{.CreatedAt
 nitro-cli build-enclave --docker-uri ${docker_image_tag} --output-file nitro-image.eif
 
 if [ "${and_run}" == "run" ]; then 
-  /enclave/run.sh
+  /enclave/run.sh "${service}"
 fi
 
