@@ -79,7 +79,8 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
-	if err != nil {
+	if err != nil || port > ^uint32(0) {
+		// panic if there is an error, or if the port is too large to fit in uint32
 		logger.Panic().Err(err).Msg("invalid --address")
 	}
 
