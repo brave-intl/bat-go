@@ -11,7 +11,7 @@ import (
 	cbr "github.com/brave-intl/bat-go/utils/clients/cbr"
 	wallet "github.com/brave-intl/bat-go/utils/wallet"
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/satori/go.uuid"
+	go_uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
 )
 
@@ -39,18 +39,18 @@ func (m *MockDrainWorker) EXPECT() *MockDrainWorkerMockRecorder {
 }
 
 // RedeemAndTransferFunds mocks base method.
-func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, walletID uuid.UUID, total decimal.Decimal, claimID *uuid.UUID) (*wallet.TransactionInfo, error) {
+func (m *MockDrainWorker) RedeemAndTransferFunds(ctx context.Context, credentials []cbr.CredentialRedemption, drainJob DrainJob) (*wallet.TransactionInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, walletID, total, claimID)
+	ret := m.ctrl.Call(m, "RedeemAndTransferFunds", ctx, credentials, drainJob)
 	ret0, _ := ret[0].(*wallet.TransactionInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RedeemAndTransferFunds indicates an expected call of RedeemAndTransferFunds.
-func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, walletID, total, claimID interface{}) *gomock.Call {
+func (mr *MockDrainWorkerMockRecorder) RedeemAndTransferFunds(ctx, credentials, drainJob interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, walletID, total, claimID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemAndTransferFunds", reflect.TypeOf((*MockDrainWorker)(nil).RedeemAndTransferFunds), ctx, credentials, drainJob)
 }
 
 // MockDrainRetryWorker is a mock of DrainRetryWorker interface.
@@ -77,10 +77,10 @@ func (m *MockDrainRetryWorker) EXPECT() *MockDrainRetryWorkerMockRecorder {
 }
 
 // FetchAdminAttestationWalletID mocks base method.
-func (m *MockDrainRetryWorker) FetchAdminAttestationWalletID(ctx context.Context) (*uuid.UUID, error) {
+func (m *MockDrainRetryWorker) FetchAdminAttestationWalletID(ctx context.Context) (*go_uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchAdminAttestationWalletID", ctx)
-	ret0, _ := ret[0].(*uuid.UUID)
+	ret0, _ := ret[0].(*go_uuid.UUID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -115,7 +115,7 @@ func (m *MockMintWorker) EXPECT() *MockMintWorkerMockRecorder {
 }
 
 // MintGrant mocks base method.
-func (m *MockMintWorker) MintGrant(ctx context.Context, walletID uuid.UUID, total decimal.Decimal, promoIDs ...uuid.UUID) error {
+func (m *MockMintWorker) MintGrant(ctx context.Context, walletID go_uuid.UUID, total decimal.Decimal, promoIDs ...go_uuid.UUID) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, walletID, total}
 	for _, a := range promoIDs {
@@ -157,7 +157,7 @@ func (m *MockBatchTransferWorker) EXPECT() *MockBatchTransferWorkerMockRecorder 
 }
 
 // SubmitBatchTransfer mocks base method.
-func (m *MockBatchTransferWorker) SubmitBatchTransfer(ctx context.Context, batchID *uuid.UUID) error {
+func (m *MockBatchTransferWorker) SubmitBatchTransfer(ctx context.Context, batchID *go_uuid.UUID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBatchTransfer", ctx, batchID)
 	ret0, _ := ret[0].(error)

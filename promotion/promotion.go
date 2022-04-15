@@ -74,7 +74,11 @@ func Filter(orig []Promotion, f func(Promotion) bool) []Promotion {
 
 // CredentialValue returns the approximate value of a credential
 func (promotion *Promotion) CredentialValue() decimal.Decimal {
-	return promotion.ApproximateValue.Div(decimal.New(int64(promotion.SuggestionsPerGrant), 0))
+	cv := promotion.ApproximateValue.Div(decimal.New(int64(promotion.SuggestionsPerGrant), 0))
+	if !cv.Sub(decimal.NewFromFloat(0.25)).IsZero() {
+		panic("wrong credential value calculated for promotion")
+	}
+	return cv
 }
 
 // Claimable checks whether the promotion can be claimed
