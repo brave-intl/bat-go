@@ -19,7 +19,7 @@ require (
 	github.com/hashicorp/vault v1.10.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/hashicorp/vault/sdk v0.4.2-0.20220321211954-d7083ad326db
-	github.com/jmoiron/sqlx v1.3.4
+	github.com/jmoiron/sqlx v1.3.5
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
