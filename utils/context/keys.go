@@ -129,6 +129,11 @@ const (
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 	// SecretsURICTXKey - the context key for getting the application secrets file location
 	SecretsURICTXKey CTXKey = "secrets_uri"
+
+	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
+	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
+	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
 )
 
 var (
