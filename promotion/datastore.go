@@ -593,7 +593,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	claim := claims[0]
 
 	// This will error if user has already claimed due to uniqueness constraint
-	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds, created_at) values ($1, $2, $3, now())`, issuer.ID, claim.ID, blindedCredsJSON)
+	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds, created_at) values ($1, $2, $3, now()) on conflict do nothing`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
 		return nil, err
 	}
