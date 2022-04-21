@@ -115,13 +115,6 @@ func (service *Service) ClaimPromotionForWallet(
 			Code:    http.StatusGone,
 		}
 	}
-	// check if promotion is disabled, need different behavior than Gone
-	if !promotion.Active {
-		return nil, &handlers.AppError{
-			Message: "promotion is disabled",
-			Code:    http.StatusBadRequest,
-		}
-	}
 
 	if claim != nil {
 		// get the claim credentials to check if these blinded creds were used before
@@ -141,6 +134,14 @@ func (service *Service) ClaimPromotionForWallet(
 			return nil, errClaimedDifferentBlindCreds
 		}
 
+	}
+
+	// check if promotion is disabled, need different behavior than Gone
+	if !promotion.Active {
+		return nil, &handlers.AppError{
+			Message: "promotion is disabled",
+			Code:    http.StatusBadRequest,
+		}
 	}
 
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
