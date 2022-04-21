@@ -1219,7 +1219,7 @@ func (suite *ControllersTestSuite) TestClaimCompatibility() {
 			PromoActive:      false,
 			CreatedAt:        now,
 			ExpiresAt:        later,
-			ClaimStatus:      http.StatusGone,
+			ClaimStatus:      http.StatusBadRequest,
 			ChecksReputation: true,
 		},
 		{
@@ -1237,7 +1237,7 @@ func (suite *ControllersTestSuite) TestClaimCompatibility() {
 			PromoActive: false,
 			CreatedAt:   now,
 			ExpiresAt:   later,
-			ClaimStatus: http.StatusGone,
+			ClaimStatus: http.StatusBadRequest,
 			// these are irrelevant if claim is gone
 			ChecksReputation: false,
 		},
