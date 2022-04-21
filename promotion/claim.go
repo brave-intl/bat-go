@@ -146,7 +146,7 @@ func (service *Service) ClaimPromotionForWallet(
 
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
 	if claim == nil || !claim.LegacyClaimed {
-		walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)
+		walletIsReputable, err := service.reputationClient.IsWalletAdsReputable(ctx, walletID, promotion.Platform)
 		if err != nil {
 			return nil, err
 		}

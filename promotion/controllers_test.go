@@ -404,7 +404,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -449,7 +449,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	}`
 	suite.Assert().JSONEq(expected, rr.Body.String(), "Expected public key to appear in promotions endpoint")
 
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -491,7 +491,7 @@ func (suite *ControllersTestSuite) TestClaimGrant() {
 	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 	suite.Assert().JSONEq(`{"message":"Error claiming promotion: wrong number of blinded tokens included","code":400}`, rr.Body.String())
 
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -564,7 +564,7 @@ func (suite *ControllersTestSuite) TestSuggestCBRError() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -711,7 +711,7 @@ func (suite *ControllersTestSuite) TestSuggest() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1330,7 +1330,7 @@ func (suite *ControllersTestSuite) TestClaimCompatibility() {
 			// non legacy pathway
 			if test.ChecksReputation {
 				mockReputation.EXPECT().
-					IsWalletReputable(
+					IsWalletAdsReputable(
 						gomock.Any(),
 						gomock.Any(),
 						gomock.Any(),
@@ -1397,7 +1397,7 @@ func (suite *ControllersTestSuite) TestSuggestionMintDrain() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1597,7 +1597,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerJPYLimit() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1766,7 +1766,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainSkipCBRDupRedeem() {
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	// the wallet reputation check originally succeeds
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1937,7 +1937,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	// the wallet reputation check originally succeeds
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -1946,7 +1946,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainWalletNotReputable() {
 		nil,
 	)
 	// the second batch submitted
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2263,7 +2263,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyerNoINV() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2446,7 +2446,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainBitflyer() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2614,7 +2614,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrainV2() {
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -2799,7 +2799,7 @@ func (suite *ControllersTestSuite) TestSuggestionDrain() {
 	suite.Require().NoError(err, "Failed to register wallet")
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
@@ -3014,7 +3014,7 @@ func (suite *ControllersTestSuite) TestBraveFundsTransaction() {
 	}
 
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
-	mockReputation.EXPECT().IsWalletReputable(
+	mockReputation.EXPECT().IsWalletAdsReputable(
 		gomock.Any(),
 		gomock.Any(),
 		gomock.Any(),
