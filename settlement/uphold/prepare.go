@@ -33,16 +33,16 @@ func FlattenPaymentsByWalletProviderID(settlements *[]settlement.Transaction) []
 	flattenedSettlements := []settlement.Transaction{}
 	for _, v := range groupedSettlements {
 		var (
-			flattenedSettlement       settlement.Transaction
-			flattenedSettlementAmount decimal.Decimal = decimal.NewFromFloat(0.0)
+			flattenedSettlement      settlement.Transaction
+			flattenedSettlementProbi decimal.Decimal = decimal.NewFromFloat(0.0)
 		)
 		for _, record := range v {
 			if (flattenedSettlement == settlement.Transaction{}) {
 				flattenedSettlement = record
 			}
-			flattenedSettlementAmount = flattenedSettlementAmount.Add(record.Amount)
+			flattenedSettlementProbi = flattenedSettlementProbi.Add(record.Probi)
 		}
-		flattenedSettlement.Amount = flattenedSettlementAmount
+		flattenedSettlement.Probi = flattenedSettlementProbi
 		flattenedSettlements = append(flattenedSettlements, flattenedSettlement)
 	}
 	return flattenedSettlements

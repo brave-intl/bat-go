@@ -18,7 +18,7 @@ func TestGroupSettlements(t *testing.T) {
 	settlements, wantedSettlements := generateRandomSettlementsAndResultMap()
 	result := GroupSettlements(&settlements)
 	if !reflect.DeepEqual(result, wantedSettlements) {
-		t.Fatalf("Wanted: %#v\nFound: %#v", wantedSettlements, result)
+		t.Fatalf("wanted: %#v\nfound: %#v", wantedSettlements, result)
 	}
 }
 
@@ -31,8 +31,8 @@ func TestFlattenPaymentsByWalletProviderID(t *testing.T) {
 		for _, wantedSettlement := range wantedSettlements {
 			fmt.Printf("wanted WalletProviderID: %s\nfound WalletProviderID: %s\n", wantedSettlement.WalletProviderID, result.WalletProviderID)
 			if wantedSettlement.WalletProviderID == result.WalletProviderID {
-				fmt.Printf("wanted Amount: %s\nfound Amount: %s\n", wantedSettlement.Amount, result.Amount)
-				if wantedSettlement.Amount.Equal(result.Amount) {
+				fmt.Printf("wanted Amount: %s\nfound Amount: %s\n", wantedSettlement.Probi, result.Probi)
+				if wantedSettlement.Probi.Equal(result.Probi) {
 					foundMatches++
 				}
 			}
@@ -101,16 +101,19 @@ func generateFixedSettlementsSliceAndResultsSlice() ([]settlement.Transaction, [
 	)
 	altCurrency := altcurrency.BAT
 	provderIds := []string{"ea524fe8-8a81-4191-a1bf-610f4b956816", "fc5cd231-22ac-403b-867c-9b8a080001b2", "060f9494-9b71-450b-89a7-ba745a9f36f7", "fe3e49fe-9c5c-4b08-b07c-97b3171c0b69"}
+
+	probi1, _ := decimal.NewFromString("1000000000000000000")
+	probi2, _ := decimal.NewFromString("200000000000000000")
+	probi3, _ := decimal.NewFromString("500000000000000000")
+	probi4, _ := decimal.NewFromString("4100000000000000000")
+	probi5, _ := decimal.NewFromString("9300000000000000000")
+	probi6, _ := decimal.NewFromString("24100000000000000000")
+	probi7, _ := decimal.NewFromString("7700000000000000000")
+	probi8, _ := decimal.NewFromString("1000000000000000345")
 	priceSet := []decimal.Decimal{
-		decimal.NewFromFloat(1.0),
-		decimal.NewFromFloat(0.2),
-		decimal.NewFromFloat(0.5),
-		decimal.NewFromFloat(4.1),
-		decimal.NewFromFloat(9.3),
-		decimal.NewFromFloat(24.10),
-		decimal.NewFromFloat(7.7),
+		probi1, probi2, probi3, probi4, probi5, probi6, probi7, probi8,
 	}
-	wantedSum := decimal.NewFromFloat(46.9)
+	wantedSum, _ := decimal.NewFromString("47900000000000000345")
 	presetTime := time.Now()
 	for _, provderID := range provderIds {
 		settlementInstance := settlement.Transaction{
@@ -138,10 +141,10 @@ func generateFixedSettlementsSliceAndResultsSlice() ([]settlement.Transaction, [
 			Note:             "test",
 		}
 		for _, price := range priceSet {
-			settlementInstance.Amount = price
+			settlementInstance.Probi = price
 			settlements = append(settlements, settlementInstance)
 		}
-		settlementInstance.Amount = wantedSum
+		settlementInstance.Probi = wantedSum
 		wantedSettlements = append(wantedSettlements, settlementInstance)
 	}
 	return settlements, wantedSettlements
