@@ -43,7 +43,7 @@ func (suite *PromotionTestSuite) TestPromotionClaimable() {
 	now := time.Now()
 	monthsAgo3 := now.AddDate(0, -3, 0)
 	scenarios := []Assertion{{
-		Claimable:     false,
+		Claimable:     true, // we no longer do Gone if the promotion active flag is false
 		LegacyClaimed: false,
 		Promotion: Promotion{
 			Active:    false, // fails because not active

@@ -136,6 +136,14 @@ func (service *Service) ClaimPromotionForWallet(
 
 	}
 
+	// check if promotion is disabled, need different behavior than Gone
+	if !promotion.Active {
+		return nil, &handlers.AppError{
+			Message: "promotion is disabled",
+			Code:    http.StatusBadRequest,
+		}
+	}
+
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
 	if claim == nil || !claim.LegacyClaimed {
 		walletIsReputable, err := service.reputationClient.IsWalletReputable(ctx, walletID, promotion.Platform)

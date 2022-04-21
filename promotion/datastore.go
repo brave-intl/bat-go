@@ -593,7 +593,7 @@ func (pg *Postgres) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet 
 	claim := claims[0]
 
 	// This will error if user has already claimed due to uniqueness constraint
-	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds, created_at) values ($1, $2, $3, now())`, issuer.ID, claim.ID, blindedCredsJSON)
+	_, err = tx.Exec(`insert into claim_creds (issuer_id, claim_id, blinded_creds, created_at) values ($1, $2, $3, now()) on conflict do nothing`, issuer.ID, claim.ID, blindedCredsJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -680,7 +680,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 				select * from claims where claims.wallet_id = $1
 			) wallet_claims on promos.id = wallet_claims.promotion_id
 		where
-			wallet_claims.redeemed is distinct from true and (
+			(wallet_claims.redeemed is distinct from true or promos.id='66d1d59f-2c12-44d6-810e-6a3b87fcb9e8' ) and (
 				wallet_claims.legacy_claimed is true or (
 					promos.created_at > NOW() - INTERVAL '3 months' and promos.active and (
 						( promos.promotion_type = 'ugp' and promos.remaining_grants > 0 ) or
@@ -689,6 +689,7 @@ func (pg *Postgres) GetAvailablePromotionsForWallet(wallet *walletutils.Info, pl
 				)
 			)
 		order by promos.created_at;`
+	// TODO: remove the promos.id hardcode in 3 months
 
 	promotions := []Promotion{}
 
@@ -996,8 +997,8 @@ func (pg *Postgres) GetClaimByWalletAndPromotion(
 SELECT
   *
 FROM claims
-WHERE wallet_id = $1
-  AND promotion_id = $2
+	WHERE wallet_id = $1
+	AND promotion_id = $2
 	AND (legacy_claimed or redeemed)
 ORDER BY created_at DESC
 `
