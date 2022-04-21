@@ -9,6 +9,7 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/google/go-querystring/query"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -216,33 +217,7 @@ func (c *HTTPClient) IsWalletReputable(
 	paymentID uuid.UUID,
 	platform string,
 ) (bool, error) {
-
-	var body IsReputableOpts
-	if platform != "" {
-		// pass in query string "platform" into our request
-		body = IsReputableOpts{
-			Platform: platform,
-		}
-	}
-
-	req, err := c.client.NewRequest(
-		ctx,
-		"GET",
-		"v1/reputation/"+paymentID.String(),
-		nil,
-		&body,
-	)
-	if err != nil {
-		return false, err
-	}
-
-	var resp IsWalletReputableResponse
-	_, err = c.client.Do(ctx, req, &resp)
-	if err != nil {
-		return false, err
-	}
-
-	return resp.IsReputable, nil
+	return false, errorutils.ErrIsDepricated
 }
 
 // IsWalletOnPlatformResponse - will send back indication if wallet is on said platform

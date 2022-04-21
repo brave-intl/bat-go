@@ -35,6 +35,8 @@ var (
 	ErrNotImplemented = errors.New("this function is not yet implemented")
 	// ErrNotFound - resource not found
 	ErrNotFound = errors.New("not found")
+	// ErrIsDepricated - depricated
+	ErrIsDepricated = errors.New("depricated")
 )
 
 // ErrorBundle creates a new response error
