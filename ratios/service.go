@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
+	etherscan "github.com/brave-intl/bat-go/utils/clients/etherscan"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
@@ -16,10 +17,11 @@ import (
 )
 
 // NewService - create a new ratios service structure
-func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool) *Service {
+func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool, etherscan etherscan.Client) *Service {
 	return &Service{
 		jobs:      []srv.Job{},
 		coingecko: coingecko,
+		etherscan: etherscan,
 		redis:     redis,
 	}
 }
@@ -29,6 +31,7 @@ type Service struct {
 	jobs []srv.Job
 	// coingecko client
 	coingecko coingecko.Client
+	etherscan etherscan.Client
 	redis     *redis.Pool
 }
 
@@ -73,7 +76,14 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	service := NewService(ctx, client, redis)
+
+	etherscanClient, err := etherscan.NewWithContext(ctx, redis)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize the etherscan client")
+		return ctx, nil, fmt.Errorf("failed to initialize the etherscan client: %w", err)
+	}
+
+	service := NewService(ctx, client, redis, etherscanClient)
 
 	ctx, err = service.initializeCoingeckoCurrencies(ctx)
 	if err != nil {
@@ -248,6 +258,30 @@ func (s *Service) GetCoinMarkets(
 	}
 
 	return &GetCoinMarketsResponse{
+		Payload:     *payload,
+		LastUpdated: updated,
+	}, nil
+}
+
+// GetGasOracleResponse - response type for etherscan passthrough
+type GetGasOracleResponse struct {
+	Payload     etherscan.GasOracleResponse `json:"payload"`
+	LastUpdated time.Time                   `json:"lastUpdated"`
+}
+
+//GetGasOracle - get the gas oracle info from etherscan
+func (s *Service) GetGasOracle(ctx context.Context) (*GetGasOracleResponse, error) {
+
+	// get logger from context
+	logger := logging.Logger(ctx, "ratios.GetGasOracle")
+
+	payload, updated, err := s.etherscan.FetchGasOracle(ctx)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to fetch coin markets data from coingecko")
+		return nil, fmt.Errorf("failed to fetch coin markets data from coingecko: %w", err)
+	}
+
+	return &GetGasOracleResponse{
 		Payload:     *payload,
 		LastUpdated: updated,
 	}, nil

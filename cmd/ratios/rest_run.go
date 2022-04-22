@@ -41,6 +41,9 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.CoingeckoVsCurrencyLimitCTXKey, viper.GetInt("coingecko-vs-currency-limit"))
 	ctx = context.WithValue(ctx, appctx.RatiosRedisAddrCTXKey, viper.Get("redis-addr"))
 	ctx = context.WithValue(ctx, appctx.RateLimitPerMinuteCTXKey, viper.GetInt("rate-limit-per-min"))
+	// etherscan configs
+	ctx = context.WithValue(ctx, appctx.EtherscanURICTXKey, viper.GetInt("etherscan-uri"))
+	ctx = context.WithValue(ctx, appctx.EtherscanTokenCTXKey, viper.GetInt("etherscan-token"))
 
 	// setup the service now
 	ctx, s, err := ratios.InitService(ctx)

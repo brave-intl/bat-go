@@ -43,6 +43,17 @@ func init() {
 	ratiosCmd.PersistentFlags().Int("rate-limit-per-min", 50, "rate limit per minute value")
 	cmd.Must(viper.BindPFlag("rate-limit-per-min", ratiosCmd.PersistentFlags().Lookup("rate-limit-per-min")))
 	cmd.Must(viper.BindEnv("rate-limit-per-min", "RATE_LIMIT_PER_MIN"))
+
+	// Etherscan Configs
+	ratiosCmd.PersistentFlags().String("etherscan-uri", "https://api.etherscan.io",
+		"the etherscan uri for this service")
+	cmd.Must(viper.BindPFlag("etherscan-uri", ratiosCmd.PersistentFlags().Lookup("etherscan-uri")))
+	cmd.Must(viper.BindEnv("etherscan-uri", "ETHERSCAN_URI"))
+
+	ratiosCmd.PersistentFlags().String("etherscan-token", "",
+		"the etherscan token for this service")
+	cmd.Must(viper.BindPFlag("etherscan-token", ratiosCmd.PersistentFlags().Lookup("etherscan-token")))
+	cmd.Must(viper.BindEnv("etherscan-token", "ETHERSCAN_TOKEN"))
 }
 
 var (

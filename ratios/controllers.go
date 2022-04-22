@@ -242,3 +242,25 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	})
 }
+
+// GetGasOracleHandler - handler to get the gas oracle
+func GetGasOracleHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var (
+			err error
+		)
+
+		// get logger from context
+		logger := logging.Logger(ctx, "ratios.GetGasOracleHandler")
+
+		data, err := service.GetGasOracle(ctx)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get top currencies")
+			return handlers.WrapError(err, "failed to get top currencies", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(ctx, data, w, http.StatusOK)
+	})
+}

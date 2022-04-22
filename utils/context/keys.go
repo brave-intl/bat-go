@@ -127,6 +127,11 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// EtherscanURICTXKey - the context key for getting the rate limit
+	EtherscanURICTXKey CTXKey = "etherscan_uri"
+	// EtherscanTokenCTXKey - the context key for getting the rate limit
+	EtherscanTokenCTXKey CTXKey = "etherscan_token"
 )
 
 var (
