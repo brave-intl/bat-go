@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -eux
 
 while true
 do
