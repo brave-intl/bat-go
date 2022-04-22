@@ -2,7 +2,7 @@
 
 service="${1}"
 
-set -euxo pipefail
+set -eux
 
 nitro-cli run-enclave --cpu-count 2 --memory 512 ---eif-path nitro-image.eif > /tmp/output.json
 cat /tmp/output.json

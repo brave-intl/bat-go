@@ -10,7 +10,7 @@ fi
 
 and_run="${3}"
 
-set -euxo pipefail
+set -eux
 
 # wait for a few seconds for eks to pull down the right version
 sleep 20
