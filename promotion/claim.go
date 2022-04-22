@@ -64,11 +64,9 @@ func blindCredsEq(a, b []string) bool {
 		return false
 	}
 	// a and b must have same values in same order
-	for _, v := range a {
-		for _, vv := range b {
-			if v != vv {
-				return false
-			}
+	for i, _ := range a {
+		if a[i] != b[i] {
+			return false
 		}
 	}
 	return true
