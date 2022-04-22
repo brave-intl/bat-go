@@ -18,7 +18,7 @@ sleep 20
 # get the latest docker image of the base image we are looking for
 docker_image=$(docker images --format "{{.Repository}} {{.CreatedAt}}" | grep "${docker_image_base}" | sort -rk 2 | awk -v s="${service}" 'NR==1{printf "%s%s", $1, s}')
 
-if [ "${docker_image}" == "" ]; then
+if [ -z "${docker_image}" ]; then
     docker_image=${docker_image_base}
 fi
 
@@ -26,7 +26,7 @@ aws ecr get-login-password --region us-west-2 | docker login --username AWS --pa
 
 # get the latest docker image of the base image we are looking for with tag
 docker_image_tag=$(docker images --format "{{.Repository}} {{.Tag}} {{.CreatedAt}}" | grep "${docker_image_base}" | sort -rk 3 | awk -v s="${service}" 'NR==1{printf "%s%s:%s", $1, s, $2}')
-if [ "${docker_image_tag}" == "" ]; then
+if [ -z "${docker_image_tag}" ]; then
     docker_image_tag=${docker_image_base}
 fi
 
