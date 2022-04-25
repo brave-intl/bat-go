@@ -125,26 +125,23 @@ func (service *Service) ClaimPromotionForWallet(
 			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
 		}
 
-		if claimCreds == nil {
-			// there are no stored claim creds for this claim
-			logger.Error().
-				Str("wallet_id", walletID.String()).
-				Str("claim_id", claim.ID.String()).
-				Msg("nil claim credentials for claim")
-			return nil, errors.New("nil claim credentials recorded")
-		}
+		if claim.Redeemed {
+			if claimCreds == nil {
+				// there are no stored claim creds for this claim
+				logger.Error().
+					Str("wallet_id", walletID.String()).
+					Str("claim_id", claim.ID.String()).
+					Msg("nil claim credentials for claim")
+				return nil, errors.New("nil claim credentials recorded")
+			}
 
-		// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
-		// and the claim blinded tokens are the same
-		if claim.Redeemed && blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
-			return &claim.ID, nil
-		}
-
-		// if blinded creds do not match prior attempt, return error
-		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
+			// and the claim blinded tokens are the same
+			if blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+				return &claim.ID, nil
+			}
 			return nil, errClaimedDifferentBlindCreds
 		}
-
 	}
 
 	// check if promotion is disabled, need different behavior than Gone
