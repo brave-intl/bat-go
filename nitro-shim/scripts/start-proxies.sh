@@ -18,11 +18,11 @@ done
 
 # at this point the enclave is up.  depending on what service we're running,
 # it's now time to set up proxy tools
-if [ "${service}" = "payments" ]; then
+if [ "${service}" = "/payments" ]; then
     # setup inbound traffic proxy
     export IN_ADDRS=":8080"
     export OUT_ADDRS="${CID}:8080"
-elif [ "${service}" = "ia2" ]; then
+elif [ "${service}" = "/ia2" ]; then
     # setup proxy that allows the enclave to talk to Let's Encrypt and our Kafka
     # cluster
     export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org,${KAFKA_BROKERS}"
