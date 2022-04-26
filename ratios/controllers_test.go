@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/ratios"
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/utils/clients/coingecko/mock"
+	mocketherscan "github.com/brave-intl/bat-go/utils/clients/etherscan/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
@@ -28,10 +29,11 @@ import (
 type ControllersTestSuite struct {
 	suite.Suite
 
-	ctx        context.Context
-	service    *ratios.Service
-	mockCtrl   *gomock.Controller
-	mockClient *mockcoingecko.MockClient
+	ctx                 context.Context
+	service             *ratios.Service
+	mockCtrl            *gomock.Controller
+	mockClient          *mockcoingecko.MockClient
+	mockEtherscanClient *mocketherscan.MockClient
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -94,7 +96,10 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	client := mockcoingecko.NewMockClient(suite.mockCtrl)
 	suite.mockClient = client
 
-	suite.service = ratios.NewService(suite.ctx, client, redis)
+	etherscanClient := mocketherscan.NewMockClient(suite.mockCtrl)
+	suite.mockEtherscanClient = etherscanClient
+
+	suite.service = ratios.NewService(suite.ctx, client, redis, etherscanClient)
 	suite.Require().NoError(err, "failed to setup ratios service")
 }
 
