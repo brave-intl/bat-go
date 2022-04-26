@@ -10,7 +10,7 @@ require (
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/go-chi/cors v1.2.0
+	github.com/go-chi/cors v1.2.1
 	github.com/gocarina/gocsv v0.0.0-20191214001331-e6697589f2e0
 	github.com/golang-migrate/migrate/v4 v4.14.1
 	github.com/golang/mock v1.6.0
@@ -19,7 +19,7 @@ require (
 	github.com/hashicorp/vault v1.10.0
 	github.com/hashicorp/vault/api v1.5.0
 	github.com/hashicorp/vault/sdk v0.4.2-0.20220321211954-d7083ad326db
-	github.com/jmoiron/sqlx v1.3.4
+	github.com/jmoiron/sqlx v1.3.5
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
@@ -36,7 +36,7 @@ require (
 	github.com/spf13/viper v1.10.1
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.7.1
-	github.com/stripe/stripe-go/v72 v72.99.0
+	github.com/stripe/stripe-go/v72 v72.103.0
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
