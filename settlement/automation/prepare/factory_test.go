@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package prepare_test
 
@@ -7,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"net/http"
 	"net/http/httptest"
@@ -44,8 +44,8 @@ func (suite *PrepareTestSuite) SetupTest() {
 }
 
 func (suite *PrepareTestSuite) TestPrepare_Grants() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.Require().NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.Require().NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -54,7 +54,8 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	// stub payment service with expectedTransactions responses
@@ -97,7 +98,7 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
@@ -125,8 +126,8 @@ func (suite *PrepareTestSuite) TestPrepare_Grants() {
 }
 
 func (suite *PrepareTestSuite) TestPrepare_Ads() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.Require().NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.Require().NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -135,7 +136,8 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	// stub payment service with expectedTransactions responses
@@ -178,7 +180,7 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
@@ -188,8 +190,8 @@ func (suite *PrepareTestSuite) TestPrepare_Ads() {
 	// start prepare consumer
 	go prepare.StartConsumer(ctx) // nolint
 
-	// assert message has been processed. once ads messages are consumed by prepare
-	// these should be routed to the notify stream
+	// assert message has been processed
+	// once ads messages are consumed by prepare stream they should be routed to the notify stream
 	actualC := make(chan event.Message, len(messages))
 	// start a test consumer to read from notify stream
 	go test.StartTestBatchConsumer(suite.T(), ctx, redis, event.NotifyStream, actualC)

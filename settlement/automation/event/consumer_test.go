@@ -1,11 +1,11 @@
 //go:build integration
-// +build integration
 
 package event_test
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -34,8 +34,8 @@ func TestConsumerTestSuite(t *testing.T) {
 }
 
 func (suite *ConsumerTestSuite) SetupTest() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -43,7 +43,8 @@ func (suite *ConsumerTestSuite) SetupTest() {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	suite.Require().NotNil(redisPassword)
 
-	rc, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	rc, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.NoError(err)
 
 	_, err = rc.Do(context.Background(), "DEL", suite.stream).Result()
@@ -54,8 +55,8 @@ func (suite *ConsumerTestSuite) SetupTest() {
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_Success() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.Require().NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.Require().NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -64,7 +65,8 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Success() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	ctx := context.Background()
@@ -141,8 +143,8 @@ func (e errorHandler) Handle(ctx context.Context, messages []event.Message) erro
 }
 
 func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -151,7 +153,8 @@ func (suite *ConsumerTestSuite) TestConsumer_Process_Handler_Error() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	ctx := context.Background()

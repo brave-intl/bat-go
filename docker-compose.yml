@@ -65,7 +65,7 @@ services:
       - BITFLYER_TOKEN
       - "ALLOWED_ORIGINS=http://localhost:8080"
       - SKUS_WHITELIST-
-      - "REDIS_URL=redis://grant-redis:6379"
+      - "REDIS_URL=redis-master"
       - "REDIS_USERNAME=redis"
       - "REDIS_PASSWORD=redis"
     volumes:
@@ -137,7 +137,7 @@ services:
       - BITFLYER_CLIENT_SECRET
       - BITFLYER_EXTRA_CLIENT_SECRET
       - BITFLYER_TOKEN
-      - "REDIS_URL=redis://grant-redis:6379"
+      - "REDIS_URL=redis-master"
       - "REDIS_USERNAME=redis"
       - "REDIS_PASSWORD=redis"
     volumes:
@@ -153,16 +153,10 @@ services:
   redis:
     container_name: grant-redis
     image: redis:latest
-    build:
-      context: ./test/redis
-      dockerfile: ./Dockerfile
-    command: ["redis-server", "/etc/redis/redis.conf"]
     ports:
       - "6379:6379"
     networks:
       - grant
-    volumes:
-      - ./test/redis:/etc/redis
   postgres:
     container_name: grant-postgres
     image: postgres:10.4

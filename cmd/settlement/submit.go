@@ -31,7 +31,7 @@ func init() {
 func StartSubmitWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, viper.Get("REDIS_ADDRESS"))
-	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, viper.Get("REDIS_USERNAME"))
+	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, viper.Get("REDIS_USERNAME"))
 	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, viper.Get("REDIS_PASSWORD"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, viper.Get("PAYMENT_SERVICE_SIGNATOR_PRIVATE_KEY_HEX"))

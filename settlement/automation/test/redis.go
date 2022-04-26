@@ -13,8 +13,8 @@ import (
 
 // StreamsTearDown cleanup redis streams
 func StreamsTearDown(t *testing.T) {
-	redisURL := os.Getenv("REDIS_URL")
-	require.NotNil(t, redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	require.NotNil(t, redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	require.NotNil(t, redisUsername)
@@ -22,7 +22,8 @@ func StreamsTearDown(t *testing.T) {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	require.NotNil(t, redisPassword)
 
-	rc, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	rc, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	require.NoError(t, err)
 
 	_, err = rc.Do(context.Background(), "DEL", event.PrepareStream).Result()

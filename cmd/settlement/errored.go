@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/brave-intl/bat-go/settlement/automation/submitstatus"
+	"github.com/brave-intl/bat-go/settlement/automation/notify"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	loggingutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/spf13/cobra"
@@ -14,20 +14,20 @@ import (
 )
 
 var (
-	// SubmitStatusWorkerCmd starts the submit status worker.
-	SubmitStatusWorkerCmd = &cobra.Command{
-		Short: "starts settlement submit status worker",
-		Use:   "submit-status-worker",
-		Run:   StartSubmitStatusWorker,
+	// ErroredWorkerCmd starts errored worker
+	ErroredWorkerCmd = &cobra.Command{
+		Short: "starts settlement errored worker",
+		Use:   "errored-worker",
+		Run:   StartErroredWorker,
 	}
 )
 
 func init() {
-	SettlementCmd.AddCommand(SubmitStatusWorkerCmd)
+	SettlementCmd.AddCommand(ErroredWorkerCmd)
 }
 
-// StartSubmitStatusWorker initializes and starts submit status worker.
-func StartSubmitStatusWorker(command *cobra.Command, args []string) {
+// StartErroredWorker initializes and starts errored worker
+func StartErroredWorker(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, viper.Get("REDIS_ADDRESS"))
 	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, viper.Get("REDIS_USERNAME"))
@@ -35,11 +35,11 @@ func StartSubmitStatusWorker(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, viper.Get("PAYMENT_SERVICE_URL"))
 	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, viper.Get("PAYMENT_SERVICE_SIGNATOR_PRIVATE_KEY_HEX"))
 
-	loggingutils.FromContext(ctx).Info().Msg("starting submit status worker")
+	loggingutils.FromContext(ctx).Info().Msg("starting errored consumer")
 
-	err := submitstatus.StartConsumer(ctx)
+	err := notify.StartConsumer(ctx)
 	if err != nil {
-		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting consumer")
+		loggingutils.FromContext(ctx).Error().Err(err).Msg("error starting errored consumer")
 		return
 	}
 
@@ -48,7 +48,7 @@ func StartSubmitStatusWorker(command *cobra.Command, args []string) {
 
 	<-shutdown
 
-	loggingutils.FromContext(ctx).Info().Msg("shutting down submit status worker")
+	loggingutils.FromContext(ctx).Info().Msg("shutting down errored consumer")
 
 	close(shutdown)
 }

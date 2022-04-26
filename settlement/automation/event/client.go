@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 )
 
 const (
+	// dialTimeout timeout for dialler
+	dialTimeout = 15 * time.Second
 	// readTimeout timeout for socket reads
 	readTimeout = 5 * time.Second
 	// writeTimeout timeout for socket writes
@@ -19,34 +22,34 @@ const (
 	minRetryBackoff = 5 * time.Millisecond
 	// maxRetryBackoff backoff between each retry
 	maxRetryBackoff = 500 * time.Millisecond
-	// dataKey this is the key used retrieve the event.Message value from the redis stream message
+	// dataKey is the key used to retrieve the event.Message value from the redis stream message
 	dataKey = "data"
 )
 
 // Client defines a event client
 type Client struct {
-	*redis.Client
+	*redis.ClusterClient
 }
 
 // NewRedisClient creates a new instance of redis client
-func NewRedisClient(address, username, password string) (*Client, error) {
-	opt, err := redis.ParseURL(address)
-	if err != nil {
-		return nil, fmt.Errorf("redis client: error creating new redis client: %w", err)
-	}
-	return &Client{
-		Client: redis.NewClient(&redis.Options{
-			Addr:            opt.Addr,
-			Username:        username,
-			Password:        password,
-			DB:              0,
-			ReadTimeout:     readTimeout,
-			MaxRetries:      maxRetries,
-			MinRetryBackoff: minRetryBackoff,
-			MaxRetryBackoff: maxRetryBackoff,
-			WriteTimeout:    writeTimeout,
-		}),
-	}, nil
+func NewRedisClient(addresses []string, username, password string) (*Client, error) {
+	return &Client{redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:           addresses,
+		Username:        username,
+		Password:        password,
+		DialTimeout:     dialTimeout,
+		ReadTimeout:     readTimeout,
+		MaxRetries:      maxRetries,
+		MinRetryBackoff: minRetryBackoff,
+		MaxRetryBackoff: maxRetryBackoff,
+		WriteTimeout:    writeTimeout,
+		RouteByLatency:  true,
+		TLSConfig: &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true,
+			ClientAuth:         0,
+		},
+	})}, nil
 }
 
 // Send wraps the event.Message in dataKey field and sends to stream

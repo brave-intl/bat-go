@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -41,8 +42,8 @@ func (suite *SubmitTestSuite) SetupTest() {
 }
 
 func (suite *SubmitTestSuite) TestSubmit() {
-	redisURL := os.Getenv("REDIS_URL")
-	suite.Require().NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.Require().NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -51,7 +52,8 @@ func (suite *SubmitTestSuite) TestSubmit() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	// create and send messages to submit stream
@@ -116,7 +118,7 @@ func (suite *SubmitTestSuite) TestSubmit() {
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)

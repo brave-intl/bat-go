@@ -17,7 +17,7 @@ import (
 
 // StartConsumer initializes and starts the check status consumer
 func StartConsumer(ctx context.Context) error {
-	redisURL := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
+	redisAddress := ctx.Value(appctx.SettlementRedisAddressCTXKey).(string)
 	redisUsername := ctx.Value(appctx.SettlementRedisUsernameCTXKey).(string)
 	redisPassword := ctx.Value(appctx.SettlementRedisPasswordCTXKey).(string)
 	paymentURL := ctx.Value(appctx.PaymentServiceURLCTXKey).(string)
@@ -31,7 +31,8 @@ func StartConsumer(ctx context.Context) error {
 		return fmt.Errorf("start check status consumer: error creating batch consumer config: %w", err)
 	}
 
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	if err != nil {
 		return fmt.Errorf("start check status consumer: error creating redis client: %w", err)
 	}

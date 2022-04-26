@@ -6,38 +6,37 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"github.com/brave-intl/bat-go/settlement/automation/checkstatus"
+	"github.com/brave-intl/bat-go/settlement/automation/test"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/logging"
+	testutils "github.com/brave-intl/bat-go/utils/test"
 	"strings"
+	"time"
 
 	"github.com/brave-intl/bat-go/settlement/automation/transactionstatus"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 
-	"github.com/brave-intl/bat-go/settlement/automation/checkstatus"
-	"github.com/brave-intl/bat-go/settlement/automation/test"
-	"github.com/brave-intl/bat-go/utils/logging"
-
 	"github.com/brave-intl/bat-go/utils/ptr"
 
+	"github.com/brave-intl/bat-go/settlement/automation/event"
+	"github.com/brave-intl/bat-go/utils/clients/payment"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
-
-	"github.com/brave-intl/bat-go/settlement/automation/event"
-	"github.com/brave-intl/bat-go/utils/clients/payment"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	testutils "github.com/brave-intl/bat-go/utils/test"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 )
 
 type CheckStatusTestSuite struct {
 	suite.Suite
 }
 
-func TestStatusTestSuite(t *testing.T) {
+func TestCheckStatusTestSuite(t *testing.T) {
 	suite.Run(t, new(CheckStatusTestSuite))
 }
 
@@ -46,10 +45,8 @@ func (suite *CheckStatusTestSuite) SetupTest() {
 }
 
 func (suite *CheckStatusTestSuite) TestCheckStatus() {
-	test.StreamsTearDown(suite.T())
-
-	redisURL := os.Getenv("REDIS_URL")
-	suite.Require().NotNil(redisURL)
+	redisAddress := os.Getenv("REDIS_URL")
+	suite.Require().NotNil(redisAddress)
 
 	redisUsername := os.Getenv("REDIS_USERNAME")
 	suite.Require().NotNil(redisUsername)
@@ -58,7 +55,8 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	suite.Require().NotNil(redisPassword)
 
 	// create newHandler redis client and clear streams
-	redis, err := event.NewRedisClient(redisURL, redisUsername, redisPassword)
+	redisAddresses := []string{fmt.Sprintf("%s:6379", redisAddress)}
+	redis, err := event.NewRedisClient(redisAddresses, redisUsername, redisPassword)
 	suite.Require().NoError(err)
 
 	// create and send messages to check status stream
@@ -112,13 +110,17 @@ func (suite *CheckStatusTestSuite) TestCheckStatus() {
 	// setup consumer context
 	ctx := context.Background()
 	ctx, _ = logging.SetupLogger(ctx)
-	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisURL)
+	ctx = context.WithValue(ctx, appctx.SettlementRedisAddressCTXKey, redisAddress)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisUsernameCTXKey, redisUsername)
 	ctx = context.WithValue(ctx, appctx.SettlementRedisPasswordCTXKey, redisPassword)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceURLCTXKey, paymentURL)
 	ctx = context.WithValue(ctx, appctx.PaymentServiceHTTPSingingKeyHexCTXKey, hexPrivateKey)
 
 	ctx, done := context.WithTimeout(ctx, 10*time.Second)
+
+	s, err := redis.XGroupCreateMkStream(ctx, event.CheckStatusStream, event.CheckStatusConsumerGroup, "0").Result()
+	fmt.Println(s)
+	fmt.Println(err)
 
 	// start prepare consumer
 	go checkstatus.StartConsumer(ctx) // nolint
