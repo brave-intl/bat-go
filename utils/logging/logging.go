@@ -42,6 +42,8 @@ func SetupLoggerWithLevel(ctx context.Context, level zerolog.Level) (context.Con
 
 // SetupLogger - helper to setup a logger and associate with context
 func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
+	writer, ok := ctx.Value(appctx.LogWriterKey).(io.Writer)
+
 	env, err := appctx.GetStringFromContext(ctx, appctx.EnvironmentCTXKey)
 	if err != nil {
 		// if not in context, default to local
@@ -52,7 +54,9 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 	level, _ := appctx.GetLogLevelFromContext(ctx, appctx.LogLevelCTXKey)
 
 	var output io.Writer
-	if env != "local" {
+	if ok {
+		output = writer
+	} else if env != "local" {
 		// this log writer uses a ring buffer and drops messages that cannot be processed
 		// in a timely manner
 		output = diode.NewWriter(os.Stdout, 1000, time.Duration(20*time.Millisecond), func(missed int) {
@@ -68,7 +72,6 @@ func SetupLogger(ctx context.Context) (context.Context, *zerolog.Logger) {
 
 	var (
 		debug bool
-		ok    bool
 	)
 
 	// set the log level
@@ -150,7 +153,7 @@ type UpholdProgress struct {
 	Count   int
 }
 
-// UpholdProgressSet - set of progress updates
+// UpholdProgressSet - the set up uphold progresses
 type UpholdProgressSet struct {
 	Progress []UpholdProgress
 }

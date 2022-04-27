@@ -144,16 +144,16 @@ const (
 	RatiosRedisAddrCTXKey CTXKey = "ratios_redis_addr"
 	// BlacklistedCountryCodesCTXKey - the context key for getting the ratios redis address
 	BlacklistedCountryCodesCTXKey CTXKey = "blacklisted_country_codes"
-
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 	// SecretsURICTXKey - the context key for getting the application secrets file location
 	SecretsURICTXKey CTXKey = "secrets_uri"
-
 	// PaymentsEncryptionKeyCTXKey - the context key for getting the application secrets file location
 	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
 	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
+	// LogWriterKey - the context key for getting the zerolog writer
+	LogWriterKey CTXKey = "log_writer_key"
 )
 
 var (

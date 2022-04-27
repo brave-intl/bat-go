@@ -9,6 +9,9 @@ require (
 	github.com/amzn/ion-go v1.1.3
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
 	github.com/aws/aws-sdk-go v1.37.19
+	github.com/aws/aws-sdk-go-v2/config v1.6.0
+	github.com/aws/aws-sdk-go-v2/credentials v1.3.2
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.4.0
 	github.com/awslabs/amazon-qldb-driver-go/v2 v2.0.2
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
 	github.com/getsentry/sentry-go v0.13.0
@@ -28,6 +31,7 @@ require (
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.3
 	github.com/linkedin/goavro v2.1.0+incompatible
+	github.com/mdlayher/vsock v0.0.0-20210303205602-10d591861736
 	github.com/mssola/user_agent v0.5.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.12.1
@@ -78,6 +82,12 @@ require (
 	github.com/amzn/ion-hash-go v1.1.1 // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/aws/aws-sdk-go-v2 v1.8.0 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.2.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.2.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.3.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.6.1 // indirect
+	github.com/aws/smithy-go v1.7.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
