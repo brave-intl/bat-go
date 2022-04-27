@@ -33,7 +33,7 @@ type (
 		Body      string      `json:"body"`
 	}
 
-	// MessageType the a message type.
+	// MessageType a message type.
 	MessageType string
 
 	// Headers hold any headers associated with the message.

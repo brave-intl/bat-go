@@ -156,7 +156,7 @@ func (b *BatchConsumer) process(ctx context.Context) {
 						logging.FromContext(ctx).Error().
 							Str("x_message_id", xMessage.ID).
 							Err(errors.New("error sending message to dlq")).
-							Msg("batch consumer retry")
+							Msg("batch consumer processing")
 					}
 					continue
 				}
@@ -178,7 +178,7 @@ func (b *BatchConsumer) process(ctx context.Context) {
 							logging.FromContext(ctx).Error().
 								Str("x_message_id", xMessage.ID).
 								Err(errors.New("error sending message to dlq")).
-								Msg("batch consumer retry")
+								Msg("batch consumer processing")
 						}
 						continue
 					}
@@ -202,7 +202,7 @@ func (b *BatchConsumer) process(ctx context.Context) {
 								logging.FromContext(ctx).Error().
 									Str("x_message_id", xMessage.ID).
 									Err(errors.New("error sending message to dlq")).
-									Msg("batch consumer retry")
+									Msg("batch consumer processing")
 							}
 							continue
 						}
@@ -221,7 +221,7 @@ func (b *BatchConsumer) process(ctx context.Context) {
 						logging.FromContext(ctx).Error().
 							Str("x_message_id", xMessage.ID).
 							Err(errors.New("error sending message to dlq")).
-							Msg("batch consumer retry")
+							Msg("batch consumer processing")
 					}
 				}
 			}
@@ -381,6 +381,27 @@ func (b *BatchConsumer) retry(ctx context.Context) {
 						message.Headers[HeaderCorrelationID] = uuid.NewV4().String()
 					}
 
+					if b.router != nil {
+						err := b.router(message)
+						if err != nil {
+
+							logging.FromContext(ctx).Error().
+								Str("x_message_id", xMessage.ID).
+								Str("message_id", message.ID.String()).
+								Err(fmt.Errorf("error adding router: %w", err)).
+								Msg("batch consumer retry")
+
+							err := b.sendDeadLetter(ctx, xMessage)
+							if err != nil {
+								logging.FromContext(ctx).Error().
+									Str("x_message_id", xMessage.ID).
+									Err(errors.New("error sending message to dlq")).
+									Msg("batch consumer retry")
+							}
+							continue
+						}
+					}
+
 					err = b.handler.Handle(ctx, []Message{*message})
 					if err != nil {
 						logging.FromContext(ctx).Error().
@@ -429,6 +450,10 @@ func (b *BatchConsumer) sendDeadLetter(ctx context.Context, xMessage redis.XMess
 	if err != nil {
 		return fmt.Errorf("error creating new message: %w", err)
 	}
+
+	// add failed on headers to help debugging
+	deadletter.Headers["X-Failed-On-Consumer-Group"] = b.config.consumerGroup
+	deadletter.Headers["X-Failed-On-Stream-Name"] = b.config.streamName
 
 	err = b.redis.Send(ctx, *deadletter, b.deadLetterQueue)
 	if err != nil {
