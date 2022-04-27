@@ -83,10 +83,6 @@ func (promotion *Promotion) CredentialValue() decimal.Decimal {
 
 // Claimable checks whether the promotion can be claimed
 func (promotion *Promotion) Claimable(overrideAutoExpiry bool) bool {
-	// manually disallow claims
-	if !promotion.Active {
-		return false
-	}
 	// always refuse expired promotions
 	if promotion.Expired() {
 		return false

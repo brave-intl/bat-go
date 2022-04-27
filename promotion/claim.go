@@ -11,6 +11,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
@@ -64,11 +65,9 @@ func blindCredsEq(a, b []string) bool {
 		return false
 	}
 	// a and b must have same values in same order
-	for _, v := range a {
-		for _, vv := range b {
-			if v != vv {
-				return false
-			}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
 		}
 	}
 	return true
@@ -84,6 +83,9 @@ func (service *Service) ClaimPromotionForWallet(
 	walletID uuid.UUID,
 	blindedCreds []string,
 ) (*uuid.UUID, error) {
+
+	logger := logging.Logger(ctx, "ClaimPromotionForWallet")
+
 	promotion, err := service.Datastore.GetPromotion(promotionID)
 	if err != nil {
 		return nil, err
@@ -123,17 +125,31 @@ func (service *Service) ClaimPromotionForWallet(
 			return nil, errorutils.Wrap(err, "error checking claim credentials for claims")
 		}
 
-		// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
-		// and the claim blinded tokens are the same
-		if claim.Redeemed && blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
-			return &claim.ID, nil
-		}
+		if claim.Redeemed {
+			if claimCreds == nil {
+				// there are no stored claim creds for this claim
+				logger.Error().
+					Str("wallet_id", walletID.String()).
+					Str("claim_id", claim.ID.String()).
+					Msg("nil claim credentials for claim")
+				return nil, errors.New("nil claim credentials recorded")
+			}
 
-		// if blinded creds do not match prior attempt, return error
-		if claim.Redeemed && !blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+			// If this wallet already claimed and it was redeemed (legacy or into claim creds), return the claim id
+			// and the claim blinded tokens are the same
+			if blindCredsEq([]string(claimCreds.BlindedCreds), blindedCreds) {
+				return &claim.ID, nil
+			}
 			return nil, errClaimedDifferentBlindCreds
 		}
+	}
 
+	// check if promotion is disabled, need different behavior than Gone
+	if !promotion.Active {
+		return nil, &handlers.AppError{
+			Message: "promotion is disabled",
+			Code:    http.StatusBadRequest,
+		}
 	}
 
 	// This is skipped for legacy migration path as they passed a reputation check when originally claiming
