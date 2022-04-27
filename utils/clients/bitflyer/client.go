@@ -305,6 +305,42 @@ type HTTPClient struct {
 	client *clients.SimpleHTTPClient
 }
 
+var (
+	// ErrInvalidServerURL - invalid server url
+	ErrInvalidServerURL = errors.New("invalid bitflyer server url")
+	// ErrInvalidToken - invalid server token
+	ErrInvalidToken = errors.New("invalid bitflyer token")
+)
+
+// NewWithContext returns a new HTTPClient, retrieving the base URL from the ctx
+func NewWithContext(ctx context.Context) (Client, error) {
+	// get the server url
+	serverURL, ok := ctx.Value(appctx.BitflyerServerURLCTXKey).(string)
+	if !ok || len(serverURL) == 0 {
+		return nil, ErrInvalidServerURL
+	}
+
+	// get the proxy url if applicable
+	proxyURL, ok := ctx.Value(appctx.BitflyerProxyURLCTXKey).(string)
+	if !ok || len(proxyURL) == 0 {
+		proxyURL = ""
+	}
+
+	// get the token
+	token, ok := ctx.Value(appctx.BitflyerTokenCTXKey).(string)
+	if !ok || len(token) == 0 {
+		token = ""
+	}
+
+	// create the client
+	client, err := clients.NewWithProxy("bitflyer", serverURL, token, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	// return instrumented client
+	return NewClientWithPrometheus(&HTTPClient{client}, "bitflyer_client"), err
+}
+
 // New returns a new HTTPClient, retrieving the base URL from the environment
 func New() (Client, error) {
 	serverEnvKey := "BITFLYER_SERVER"
