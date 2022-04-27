@@ -7,7 +7,6 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/custodian"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
 
 	"crypto/rand"
 	"encoding/base64"
@@ -35,12 +34,6 @@ type Service struct {
 	secretMgr appsrv.SecretManager
 	pubKey    *[32]byte
 	privKey   *[32]byte
-}
-
-// LookupVerifier - implement keystore for httpsignature
-func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
-	// TODO: implement
-	return ctx, nil, nil
 }
 
 // NewService creates a service using the passed datastore and clients configured from the environment
