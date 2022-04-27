@@ -1,31 +1,19 @@
 package payments
 
 import (
-	"crypto"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 )
 
-// AuthorizerSignedMiddleware requires that requests are signed by valid payment authorizers
-func (service *Service) AuthorizerSignedMiddleware() func(http.Handler) http.Handler {
-	authorizerVerifier := httpsignature.ParameterizedKeystoreVerifier{
-		SignatureParams: httpsignature.SignatureParams{
-			Algorithm: httpsignature.ED25519,
-			Headers: []string{
-				"(request-target)", "host", "date", "digest", "content-length", "content-type",
-			},
-		},
-		Keystore: service,
-		Opts:     crypto.Hash(0),
-	}
-
-	// TODO replace with returning VerifyHTTPSignedOnly once we've migrated
-	// subscriptions server auth off simple token
+// ConfigurationMiddleware applies the current state of the service's configuration on the ctx
+func (service *Service) ConfigurationMiddleware() func(http.Handler) http.Handler {
+	// the actual middleware
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			middleware.VerifyHTTPSignedOnly(authorizerVerifier)(next).ServeHTTP(w, r)
+			// wrap the request context in the baseCtx from the service
+			r = r.WithContext(appctx.Wrap(service.baseCtx, r.Context()))
+			next.ServeHTTP(w, r)
 		})
 	}
 }

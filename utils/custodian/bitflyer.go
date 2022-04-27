@@ -133,7 +133,7 @@ func (bc *bitflyerCustodian) SubmitTransactions(ctx context.Context, txs ...Tran
 		var (
 			transferIDs  = []string{}
 			c            string
-			totalF64     float64 = 0.0
+			totalF64     float64
 			limitReached bool
 		)
 
