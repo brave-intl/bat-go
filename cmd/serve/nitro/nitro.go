@@ -10,6 +10,7 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/middleware"
+	"github.com/brave-intl/bat-go/payments"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/nitro"
@@ -76,10 +77,23 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx, logger := logging.SetupLogger(ctx)
 	// setup router
 	ctx, r := setupRouter(ctx)
+	// setup the service now
+	ctx, s, err := payments.NewService(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initalize payments service")
+	}
+	// setup payments routes
+	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
+	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
+	// submit will have an http signature from a known list of public keys
+	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
+	// status to get the status and submission results from the submit
+	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
+
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
-	if err != nil || port > ^uint32(0) {
+	if err != nil || uint32(port) > ^uint32(0) {
 		// panic if there is an error, or if the port is too large to fit in uint32
 		logger.Panic().Err(err).Msg("invalid --address")
 	}
