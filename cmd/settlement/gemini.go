@@ -64,6 +64,7 @@ func UploadGeminiSettlement(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, os.Getenv("GEMINI_API_KEY"))
 
 	return GeminiUploadSettlement(
 		ctx,
@@ -98,6 +99,7 @@ func CheckStatusGeminiSettlement(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.WithValue(cmd.Context(), appctx.GeminiAPISecretCTXKey, os.Getenv("GEMINI_API_SECRET"))
+	ctx = context.WithValue(ctx, appctx.GeminiAPIKeyCTXKey, os.Getenv("GEMINI_API_KEY"))
 
 	return GeminiUploadSettlement(
 		ctx,
