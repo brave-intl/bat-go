@@ -16,9 +16,9 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
-	github.com/hashicorp/vault v1.10.1
+	github.com/hashicorp/vault v1.10.2
 	github.com/hashicorp/vault/api v1.5.0
-	github.com/hashicorp/vault/sdk v0.4.2-0.20220324144656-cdb85cfca8f5
+	github.com/hashicorp/vault/sdk v0.4.2-0.20220422204215-a7cef09c9429
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.5
