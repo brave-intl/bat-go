@@ -1109,8 +1109,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.1 h1:5TQK59W5E3v0r2duFAb7P95B6hEeOyEnHRa8MjYSMTY=
 github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/stripe/stripe-go/v72 v72.103.0 h1:PrGSn1jN2Tv6YGg7Lhq/RLrRIPBc6m4VwZ5ZPVCvpBY=
-github.com/stripe/stripe-go/v72 v72.103.0/go.mod h1:QwqJQtduHubZht9mek5sds9CtQcKFdsykV9ZepRWwo0=
+github.com/stripe/stripe-go/v72 v72.106.0 h1:DsGgphJXNI3zHn64Xmc+rfabN1IDqQUvjIWejccVZN4=
+github.com/stripe/stripe-go/v72 v72.106.0/go.mod h1:QwqJQtduHubZht9mek5sds9CtQcKFdsykV9ZepRWwo0=
 github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s=
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 h1:UOKr78K7smMjkKuwZjbOCzIFTUhIUzXc5+tYeaPRirE=
