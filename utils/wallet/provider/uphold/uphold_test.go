@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
@@ -113,7 +113,16 @@ func TestDecodeTransaction(t *testing.T) {
 		expected.Denomination.Currency = &tmp
 	}
 
-	if !reflect.DeepEqual(*txnReq, expected) {
+	fmt.Println("txn: ", txnReq)
+	fmt.Println("expected: ", expected)
+
+	if txnReq.Destination != expected.Destination {
+		t.Error("Decoded transaction does not match expected value")
+	}
+	if !txnReq.Denomination.Amount.Equal(expected.Denomination.Amount) {
+		t.Error("Decoded transaction does not match expected value")
+	}
+	if *txnReq.Denomination.Currency != *expected.Denomination.Currency {
 		t.Error("Decoded transaction does not match expected value")
 	}
 }
