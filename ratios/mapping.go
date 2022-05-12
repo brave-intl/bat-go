@@ -117,6 +117,7 @@ var (
 		"susd":  "stabilize-usd",
 		"swt":   "swarm-city",
 		"tbtc":  "tbtc",
+		"thor":  "thor",
 		"time":  "chronobank",
 		"top":   "top-network",
 		"uni":   "uniswap",
