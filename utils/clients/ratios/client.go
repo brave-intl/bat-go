@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	ratiosrv "github.com/brave-intl/bat-go/ratios"
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/go-querystring/query"
@@ -106,21 +107,24 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 		return rate.(*RateResponse), nil
 	}
 
-	url := fmt.Sprintf("/v1/relative/%s", base)
-	req, err := c.client.NewRequest(ctx, "GET", url, nil, &FetchOptions{
-		Currency: currency,
-	})
+	url := fmt.Sprintf("/v2/relative/provider/coingecko/%s/%s/1d", base, currency)
+	req, err := c.client.NewRequest(ctx, "GET", url, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var body RateResponse
+	var body ratiosrv.RelativeResponse
 	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err
 	}
 
-	c.cache.Set(cacheKey, &body, cache.DefaultExpiration)
+	resp := RateResponse{
+		Payload:     body.Payload[base],
+		LastUpdated: time.Now(),
+	}
 
-	return &body, nil
+	c.cache.Set(cacheKey, &resp, cache.DefaultExpiration)
+
+	return &resp, nil
 }
