@@ -48,12 +48,16 @@ func InitService(ctx context.Context) (*Service, error) {
 
 // GetParameters - respond to caller with the rewards parameters
 func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
+	if currency == nil {
+		currency = new(BaseCurrency)
+		*currency = "usd"
+	}
 
 	var currencyStr = strings.ToLower(currency.String())
 	// get logger from context
 	logger := logging.Logger(ctx, "rewards.GetParameters")
 
-	rateData, err := s.ratios.FetchRate(ctx, "BAT", currencyStr)
+	rateData, err := s.ratios.FetchRate(ctx, "bat", currencyStr)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to fetch rate from ratios")
 		return nil, fmt.Errorf("failed to fetch rate from ratios: %w", err)
