@@ -120,6 +120,7 @@ func TestPatchConfigurationHandler(t *testing.T) {
 		appctx.SecretsURICTXKey:              "secrets uri",                                // tell configuration to pull new secrets
 		appctx.PaymentsEncryptionKeyCTXKey:   base64.StdEncoding.EncodeToString(encrypted), // tell configuration to pull new secrets
 		appctx.PaymentsSenderPublicKeyCTXKey: hex.EncodeToString(senderPubKey[:]),          // tell configuration to pull new secrets
+		appctx.PaymentsKMSWrapperARNCTXKey:   "arn:////",                                   // tell configuration which kms key to decrypt secret object with
 	})
 
 	body, err := json.Marshal(reqBody)

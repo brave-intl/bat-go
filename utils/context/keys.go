@@ -154,6 +154,8 @@ const (
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
 	// LogWriterKey - the context key for getting the zerolog writer
 	LogWriterKey CTXKey = "log_writer_key"
+	// PaymentsKMSWrapperARNCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperARNCTXKey CTXKey = "payments_kms_wrapper_arn"
 )
 
 var (
