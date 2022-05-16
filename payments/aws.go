@@ -35,8 +35,14 @@ func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, e
 	bucket := parts[len(parts)-2]
 	object := parts[len(parts)-1]
 
+	// get proxy address for outbound
+	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to get egress proxy for qldb")
+	}
+
 	// create session
-	sess := session.Must(session.NewSession())
+	sess := session.Must(session.NewSession(appaws.NewAWSConfig(egressProxyAddr, "us-west-2")))
 	// create kms client
 	kmsClient := kms.New(sess)
 

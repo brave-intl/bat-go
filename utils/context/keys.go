@@ -156,6 +156,8 @@ const (
 	LogWriterKey CTXKey = "log_writer_key"
 	// PaymentsKMSWrapperARNCTXKey - the context key for getting the kms wrapper key
 	PaymentsKMSWrapperARNCTXKey CTXKey = "payments_kms_wrapper_arn"
+	// EgressProxyAddrCTXKey - reverse proxy address for egress traffic
+	EgressProxyAddrCTXKey CTXKey = "egress_proxy_address"
 )
 
 var (

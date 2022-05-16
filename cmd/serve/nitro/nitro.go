@@ -73,6 +73,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	logaddr := viper.GetString("log-address")
 	writer := nitro.NewVsockWriter(logaddr)
 	ctx = context.WithValue(ctx, appctx.LogWriterKey, writer)
+	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
 	// setup router

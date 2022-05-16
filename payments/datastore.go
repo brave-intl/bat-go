@@ -26,8 +26,12 @@ type Transaction struct {
 
 // newQLDBDatastore - create a new qldbDatastore
 func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
+	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to get egress proxy for qldb")
+	}
 	// create our aws session
-	awsSession := session.Must(session.NewSession())
+	awsSession := session.Must(session.NewSession(appaws.NewAWSConfig(egressProxyAddr, "us-west-2")))
 	// create our qldb driver
 	qldbSession := qldbsession.New(awsSession)
 	// create our qldb driver
