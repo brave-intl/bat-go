@@ -26,3 +26,13 @@ func (w *wrapper) Value(k interface{}) interface{} {
 func Wrap(wrapped context.Context, context context.Context) context.Context {
 	return &wrapper{wrapped, context}
 }
+
+// MapToContext - import a map to the context
+func MapToContext(ctx context.Context, m map[CTXKey]interface{}) context.Context {
+	for k, v := range m {
+		if vv := ctx.Value(k); vv == nil {
+			ctx = context.WithValue(ctx, k, v)
+		}
+	}
+	return ctx
+}
