@@ -19,11 +19,11 @@ func TestGetParametersController(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	mockRatios := ratiosmock.NewMockClient(mockCtrl)
-	mockRatios.EXPECT().FetchRate(gomock.Any(), gomock.Eq("BAT"), gomock.Eq("USD")).
+	mockRatios.EXPECT().FetchRate(gomock.Any(), gomock.Eq("bat"), gomock.Eq("usd")).
 		Return(&ratios.RateResponse{
 			Payload: map[string]decimal.Decimal{
-				"USD": decimal.Zero,
-				"BAT": decimal.Zero,
+				"usd": decimal.Zero,
+				"bat": decimal.Zero,
 			}}, nil)
 
 	var (
