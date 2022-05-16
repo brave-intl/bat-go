@@ -73,7 +73,8 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		defaultChoice = dc
 	}
 
-	var rate, _ = rateData.Payload[currency.String()].Float64()
+	// payload["bat"]["currency"]
+	var rate, _ = rateData.Payload["bat"][currency.String()].Float64()
 
 	return &ParametersV1{
 		BATRate: rate,
