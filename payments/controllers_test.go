@@ -57,6 +57,9 @@ func TestPatchConfigurationHandler(t *testing.T) {
 
 	// servicePubKey is the ed25519 key we will use for encrypting the config encryption key
 	servicePubKey, err := hex.DecodeString(getConf.PublicKey)
+	if err != nil {
+		t.Error("failed to decode config response", err)
+	}
 
 	// generate an ephemeral sender keypair
 	senderPubKey, senderPrivKey, err := box.GenerateKey(rand.Reader)
@@ -117,6 +120,7 @@ func TestPatchConfigurationHandler(t *testing.T) {
 		appctx.SecretsURICTXKey:              "secrets uri",                                // tell configuration to pull new secrets
 		appctx.PaymentsEncryptionKeyCTXKey:   base64.StdEncoding.EncodeToString(encrypted), // tell configuration to pull new secrets
 		appctx.PaymentsSenderPublicKeyCTXKey: hex.EncodeToString(senderPubKey[:]),          // tell configuration to pull new secrets
+		appctx.PaymentsKMSWrapperARNCTXKey:   "arn:////",                                   // tell configuration which kms key to decrypt secret object with
 	})
 
 	body, err := json.Marshal(reqBody)

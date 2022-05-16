@@ -39,8 +39,8 @@ func PatchConfigurationHandler(service *Service) handlers.AppHandler {
 			// value of encrypted (nacl box) payments encryption key
 			// payments needs to be told what the secret key is for decryption
 			// of secrets for it's configuration
-			ciphertext, ok := service.baseCtx.Value(appctx.PaymentsEncryptionKeyCTXKey).(string)
-			if !ok || len(ciphertext) == 0 {
+			keyCiphertext, ok := service.baseCtx.Value(appctx.PaymentsEncryptionKeyCTXKey).(string)
+			if !ok || len(keyCiphertext) == 0 {
 				return handlers.WrapError(err, "error decrypting secrets, no key exchange", http.StatusBadRequest)
 			}
 
@@ -49,7 +49,7 @@ func PatchConfigurationHandler(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "error decrypting secrets, no sender pubkey", http.StatusBadRequest)
 			}
 
-			// go get secrets from secretMgr
+			// go get secrets from secretMgr (handles the kms wrapper key for the object)
 			secrets, err := service.secretMgr.RetrieveSecrets(ctx, uri)
 			if err != nil {
 				logger.Error().Err(err).Msg("error retrieving secrets")
@@ -57,7 +57,7 @@ func PatchConfigurationHandler(service *Service) handlers.AppHandler {
 			}
 
 			// decrypt secrets (nacl box to get secret decryption key)
-			secretValues, err := service.decryptSecrets(ctx, secrets, ciphertext, senderKey)
+			secretValues, err := service.decryptSecrets(ctx, secrets, keyCiphertext, senderKey)
 			if err != nil {
 				logger.Error().Err(err).Msg("error decrypting secrets")
 				return handlers.WrapError(err, "error decrypting secrets", http.StatusInternalServerError)

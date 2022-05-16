@@ -134,6 +134,8 @@ const (
 	PaymentsEncryptionKeyCTXKey CTXKey = "payments_encryption_key"
 	// PaymentsSenderPublicKeyCTXKey - the context key for getting the application secrets file location
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
+	// PaymentsKMSWrapperARNCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperARNCTXKey CTXKey = "payments_kms_wrapper_arn"
 )
 
 var (

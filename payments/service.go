@@ -44,9 +44,9 @@ func initService(ctx context.Context) (*Service, error) {
 }
 
 // decryptSecrets - perform nacl box to get the configuration encryption key from exchange
-func (s *Service) decryptSecrets(ctx context.Context, secrets []byte, ciphertextB64 string, senderKeyHex string) (map[appctx.CTXKey]interface{}, error) {
+func (s *Service) decryptSecrets(ctx context.Context, secrets []byte, keyCiphertextB64 string, senderKeyHex string) (map[appctx.CTXKey]interface{}, error) {
 	// ciphertext is the nacl box encrypted short shared key for decrypting secrets
-	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextB64)
+	keyCiphertext, err := base64.StdEncoding.DecodeString(keyCiphertextB64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to b64 decode ciphertext: %w", err)
 	}
@@ -59,7 +59,7 @@ func (s *Service) decryptSecrets(ctx context.Context, secrets []byte, ciphertext
 
 	// get nonce from ciphertext, keeping it in first 24 bytes
 	var decryptNonce [24]byte
-	copy(decryptNonce[:], ciphertext[:24])
+	copy(decryptNonce[:], keyCiphertext[:24])
 
 	var senderKeyT [32]byte
 	copy(senderKeyT[:], senderKey[:32])
@@ -67,7 +67,7 @@ func (s *Service) decryptSecrets(ctx context.Context, secrets []byte, ciphertext
 	var privKey [32]byte
 	copy(privKey[:], s.privKey[:32])
 
-	key, ok := box.Open(nil, ciphertext[24:], &decryptNonce, &senderKeyT, &privKey)
+	key, ok := box.Open(nil, keyCiphertext[24:], &decryptNonce, &senderKeyT, &privKey)
 	if !ok {
 		return nil, errors.New("decryption error")
 	}
