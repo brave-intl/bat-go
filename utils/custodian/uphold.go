@@ -3,7 +3,7 @@ package custodian
 import (
 	"context"
 
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
 )
 
 // upholdCustodian - implementation of the uphold custodian
@@ -11,15 +11,21 @@ type upholdCustodian struct{}
 
 // newUpholdCustodian - create a new uphold custodian with configuration
 func newUpholdCustodian(ctx context.Context, conf Config) (*upholdCustodian, error) {
-	return &upholdCustodian{}, errorutils.ErrNotImplemented
+	logger := logging.Logger(ctx, "uphold.newUpholdCustodian")
+	logger.Error().Err(err).Msg("not yet implemented")
+	return &upholdCustodian{}, nil
 }
 
 // SubmitTransactions - implement Custodian interface
 func (uc *upholdCustodian) SubmitTransactions(ctx context.Context, txs ...Transaction) error {
-	return errorutils.ErrNotImplemented
+	logger := logging.Logger(ctx, "uphold.SubmitTransactions")
+	logger.Error().Err(err).Msg("not yet implemented")
+	return nil
 }
 
 // GetTransactionsStatus - implement Custodian interface
 func (uc *upholdCustodian) GetTransactionsStatus(ctx context.Context, tx ...Transaction) (map[string]TransactionStatus, error) {
-	return nil, errorutils.ErrNotImplemented
+	logger := logging.Logger(ctx, "uphold.GetTransactionsStatus")
+	logger.Error().Err(err).Msg("not yet implemented")
+	return nil, nil
 }

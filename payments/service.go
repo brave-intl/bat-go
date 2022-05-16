@@ -40,8 +40,12 @@ type Service struct {
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
-	driver, err := newQLDBDatastore(ctx)
+	service, err := initService(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to setup encryption keys for payments")
+	}
 
+	driver, err := newQLDBDatastore(ctx)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to setup qldb")
 	}
@@ -71,16 +75,13 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
 	}
 
-	service := &Service{
-		// initialize qldb datastore
-		datastore:              driver,
-		processTransaction:     processTransaction,
-		stopProcessTransaction: stopProcessTransaction,
-		custodians: map[string]custodian.Custodian{
-			custodian.Uphold:   upholdCustodian,
-			custodian.Gemini:   geminiCustodian,
-			custodian.Bitflyer: bitflyerCustodian,
-		},
+	service.datastore = driver
+	service.processTransaction = processTransaction
+	service.stopProcessTransaction = stopProcessTransaction
+	service.custodians = map[string]custodian.Custodian{
+		custodian.Uphold:   upholdCustodian,
+		custodian.Gemini:   geminiCustodian,
+		custodian.Bitflyer: bitflyerCustodian,
 	}
 
 	// startup our transaction processing job
