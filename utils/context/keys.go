@@ -154,10 +154,12 @@ const (
 	PaymentsSenderPublicKeyCTXKey CTXKey = "payments_sender_public_key"
 	// LogWriterKey - the context key for getting the zerolog writer
 	LogWriterKey CTXKey = "log_writer_key"
-	// PaymentsKMSWrapperARNCTXKey - the context key for getting the kms wrapper key
-	PaymentsKMSWrapperARNCTXKey CTXKey = "payments_kms_wrapper_arn"
+	// PaymentsKMSWrapperCTXKey - the context key for getting the kms wrapper key
+	PaymentsKMSWrapperCTXKey CTXKey = "payments_kms_wrapper"
 	// EgressProxyAddrCTXKey - reverse proxy address for egress traffic
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_address"
+	// AWSRegionCTXKey - reverse proxy address for egress traffic
+	AWSRegionCTXKey CTXKey = "aws_region"
 )
 
 var (

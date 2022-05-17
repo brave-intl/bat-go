@@ -9,12 +9,10 @@ import (
 
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
+	appaws "github.com/brave-intl/bat-go/utils/nitro/aws"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3crypto"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type awsClient struct{}
@@ -22,6 +20,14 @@ type awsClient struct{}
 // RetrieveSecrets - implements secret discovery for payments service
 func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, error) {
 	logger := logging.Logger(ctx, "awsClient.RetrieveSecrets")
+
+	// decrypt the aws region
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		err := errors.New("empty aws region")
+		logger.Error().Err(err).Str("region", region).Msg("aws region")
+		return nil, err
+	}
 
 	// decrypt the s3 object with the kms key.
 	s3URI, ok := ctx.Value(appctx.SecretsURICTXKey).(string)
@@ -35,42 +41,52 @@ func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, e
 	bucket := parts[len(parts)-2]
 	object := parts[len(parts)-1]
 
+	// decrypt the s3 object with the kms key.
+	kmsKey, ok := ctx.Value(appctx.PaymentsKMSWrapperCTXKey).(string)
+	if !ok {
+		err := errors.New("empty kms wrapper key")
+		logger.Error().Err(err).Str("kmsKey", kmsKey).Msg("kms key")
+		return nil, err
+	}
+
 	// get proxy address for outbound
 	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 	if !ok {
 		return nil, fmt.Errorf("failed to get egress proxy for qldb")
 	}
 
-	// create session
-	sess := session.Must(session.NewSession(appaws.NewAWSConfig(egressProxyAddr, "us-west-2")))
-	// create kms client
-	kmsClient := kms.New(sess)
+	logger.Debug().
+		Str("kms", kmsKey).
+		Str("egress", egressProxyAddr).
+		Str("bucket", bucket).
+		Str("object", object).
+		Str("region", region).
+		Msg("secrets location details")
 
-	// Create a CryptoRegistry and register the algorithms you wish to use for decryption
-	cr := s3crypto.NewCryptoRegistry()
-
-	if err := s3crypto.RegisterAESGCMContentCipher(cr); err != nil {
-		return nil, fmt.Errorf("failed to register aes as a content cipher: %w", err)
-	}
-
-	if err := s3crypto.RegisterKMSContextWrapWithAnyCMK(cr, kmsClient); err != nil {
-		return nil, fmt.Errorf("failed to register context wrap with cmk: %w", err)
-	}
-
-	// Create a decryption client to decrypt artifacts
-	decryptionClient, err := s3crypto.NewDecryptionClientV2(sess, cr)
+	cfg, err := appaws.NewAWSConfig(egressProxyAddr, region)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create decryption client: %w", err)
+		return nil, fmt.Errorf("failed to get aws configuration: %w", err)
 	}
-	getObject, err := decryptionClient.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(object),
-	})
+	awsCfg, ok := cfg.(aws.Config)
+	if !ok {
+		return nil, fmt.Errorf("invalid aws configuration: %w", err)
+	}
+
+	algo := "AES256"
+	client := s3.NewFromConfig(awsCfg)
+	input := &s3.GetObjectInput{
+		Bucket:               &bucket,
+		Key:                  &object,
+		SSECustomerAlgorithm: &algo,   // kms algorithm
+		SSECustomerKey:       &kmsKey, // kms key to use for decrypt
+	}
+
+	secretsResponse, err := client.GetObject(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get object: %w", err)
 	}
 
-	data, err := ioutil.ReadAll(getObject.Body)
+	data, err := ioutil.ReadAll(secretsResponse.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read object: %w", err)
 	}

@@ -2,11 +2,15 @@ package payments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/brave-intl/bat-go/utils/logging"
+	appaws "github.com/brave-intl/bat-go/utils/nitro/aws"
+
 	"github.com/amzn/ion-go/ion"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/qldbsession"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/uuid"
@@ -26,18 +30,42 @@ type Transaction struct {
 
 // newQLDBDatastore - create a new qldbDatastore
 func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
+	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
+
 	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 	if !ok {
 		return nil, fmt.Errorf("failed to get egress proxy for qldb")
 	}
-	// create our aws session
-	awsSession := session.Must(session.NewSession(appaws.NewAWSConfig(egressProxyAddr, "us-west-2")))
-	// create our qldb driver
-	qldbSession := qldbsession.New(awsSession)
+
+	// decrypt the aws region
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		err := errors.New("empty aws region")
+		logger.Error().Err(err).Str("region", region).Msg("aws region")
+		return nil, err
+	}
+
+	logger.Debug().
+		Str("egress", egressProxyAddr).
+		Str("region", region).
+		Msg("secrets location details")
+
+	cfg, err := appaws.NewAWSConfig(egressProxyAddr, region)
+	if err != nil {
+		logger.Error().Err(err).Str("region", region).Msg("aws config failed")
+		return nil, fmt.Errorf("failed to create aws config: %w", err)
+	}
+	awsCfg, ok := cfg.(aws.Config)
+	if !ok {
+		return nil, fmt.Errorf("invalid aws configuration: %w", err)
+	}
+
+	client := qldbsession.NewFromConfig(awsCfg)
+
 	// create our qldb driver
 	driver, err := qldbdriver.New(
-		"payments-service",
-		qldbSession,
+		"payments-service", // the ledger to attach to
+		client,             // the qldb session
 		func(options *qldbdriver.DriverOptions) {
 			// debug mode?
 			debug, err := appctx.GetBoolFromContext(ctx, appctx.DebugLoggingCTXKey)
