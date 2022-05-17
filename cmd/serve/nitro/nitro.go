@@ -12,6 +12,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/payments"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/nitro"
 	"github.com/go-chi/chi"
@@ -83,6 +84,7 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initalize payments service")
 	}
+	r.Use(s.ConfigurationMiddleware())
 	// setup payments routes
 	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
 	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
@@ -90,6 +92,10 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
 	// status to get the status and submission results from the submit
 	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
+
+	// get the public key
+	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
+	r.Patch("/v1/configuration", handlers.AppHandler(payments.PatchConfigurationHandler(s)).ServeHTTP)
 
 	// setup listener
 	addr := viper.GetString("address")

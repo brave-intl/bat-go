@@ -17,43 +17,53 @@ import (
 
 type awsClient struct{}
 
+func (ac *awsClient) IsReady(ctx context.Context) bool {
+	logger := logging.Logger(ctx, "awsClient.IsReady")
+	// decrypt the aws region
+	region, regionOK := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	// decrypt the s3 object with the kms key.
+	s3uri, s3OK := ctx.Value(appctx.SecretsURICTXKey).(string)
+	// decrypt the s3 object with the kms key.
+	kmsKey, kmsOK := ctx.Value(appctx.PaymentsKMSWrapperCTXKey).(string)
+	// get proxy address for outbound
+	egressAddr, egressOK := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
+	if regionOK && s3OK && kmsOK && egressOK {
+		return true
+	}
+	logger.Warn().
+		Str("region", region).
+		Str("s3uri", s3uri).
+		Str("kmsKey", kmsKey).
+		Str("egressAddr", egressAddr).
+		Msg("service is not configured to get secrets")
+	return false
+}
+
 // RetrieveSecrets - implements secret discovery for payments service
 func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, error) {
 	logger := logging.Logger(ctx, "awsClient.RetrieveSecrets")
 
-	// decrypt the aws region
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		err := errors.New("empty aws region")
-		logger.Error().Err(err).Str("region", region).Msg("aws region")
+	// check if client is ready
+	if !ac.IsReady() {
+		err := errors.New("client is not yet configured")
+		logger.Error().Err(err).Msg("client needs configuration")
 		return nil, err
 	}
 
+	// decrypt the aws region
+	region, _ := ctx.Value(appctx.AWSRegionCTXKey).(string)
 	// decrypt the s3 object with the kms key.
-	s3URI, ok := ctx.Value(appctx.SecretsURICTXKey).(string)
-	if !ok {
-		err := errors.New("empty secrets uri")
-		logger.Error().Err(err).Str("uri", uri).Msg("secrets location")
-		return nil, err
-	}
+	s3URI, _ := ctx.Value(appctx.SecretsURICTXKey).(string)
 	parts := strings.Split(s3URI, "/")
 	// get bucket and object from url
 	bucket := parts[len(parts)-2]
 	object := parts[len(parts)-1]
 
 	// decrypt the s3 object with the kms key.
-	kmsKey, ok := ctx.Value(appctx.PaymentsKMSWrapperCTXKey).(string)
-	if !ok {
-		err := errors.New("empty kms wrapper key")
-		logger.Error().Err(err).Str("kmsKey", kmsKey).Msg("kms key")
-		return nil, err
-	}
+	kmsKey, _ := ctx.Value(appctx.PaymentsKMSWrapperCTXKey).(string)
 
 	// get proxy address for outbound
-	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
-	if !ok {
-		return nil, fmt.Errorf("failed to get egress proxy for qldb")
-	}
+	egressProxyAddr, _ := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 
 	logger.Debug().
 		Str("kms", kmsKey).

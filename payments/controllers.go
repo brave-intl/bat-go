@@ -95,6 +95,11 @@ func PatchConfigurationHandler(service *Service) handlers.AppHandler {
 			service.baseCtx = appctx.MapToContext(service.baseCtx, secretValues)
 		}
 
+		// configure datastore now that we have new ctx
+		if err := service.ConfigureDatastore(ctx); err != nil {
+			return handlers.WrapError(err, "error configuring service", http.StatusInternalServerError)
+		}
+
 		// return ok, at this point all new requests will use the new baseCtx of the service
 		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
 	})

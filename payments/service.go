@@ -40,14 +40,23 @@ type Service struct {
 func NewService(ctx context.Context) (context.Context, *Service, error) {
 	var logger = logging.Logger(ctx, "payments.NewService")
 
-	service, err := initService(ctx)
+	// generate the ed25519 pub/priv keypair for secrets management
+	pubKey, privKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to setup encryption keys for payments")
+		logger.Error().Err(err).Msg("failed to generate keypair")
+		return nil, fmt.Errorf("failed to initialize service: %w", err)
 	}
 
-	driver, err := newQLDBDatastore(ctx)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to setup qldb")
+	s := &Service{
+		baseCtx:   ctx,
+		secretMgr: &awsClient{},
+		// keys used for encryption/decryption of configuration secrets
+		pubKey:  pubKey,
+		privKey: privKey,
+	}
+
+	if err := s.ConfigureDatastore(ctx); err != nil {
+		logger.Fatal().Msg("could not configure datastore")
 	}
 
 	// custodian transaction processing channel and stop signal
@@ -75,7 +84,6 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
 	}
 
-	service.datastore = driver
 	service.processTransaction = processTransaction
 	service.stopProcessTransaction = stopProcessTransaction
 	service.custodians = map[string]custodian.Custodian{
@@ -128,24 +136,6 @@ func (s *Service) ProcessTransactions(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// initialize the service
-func initService(ctx context.Context) (*Service, error) {
-	logger := logging.Logger(ctx, "initService")
-	// generate the ed25519 pub/priv keypair for secrets management
-	pubKey, privKey, err := box.GenerateKey(rand.Reader)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to generate keypair")
-		return nil, fmt.Errorf("failed to initialize service: %w", err)
-	}
-	return &Service{
-		baseCtx:   ctx,
-		secretMgr: &awsClient{},
-		// keys used for encryption/decryption of configuration secrets
-		pubKey:  pubKey,
-		privKey: privKey,
-	}, nil
 }
 
 // decryptSecrets - perform nacl box to get the configuration encryption key from exchange
