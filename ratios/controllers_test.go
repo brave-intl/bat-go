@@ -16,6 +16,8 @@ import (
 	"github.com/brave-intl/bat-go/ratios"
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/utils/clients/coingecko/mock"
+	"github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
+	mockcoingeckoassets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
@@ -28,10 +30,11 @@ import (
 type ControllersTestSuite struct {
 	suite.Suite
 
-	ctx        context.Context
-	service    *ratios.Service
-	mockCtrl   *gomock.Controller
-	mockClient *mockcoingecko.MockClient
+	ctx              context.Context
+	service          *ratios.Service
+	mockCtrl         *gomock.Controller
+	mockClient       *mockcoingecko.MockClient
+	mockAssetsClient *mockcoingeckoassets.MockClient
 }
 
 func TestControllersTestSuite(t *testing.T) {
@@ -93,8 +96,10 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	suite.Require().NoError(err, "failed to setup redis conn")
 	client := mockcoingecko.NewMockClient(suite.mockCtrl)
 	suite.mockClient = client
+	assetsClient := mockcoingeckoassets.NewMockClient(suite.mockCtrl)
+	suite.mockAssetsClient = assetsClient
 
-	suite.service = ratios.NewService(suite.ctx, client, redis)
+	suite.service = ratios.NewService(suite.ctx, assetsClient, client, redis)
 	suite.Require().NoError(err, "failed to setup ratios service")
 }
 
@@ -228,4 +233,52 @@ func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 
 	suite.Require().Equal(len(resp.Payload), 1)
 	suite.Require().Equal(resp.Payload[0].Symbol, "btc")
+}
+
+func (suite *ControllersTestSuite) TestGetCoingeckoImageAssetHandler() {
+	// PNG
+	handler := ratios.GetCoingeckoImageAssetHandler(suite.service)
+	coingeckoResp := coingeckoAssets.ImageAssetResponseBundle{
+		ImageData:   []byte("🍌"),
+		ContentType: "image/png",
+	}
+	suite.mockAssetsClient.EXPECT().
+		FetchImageAsset(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&coingeckoResp, time.Now(), nil)
+
+	req, err := http.NewRequest("GET", "/v1/coingecko/coins/images/662/large/logo_square_simple_300px.png?1609402668", nil)
+	suite.Require().NoError(err)
+	rctx := chi.NewRouteContext()
+	req = req.WithContext(suite.ctx)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	suite.Require().NoError(err)
+	suite.Require().Equal(rr.Body.String(), "🍌")
+	suite.Require().Equal(rr.Header().Get("content-type"), "image/png")
+
+	// JPG
+	// https://assets.coingecko.com/coins/images/24383/large/apecoin.jpg?1647476455
+	coingeckoResp = coingeckoAssets.ImageAssetResponseBundle{
+		ImageData:   []byte("🦍"),
+		ContentType: "image/jpeg",
+	}
+	suite.mockAssetsClient.EXPECT().
+		FetchImageAsset(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&coingeckoResp, time.Now(), nil)
+
+	req, err = http.NewRequest("GET", "/v1/coingecko/coins/images/24383/large/apecoin.jpg?1647476455", nil)
+	suite.Require().NoError(err)
+	rctx = chi.NewRouteContext()
+	req = req.WithContext(suite.ctx)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+	suite.Require().NoError(err)
+	suite.Require().Equal(rr.Body.String(), "🦍")
+	suite.Require().Equal(rr.Header().Get("content-type"), "image/jpeg")
 }

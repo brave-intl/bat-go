@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
+	coingeckoAssets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
@@ -16,11 +17,12 @@ import (
 )
 
 // NewService - create a new ratios service structure
-func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Pool) *Service {
+func NewService(ctx context.Context, coingeckoAssets coingeckoAssets.Client, coingecko coingecko.Client, redis *redis.Pool) *Service {
 	return &Service{
-		jobs:      []srv.Job{},
-		coingecko: coingecko,
-		redis:     redis,
+		jobs:            []srv.Job{},
+		coingecko:       coingecko,
+		coingeckoAssets: coingeckoAssets,
+		redis:           redis,
 	}
 }
 
@@ -28,8 +30,9 @@ func NewService(ctx context.Context, coingecko coingecko.Client, redis *redis.Po
 type Service struct {
 	jobs []srv.Job
 	// coingecko client
-	coingecko coingecko.Client
-	redis     *redis.Pool
+	coingeckoAssets coingeckoAssets.Client
+	coingecko       coingecko.Client
+	redis           *redis.Pool
 }
 
 // Jobs - Implement srv.JobService interface
@@ -73,8 +76,12 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	service := NewService(ctx, client, redis)
-
+	assetsClient, err := coingeckoAssets.NewWithContext(ctx, redis)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize the coingecko assets client")
+		return ctx, nil, fmt.Errorf("failed to initialize coingecko assets client: %w", err)
+	}
+	service := NewService(ctx, assetsClient, client, redis)
 	ctx, err = service.initializeCoingeckoCurrencies(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko coin mappings")
@@ -251,4 +258,22 @@ func (s *Service) GetCoinMarkets(
 		Payload:     *payload,
 		LastUpdated: updated,
 	}, nil
+}
+
+// GetCoingeckoImageAsset is a wrapper around the coingeckoAssets.FetchCoinMarkets function
+// for the service
+func (s *Service) GetCoingeckoImageAsset(
+	ctx context.Context,
+	imageID string,
+	size string,
+	imageFile string,
+) (*coingeckoAssets.ImageAssetResponseBundle, error) {
+	logger := logging.Logger(ctx, "ratios.GetCoingeckoImageAsset")
+	responseBundle, _, err := s.coingeckoAssets.FetchImageAsset(ctx, imageID, size, imageFile)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to fetch coin markets data from coingecko")
+		return nil, fmt.Errorf("failed to fetch coin markets data from coingecko: %w", err)
+	}
+
+	return responseBundle, nil
 }

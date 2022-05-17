@@ -103,6 +103,8 @@ const (
 	RateLimiterBurstCTXKey CTXKey = "rate_limit_burst"
 	// NoUnlinkPriorToDurationCTXKey - the iso duration of time that no unlinkings must have happened
 	NoUnlinkPriorToDurationCTXKey CTXKey = "no_unlinkings_prior_to"
+	// CoingeckoAssetsServerCTXKey - the context key for getting the coingecko assets server
+	CoingeckoAssetsServerCTXKey CTXKey = "coingecko_assets_server"
 	// CoingeckoServerCTXKey - the context key for getting the coingecko server
 	CoingeckoServerCTXKey CTXKey = "coingecko_server"
 	// CoingeckoAccessTokenCTXKey - the context key for getting the coingecko server access token

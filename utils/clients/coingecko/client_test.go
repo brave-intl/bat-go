@@ -146,10 +146,10 @@ func (suite *CoingeckoTestSuite) TestFetchCoinMarkets() {
 	suite.Require().NotNil((*resp)[0].CurrentPrice, "should have a value for price")
 	suite.Require().NotEqual((*resp)[0].CurrentPrice, 0, "bitcoin is never going to 0")
 
-	// call again but with biggger limit
+	// call again but with bigger limit
 	// in this case we should have more results, but only used cached response from redis
 	resp1, t1, err := suite.client.FetchCoinMarkets(suite.ctx, "usd", 10)
 	suite.Require().NoError(err, "should be able to fetch the coin markets")
 	suite.Require().Equal(10, len(*resp1), "should have a response length of 10 for limit=10")
-	suite.Require().Equal(t, t1, "the lastUpdated time should be equal because of cache usage")
+	suite.Require().True(t.Equal(t1), "the lastUpdated time should be equal because of cache usage")
 }

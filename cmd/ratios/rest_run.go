@@ -35,6 +35,7 @@ func RestRun(command *cobra.Command, args []string) {
 	}
 
 	// add our command line params to context
+	ctx = context.WithValue(ctx, appctx.CoingeckoAssetsServerCTXKey, viper.Get("coingecko-assets-service"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoServerCTXKey, viper.Get("coingecko-service"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoAccessTokenCTXKey, viper.Get("coingecko-token"))
 	ctx = context.WithValue(ctx, appctx.CoingeckoCoinLimitCTXKey, viper.GetInt("coingecko-coin-limit"))
@@ -54,6 +55,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r.Get("/v2/history/coingecko/{coinID}/{vsCurrency}/{duration}", middleware.InstrumentHandler("GetHistoryHandler", ratios.GetHistoryHandler(s)).ServeHTTP)
 	r.Get("/v2/coinmap/provider/coingecko", middleware.InstrumentHandler("GetMappingHandler", ratios.GetMappingHandler(s)).ServeHTTP)
 	r.Get("/v2/market/provider/coingecko", middleware.InstrumentHandler("GetCoinMarketsHandler", ratios.GetCoinMarketsHandler(s)).ServeHTTP)
+	r.Get("/v1/coingecko/coins/images/{imageID}/{size}/{imageFile}", middleware.InstrumentHandler("GetCoingeckoImageAssetHandler", ratios.GetCoingeckoImageAssetHandler(s)).ServeHTTP)
 
 	err = cmd.SetupJobWorkers(command.Context(), s.Jobs())
 	if err != nil {

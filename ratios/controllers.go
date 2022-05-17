@@ -242,3 +242,24 @@ func GetCoinMarketsHandler(service *Service) handlers.AppHandler {
 		return handlers.RenderContent(ctx, data, w, http.StatusOK)
 	})
 }
+
+// GetCoingeckoImageAssetHandler handles requests for coingecko image assets
+func GetCoingeckoImageAssetHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		ctx := r.Context()
+		var (
+			imageID   = chi.URLParam(r, "imageID")
+			size      = chi.URLParam(r, "size")
+			imageFile = chi.URLParam(r, "imageFile")
+			err       error
+		)
+		logger := logging.Logger(ctx, "ratios.GetCoingeckoImageAssetHandler")
+		responseBundle, err := service.GetCoingeckoImageAsset(ctx, imageID, size, imageFile)
+		w.Header().Set("content-type", responseBundle.ContentType)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to get top currencies")
+			return handlers.WrapError(err, "failed to get top currencies", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(ctx, responseBundle.ImageData, w, http.StatusOK)
+	})
+}

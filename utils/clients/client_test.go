@@ -3,12 +3,13 @@ package clients
 import (
 	"context"
 	"fmt"
-	"github.com/brave-intl/bat-go/utils/errors"
-	testutils "github.com/brave-intl/bat-go/utils/test"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/brave-intl/bat-go/utils/errors"
+	testutils "github.com/brave-intl/bat-go/utils/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDo_ErrorWithResponse(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDo_ErrorWithResponse(t *testing.T) {
 	assert.NotNil(t, response)
 
 	actual := err.(*errors.ErrorBundle)
-	assert.Equal(t, "response", actual.Error())
+	assert.Equal(t, ErrUnableToDecode, actual.Error())
 	assert.NotNil(t, actual.Cause(), ErrUnableToDecode)
 
 	httpState := actual.Data().(HTTPState)

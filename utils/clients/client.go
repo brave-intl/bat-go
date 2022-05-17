@@ -313,7 +313,7 @@ func (c *SimpleHTTPClient) Do(ctx context.Context, req *http.Request, v interfac
 				Body:            rb,
 			}
 
-			return resp, NewHTTPError(err, req.URL.String(), "response", resp.StatusCode, errorData)
+			return resp, NewHTTPError(err, req.URL.String(), err.Error(), resp.StatusCode, errorData)
 		}
 		return nil, fmt.Errorf("failed c.do, no response body: %w", err)
 	}

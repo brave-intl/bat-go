@@ -89,6 +89,12 @@ func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, st
 		if err != nil {
 			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
 		}
+	default:
+		w.WriteHeader(status)
+		_, err := w.Write(v.([]byte))
+		if err != nil {
+			return WrapError(err, "Error writing a response", http.StatusInternalServerError)
+		}
 	}
 
 	return nil

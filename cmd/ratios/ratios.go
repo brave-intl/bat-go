@@ -28,6 +28,10 @@ func init() {
 	cmd.Must(viper.BindPFlag("coingecko-service", ratiosCmd.PersistentFlags().Lookup("coingecko-service")))
 	cmd.Must(viper.BindEnv("coingecko-service", "COINGECKO_SERVICE"))
 
+	ratiosCmd.PersistentFlags().String("coingecko-assets-service", "https://assets.coingecko.com/", "the coingecko service address for image assets")
+	cmd.Must(viper.BindPFlag("coingecko-assets-service", ratiosCmd.PersistentFlags().Lookup("coingecko-assets-service")))
+	cmd.Must(viper.BindEnv("coingecko-assets-service", "COINGECKO_ASSETS_SERVICE"))
+
 	ratiosCmd.PersistentFlags().Int("coingecko-coin-limit", 25, "the coingecko coin limit")
 	cmd.Must(viper.BindPFlag("coingecko-coin-limit", ratiosCmd.PersistentFlags().Lookup("coingecko-coin-limit")))
 	cmd.Must(viper.BindEnv("coingecko-coin-limit", "COINGECKO_COIN_LIMIT"))
