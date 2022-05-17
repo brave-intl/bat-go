@@ -44,10 +44,10 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	pubKey, privKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to generate keypair")
-		return nil, fmt.Errorf("failed to initialize service: %w", err)
+		return ctx, nil, fmt.Errorf("failed to initialize service: %w", err)
 	}
 
-	s := &Service{
+	service := &Service{
 		baseCtx:   ctx,
 		secretMgr: &awsClient{},
 		// keys used for encryption/decryption of configuration secrets
@@ -55,7 +55,7 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 		privKey: privKey,
 	}
 
-	if err := s.ConfigureDatastore(ctx); err != nil {
+	if err := service.configureDatastore(ctx); err != nil {
 		logger.Fatal().Msg("could not configure datastore")
 	}
 

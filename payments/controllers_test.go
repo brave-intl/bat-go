@@ -30,7 +30,7 @@ func (msm *mockSecretManager) RetrieveSecrets(ctx context.Context, uri string) (
 }
 
 func TestPatchConfigurationHandler(t *testing.T) {
-	s, err := initService(context.Background())
+	_, s, err := NewService(context.Background())
 	if err != nil {
 		t.Error("failed to init service: ", err)
 	}
@@ -144,7 +144,7 @@ func TestPatchConfigurationHandler(t *testing.T) {
 }
 
 func TestGetConfigurationHandler(t *testing.T) {
-	s, err := initService(context.Background())
+	_, s, err := NewService(context.Background())
 	if err != nil {
 		t.Error("failed to init payment service: ", err)
 	}

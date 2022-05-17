@@ -96,7 +96,7 @@ func PatchConfigurationHandler(service *Service) handlers.AppHandler {
 		}
 
 		// configure datastore now that we have new ctx
-		if err := service.ConfigureDatastore(ctx); err != nil {
+		if err := service.configureDatastore(ctx); err != nil {
 			return handlers.WrapError(err, "error configuring service", http.StatusInternalServerError)
 		}
 

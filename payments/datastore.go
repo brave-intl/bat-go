@@ -28,9 +28,10 @@ type Transaction struct {
 	DocumentID     string          `json:"documentId,omitempty" ion:"id"`
 }
 
+// ErrNotConfiguredYet - service not fully configured
 var ErrNotConfiguredYet = errors.New("not yet configured")
 
-func (s *Service) ConfigureDatastore(ctx context.Context) error {
+func (s *Service) configureDatastore(ctx context.Context) error {
 	driver, err := newQLDBDatastore(ctx)
 	if err != nil {
 		if errors.Is(err, ErrNotConfiguredYet) {
@@ -39,7 +40,7 @@ func (s *Service) ConfigureDatastore(ctx context.Context) error {
 		}
 		return fmt.Errorf("failed to create new qldb datastore: %w", err)
 	}
-	service.datastore = driver
+	s.datastore = driver
 	return nil
 }
 
@@ -62,6 +63,10 @@ func isQLDBReady(ctx context.Context) bool {
 // newQLDBDatastore - create a new qldbDatastore
 func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	logger := logging.Logger(ctx, "payments.newQLDBDatastore")
+
+	if !isQLDBReady(ctx) {
+		return nil, ErrNotConfiguredYet
+	}
 
 	egressProxyAddr, ok := ctx.Value(appctx.EgressProxyAddrCTXKey).(string)
 	if !ok {

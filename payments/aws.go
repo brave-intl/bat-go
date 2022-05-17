@@ -44,7 +44,7 @@ func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, e
 	logger := logging.Logger(ctx, "awsClient.RetrieveSecrets")
 
 	// check if client is ready
-	if !ac.IsReady() {
+	if !ac.IsReady(ctx) {
 		err := errors.New("client is not yet configured")
 		logger.Error().Err(err).Msg("client needs configuration")
 		return nil, err
