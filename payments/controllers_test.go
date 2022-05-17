@@ -40,7 +40,7 @@ func TestPatchConfigurationHandler(t *testing.T) {
 
 	r := chi.NewRouter()
 	// startup our configuration middleware
-	r.Use(s.ConfigurationMiddleware())
+	r.Use(s.ConfigurationMiddleware)
 
 	// get the public key
 	r.Get("/conf", handlers.AppHandler(GetConfigurationHandler(s)).ServeHTTP)

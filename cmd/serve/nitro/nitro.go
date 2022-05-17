@@ -77,26 +77,19 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	ctx = context.WithValue(ctx, appctx.EgressProxyAddrCTXKey, viper.GetString("egress-address"))
 	// special logger with writer
 	ctx, logger := logging.SetupLogger(ctx)
-	// setup router
-	ctx, r := setupRouter(ctx)
 	// setup the service now
 	ctx, s, err := payments.NewService(ctx)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initalize payments service")
 	}
-	r.Use(s.ConfigurationMiddleware())
-	// setup payments routes
-	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
-	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
-	// submit will have an http signature from a known list of public keys
-	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
-	// status to get the status and submission results from the submit
-	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
+	logger.Info().Msg("payments service setup")
+	// setup router
+	ctx, r := setupRouter(ctx, s)
 
-	// get the public key
-	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
-	r.Patch("/v1/configuration", handlers.AppHandler(payments.PatchConfigurationHandler(s)).ServeHTTP)
+	time.Sleep(1 * time.Second)
+	logger.Info().Msg("payments routes setup")
 
+	time.Sleep(5 * time.Second)
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
@@ -110,18 +103,22 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
+	logger.Info().Msg("vsock listener setup")
+	time.Sleep(5 * time.Second)
 	// setup server
 	srv := http.Server{
 		Handler:      chi.ServerBaseContext(ctx, r),
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}
+	logger.Info().Msg("starting server")
+	time.Sleep(5 * time.Second)
 	// run the server in another routine
 	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
 	return nil
 }
 
-func setupRouter(ctx context.Context) (context.Context, *chi.Mux) {
+func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *chi.Mux) {
 	// base service logger
 	logger := logging.Logger(ctx, "payments")
 	// base router
@@ -134,8 +131,26 @@ func setupRouter(ctx context.Context) (context.Context, *chi.Mux) {
 	r.Use(hlog.RequestIDHandler("req_id", "Request-Id"))
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(chiware.Timeout(15 * time.Second))
+	r.Use(s.ConfigurationMiddleware)
+	logger.Info().Msg("configuration middleware setup")
+	time.Sleep(1 * time.Second)
 	// routes
 	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
+	// setup payments routes
+	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
+	r.Post("/v1/payments/prepare", middleware.InstrumentHandler("PrepareHandler", payments.PrepareHandler(s)).ServeHTTP)
+	logger.Info().Msg("prepare endpoint setup")
+	// submit will have an http signature from a known list of public keys
+	r.Post("/v1/payments/submit", middleware.InstrumentHandler("SubmitHandler", s.AuthorizerSignedMiddleware()(payments.SubmitHandler(s))).ServeHTTP)
+	logger.Info().Msg("submit endpoint setup")
+	// status to get the status and submission results from the submit
+	r.Post("/v1/payments/{documentID}/status", middleware.InstrumentHandler("StatusHandler", payments.SubmitHandler(s)).ServeHTTP)
+	logger.Info().Msg("status endpoint setup")
+
+	r.Get("/v1/configuration", handlers.AppHandler(payments.GetConfigurationHandler(s)).ServeHTTP)
+	logger.Info().Msg("get config endpoint setup")
+	r.Patch("/v1/configuration", handlers.AppHandler(payments.PatchConfigurationHandler(s)).ServeHTTP)
+	logger.Info().Msg("patch config endpoint setup")
 	return ctx, r
 }
 

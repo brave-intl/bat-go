@@ -9,6 +9,7 @@ PARENT_CID="3" # the CID of the EC2 instance
 for i in `seq 0 5`
 do
         sleep 20
+        nitro-cli describe-enclaves | jq -r .[].EnclaveCID
         CID=$(nitro-cli describe-enclaves | jq -r .[].EnclaveCID)
         if [ "${CID}" == "" ]; then
                 continue
@@ -16,12 +17,14 @@ do
         break
 done
 
+echo "cid is ${CID}"
 # at this point the enclave is up.  depending on what service we're running,
 # it's now time to set up proxy tools
 if [ "${service}" = "/payments" ]; then
     # setup inbound traffic proxy
     export IN_ADDRS=":8080"
     export OUT_ADDRS="${CID}:8080"
+    echo "${IN_ADDRS} to ${OUT_ADDRS}"
 elif [ "${service}" = "/ia2" ]; then
     # setup proxy that allows the enclave to talk to Let's Encrypt and our Kafka
     # cluster

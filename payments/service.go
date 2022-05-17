@@ -65,32 +65,34 @@ func NewService(ctx context.Context) (context.Context, *Service, error) {
 	ctx, stopProcessTransaction := context.WithCancel(ctx)
 
 	// setup our custodian integrations
-	upholdCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Uphold})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create uphold custodian")
-		defer stopProcessTransaction()
-		return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
-	}
-	geminiCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Gemini})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create gemini custodian")
-		defer stopProcessTransaction()
-		return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
-	}
-	bitflyerCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Bitflyer})
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create bitflyer custodian")
-		defer stopProcessTransaction()
-		return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
-	}
+	/*
+		upholdCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Uphold})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create uphold custodian")
+			defer stopProcessTransaction()
+			return ctx, nil, fmt.Errorf("failed to create uphold custodian: %w", err)
+		}
+		geminiCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Gemini})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create gemini custodian")
+			defer stopProcessTransaction()
+			return ctx, nil, fmt.Errorf("failed to create gemini custodian: %w", err)
+		}
+		bitflyerCustodian, err := custodian.New(ctx, custodian.Config{Provider: custodian.Bitflyer})
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create bitflyer custodian")
+			defer stopProcessTransaction()
+			return ctx, nil, fmt.Errorf("failed to create bitflyer custodian: %w", err)
+		}
+	*/
 
 	service.processTransaction = processTransaction
 	service.stopProcessTransaction = stopProcessTransaction
-	service.custodians = map[string]custodian.Custodian{
-		custodian.Uphold:   upholdCustodian,
-		custodian.Gemini:   geminiCustodian,
-		custodian.Bitflyer: bitflyerCustodian,
-	}
+	service.custodians = map[string]custodian.Custodian{}
+	//custodian.Uphold:   upholdCustodian,
+	//custodian.Gemini:   geminiCustodian,
+	//custodian.Bitflyer: bitflyerCustodian,
+	//}
 
 	// startup our transaction processing job
 	go func() {

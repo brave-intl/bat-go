@@ -84,7 +84,7 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 	logger.Debug().
 		Str("egress", egressProxyAddr).
 		Str("region", region).
-		Msg("secrets location details")
+		Msg("qldb details")
 
 	cfg, err := appaws.NewAWSConfig(egressProxyAddr, region)
 	if err != nil {
