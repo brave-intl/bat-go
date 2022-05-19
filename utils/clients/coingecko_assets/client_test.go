@@ -67,26 +67,20 @@ func (suite *CoingeckoAssetsTestSuite) SetupTest() {
 	suite.Require().NoError(err, "failed to connect to redis")
 	suite.Require().True(s == "PONG", "bad response from redis")
 
-	// setup the client under test, no redis, will test redis interactions in ratios service
-	suite.client, err = coingeckoAssets.NewWithContext(suite.ctx, suite.redisPool)
+	suite.client, err = coingeckoAssets.NewWithContext(suite.ctx)
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 }
 
 func (suite *CoingeckoAssetsTestSuite) TestFetchImageAsset() {
 	// PNG
-	responseBundle, t1, err := suite.client.FetchImageAsset(suite.ctx, "662", "large", "logo_square_simple_300px.png")
+	responseBundle, err := suite.client.FetchImageAsset(suite.ctx, "662", "large", "logo_square_simple_300px.png")
 	suite.Require().NoError(err, "should be able to fetch the coin markets")
 	suite.Require().True(len(responseBundle.ImageData) > 0, "should have some image data")
 	suite.Require().Equal(responseBundle.ContentType, "image/png")
 
-	// Cache works
-	responseBundle, t2, err := suite.client.FetchImageAsset(suite.ctx, "662", "large", "logo_square_simple_300px.png")
-	suite.Require().NoError(err, "should be able to fetch the coin markets")
-	suite.Require().True(t1.Equal(t2), "should have the same last updated timestamp because of cache usage")
-
 	// JPG
 	// https://assets.coingecko.com/coins/images/24383/large/apecoin.jpg?1647476455
-	responseBundle, _, err = suite.client.FetchImageAsset(suite.ctx, "24383", "large", "apecoin.jpg")
+	responseBundle, err = suite.client.FetchImageAsset(suite.ctx, "24383", "large", "apecoin.jpg")
 	suite.Require().NoError(err, "should be able to fetch the coin markets")
 	suite.Require().True(len(responseBundle.ImageData) > 0, "should have some image data")
 	suite.Require().Equal(responseBundle.ContentType, "image/jpeg")

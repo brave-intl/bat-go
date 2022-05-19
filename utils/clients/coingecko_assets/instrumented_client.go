@@ -39,7 +39,7 @@ func NewClientWithPrometheus(base Client, instanceName string) ClientWithPrometh
 }
 
 // FetchImageAsset implements Client
-func (_d ClientWithPrometheus) FetchImageAsset(ctx context.Context, imageID string, size string, imageFile string) (ip1 *ImageAssetResponseBundle, t1 time.Time, err error) {
+func (_d ClientWithPrometheus) FetchImageAsset(ctx context.Context, imageID string, size string, imageFile string) (ip1 *ImageAssetResponseBundle, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

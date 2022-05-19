@@ -76,7 +76,7 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	assetsClient, err := coingeckoAssets.NewWithContext(ctx, redis)
+	assetsClient, err := coingeckoAssets.NewWithContext(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko assets client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko assets client: %w", err)
@@ -269,7 +269,7 @@ func (s *Service) GetCoingeckoImageAsset(
 	imageFile string,
 ) (*coingeckoAssets.ImageAssetResponseBundle, error) {
 	logger := logging.Logger(ctx, "ratios.GetCoingeckoImageAsset")
-	responseBundle, _, err := s.coingeckoAssets.FetchImageAsset(ctx, imageID, size, imageFile)
+	responseBundle, err := s.coingeckoAssets.FetchImageAsset(ctx, imageID, size, imageFile)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to fetch image asset from coingecko")
 		return nil, fmt.Errorf("failed to fetch image asset from coingecko: %w", err)

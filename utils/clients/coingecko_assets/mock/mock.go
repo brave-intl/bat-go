@@ -7,7 +7,6 @@ package mock_coingecko_assets
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	coingeckoAssets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
 	gomock "github.com/golang/mock/gomock"
@@ -37,13 +36,12 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // FetchImageAsset mocks base method.
-func (m *MockClient) FetchImageAsset(ctx context.Context, imageID, size, imageFile string) (*coingeckoAssets.ImageAssetResponseBundle, time.Time, error) {
+func (m *MockClient) FetchImageAsset(ctx context.Context, imageID, size, imageFile string) (*coingeckoAssets.ImageAssetResponseBundle, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchImageAsset", ctx, imageID, size, imageFile)
 	ret0, _ := ret[0].(*coingeckoAssets.ImageAssetResponseBundle)
-	ret1, _ := ret[1].(time.Time)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // FetchImageAsset indicates an expected call of FetchImageAsset.

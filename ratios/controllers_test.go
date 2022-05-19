@@ -244,7 +244,7 @@ func (suite *ControllersTestSuite) TestGetCoingeckoImageAssetHandler() {
 	}
 	suite.mockAssetsClient.EXPECT().
 		FetchImageAsset(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&coingeckoResp, time.Now(), nil)
+		Return(&coingeckoResp, nil)
 
 	req, err := http.NewRequest("GET", "/v1/coingecko/coins/images/662/large/logo_square_simple_300px.png?1609402668", nil)
 	suite.Require().NoError(err)
@@ -267,7 +267,7 @@ func (suite *ControllersTestSuite) TestGetCoingeckoImageAssetHandler() {
 	}
 	suite.mockAssetsClient.EXPECT().
 		FetchImageAsset(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&coingeckoResp, time.Now(), nil)
+		Return(&coingeckoResp, nil)
 
 	req, err = http.NewRequest("GET", "/v1/coingecko/coins/images/24383/large/apecoin.jpg?1647476455", nil)
 	suite.Require().NoError(err)
