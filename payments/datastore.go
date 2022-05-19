@@ -19,8 +19,8 @@ import (
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey *uuid.UUID      `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"uuid"`
-	Amount         decimal.Decimal `json:"amount,omitempty" ion:"amount" valid:"numeric"`
+	IdempotencyKey *uuid.UUID      `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	Amount         decimal.Decimal `json:"amount,omitempty" ion:"amount" valid:"required"`
 	To             *uuid.UUID      `json:"to,omitempty" ion:"to" valid:"required"`
 	From           *uuid.UUID      `json:"from,omitempty" ion:"from" valid:"required"`
 	Custodian      string          `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
