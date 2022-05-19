@@ -24,7 +24,7 @@ type Transaction struct {
 	To             *uuid.UUID      `json:"to,omitempty" ion:"to" valid:"required"`
 	From           *uuid.UUID      `json:"from,omitempty" ion:"from" valid:"required"`
 	Custodian      string          `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State          string          `json:"-" ion:"state" valid:"in(prepared|submitted)"`
+	State          string          `json:"state,omitempty" ion:"state"`
 	DocumentID     string          `json:"documentId,omitempty" ion:"id"`
 }
 
