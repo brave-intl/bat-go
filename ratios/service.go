@@ -260,7 +260,7 @@ func (s *Service) GetCoinMarkets(
 	}, nil
 }
 
-// GetCoingeckoImageAsset is a wrapper around the coingeckoAssets.FetchCoinMarkets function
+// GetCoingeckoImageAsset is a wrapper around the coingeckoAssets.FetchImageAsset function
 // for the service
 func (s *Service) GetCoingeckoImageAsset(
 	ctx context.Context,
@@ -271,8 +271,8 @@ func (s *Service) GetCoingeckoImageAsset(
 	logger := logging.Logger(ctx, "ratios.GetCoingeckoImageAsset")
 	responseBundle, _, err := s.coingeckoAssets.FetchImageAsset(ctx, imageID, size, imageFile)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to fetch coin markets data from coingecko")
-		return nil, fmt.Errorf("failed to fetch coin markets data from coingecko: %w", err)
+		logger.Error().Err(err).Msg("failed to fetch image asset from coingecko")
+		return nil, fmt.Errorf("failed to fetch image asset from coingecko: %w", err)
 	}
 
 	return responseBundle, nil
