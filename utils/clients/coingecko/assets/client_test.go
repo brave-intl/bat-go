@@ -1,7 +1,7 @@
 //go:build integration && vpn
 // +build integration,vpn
 
-package coingeckoAssets_test
+package assets_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	coingeckoAssets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
+	"github.com/brave-intl/bat-go/utils/clients/coingecko/assets"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/gomodule/redigo/redis"
@@ -19,7 +19,7 @@ import (
 type CoingeckoAssetsTestSuite struct {
 	suite.Suite
 	redisPool *redis.Pool
-	client    coingeckoAssets.Client
+	client    assets.Client
 	ctx       context.Context
 }
 
@@ -67,7 +67,7 @@ func (suite *CoingeckoAssetsTestSuite) SetupTest() {
 	suite.Require().NoError(err, "failed to connect to redis")
 	suite.Require().True(s == "PONG", "bad response from redis")
 
-	suite.client, err = coingeckoAssets.NewWithContext(suite.ctx)
+	suite.client, err = assets.NewWithContext(suite.ctx)
 	suite.Require().NoError(err, "Must be able to correctly initialize the client")
 }
 

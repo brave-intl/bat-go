@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
-	coingeckoAssets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
+	"github.com/brave-intl/bat-go/utils/clients/coingecko/assets"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
@@ -17,7 +17,7 @@ import (
 )
 
 // NewService - create a new ratios service structure
-func NewService(ctx context.Context, coingeckoAssets coingeckoAssets.Client, coingecko coingecko.Client, redis *redis.Pool) *Service {
+func NewService(ctx context.Context, coingeckoAssets assets.Client, coingecko coingecko.Client, redis *redis.Pool) *Service {
 	return &Service{
 		jobs:            []srv.Job{},
 		coingecko:       coingecko,
@@ -30,7 +30,7 @@ func NewService(ctx context.Context, coingeckoAssets coingeckoAssets.Client, coi
 type Service struct {
 	jobs []srv.Job
 	// coingecko client
-	coingeckoAssets coingeckoAssets.Client
+	coingeckoAssets assets.Client
 	coingecko       coingecko.Client
 	redis           *redis.Pool
 }
@@ -76,7 +76,7 @@ func InitService(ctx context.Context) (context.Context, *Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko client: %w", err)
 	}
-	assetsClient, err := coingeckoAssets.NewWithContext(ctx)
+	assetsClient, err := assets.NewWithContext(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize the coingecko assets client")
 		return ctx, nil, fmt.Errorf("failed to initialize coingecko assets client: %w", err)
@@ -260,14 +260,14 @@ func (s *Service) GetCoinMarkets(
 	}, nil
 }
 
-// GetCoingeckoImageAsset is a wrapper around the coingeckoAssets.FetchImageAsset function
+// GetCoingeckoImageAsset is a wrapper around the assets.FetchImageAsset function
 // for the service
 func (s *Service) GetCoingeckoImageAsset(
 	ctx context.Context,
 	imageID string,
 	size string,
 	imageFile string,
-) (*coingeckoAssets.ImageAssetResponseBundle, error) {
+) (*assets.ImageAssetResponseBundle, error) {
 	logger := logging.Logger(ctx, "ratios.GetCoingeckoImageAsset")
 	responseBundle, err := s.coingeckoAssets.FetchImageAsset(ctx, imageID, size, imageFile)
 	if err != nil {

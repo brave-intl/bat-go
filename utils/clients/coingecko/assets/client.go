@@ -1,4 +1,4 @@
-package coingeckoAssets
+package assets
 
 import (
 	"context"

@@ -15,9 +15,9 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/ratios"
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
+	"github.com/brave-intl/bat-go/utils/clients/coingecko/assets"
+	mockcoingeckoassets "github.com/brave-intl/bat-go/utils/clients/coingecko/assets/mock"
 	mockcoingecko "github.com/brave-intl/bat-go/utils/clients/coingecko/mock"
-	"github.com/brave-intl/bat-go/utils/clients/coingecko_assets"
-	mockcoingeckoassets "github.com/brave-intl/bat-go/utils/clients/coingecko_assets/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
@@ -238,7 +238,7 @@ func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 func (suite *ControllersTestSuite) TestGetCoingeckoImageAssetHandler() {
 	// PNG
 	handler := ratios.GetCoingeckoImageAssetHandler(suite.service)
-	coingeckoResp := coingeckoAssets.ImageAssetResponseBundle{
+	coingeckoResp := assets.ImageAssetResponseBundle{
 		ImageData:   []byte("🍌"),
 		ContentType: "image/png",
 	}
@@ -261,7 +261,7 @@ func (suite *ControllersTestSuite) TestGetCoingeckoImageAssetHandler() {
 
 	// JPG
 	// https://assets.coingecko.com/coins/images/24383/large/apecoin.jpg?1647476455
-	coingeckoResp = coingeckoAssets.ImageAssetResponseBundle{
+	coingeckoResp = assets.ImageAssetResponseBundle{
 		ImageData:   []byte("🦍"),
 		ContentType: "image/jpeg",
 	}
