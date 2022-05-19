@@ -114,6 +114,7 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		var (
 			logger = logging.Logger(ctx, "PrepareHandler")
 			req    = []*Transaction{}
+			txns   = []*Transaction{}
 		)
 
 		// read the transactions in the body
@@ -121,16 +122,23 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
+
+		logger.Debug().Str("request", fmt.Sprintf("%+v", req)).Msg("structure of request")
 		// validate the list of transactions
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
+
+		for i, v := range req {
+			_, err = govalidator.ValidateStruct(v)
+			if err != nil {
+				logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
+				continue // skip txns that are malformed
+			}
+			txns = append(txns, req[i])
 		}
 
-		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling prepare request")
+		logger.Debug().Str("transactions", fmt.Sprintf("%+v", txns)).Msg("handling prepare request")
 
 		// returns an enriched list of transactions, which includes the document metadata
-		resp, err := service.InsertTransactions(ctx, req...)
+		resp, err := service.InsertTransactions(ctx, txns...)
 		if err != nil {
 			return handlers.WrapError(err, "failed to insert transactions", http.StatusInternalServerError)
 		}
