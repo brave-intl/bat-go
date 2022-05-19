@@ -133,8 +133,8 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 	r.Use(chiware.Timeout(15 * time.Second))
 	r.Use(s.ConfigurationMiddleware)
 	logger.Info().Msg("configuration middleware setup")
-	time.Sleep(1 * time.Second)
 	// routes
+	r.Method("GET", "/", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	r.Method("GET", "/health-check", http.HandlerFunc(nitro.EnclaveHealthCheck))
 	// setup payments routes
 	// prepare inserts transactions into qldb, returning a document which needs to be submitted by an authorizer
