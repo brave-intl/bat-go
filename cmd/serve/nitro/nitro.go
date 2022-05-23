@@ -68,7 +68,6 @@ var NitroServeCmd = &cobra.Command{
 
 // RunNitroServerInEnclave - start up the nitro server living inside the enclave
 func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
-	fmt.Println("running inside encalve")
 	ctx := cmd.Context()
 
 	logaddr := viper.GetString("log-address")
@@ -85,11 +84,8 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 	logger.Info().Msg("payments service setup")
 	// setup router
 	ctx, r := setupRouter(ctx, s)
-
-	time.Sleep(1 * time.Second)
 	logger.Info().Msg("payments routes setup")
 
-	time.Sleep(5 * time.Second)
 	// setup listener
 	addr := viper.GetString("address")
 	port, err := strconv.Atoi(strings.Split(addr, ":")[1])
@@ -104,7 +100,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 		logger.Panic().Err(err).Msg("listening on vsock port failed")
 	}
 	logger.Info().Msg("vsock listener setup")
-	time.Sleep(5 * time.Second)
 	// setup server
 	srv := http.Server{
 		Handler:      chi.ServerBaseContext(ctx, r),
@@ -112,7 +107,6 @@ func RunNitroServerInEnclave(cmd *cobra.Command, args []string) error {
 		WriteTimeout: 20 * time.Second,
 	}
 	logger.Info().Msg("starting server")
-	time.Sleep(5 * time.Second)
 	// run the server in another routine
 	logger.Fatal().Err(srv.Serve(l)).Msg("server shutdown")
 	return nil
@@ -156,7 +150,6 @@ func setupRouter(ctx context.Context, s *payments.Service) (context.Context, *ch
 
 // RunNitroServerOutsideEnclave - start up all the services which are outside
 func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
-	fmt.Println("running outside encalve")
 	ctx := cmd.Context()
 	logger, err := appctx.GetLogger(ctx)
 	if err != nil {
@@ -164,21 +157,12 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 	}
 
 	egressaddr := strings.Split(viper.GetString("egress-address"), ":")
-	fmt.Println(egressaddr)
 	if len(egressaddr) != 2 {
 		return fmt.Errorf("address must include port")
 	}
 	egressport, err := strconv.Atoi(egressaddr[1])
 	if err != nil || egressport < 0 {
 		return fmt.Errorf("port must be a valid uint32: %v", err)
-	}
-
-	server, err := nitro.NewReverseProxyServer(
-		viper.GetString("address"),
-		viper.GetString("upstream-url"),
-	)
-	if err != nil {
-		return err
 	}
 
 	logaddr := strings.Split(viper.GetString("log-address"), ":")
@@ -200,13 +184,31 @@ func RunNitroServerOutsideEnclave(cmd *cobra.Command, args []string) error {
 		Str("environment", viper.GetString("environment")).
 		Msg("server starting")
 
-	go logger.Error().Err(logserve.Serve(nil)).Msg("failed to start log server")
+	done := make(chan struct{})
 
-	go logger.Error().Err(nitro.ServeOpenProxy(
-		ctx,
-		uint32(egressport),
-		10*time.Second,
-	)).Msg("failed to start proxy server")
+	// open proxy server
+	logger.Info().
+		Msg("starting serve open proxy")
 
-	return server.ListenAndServe()
+	go func() {
+		if err := nitro.ServeOpenProxy(
+			ctx,
+			uint32(egressport),
+			10*time.Second,
+		); err != nil {
+			logger.Fatal().Err(err).Msg("failed to start open proxy")
+		}
+	}()
+
+	go func() {
+		if err := logserve.Serve(nil); err != nil {
+			logger.Fatal().Err(err).Msg("failed to start log server")
+		}
+	}()
+
+	logger.Info().Msg("startup complete for utils")
+
+	// wait forever
+	<-done
+	return nil
 }

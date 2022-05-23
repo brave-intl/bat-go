@@ -160,6 +160,10 @@ const (
 	EgressProxyAddrCTXKey CTXKey = "egress_proxy_address"
 	// AWSRegionCTXKey - reverse proxy address for egress traffic
 	AWSRegionCTXKey CTXKey = "aws_region"
+	// PaymentsQLDBRoleArnCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBRoleArnCTXKey CTXKey = "qldb_role_arn"
+	// PaymentsQLDBLedgerNameCTXKey - reverse proxy address for egress traffic
+	PaymentsQLDBLedgerNameCTXKey CTXKey = "qldb_ledger_name"
 )
 
 var (

@@ -27,7 +27,7 @@ func NewVsockWriter(addr string) *VsockWriter {
 // Connect - interface implementation for connect method for VsockWriter
 func (w *VsockWriter) Connect() error {
 	if w.socket == nil {
-		s, err := Dial("tcp", w.addr)
+		s, err := DialContext(context.Background(), "tcp", w.addr)
 		if err != nil {
 			return err
 		}

@@ -73,7 +73,7 @@ func (ac *awsClient) RetrieveSecrets(ctx context.Context, uri string) ([]byte, e
 		Str("region", region).
 		Msg("secrets location details")
 
-	cfg, err := appaws.NewAWSConfig(egressProxyAddr, region)
+	cfg, err := appaws.NewAWSConfig(ctx, egressProxyAddr, region)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get aws configuration: %w", err)
 	}

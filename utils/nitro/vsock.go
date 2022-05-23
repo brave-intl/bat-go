@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/mdlayher/vsock"
 )
 
@@ -53,34 +54,60 @@ func parseVsockAddr(addr string) (uint32, uint32, error) {
 	return uint32(cid), uint32(port), nil
 }
 
-// Dial is a net.Dial wrapper which additionally allows connecting to vsock networks
-func Dial(network, addr string) (net.Conn, error) {
+// DialContext is a net.Dial wrapper which additionally allows connecting to vsock networks
+func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	logger := logging.Logger(ctx, "nitro.DialContext")
+	logger.Info().
+		Str("network", fmt.Sprintf("%v", network)).
+		Str("addr", fmt.Sprintf("%v", addr)).
+		Msg("DialContext")
+
 	cid, port, err := parseVsockAddr(addr)
 	if err != nil {
 		if _, ok := err.(NotVsockAddrError); ok {
 			// fallback to net.Dial
+			logger.Error().Err(err).
+				Str("cid", fmt.Sprintf("%v", cid)).
+				Str("port", fmt.Sprintf("%v", port)).
+				Msg("vsock dialing now")
 			return net.Dial(network, addr)
 		}
 		return nil, err
 	}
 
+	logger.Info().
+		Str("cid", fmt.Sprintf("%v", cid)).
+		Str("port", fmt.Sprintf("%v", port)).
+		Msg("vsock dialing now")
 	return vsock.Dial(cid, port)
 }
 
 type proxyClientConfig struct {
+	Ctx  context.Context
 	Addr string
 }
 
 func (p *proxyClientConfig) Proxy(*http.Request) (*url.URL, error) {
-	return url.Parse(p.Addr)
+	logger := logging.Logger(p.Ctx, "nitro.Proxy")
+	logger.Info().
+		Str("addr", p.Addr).
+		Msg("performing proxy")
+	v, err := url.Parse(p.Addr)
+	if err != nil {
+		logger.Error().Err(err).
+			Str("addr", p.Addr).
+			Msg("error parsing address")
+	}
+
+	return v, err
 }
 
 // NewProxyRoundTripper returns an http.RoundTripper which routes outgoing requests through the proxy addr
-func NewProxyRoundTripper(addr string) http.RoundTripper {
-	config := proxyClientConfig{addr}
+func NewProxyRoundTripper(ctx context.Context, addr string) http.RoundTripper {
+	config := proxyClientConfig{ctx, addr}
 	return &http.Transport{
-		Proxy: config.Proxy,
-		Dial:  Dial,
+		Proxy:       config.Proxy,
+		DialContext: DialContext,
 	}
 }
 
@@ -95,7 +122,7 @@ func NewReverseProxyServer(
 	}
 	proxy := httputil.NewSingleHostReverseProxy(proxyURL)
 	proxy.Transport = &http.Transport{
-		Dial: Dial,
+		DialContext: DialContext,
 	}
 	proxy.Director = func(req *http.Request) {
 		req.Header.Add("X-Forwarded-Host", req.Host)
@@ -120,6 +147,10 @@ func ServeOpenProxy(
 	port uint32,
 	connectTimeout time.Duration,
 ) error {
+
+	logger := logging.Logger(ctx, "nitro")
+	logger.Info().Msg("!!!! starting open proxy")
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: openProxy{ConnectTimeout: connectTimeout},
@@ -127,9 +158,12 @@ func ServeOpenProxy(
 
 	l, err := vsock.Listen(port)
 	if err != nil {
+		logger.Error().Err(err).Msg(fmt.Sprintf("listening on vsock port: %v", port))
 		return fmt.Errorf("listening on vsock port failed: %v", err)
 	}
 	defer closers.Panic(ctx, l)
+
+	logger.Info().Msg(fmt.Sprintf("listening on vsock port: %v", port))
 
 	return server.Serve(l)
 }
@@ -197,6 +231,7 @@ func bidirectionalCopy(ctx context.Context, a net.Conn, b net.Conn) {
 	// left undelivered.
 	wg.Add(1)
 	go syncCopy(&wg, b, a)
+	wg.Add(1)
 	go syncCopy(&wg, a, b)
 	wg.Wait()
 }
