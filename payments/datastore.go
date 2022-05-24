@@ -16,18 +16,17 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 )
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey *uuid.UUID      `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
-	Amount         decimal.Decimal `json:"amount,omitempty" ion:"amount" valid:"required"`
-	To             *uuid.UUID      `json:"to,omitempty" ion:"to" valid:"required"`
-	From           *uuid.UUID      `json:"from,omitempty" ion:"from" valid:"required"`
-	Custodian      string          `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State          string          `json:"state,omitempty" ion:"state"`
-	DocumentID     string          `json:"documentId,omitempty" ion:"id"`
+	IdempotencyKey *uuid.UUID  `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	Amount         ion.Decimal `json:"amount,omitempty" ion:"amount" valid:"required"`
+	To             *uuid.UUID  `json:"to,omitempty" ion:"to" valid:"required"`
+	From           *uuid.UUID  `json:"from,omitempty" ion:"from" valid:"required"`
+	Custodian      string      `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	State          string      `json:"state,omitempty" ion:"state"`
+	DocumentID     string      `json:"documentId,omitempty" ion:"id"`
 }
 
 // ErrNotConfiguredYet - service not fully configured
