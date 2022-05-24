@@ -2,17 +2,20 @@ package payments
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/logging"
 	appaws "github.com/brave-intl/bat-go/utils/nitro/aws"
+	"github.com/shopspring/decimal"
 
 	"github.com/amzn/ion-go/ion"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/qldbsession"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/smithy-go"
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/uuid"
@@ -20,13 +23,51 @@ import (
 
 // Transaction - the main type explaining a transaction, type used for qldb via ion
 type Transaction struct {
-	IdempotencyKey *uuid.UUID  `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
-	Amount         ion.Decimal `json:"amount,omitempty" ion:"amount" valid:"required"`
-	To             *uuid.UUID  `json:"to,omitempty" ion:"to" valid:"required"`
-	From           *uuid.UUID  `json:"from,omitempty" ion:"from" valid:"required"`
-	Custodian      string      `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
-	State          string      `json:"state,omitempty" ion:"state"`
-	DocumentID     string      `json:"documentId,omitempty" ion:"id"`
+	IdempotencyKey *uuid.UUID   `json:"idempotencyKey,omitempty" ion:"idempotencyKey" valid:"required"`
+	Amount         *ion.Decimal `json:"-" ion:"amount" valid:"required"`
+	To             *uuid.UUID   `json:"to,omitempty" ion:"to" valid:"required"`
+	From           *uuid.UUID   `json:"from,omitempty" ion:"from" valid:"required"`
+	Custodian      string       `json:"custodian,omitempty" ion:"custodian" valid:"in(uphold|gemini|bitflyer)"`
+	State          string       `json:"state,omitempty" ion:"state"`
+	DocumentID     string       `json:"documentId,omitempty" ion:"id"`
+}
+
+// MarshalJSON - custom marshaling of transaction type
+func (t *Transaction) MarshalJSON() ([]byte, error) {
+	type Alias Transaction
+	return json.Marshal(&struct {
+		Amount *decimal.Decimal `json:"amount"`
+		*Alias
+	}{
+		Amount: fromIonDecimal(t.Amount),
+		Alias:  (*Alias)(t),
+	})
+}
+
+// UnmarshalJSON - custom unmarshal of transaction type
+func (t *Transaction) UnmarshalJSON(data []byte) error {
+	type Alias Transaction
+	aux := &struct {
+		Amount *decimal.Decimal `json:"amount"`
+		*Alias
+	}{
+		Alias: (*Alias)(t),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	t.Amount = toIonDecimal(aux.Amount)
+	return nil
+}
+
+func toIonDecimal(v *decimal.Decimal) *ion.Decimal {
+	return ion.MustParseDecimal(v.String())
+}
+
+func fromIonDecimal(v *ion.Decimal) *decimal.Decimal {
+	value, exp := v.CoEx()
+	resp := decimal.NewFromBigInt(value, exp)
+	return &resp
 }
 
 // ErrNotConfiguredYet - service not fully configured
@@ -42,6 +83,53 @@ func (s *Service) configureDatastore(ctx context.Context) error {
 		return fmt.Errorf("failed to create new qldb datastore: %w", err)
 	}
 	s.datastore = driver
+	return s.setupLedger(ctx)
+}
+
+const tableAlreadyCreatedCode = "412"
+
+func (s *Service) setupLedger(ctx context.Context) error {
+	logger := logging.Logger(ctx, "payments.setupLedger")
+	// create the tables needed in the ledger
+	_, err := s.datastore.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
+		var (
+			ae smithy.APIError
+			ok bool
+		)
+		_, err := txn.Execute("CREATE TABLE transactions")
+		if err != nil {
+			logger.Warn().Err(err).Msg("error creating transactions table")
+			if errors.As(err, &ae) {
+				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating transactions table")
+				if ae.ErrorCode() == tableAlreadyCreatedCode {
+					// table has already been created
+					ok = true
+				}
+			}
+			if !ok {
+				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+			}
+		}
+		ok = false
+		_, err = txn.Execute("CREATE TABLE authorizations")
+		if err != nil {
+			logger.Warn().Err(err).Msg("error creating authorizationss table")
+			if errors.As(err, &ae) {
+				logger.Warn().Err(err).Str("code", ae.ErrorCode()).Msg("api error creating authorizations table")
+				if ae.ErrorCode() == tableAlreadyCreatedCode {
+					// table has already been created
+					ok = true
+				}
+			}
+			if !ok {
+				return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
+			}
+		}
+		return nil, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create tables: %w", err)
+	}
 	return nil
 }
 
@@ -148,22 +236,6 @@ func newQLDBDatastore(ctx context.Context) (*qldbdriver.QLDBDriver, error) {
 
 	// Overrides the retry policy set by the driver instance
 	driver.SetRetryPolicy(retryPolicy2)
-
-	// create the tables needed in the ledger
-	_, err = driver.Execute(context.Background(), func(txn qldbdriver.Transaction) (interface{}, error) {
-		_, err := txn.Execute("CREATE TABLE transactions")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
-		}
-		_, err = txn.Execute("CREATE TABLE authorizations")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create transactions table due to: %w", err)
-		}
-		return nil, nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tables: %w", err)
-	}
 
 	return driver, nil
 }

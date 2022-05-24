@@ -7,6 +7,8 @@ import (
 	"github.com/awslabs/amazon-qldb-driver-go/v2/qldbdriver"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/shopspring/decimal"
 
 	"crypto/rand"
 	"encoding/base64"
@@ -115,9 +117,14 @@ func (s *Service) ProcessTransactions(ctx context.Context) error {
 			return nil
 		case transaction := <-s.processTransaction:
 			logger.Debug().Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("processing a transaction")
+			amount, err := decimal.NewFromString(transaction.Amount.String())
+			if err != nil {
+				logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("could not convert amount to decimal")
+				return handlers.WrapValidationError(err)
+			}
 			// create a custodian transaction from this transaction:
 			custodianTransaction, err := custodian.NewTransaction(
-				ctx, transaction.IdempotencyKey, transaction.To, transaction.From, altcurrency.BAT, transaction.Amount,
+				ctx, transaction.IdempotencyKey, transaction.To, transaction.From, altcurrency.BAT, amount,
 			)
 
 			if err != nil {

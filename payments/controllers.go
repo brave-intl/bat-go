@@ -126,13 +126,14 @@ func PrepareHandler(service *Service) handlers.AppHandler {
 		logger.Debug().Str("request", fmt.Sprintf("%+v", req)).Msg("structure of request")
 		// validate the list of transactions
 
-		for i, v := range req {
+		for _, v := range req {
 			_, err = govalidator.ValidateStruct(v)
 			if err != nil {
 				logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
 				continue // skip txns that are malformed
 			}
-			txns = append(txns, req[i])
+
+			txns = append(txns, v)
 		}
 
 		logger.Debug().Str("transactions", fmt.Sprintf("%+v", txns)).Msg("handling prepare request")
@@ -156,6 +157,7 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		var (
 			logger = logging.Logger(ctx, "SubmitHandler")
 			req    = []Transaction{}
+			txns   = []Transaction{}
 		)
 
 		// read the transactions in the body
@@ -163,10 +165,15 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-		// validate the list of transactions
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
+
+		for _, v := range req {
+			_, err = govalidator.ValidateStruct(v)
+			if err != nil {
+				logger.Error().Err(err).Str("request", fmt.Sprintf("%+v", req)).Msg("failed to validate structure")
+				continue // skip txns that are malformed
+			}
+
+			txns = append(txns, v)
 		}
 
 		logger.Debug().Str("transactions", fmt.Sprintf("%+v", req)).Msg("handling submit request")
@@ -177,12 +184,12 @@ func SubmitHandler(service *Service) handlers.AppHandler {
 			return handlers.WrapValidationError(err)
 		}
 
-		err = service.AuthorizeTransactions(ctx, keyID, req...)
+		err = service.AuthorizeTransactions(ctx, keyID, txns...)
 		if err != nil {
 			return handlers.WrapError(err, "failed to record authorization", http.StatusInternalServerError)
 		}
 
-		for _, t := range req {
+		for _, t := range txns {
 			// perform the custodian submission (channel to worker) if the number of authorizations is appropriate
 			service.processTransaction <- t
 		}
@@ -204,39 +211,40 @@ func StatusHandler(service *Service) handlers.AppHandler {
 
 		logger.Info().Str("documentID", documentID).Msg("handling status request")
 
-		transaction, err := service.GetTransactionFromDocID(ctx, documentID)
+		txn, err := service.GetTransactionFromDocID(ctx, documentID)
 		if err != nil {
 			return handlers.WrapError(err, "failed to get document", http.StatusInternalServerError)
 		}
-		if transaction == nil {
+		if txn == nil {
 			return handlers.WrapError(err, "no such document", http.StatusNotFound)
 		}
 
 		resp := map[string]interface{}{
-			"transaction": transaction,
+			"transaction": txn,
 		}
 
 		// TODO: get the submission response from qldb add to resp
 
 		// TODO: get the status from the custodian and add to resp
+		amount := fromIonDecimal(txn.Amount)
 		custodianTransaction, err := custodian.NewTransaction(
-			ctx, transaction.IdempotencyKey, transaction.To, transaction.From, altcurrency.BAT, transaction.Amount,
+			ctx, txn.IdempotencyKey, txn.To, txn.From, altcurrency.BAT, *amount,
 		)
 
 		if err != nil {
-			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("could not create custodian transaction")
+			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", txn)).Msg("could not create custodian transaction")
 			return handlers.WrapValidationError(err)
 		}
 
-		if c, ok := service.custodians[transaction.Custodian]; ok {
+		if c, ok := service.custodians[txn.Custodian]; ok {
 			// TODO: store the full response from status call of transaction
 			_, err = c.GetTransactionsStatus(ctx, custodianTransaction)
 			if err != nil {
-				logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("failed to get transaction status")
+				logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", txn)).Msg("failed to get transaction status")
 				return handlers.WrapError(err, "failed to get status", http.StatusInternalServerError)
 			}
 		} else {
-			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", transaction)).Msg("invalid custodian")
+			logger.Error().Err(err).Str("transaction", fmt.Sprintf("%+v", txn)).Msg("invalid custodian")
 			return handlers.WrapValidationError(fmt.Errorf("invalid custodian"))
 		}
 
