@@ -42,6 +42,12 @@ var (
 	errReputationServiceFailure = errors.New("failed to call reputation service")
 	errWalletNotReputable       = errors.New("wallet is not reputable")
 	errWalletDrainLimitExceeded = errors.New("wallet drain limit exceeded")
+	withdrawalLimitHit          = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name:        "withdrawalLimitHit",
+			Help:        "A counter for when a drain hits the withdrawal limit",
+			ConstLabels: prometheus.Labels{"service": "wallet"},
+		})
 )
 
 // Drain ad suggestions into verified wallet
@@ -561,6 +567,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 					switch cohort {
 					case reputation.CohortWithdrawalLimits:
 						// limited withdrawal
+						withdrawalLimitHit.Inc()
 						return nil, errWalletDrainLimitExceeded
 					case reputation.CohortNil:
 						// service failure
