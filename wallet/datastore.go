@@ -43,6 +43,12 @@ var (
 			Help:        "A counter for too many linked cards",
 			ConstLabels: prometheus.Labels{"service": "wallet"},
 		})
+	tenLinkagesReached = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name:        "custodian_account_linked_ten_times",
+			Help:        "A counter for seeing how many custodian accounts have been linked 10 times",
+			ConstLabels: prometheus.Labels{"service": "wallet"},
+		})
 )
 
 func init() {
@@ -928,6 +934,11 @@ func (pg *Postgres) ConnectCustodialWallet(ctx context.Context, cl *CustodianLin
 			sublogger.Error().Err(err).
 				Msg("failed to insert wallet_custodian due to db err checking linking limits")
 			return fmt.Errorf("failed to insert wallet custodian record due to db err checking linking limits: %w", err)
+		}
+
+		// this will be the 10th linking
+		if used == 9 {
+			defer tenLinkagesReached.Inc()
 		}
 
 		// check for linking limit
