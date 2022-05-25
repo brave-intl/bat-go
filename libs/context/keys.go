@@ -158,6 +158,8 @@ const (
 	AWSRegionCTXKey CTXKey = "aws_region"
 	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
 	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
+	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
+	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
 )
 
 var (

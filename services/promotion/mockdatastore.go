@@ -56,6 +56,21 @@ func (mr *MockDatastoreMockRecorder) ActivatePromotion(promotion interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActivatePromotion", reflect.TypeOf((*MockDatastore)(nil).ActivatePromotion), promotion)
 }
 
+// BeginTx mocks base method.
+func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeginTx")
+	ret0, _ := ret[0].(*sqlx.Tx)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BeginTx indicates an expected call of BeginTx.
+func (mr *MockDatastoreMockRecorder) BeginTx() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginTx", reflect.TypeOf((*MockDatastore)(nil).BeginTx))
+}
+
 // ClaimForWallet mocks base method.
 func (m *MockDatastore) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *wallet.Info, blindedCreds jsonutils.JSONStringArray) (*Claim, error) {
 	m.ctrl.T.Helper()
@@ -745,6 +760,21 @@ func NewMockReadOnlyDatastore(ctrl *gomock.Controller) *MockReadOnlyDatastore {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockReadOnlyDatastore) EXPECT() *MockReadOnlyDatastoreMockRecorder {
 	return m.recorder
+}
+
+// BeginTx mocks base method.
+func (m *MockReadOnlyDatastore) BeginTx() (*sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeginTx")
+	ret0, _ := ret[0].(*sqlx.Tx)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BeginTx indicates an expected call of BeginTx.
+func (mr *MockReadOnlyDatastoreMockRecorder) BeginTx() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginTx", reflect.TypeOf((*MockReadOnlyDatastore)(nil).BeginTx))
 }
 
 // GetAvailablePromotions mocks base method.

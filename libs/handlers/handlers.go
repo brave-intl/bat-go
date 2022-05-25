@@ -17,10 +17,11 @@ import (
 
 // AppError is error type for json HTTP responses
 type AppError struct {
-	Cause   error       `json:"-"`
-	Message string      `json:"message"`
-	Code    int         `json:"code"`
-	Data    interface{} `json:"data,omitempty"`
+	Cause     error       `json:"-"`
+	Message   string      `json:"message"`             // description of failure
+	ErrorCode string      `json:"errorCode,omitempty"` // short error code string
+	Code      int         `json:"code"`                // status code for some reason
+	Data      interface{} `json:"data,omitempty"`      // application specific data
 }
 
 // Error makes app error an error
@@ -97,6 +98,18 @@ func RenderContent(ctx context.Context, v interface{}, w http.ResponseWriter, st
 // WrapValidationError from govalidator
 func WrapValidationError(err error) *AppError {
 	return ValidationError("request body", govalidator.ErrorsByField(err))
+}
+
+// CodedValidationError creates an error to communicate a bad request was formed
+func CodedValidationError(message string, errorCode string, validationErrors interface{}) *AppError {
+	return &AppError{
+		Message:   "Error validating " + message,
+		ErrorCode: errorCode,
+		Code:      http.StatusBadRequest,
+		Data: map[string]interface{}{
+			"validationErrors": validationErrors,
+		},
+	}
 }
 
 // ValidationError creates an error to communicate a bad request was formed

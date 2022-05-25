@@ -42,6 +42,20 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 	}
 }
 
+// BeginTx implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // GetByProviderLinkingID implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetByProviderLinkingID(ctx context.Context, providerLinkingID uuid.UUID) (iap1 *[]walletutils.Info, err error) {
 	_since := time.Now()
