@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	ratiosrv "github.com/brave-intl/bat-go/ratios"
@@ -101,6 +102,10 @@ func (fo *FetchOptions) GenerateQueryString() (url.Values, error) {
 
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
+	// normalize base and currency to lowercase
+	base = strings.ToLower(base)
+	currency = strings.ToLower(currency)
+
 	var cacheKey = fmt.Sprintf("%s_%s", base, currency)
 	// check cache for this rate
 	if rate, found := c.cache.Get(cacheKey); found {

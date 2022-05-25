@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -47,10 +48,16 @@ func InitService(ctx context.Context) (*Service, error) {
 
 // GetParameters - respond to caller with the rewards parameters
 func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*ParametersV1, error) {
+	if currency == nil {
+		currency = new(BaseCurrency)
+		*currency = "usd"
+	}
+
+	var currencyStr = strings.ToLower(currency.String())
 	// get logger from context
 	logger := logging.Logger(ctx, "rewards.GetParameters")
 
-	rateData, err := s.ratios.FetchRate(ctx, "BAT", currency.String())
+	rateData, err := s.ratios.FetchRate(ctx, "bat", currencyStr)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to fetch rate from ratios")
 		return nil, fmt.Errorf("failed to fetch rate from ratios: %w", err)
@@ -60,7 +67,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		return nil, errors.New("empty response from ratios")
 	}
 
-	var choices = getChoices(ctx, rateData.Payload[currency.String()])
+	var choices = getChoices(ctx, rateData.Payload[currencyStr])
 	var defaultChoice float64
 	if len(choices) > 1 {
 		defaultChoice = choices[len(choices)/2]
@@ -73,7 +80,7 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		defaultChoice = dc
 	}
 
-	var rate, _ = rateData.Payload[currency.String()].Float64()
+	var rate, _ = rateData.Payload[currencyStr].Float64()
 
 	return &ParametersV1{
 		BATRate: rate,
