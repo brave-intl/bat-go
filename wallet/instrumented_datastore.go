@@ -42,6 +42,20 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// BeginTx implements Datastore
+func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // ConnectCustodialWallet implements Datastore
 func (_d DatastoreWithPrometheus) ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) (err error) {
 	_since := time.Now()

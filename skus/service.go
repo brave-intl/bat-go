@@ -20,6 +20,7 @@ import (
 	"errors"
 
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
@@ -1149,4 +1150,33 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+}
+
+// validateReciept - perform reciept validation
+func (s *Service) validateReciept(ctx context.Context, orderID *uuid.UUID, vendor, reciept string) (string, error) {
+	// based on the vendor call the vendor specific apis to check the status of the reciept,
+	// and get back the external id
+	return "", errorutils.ErrNotImplemented
+}
+
+// UpdateOrderStatusPaidWithMetadata - update the order status with metadata
+func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
+	// create a tx for use in all datastore calls
+	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	defer rollback() // doesnt hurt to rollback incase we panic
+
+	if err != nil {
+		return fmt.Errorf("failed to get db transaction: %w", err)
+	}
+
+	for k, v := range metadata {
+		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
+			return fmt.Errorf("failed to append order metadata: %w", err)
+		}
+	}
+	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
+		return fmt.Errorf("failed to set order paid: %w", err)
+	}
+
+	return commit()
 }
