@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
@@ -121,4 +123,41 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 		return nil, fmt.Errorf("failed to json decode credential payload: %w", err)
 	}
 	return vcp, nil
+}
+
+const (
+	appleVendor  = "apple"
+	googleVendor = "google"
+)
+
+var errInvalidVendor = errors.New("invalid vendor")
+
+// Vendor vendor url input param
+type Vendor string
+
+// String - stringer implementation
+func (v *Vendor) String() string {
+	return string(*v)
+}
+
+// Validate - take raw []byte input and populate id with the ID
+func (v *Vendor) Validate(ctx context.Context) error {
+	if *v != appleVendor && *v != googleVendor {
+		return fmt.Errorf("%s is not a valid vendor: %w", v, errInvalidVendor)
+	}
+	return nil
+}
+
+// Decode - take raw []byte input and populate id with the ID
+func (v *Vendor) Decode(ctx context.Context, input []byte) error {
+	if len(input) == 0 {
+		return inputs.ErrIDDecodeEmpty
+	}
+	*v = Vendor(string(input))
+	return nil
+}
+
+// SubmitRecieptRequestV1 - reciept submission request
+type SubmitRecieptRequestV1 struct {
+	Reciept string `json:"reciept" valid:"required"`
 }

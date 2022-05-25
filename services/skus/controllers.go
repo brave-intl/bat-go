@@ -11,6 +11,14 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/middleware"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/responses"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
@@ -67,6 +75,9 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 
 	// api routes for order receipt validation
 	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
+
+	// api routes for order reciept validation
+	r.Method("POST", "/{orderID}/{vendor}/submit-reciept", middleware.InstrumentHandler("SubmitReciept", SubmitReciept(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
@@ -1060,6 +1071,64 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
+	})
+}
+
+// SubmitReciept submit a vendor verifiable reciept that proves order is paid
+func SubmitReciept(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              SubmitRecieptRequestV1     // the body of the request
+			orderID          = new(inputs.ID)           // the order id
+			vendor           = new(Vendor)              // our vendor (apple | google)
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// validate the order id
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationErrMap["orderID"] = err.Error()
+		}
+		// validate the vendor
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "vendor")); err != nil {
+			validationErrMap["vendor"] = err.Error()
+		}
+		// read the payload
+		if err := requestutils.ReadJSON(r.Context(), r.Body, &req); err != nil {
+			validationErrMap["request-body"] = err.Error()
+		}
+		// validate the payload
+		if _, err := govalidator.ValidateStruct(req); err != nil {
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// validate the reciept
+		externalID, err := service.validateReciept(ctx, orderID.UUID(), vendor.String(), req.Reciept)
+		if err != nil {
+			if errors.Is(err, errNotFound) {
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+			}
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		// set order paid and include the vendor and external id to metadata
+		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
+			"vendor":     vendor.String(),
+			"externalID": externalID,
+		}); err != nil {
+			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), SubmitRecieptResponseV1{
+			ExternalID: externalID,
+			Vendor:     vendor.String(),
+		}, w, http.StatusOK)
 	})
 }
 

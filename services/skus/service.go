@@ -34,7 +34,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -1397,4 +1397,33 @@ func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 
 func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {
 	return true, s.Datastore.StoreSignedOrderCredentials(ctx, s)
+}
+
+// validateReciept - perform reciept validation
+func (s *Service) validateReciept(ctx context.Context, orderID *uuid.UUID, vendor, reciept string) (string, error) {
+	// based on the vendor call the vendor specific apis to check the status of the reciept,
+	// and get back the external id
+	return "", errorutils.ErrNotImplemented
+}
+
+// UpdateOrderStatusPaidWithMetadata - update the order status with metadata
+func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
+	// create a tx for use in all datastore calls
+	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	defer rollback() // doesnt hurt to rollback incase we panic
+
+	if err != nil {
+		return fmt.Errorf("failed to get db transaction: %w", err)
+	}
+
+	for k, v := range metadata {
+		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
+			return fmt.Errorf("failed to append order metadata: %w", err)
+		}
+	}
+	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
+		return fmt.Errorf("failed to set order paid: %w", err)
+	}
+
+	return commit()
 }
