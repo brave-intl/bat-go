@@ -21,7 +21,7 @@ require (
 	github.com/hashicorp/vault/sdk v0.4.2-0.20220429220057-bdb59a36e632
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
-	github.com/lib/pq v1.10.5
+	github.com/lib/pq v1.10.6
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/mssola/user_agent v0.5.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible
