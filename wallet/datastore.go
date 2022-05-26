@@ -54,6 +54,7 @@ var (
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
 	prometheus.MustRegister(metricTxLockGauge)
+	prometheus.MustRegister(tenLinkagesReached)
 }
 
 // Datastore holds the interface for the wallet datastore

@@ -49,6 +49,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(countClaimDrainStatus)
+	prometheus.MustRegister(withdrawalLimitHit)
 }
 
 // ClobberedCreds holds data of claims that have been clobbered and when they were first reported
