@@ -126,8 +126,8 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 }
 
 const (
-	appleVendor  = "apple"
-	googleVendor = "google"
+	appleVendor  = "ios"
+	googleVendor = "android"
 )
 
 var errInvalidVendor = errors.New("invalid vendor")
@@ -159,5 +159,32 @@ func (v *Vendor) Decode(ctx context.Context, input []byte) error {
 
 // SubmitRecieptRequestV1 - reciept submission request
 type SubmitRecieptRequestV1 struct {
-	Reciept string `json:"reciept" valid:"required"`
+	Type Vendor `json:"type" valid:"in(ios,android)"`
+	Blob string `json:"raw_receipt" valid:"required"`
+}
+
+// Decode - take raw input and populate the struct
+func (srrv1 *SubmitRecieptRequestV1) Decode(ctx context.Context, input []byte) error {
+	// base64 decode the bytes
+	buf := []byte{}
+	if _, err := base64.StdEncoding.Decode(buf, input); err != nil {
+		return fmt.Errorf("failed to decode input base64: %w", err)
+	}
+	// read the json values
+	if err := json.Unmarshal(buf, srrv1); err != nil {
+		return fmt.Errorf("failed to decode input json: %w", err)
+	}
+	return nil
+}
+
+// Validate - validate the struct
+func (srrv1 *SubmitRecieptRequestV1) Validate(ctx context.Context) error {
+	// validate struct
+	if _, err := govalidator.ValidateStruct(srrv1); err != nil {
+		return fmt.Errorf("failed to validate structure: %w", err)
+	}
+	if err := srrv1.Type.Validate(ctx); err != nil {
+		return fmt.Errorf("failed to validate vendor: %w", err)
+	}
+	return nil
 }
