@@ -65,8 +65,8 @@ func Router(service *Service) chi.Router {
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
-	// api routes for order reciept validation
-	r.Method("POST", "/{orderID}/submit-reciept", middleware.InstrumentHandler("SubmitReciept", SubmitReciept(service)))
+	// api routes for order receipt validation
+	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", SubmitReceipt(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
@@ -1015,13 +1015,13 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	})
 }
 
-// SubmitReciept submit a vendor verifiable reciept that proves order is paid
-func SubmitReciept(service *Service) handlers.AppHandler {
+// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
+func SubmitReceipt(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var (
 			ctx              = r.Context()
-			req              SubmitRecieptRequestV1     // the body of the request
+			req              SubmitReceiptRequestV1     // the body of the request
 			orderID          = new(inputs.ID)           // the order id
 			validationErrMap = map[string]interface{}{} // for tracking our validation errors
 		)
@@ -1042,8 +1042,8 @@ func SubmitReciept(service *Service) handlers.AppHandler {
 			validationErrMap["request-body"] = err.Error()
 		}
 
-		// validate the reciept
-		externalID, err := service.validateReciept(ctx, orderID.UUID(), req.Type.String(), req.Blob)
+		// validate the receipt
+		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req.Type.String(), req.Blob)
 		if err != nil {
 			if errors.Is(err, errNotFound) {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)
@@ -1064,7 +1064,7 @@ func SubmitReciept(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), SubmitRecieptResponseV1{
+		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
 			ExternalID: externalID,
 			Vendor:     req.Type.String(),
 		}, w, http.StatusOK)
