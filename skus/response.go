@@ -1,7 +1,7 @@
 package skus
 
-// SubmitRecieptResponseV1 - response from submit reciept
-type SubmitRecieptResponseV1 struct {
+// SubmitReceiptResponseV1 - response from submit receipt
+type SubmitReceiptResponseV1 struct {
 	ExternalID string `json:"externalId"`
 	Vendor     string `json:"vendor"`
 }

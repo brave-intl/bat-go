@@ -157,14 +157,14 @@ func (v *Vendor) Decode(ctx context.Context, input []byte) error {
 	return nil
 }
 
-// SubmitRecieptRequestV1 - reciept submission request
-type SubmitRecieptRequestV1 struct {
+// SubmitReceiptRequestV1 - receipt submission request
+type SubmitReceiptRequestV1 struct {
 	Type Vendor `json:"type" valid:"in(ios,android)"`
 	Blob string `json:"raw_receipt" valid:"required"`
 }
 
 // Decode - take raw input and populate the struct
-func (srrv1 *SubmitRecieptRequestV1) Decode(ctx context.Context, input []byte) error {
+func (srrv1 *SubmitReceiptRequestV1) Decode(ctx context.Context, input []byte) error {
 	// base64 decode the bytes
 	buf := []byte{}
 	if _, err := base64.StdEncoding.Decode(buf, input); err != nil {
@@ -178,7 +178,7 @@ func (srrv1 *SubmitRecieptRequestV1) Decode(ctx context.Context, input []byte) e
 }
 
 // Validate - validate the struct
-func (srrv1 *SubmitRecieptRequestV1) Validate(ctx context.Context) error {
+func (srrv1 *SubmitReceiptRequestV1) Validate(ctx context.Context) error {
 	// validate struct
 	if _, err := govalidator.ValidateStruct(srrv1); err != nil {
 		return fmt.Errorf("failed to validate structure: %w", err)
