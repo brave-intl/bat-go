@@ -1043,7 +1043,7 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 		}
 
 		// validate the receipt
-		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req.Type.String(), req.Blob)
+		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req.Type, req.Blob)
 		if err != nil {
 			if errors.Is(err, errNotFound) {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)

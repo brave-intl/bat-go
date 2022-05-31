@@ -7,8 +7,8 @@ require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.21.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496
+	github.com/awa/go-iap v1.3.18
 	github.com/btcsuite/btcutil v0.0.0-20190316010144-3ac1210f4b38
-	github.com/docker/docker v20.10.13+incompatible
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1
@@ -57,7 +57,6 @@ require (
 	cloud.google.com/go/kms v1.1.0 // indirect
 	cloud.google.com/go/monitoring v1.2.0 // indirect
 	github.com/Azure/azure-sdk-for-go v61.4.0+incompatible // indirect
-	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest v0.11.24 // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.18 // indirect
@@ -72,7 +71,6 @@ require (
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
-	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190620160927-9418d7b0cd0f // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
@@ -84,17 +82,10 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible // indirect
 	github.com/circonus-labs/circonusllhist v0.1.3 // indirect
-	github.com/containerd/containerd v1.6.1 // indirect
-	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
-	github.com/docker/go-connections v0.4.0 // indirect
-	github.com/docker/go-metrics v0.0.1 // indirect
-	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -140,14 +131,10 @@ require (
 	github.com/mitchellh/go-testing-interface v1.14.0 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/natefinch/atomic v0.0.0-20150920032501-a62ce929ffcc // indirect
 	github.com/oklog/run v1.1.0 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/oracle/oci-go-sdk v13.1.0+incompatible // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect

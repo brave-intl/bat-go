@@ -127,6 +127,9 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
+	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
 )
 
 var (

@@ -2,6 +2,7 @@ package serve
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -158,6 +159,12 @@ func init() {
 		"the cooldown period for custodial wallet unlinking").
 		Bind("unlinking-cooldown").
 		Env("UNLINKING_COOLDOWN")
+
+	// playstore json key
+	flagBuilder.Flag().String("playstore-json-key", "",
+		"the playstore json key").
+		Bind("playstore-json-key").
+		Env("PLAYSTORE_JSON_KEY")
 }
 
 func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, *chi.Mux, *promotion.Service, []srv.Job) {
@@ -415,6 +422,15 @@ func GrantServer(
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
+
+	// playstore json key
+	// json key is base64
+	jsonKey, err := base64.StdEncoding.DecodeString(viper.GetString("playstore-json-key"))
+	if err != nil {
+		logger.Error().Err(err).
+			Msg("failed to decode the playstore json key")
+	}
+	ctx = context.WithValue(ctx, appctx.PlaystoreJSONKeyCTXKey, jsonKey)
 
 	ctx, r, _, jobs := setupRouter(ctx, logger)
 

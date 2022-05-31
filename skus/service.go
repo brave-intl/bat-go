@@ -114,6 +114,8 @@ func (s *Service) InitKafka(ctx context.Context) error {
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
+	// setup the in app purchase clients
+	initClients(ctx)
 
 	// setup stripe if exists in context and enabled
 	var scClient = &client.API{}
@@ -1153,9 +1155,12 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 }
 
 // validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, vendor, receipt string) (string, error) {
+func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, vendor Vendor, receipt string) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
 	// and get back the external id
+	if fn, ok := receiptValidationFns[vendor]; ok {
+		return fn(ctx, receipt)
+	}
 	return "", errorutils.ErrNotImplemented
 }
 
