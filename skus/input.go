@@ -126,8 +126,8 @@ func credentialOpaqueFromString(s string) (*VerifyCredentialOpaque, error) {
 }
 
 const (
-	appleVendor  = "ios"
-	googleVendor = "android"
+	appleVendor  Vendor = "ios"
+	googleVendor        = "android"
 )
 
 var errInvalidVendor = errors.New("invalid vendor")

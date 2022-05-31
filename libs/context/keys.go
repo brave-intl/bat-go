@@ -174,6 +174,9 @@ const (
 
 	// AppleReceiptSharedKeyCTXKey - the context key for appstore key
 	AppleReceiptSharedKeyCTXKey CTXKey = "apple_receipt_shared_key"
+
+	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
+	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
 )
 
 var (

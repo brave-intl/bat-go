@@ -1403,9 +1403,12 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 func (s *Service) validateReciept(ctx context.Context, orderID *uuid.UUID, vendor, reciept string) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the reciept,
 // validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, vendor, receipt string) (string, error) {
+func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, vendor Vendor, receipt string) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
 	// and get back the external id
+	if fn, ok := receiptValidationFns[vendor]; ok {
+		return fn(ctx, receipt)
+	}
 	return "", errorutils.ErrNotImplemented
 }
 
