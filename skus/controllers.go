@@ -456,7 +456,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 
 		if transaction != nil {
 			// if the transaction is already added, then do an update
-			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+			transaction, err = service.UpdateTransactionFromRequest(r.Context(), req, *orderID.UUID(), service.getGeminiCustodialTx)
 			if err != nil {
 				return handlers.WrapError(err, "Error updating the transaction", http.StatusBadRequest)
 			}
@@ -464,7 +464,7 @@ func CreateGeminiTransaction(service *Service) handlers.AppHandler {
 			return handlers.RenderContent(r.Context(), transaction, w, http.StatusOK)
 		}
 
-		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), getGeminiCustodialTx)
+		transaction, err = service.CreateTransactionFromRequest(r.Context(), req, *orderID.UUID(), service.getGeminiCustodialTx)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating the transaction", http.StatusBadRequest)
 		}

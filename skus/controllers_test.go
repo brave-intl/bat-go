@@ -436,12 +436,14 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 				Status:      &status,
 			}, nil)
 
-	// setup context
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientCTXKey, mockGemini))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiAPIKeyCTXKey, "key"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientIDCTXKey, "client_id"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiBrowserClientIDCTXKey, "browser_client_id"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiSettlementAddressCTXKey, settlementAddress))
+	// setup context and client
+	service.geminiClient = mockGemini
+	service.geminiConf = &gemini.Conf{
+		APIKey:            "key",
+		Secret:            "secret",
+		ClientID:          "client_id",
+		SettlementAddress: settlementAddress,
+	}
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)
@@ -490,14 +492,14 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	rctx.URLParams.Add("orderID", order.ID.String())
 	postReq = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	// setup context
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientCTXKey, mockGemini))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiAPIKeyCTXKey, "key"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiClientIDCTXKey, "client_id"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiBrowserClientIDCTXKey, "browser_client_id"))
-	postReq = postReq.WithContext(context.WithValue(postReq.Context(), appctx.GeminiSettlementAddressCTXKey, settlementAddress))
-
-	suite.Require().NoError(err)
+	// setup context and client
+	service.geminiClient = mockGemini
+	service.geminiConf = &gemini.Conf{
+		APIKey:            "key",
+		Secret:            "secret",
+		ClientID:          "client_id",
+		SettlementAddress: settlementAddress,
+	}
 
 	rr = httptest.NewRecorder()
 	handler.ServeHTTP(rr, postReq)

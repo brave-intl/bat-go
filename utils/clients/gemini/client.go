@@ -282,9 +282,10 @@ type HTTPClient struct {
 
 // Conf some common gemini configuration values
 type Conf struct {
-	ClientID string
-	APIKey   string
-	Secret   string
+	ClientID          string
+	APIKey            string
+	Secret            string
+	SettlementAddress string
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment

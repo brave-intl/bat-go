@@ -102,6 +102,37 @@ func init() {
 		Bind("stripe-secret").
 		Env("STRIPE_SECRET")
 
+	// gemini skus credentials
+	flagBuilder.Flag().String("skus-gemini-settlement-address", "",
+		"the settlement address for skus gemini").
+		Bind("skus-gemini-settlement-address").
+		Env("SKUS_GEMINI_SETTLEMENT_ADDRESS")
+
+	flagBuilder.Flag().String("skus-gemini-api-key", "",
+		"the api key for skus gemini").
+		Bind("skus-gemini-api-key").
+		Env("SKUS_GEMINI_API_KEY")
+
+	flagBuilder.Flag().String("skus-gemini-api-secret", "",
+		"the api secret for skus gemini").
+		Bind("skus-gemini-api-secret").
+		Env("SKUS_GEMINI_API_SECRET")
+
+	flagBuilder.Flag().String("skus-gemini-browser-client-id", "",
+		"the browser client id for gemini, which is the oauth client id the browser uses, required to validate transactions for AC flow").
+		Bind("skus-gemini-browser-client-id").
+		Env("SKUS_GEMINI_BROWSER_CLIENT_ID")
+
+	flagBuilder.Flag().String("skus-gemini-client-id", "",
+		"the client id for skus gemini").
+		Bind("skus-gemini-client-id").
+		Env("SKUS_GEMINI_CLIENT_ID")
+
+	flagBuilder.Flag().String("skus-gemini-client-secret", "",
+		"the client secret for skus gemini").
+		Bind("skus-gemini-client-secret").
+		Env("SKUS_GEMINI_CLIENT_SECRET")
+
 	// gemini credentials
 	flagBuilder.Flag().String("gemini-settlement-address", "",
 		"the settlement address for gemini").
@@ -275,7 +306,15 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
-	skusService, err := skus.InitService(ctx, skusPG, walletService)
+	// skus gemini varibles
+	skuCtx := context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("skus-gemini-settlement-address"))
+	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPIKeyCTXKey, viper.GetString("skus-gemini-api-key"))
+	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPISecretCTXKey, viper.GetString("skus-gemini-api-secret"))
+	skuCtx = context.WithValue(skuCtx, appctx.GeminiBrowserClientIDCTXKey, viper.GetString("skus-gemini-browser-client-id"))
+	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientIDCTXKey, viper.GetString("skus-gemini-client-id"))
+	skuCtx = context.WithValue(skuCtx, appctx.GeminiClientSecretCTXKey, viper.GetString("skus-gemini-client-secret"))
+
+	skusService, err := skus.InitService(skuCtx, skusPG, walletService)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Panic().Err(err).Msg("SKUs service initialization failed")
