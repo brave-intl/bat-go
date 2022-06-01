@@ -985,7 +985,7 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	if err != nil {
 		// is this a cbr client error
 		var eb *errorutils.ErrorBundle
-		if errors.As(err, eb) {
+		if errors.As(err, &eb) {
 			// pull out the data and see if this is an http client error
 			if hs, ok := eb.Data().(clients.HTTPState); ok {
 				// this is an http client error from cbr
