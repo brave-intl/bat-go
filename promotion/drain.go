@@ -575,6 +575,7 @@ func (service *Service) RedeemAndTransferFunds(ctx context.Context, credentials 
 					}
 				}
 				// not reputable
+				countDrainFlaggedUnusual.Inc()
 				return nil, errWalletNotReputable
 			}
 		} else {
