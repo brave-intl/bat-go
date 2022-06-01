@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -337,8 +336,8 @@ func createUpholdArtifact(
 
 	// Ensure that there is only one payment for a given Uphold wallet by combining
 	// multiples if they exist.
-	mergeCustodial, ok := ctx.Value("mergeCustodial").(bool)
-	fmt.Printf("%t", mergeCustodial)
+	mergeCustodialRaw := ctx.Value("mergeCustodial")
+	mergeCustodial, ok := mergeCustodialRaw.(bool)
 	if ok && mergeCustodial == true {
 		transactionSet = upholdsettlement.FlattenPaymentsByWalletProviderID(
 			&upholdOnlySettlements,

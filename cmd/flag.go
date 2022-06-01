@@ -61,7 +61,7 @@ func (fb *FlagBuilder) String(key string, defaultValue string, description strin
 		})
 }
 
-// BoolVarP attaches a boolean flag to the command
+// BoolP attaches a boolean flag to the command
 func (fb *FlagBuilder) BoolP(key string, shortKey string, defaultValue bool, description string) *FlagBuilder {
 	return fb.SetKey(key).
 		loopCommands(func(command *cobra.Command) {
