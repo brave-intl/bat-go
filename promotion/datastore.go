@@ -45,11 +45,19 @@ var (
 		},
 		[]string{"custodian", "status"},
 	)
+	// counter for flagged unusual
+	countDrainFlaggedUnusual = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name:        "count_drain_flagged_unusual",
+			Help:        "provides a count of unusual drain flagged results",
+			ConstLabels: prometheus.Labels{"service": "promotions"},
+		})
 )
 
 func init() {
 	prometheus.MustRegister(countClaimDrainStatus)
 	prometheus.MustRegister(withdrawalLimitHit)
+	prometheus.MustRegister(countDrainFlaggedUnusual)
 }
 
 // ClobberedCreds holds data of claims that have been clobbered and when they were first reported
