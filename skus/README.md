@@ -190,3 +190,9 @@ Documentation above refers to a general use of the payment service. In the conte
 <img width="1065" alt="Screen Shot 2021-04-30 at 1 58 22 PM" src="https://user-images.githubusercontent.com/4713771/116735903-2afbf300-a9bd-11eb-97fc-a384cece6346.png">
 
 
+### Stripe Integration 
+
+For the stripe integration details refer to the diagram below with numbered interactions.
+
+[stripe integration diagram](docs/StripeSKUsIntegration.pdf)
+
