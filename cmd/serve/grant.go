@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
@@ -56,17 +57,17 @@ func init() {
 		Bind("enable-job-workers").
 		Env("ENABLE_JOB_WORKERS")
 
-	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
+	flagBuilder.Flag().String("brave-transfer-promotion-ids", "",
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
 		Env("BRAVE_TRANSFER_PROMOTION_IDS")
 
-	flagBuilder.Flag().StringSlice("skus-whitelist", []string{""},
+	flagBuilder.Flag().String("skus-whitelist", "",
 		"the whitelist of skus").
 		Bind("skus-whitelist").
 		Env("SKUS_WHITELIST")
 
-	flagBuilder.Flag().StringSlice("country-blacklist", []string{""},
+	flagBuilder.Flag().String("country-blacklist", "",
 		"the blacklist of countries for wallet linking").
 		Bind("country-blacklist").
 		Env("COUNTRY_BLACKLIST")
@@ -384,7 +385,7 @@ func GrantServer(
 		Msg("Starting server")
 
 	// add flags to context
-	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
+	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, strings.Split(viper.GetString("brave-transfer-promotion-ids"), " "))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
 	ctx = context.WithValue(ctx, appctx.ReputationWithdrawalOnDrainCTXKey, viper.GetBool("reputation-withdrawal-on-drain"))
@@ -408,10 +409,10 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
 
 	// whitelisted skus
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, strings.Split(viper.GetString("skus-whitelist"), " "))
 
 	// blacklisted countries
-	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))
+	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, strings.Split(viper.GetString("country-blacklist"), " "))
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
