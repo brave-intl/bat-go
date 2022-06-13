@@ -49,11 +49,20 @@ var (
 			Help:        "A counter for seeing how many custodian accounts have been linked 10 times",
 			ConstLabels: prometheus.Labels{"service": "wallet"},
 		})
+	// counter for flagged unusual
+	countLinkingFlaggedUnusual = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name:        "count_linking_flagged_unusual",
+			Help:        "provides a count of unusual linkings flagged results",
+			ConstLabels: prometheus.Labels{"service": "wallet"},
+		})
 )
 
 func init() {
 	prometheus.MustRegister(tooManyCardsCounter)
 	prometheus.MustRegister(metricTxLockGauge)
+	prometheus.MustRegister(tenLinkagesReached)
+	prometheus.MustRegister(countLinkingFlaggedUnusual)
 }
 
 // Datastore holds the interface for the wallet datastore
@@ -611,6 +620,7 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 
 		if !reputable && !isTooYoung {
 			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
+			countLinkingFlaggedUnusual.Inc()
 			return ErrUnusualActivity
 		}
 	}

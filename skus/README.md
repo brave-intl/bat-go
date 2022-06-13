@@ -213,3 +213,10 @@ The payload of the above call is a Base64 encoded string of a JSON document.  Tw
 ```
 
 The and example POST payload of the API call to submit receipt is the above json base64 encoded. 
+
+### Stripe Integration 
+
+For the stripe integration details refer to the diagram below with numbered interactions.
+
+[stripe integration diagram](docs/StripeSKUsIntegration.pdf)
+
