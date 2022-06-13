@@ -1155,12 +1155,15 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 }
 
 // validateReceipt - perform receipt validation
-func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, vendor Vendor, receipt string) (string, error) {
+func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
-	// and get back the external id
-	if fn, ok := receiptValidationFns[vendor]; ok {
-		return fn(ctx, receipt)
+	if v, ok := receipt.(SubmitReceiptRequestV1); ok {
+		// and get back the external id
+		if fn, ok := receiptValidationFns[v.Type]; ok {
+			return fn(ctx, receipt)
+		}
 	}
+
 	return "", errorutils.ErrNotImplemented
 }
 
