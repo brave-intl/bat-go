@@ -159,8 +159,10 @@ func (v *Vendor) Decode(ctx context.Context, input []byte) error {
 
 // SubmitReceiptRequestV1 - receipt submission request
 type SubmitReceiptRequestV1 struct {
-	Type Vendor `json:"type" valid:"in(ios,android)"`
-	Blob string `json:"raw_receipt" valid:"required"`
+	Type           Vendor `json:"type" valid:"in(ios,android)"`
+	Blob           string `json:"raw_receipt" valid:"required"`
+	Package        string `json:"package"`
+	SubscriptionID string `json:"subscription_id"`
 }
 
 // Decode - take raw input and populate the struct
