@@ -69,6 +69,8 @@ func init() {
 		"( legacy compatibility ) input file path").
 		Bind("in")
 
+	signSettlementBuilder.Flag().BoolP("merge-custodial", "m", false, "If present, combine multiple addresses which share a walletProviderID into a single transaction.")
+
 	providers := []string{}
 	for k := range providerTransactionTypes {
 		providers = append(providers, k)
@@ -144,6 +146,10 @@ func SignSettlement(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	mergeCustodial, err := command.Flags().GetBool("merge-custodial")
+	if err != nil {
+		return err
+	}
 
 	logger, err := appctx.GetLogger(command.Context())
 	if err != nil {
@@ -187,7 +193,19 @@ func SignSettlement(command *cobra.Command, args []string) error {
 		if merge {
 			sublog.Info().Int("len(mergedSettlements)", len(mergedSettlements)).Msg("merged settlements")
 		} else {
-			return processSettlements(sublog.WithContext(command.Context()), providers, outDir, outBaseFile, antifraudSettlements)
+			return processSettlements(
+				sublog.WithContext(
+					context.WithValue(
+						command.Context(),
+						"mergeCustodial",
+						mergeCustodial,
+					),
+				),
+				providers,
+				outDir,
+				outBaseFile,
+				antifraudSettlements,
+			)
 		}
 	}
 
@@ -305,6 +323,7 @@ func createUpholdArtifact(
 	walletKey string,
 	upholdOnlySettlements []settlement.Transaction,
 ) error {
+	var transactionSet []settlement.Transaction = upholdOnlySettlements
 	response, err := wrappedClient.Client.Logical().Read("wallets/" + walletKey)
 	if err != nil {
 		return err
@@ -317,9 +336,13 @@ func createUpholdArtifact(
 
 	// Ensure that there is only one payment for a given Uphold wallet by combining
 	// multiples if they exist.
-	flattenedTransactions := upholdsettlement.FlattenPaymentsByWalletProviderID(
-		&upholdOnlySettlements,
-	)
+	mergeCustodialRaw := ctx.Value("mergeCustodial")
+	mergeCustodial, ok := mergeCustodialRaw.(bool)
+	if ok && mergeCustodial == true {
+		transactionSet = upholdsettlement.FlattenPaymentsByWalletProviderID(
+			&upholdOnlySettlements,
+		)
+	}
 
 	signer, err := wrappedClient.GenerateEd25519Signer(walletKey)
 	if err != nil {
@@ -336,12 +359,12 @@ func createUpholdArtifact(
 	}
 	settlementWallet := &uphold.Wallet{Info: info, PrivKey: signer, PubKey: signer}
 
-	err = settlement.PrepareTransactions(settlementWallet, flattenedTransactions, "payout", &uphold.Beneficiary{Relationship: "business"})
+	err = settlement.PrepareTransactions(settlementWallet, transactionSet, "payout", &uphold.Beneficiary{Relationship: "business"})
 	if err != nil {
 		return err
 	}
 
-	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: flattenedTransactions}
+	state := settlement.State{WalletInfo: settlementWallet.Info, Transactions: transactionSet}
 
 	out, err := json.MarshalIndent(state, "", "    ")
 	if err != nil {
