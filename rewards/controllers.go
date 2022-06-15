@@ -2,6 +2,7 @@ package rewards
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -53,4 +54,36 @@ func GetParametersHandler(service *Service) handlers.AppHandler {
 		}
 		return handlers.RenderContent(ctx, parameters, w, http.StatusOK)
 	})
+}
+
+// SetPayoutStatusHandler - handler to set the payout status
+func SetPayoutStatusHandler(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		// get context from request
+		ctx := r.Context()
+
+		var payoutStatus = new(PayoutStatus)
+
+		// get logger from context
+		logger := logging.Logger(ctx, "rewards.SetPayoutStatusHandler")
+
+		// decode and validate the request body
+		if err := inputs.DecodeAndValidateReader(ctx, payoutStatus, r.Body); err != nil {
+			logger.Error().Err(err).Msg("failed to read request body")
+			return payoutStatus.HandleErrors(err)
+		}
+
+		service.SetPayoutStatus(payoutStatus)
+		logger.Info().Str("payoutStatus", fmt.Sprintf("%+v", payoutStatus)).Msg("set payout status")
+
+		return handlers.RenderContent(ctx, setPayoutStatusResponse{
+			Status:  "OK",
+			Message: "payout status updated",
+		}, w, http.StatusOK)
+	})
+}
+
+type setPayoutStatusResponse struct {
+	Status  string
+	Message string
 }

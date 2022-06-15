@@ -2,20 +2,67 @@ package rewards
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 )
 
+// PayoutStatus - current state of the payout status
+type PayoutStatus struct {
+	Unverified string `json:"unverified" valid:"in(off|processing|complete)"`
+	Uphold     string `json:"uphold" valid:"in(off|processing|complete)"`
+	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
+	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
+}
+
+// HandleErrors - handle any errors in input
+func (ps *PayoutStatus) HandleErrors(err error) *handlers.AppError {
+	return handlers.ValidationError("invalid payout status", err)
+}
+
+// Decode - implement decodable
+func (ps *PayoutStatus) Decode(ctx context.Context, input []byte) error {
+	return json.Unmarshal(input, ps)
+}
+
+// Validate - implement validatable
+func (ps *PayoutStatus) Validate(ctx context.Context) error {
+	isValid, err := govalidator.ValidateStruct(ps)
+	if err != nil {
+		return err
+	}
+	if !isValid {
+		return errors.New("invalid input")
+	}
+	return nil
+}
+
+func (s *Service) SetPayoutStatus(v *PayoutStatus) {
+	s.payoutStatusMutex.Lock()
+	s.payoutStatus = v
+	defer s.payoutStatusMutex.Unlock()
+}
+
 // NewService - create a new rewards service structure
 func NewService(ctx context.Context, ratio ratios.Client) *Service {
 	return &Service{
-		jobs:   []srv.Job{},
-		ratios: ratio,
+		jobs:              []srv.Job{},
+		ratios:            ratio,
+		payoutStatusMutex: new(sync.RWMutex),
+		payoutStatus: &PayoutStatus{
+			Unverified: "off",
+			Uphold:     "off",
+			Gemini:     "off",
+			Bitflyer:   "off",
+		},
 	}
 }
 
@@ -23,7 +70,9 @@ func NewService(ctx context.Context, ratio ratios.Client) *Service {
 type Service struct {
 	jobs []srv.Job
 	// ratios client
-	ratios ratios.Client
+	ratios            ratios.Client
+	payoutStatusMutex *sync.RWMutex
+	payoutStatus      *PayoutStatus
 }
 
 // Jobs - Implement srv.JobService interface
@@ -82,8 +131,12 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	var rate, _ = rateData.Payload[currencyStr].Float64()
 
+	s.payoutStatusMutex.RLock()
+	defer s.payoutStatusMutex.RUnlock()
+
 	return &ParametersV1{
-		BATRate: rate,
+		PayoutStatus: s.payoutStatus,
+		BATRate:      rate,
 		AutoContribute: AutoContribute{
 			DefaultChoice: defaultChoice,
 			Choices:       choices,
