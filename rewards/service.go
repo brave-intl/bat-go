@@ -45,6 +45,7 @@ func (ps *PayoutStatus) Validate(ctx context.Context) error {
 	return nil
 }
 
+// SetPayoutStatus - set the payout status state
 func (s *Service) SetPayoutStatus(v *PayoutStatus) {
 	s.payoutStatusMutex.Lock()
 	s.payoutStatus = v

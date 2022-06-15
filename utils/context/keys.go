@@ -6,6 +6,8 @@ import "errors"
 type CTXKey string
 
 const (
+	// MergeCustodialCTXKey - the context key for merge custodial
+	MergeCustodialCTXKey CTXKey = "merge_custodial"
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
 	// DatabaseTransactionCTXKey - context key for database transactions

@@ -74,7 +74,7 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
-	r.Method("PATCH", "/v1/parameters/payoutStatus", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler(CreatePromotion(service))))
+	r.Method("PATCH", "/v1/parameters/payoutStatus", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("SetPayoutStatusHandler", rewards.SetPayoutStatusHandler(s))))
 
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)
