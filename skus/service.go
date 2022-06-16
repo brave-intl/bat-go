@@ -59,6 +59,8 @@ const (
 type Service struct {
 	wallet           *wallet.Service
 	cbClient         cbr.Client
+	geminiClient     gemini.Client
+	geminiConf       *gemini.Conf
 	scClient         *client.API
 	Datastore        Datastore
 	codecs           map[string]*goavro.Codec
@@ -131,8 +133,33 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		return nil, err
 	}
 
+	var (
+		geminiClient gemini.Client
+		geminiConf   *gemini.Conf
+	)
+	if os.Getenv("GEMINI_ENABLED") == "true" {
+		apiKey, clientID, settlementAddress, apiSecret, err := getGeminiInfoFromCtx(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get gemini info: %w", err)
+		}
+		// get the correct env variables for bulk pay API call
+		geminiConf = &gemini.Conf{
+			ClientID:          clientID,
+			APIKey:            apiKey,
+			Secret:            apiSecret,
+			SettlementAddress: settlementAddress,
+		}
+
+		geminiClient, err = gemini.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gemini client: %w", err)
+		}
+	}
+
 	service = &Service{
 		wallet:           walletService,
+		geminiClient:     geminiClient,
+		geminiConf:       geminiConf,
 		cbClient:         cbClient,
 		scClient:         scClient,
 		Datastore:        datastore,
@@ -483,57 +510,53 @@ OUTER:
 	return amount, status, currency, custodian, nil
 }
 
-// returns gemini client, api key, client id, settlement address, error
-func getGeminiInfoFromCtx(ctx context.Context) (gemini.Client, string, string, string, error) {
-	// get gemini client from context
-	geminiClient, ok := ctx.Value(appctx.GeminiClientCTXKey).(gemini.Client)
-	if !ok {
-		return nil, "", "", "", fmt.Errorf("no gemini client in ctx: %w", appctx.ErrNotInContext)
-	}
+// returns gemini client, api key, client id, settlement address, apiSecret, error
+func getGeminiInfoFromCtx(ctx context.Context) (string, string, string, string, error) {
 	// get gemini client from context
 	apiKey, ok := ctx.Value(appctx.GeminiAPIKeyCTXKey).(string)
 	if !ok {
-		return nil, "", "", "", fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
+		return "", "", "", "", fmt.Errorf("no gemini api key in ctx: %w", appctx.ErrNotInContext)
 	}
 
 	// get gemini client id from context
 	clientID, ok := ctx.Value(appctx.GeminiBrowserClientIDCTXKey).(string)
 	if !ok {
-		return nil, "", "", "", fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
+		return "", "", "", "", fmt.Errorf("no gemini browser client id in ctx: %w", appctx.ErrNotInContext)
 	}
 
 	// get gemini settlement address from context
 	settlementAddress, ok := ctx.Value(appctx.GeminiSettlementAddressCTXKey).(string)
 	if !ok {
-		return nil, "", "", "", fmt.Errorf("no gemini settlement address in ctx: %w", appctx.ErrNotInContext)
+		return "", "", "", "", fmt.Errorf("no gemini settlement address in ctx: %w", appctx.ErrNotInContext)
 	}
 
-	return geminiClient, apiKey, clientID, settlementAddress, nil
+	// get gemini api secret from context
+	apiSecret, ok := ctx.Value(appctx.GeminiAPISecretCTXKey).(string)
+	if !ok {
+		return "", "", "", "", fmt.Errorf("no gemini api secret in ctx: %w", appctx.ErrNotInContext)
+	}
+
+	return apiKey, clientID, settlementAddress, apiSecret, nil
 }
 
 // getGeminiCustodialTx - the the custodial tx information from gemini
-func getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
+func (s *Service) getGeminiCustodialTx(ctx context.Context, txRef string) (*decimal.Decimal, string, string, string, error) {
 	sublogger := logging.Logger(ctx, "payments").With().
 		Str("func", "getGeminiCustodialTx").
 		Logger()
 
 	custodian := "gemini"
-	// get gemini client from tx
-	client, geminiAPIKey, geminiBrowserClientID, settlementAddress, err := getGeminiInfoFromCtx(ctx)
-	if err != nil {
-		sublogger.Error().Err(err).Msg("failed to get gemini configuration")
-		return nil, "", "", custodian, fmt.Errorf("error getting gemini client/info from ctx: %w", err)
-	}
 
 	// call client.CheckTxStatus
-	resp, err := client.CheckTxStatus(ctx, geminiAPIKey, geminiBrowserClientID, txRef)
+	ctx = context.WithValue(ctx, appctx.GeminiAPISecretCTXKey, s.geminiConf.Secret)
+	resp, err := s.geminiClient.CheckTxStatus(ctx, s.geminiConf.APIKey, s.geminiConf.ClientID, txRef)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to check tx status")
 		return nil, "", "", custodian, fmt.Errorf("error getting tx status: %w", err)
 	}
 
 	// check if destination is the right address
-	if *resp.Destination != settlementAddress {
+	if *resp.Destination != s.geminiConf.SettlementAddress {
 		sublogger.Error().Err(err).Msg("settlement address does not match tx destination")
 		return nil, "", "", custodian, errors.New("error recording transaction: invalid settlement address")
 	}
