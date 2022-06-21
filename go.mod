@@ -16,9 +16,9 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
-	github.com/hashicorp/vault v1.10.3
-	github.com/hashicorp/vault/api v1.5.0
-	github.com/hashicorp/vault/sdk v0.4.2-0.20220429220057-bdb59a36e632
+	github.com/hashicorp/vault v1.11.0
+	github.com/hashicorp/vault/api v1.7.2
+	github.com/hashicorp/vault/sdk v0.5.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/keybase/go-crypto v0.0.0-20190403132359-d65b6b94177f
 	github.com/lib/pq v1.10.6
@@ -40,7 +40,7 @@ require (
 	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5
 	github.com/throttled/throttled v2.2.4+incompatible
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
-	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4
+	golang.org/x/crypto v0.0.0-20220427172511-eb4f295cb31f
 	golang.org/x/net v0.0.0-20220520000938-2e3eb7b945c2
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	gopkg.in/macaroon.v2 v2.1.0
@@ -99,12 +99,12 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-kms-wrapping v0.7.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-plugin v1.4.3 // indirect
+	github.com/hashicorp/go-plugin v1.4.4 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.0 // indirect
 	github.com/hashicorp/go-rootcerts v1.0.2 // indirect
 	github.com/hashicorp/go-secure-stdlib/awsutil v0.1.6 // indirect
 	github.com/hashicorp/go-secure-stdlib/mlock v0.1.2 // indirect
-	github.com/hashicorp/go-secure-stdlib/parseutil v0.1.4 // indirect
+	github.com/hashicorp/go-secure-stdlib/parseutil v0.1.6 // indirect
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-secure-stdlib/tlsutil v0.1.1 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
@@ -127,7 +127,7 @@ require (
 	github.com/mitchellh/cli v1.1.2 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/go-testing-interface v1.14.0 // indirect
+	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
