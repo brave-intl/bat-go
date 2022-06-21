@@ -32,7 +32,7 @@ require (
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/sirupsen/logrus v1.8.1
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.12.0
 	github.com/square/go-jose v2.6.0+incompatible
 	github.com/stretchr/testify v1.7.1
