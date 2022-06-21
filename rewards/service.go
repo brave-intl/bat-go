@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -53,18 +54,24 @@ func (s *Service) SetPayoutStatus(v *PayoutStatus) {
 }
 
 // NewService - create a new rewards service structure
-func NewService(ctx context.Context, ratio ratios.Client) *Service {
-	return &Service{
-		jobs:              []srv.Job{},
-		ratios:            ratio,
-		payoutStatusMutex: new(sync.RWMutex),
-		payoutStatus: &PayoutStatus{
-			Unverified: "off",
-			Uphold:     "off",
-			Gemini:     "off",
-			Bitflyer:   "off",
-		},
+func NewService(ctx context.Context, ratio ratios.Client) (*Service, error) {
+	// get the aws region from ctx
+	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
+	if !ok {
+		return nil, errors.New("aws region is not configured")
 	}
+
+	// aws config
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load aws config: %w", err)
+	}
+
+	return &Service{
+		jobs:     []srv.Job{},
+		ratios:   ratio,
+		s3Client: s3.FromConfig(cfg),
+	}, nil
 }
 
 // Service contains datastore
@@ -74,6 +81,7 @@ type Service struct {
 	ratios            ratios.Client
 	payoutStatusMutex *sync.RWMutex
 	payoutStatus      *PayoutStatus
+	s3Client          *s3.Client
 }
 
 // Jobs - Implement srv.JobService interface
