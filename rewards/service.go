@@ -11,12 +11,14 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awslogging "github.com/aws/smithy-go/logging"
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/rs/zerolog"
 )
 
 // PayoutStatus - current state of the payout status
@@ -79,30 +81,41 @@ func (ps *PayoutStatus) Validate(ctx context.Context) error {
 	return nil
 }
 
-// SetPayoutStatus - set the payout status state
-func (s *Service) SetPayoutStatus(v *PayoutStatus) {
-	s.payoutStatusMutex.Lock()
-	s.payoutStatus = v
-	defer s.payoutStatusMutex.Unlock()
+type appLogger struct {
+	*zerolog.Logger
+}
+
+// Logf - implement smithy-go/logging.Logger
+func (al *appLogger) Logf(classification awslogging.Classification, format string, v ...interface{}) {
+	al.Debug().Msg(fmt.Sprintf(format, v...))
 }
 
 // NewService - create a new rewards service structure
 func NewService(ctx context.Context, ratio ratios.Client, s3client S3GetObjectAPI) (*Service, error) {
+	logger := logging.Logger(ctx, "rewards.NewService")
+
+	logger.Info().Msg("getting aws region")
 	// get the aws region from ctx
 	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
 	if !ok || len(region) == 0 {
 		region = "us-west-2"
 	}
 
+	logger.Info().Msg("checking s3 client")
 	if s3client == nil {
+		logger.Info().Str("region", region).Msg("setting up s3 client")
 		// aws config
-		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+		cfg, err := config.LoadDefaultConfig(
+			context.TODO(),
+			config.WithLogger(&appLogger{logger}),
+			config.WithRegion(region))
 		if err != nil {
 			return nil, fmt.Errorf("failed to load aws config: %w", err)
 		}
 		s3client = s3.NewFromConfig(cfg)
 	}
 
+	logger.Info().Str("s3client", fmt.Sprintf("%+v", s3client)).Msg("setup s3 client")
 	return &Service{
 		jobs:     []srv.Job{},
 		ratios:   ratio,
@@ -136,6 +149,8 @@ func InitService(ctx context.Context) (*Service, error) {
 		logger.Error().Err(err).Msg("failed to initialize the ratios client")
 		return nil, fmt.Errorf("failed to initialize ratios client: %w", err)
 	}
+
+	logger.Info().Msg("creating new rewards parameters service")
 
 	return NewService(ctx, client, nil)
 }
@@ -181,11 +196,14 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 		payoutStatus *PayoutStatus
 		bucket, ok   = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	)
+	logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")
 	if ok {
+		logger.Debug().Str("bucket", bucket).Msg("extracting payout status")
 		payoutStatus, err = extractPayoutStatus(ctx, s.s3Client, bucket, "payout-status.json")
 		if err != nil {
 			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
 		}
+		logger.Debug().Str("bucket", bucket).Str("payout status", fmt.Sprintf("%+v", *payoutStatus)).Msg("payout status")
 	}
 
 	return &ParametersV1{

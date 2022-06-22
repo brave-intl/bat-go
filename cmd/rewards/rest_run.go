@@ -2,6 +2,7 @@ package rewards
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -41,7 +42,7 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.RatiosCacheExpiryDurationCTXKey, viper.GetDuration("ratios-client-cache-expiry"))
 	ctx = context.WithValue(ctx, appctx.RatiosCachePurgeDurationCTXKey, viper.GetDuration("ratios-client-cache-purge"))
 	ctx = context.WithValue(ctx, appctx.DefaultACChoiceCTXKey, viper.GetFloat64("default-ac-choice"))
-	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.GetFloat64("merge-param-bucket"))
+	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
 
 	// parse default-monthly-choices and default-tip-choices
 
@@ -70,9 +71,10 @@ func RestRun(command *cobra.Command, args []string) {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initalize rewards service")
 	}
+	logger.Info().Str("service", fmt.Sprintf("%+v", s)).Msg("initialized service")
 
 	// do rest endpoints
-	r := cmd.SetupRouter(command.Context())
+	r := cmd.SetupRouter(ctx)
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
 
