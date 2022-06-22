@@ -10,8 +10,11 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 )
@@ -22,6 +25,36 @@ type PayoutStatus struct {
 	Uphold     string `json:"uphold" valid:"in(off|processing|complete)"`
 	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
+}
+
+// S3GetObjectAPI - interface to allow for a GetObject mock
+type S3GetObjectAPI interface {
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
+func extractPayoutStatus(ctx context.Context, client S3GetObjectAPI, bucket, object string) (*PayoutStatus, error) {
+	logger := logging.Logger(ctx, "rewards.extractPayoutStatus")
+	// get the object with the client
+	out, err := client.GetObject(
+		ctx, &s3.GetObjectInput{
+			Bucket: &bucket,
+			Key:    &object,
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payout status: %w", err)
+	}
+	defer func() {
+		err := out.Body.Close()
+		logger.Error().Err(err).Msg("failed to close s3 result body")
+	}()
+	var payoutStatus = new(PayoutStatus)
+
+	// parse body json
+	if err := inputs.DecodeAndValidateReader(ctx, payoutStatus, out.Body); err != nil {
+		return nil, payoutStatus.HandleErrors(err)
+	}
+
+	return payoutStatus, nil
 }
 
 // HandleErrors - handle any errors in input
@@ -54,23 +87,26 @@ func (s *Service) SetPayoutStatus(v *PayoutStatus) {
 }
 
 // NewService - create a new rewards service structure
-func NewService(ctx context.Context, ratio ratios.Client) (*Service, error) {
+func NewService(ctx context.Context, ratio ratios.Client, s3client S3GetObjectAPI) (*Service, error) {
 	// get the aws region from ctx
 	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		return nil, errors.New("aws region is not configured")
+	if !ok || len(region) == 0 {
+		region = "us-west-2"
 	}
 
-	// aws config
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load aws config: %w", err)
+	if s3client == nil {
+		// aws config
+		cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+		if err != nil {
+			return nil, fmt.Errorf("failed to load aws config: %w", err)
+		}
+		s3client = s3.NewFromConfig(cfg)
 	}
 
 	return &Service{
 		jobs:     []srv.Job{},
 		ratios:   ratio,
-		s3Client: s3.FromConfig(cfg),
+		s3Client: s3client,
 	}, nil
 }
 
@@ -81,7 +117,7 @@ type Service struct {
 	ratios            ratios.Client
 	payoutStatusMutex *sync.RWMutex
 	payoutStatus      *PayoutStatus
-	s3Client          *s3.Client
+	s3Client          S3GetObjectAPI
 }
 
 // Jobs - Implement srv.JobService interface
@@ -101,7 +137,7 @@ func InitService(ctx context.Context) (*Service, error) {
 		return nil, fmt.Errorf("failed to initialize ratios client: %w", err)
 	}
 
-	return NewService(ctx, client), nil
+	return NewService(ctx, client, nil)
 }
 
 // GetParameters - respond to caller with the rewards parameters
@@ -140,11 +176,20 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	var rate, _ = rateData.Payload[currencyStr].Float64()
 
-	s.payoutStatusMutex.RLock()
-	defer s.payoutStatusMutex.RUnlock()
+	// merge in static s3 attributes into response
+	var (
+		payoutStatus *PayoutStatus
+		bucket, ok   = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+	)
+	if ok {
+		payoutStatus, err = extractPayoutStatus(ctx, s.s3Client, bucket, "payout-status.json")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
+		}
+	}
 
 	return &ParametersV1{
-		PayoutStatus: s.payoutStatus,
+		PayoutStatus: payoutStatus,
 		BATRate:      rate,
 		AutoContribute: AutoContribute{
 			DefaultChoice: defaultChoice,

@@ -4,18 +4,26 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	ratiosmock "github.com/brave-intl/bat-go/utils/clients/ratios/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 )
+
+type mockGetObjectAPI func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+
+func (m mockGetObjectAPI) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return m(ctx, params, optFns...)
+}
 
 func TestGetParametersController(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
@@ -28,30 +36,24 @@ func TestGetParametersController(t *testing.T) {
 				"bat": decimal.Zero,
 			}}, nil)
 
+	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewBufferString(`{
+				"uphold":"processing",
+				"gemini":"off",
+				"bitflyer":"off",
+				"unverified":"off"
+			}
+			`)),
+		}, nil
+	})
 	var (
-		s      = NewService(context.Background(), mockRatios)
+		s, err = NewService(context.Background(), mockRatios, mockS3)
 		hGet   = GetParametersHandler(s)
-		hPatch = SetPayoutStatusHandler(s)
 		params = new(ParametersV1)
 	)
-
-	fmt.Println("s.payoutStatus: ", s.payoutStatus)
-	rctx := chi.NewRouteContext()
-
-	sporeq, err := http.NewRequest("PATCH", "/parameters/payoutStatus", bytes.NewBufferString(`
-{"uphold":"processing","gemini":"off","bitflyer":"off","unverified":"off"}
-	`))
 	if err != nil {
-		t.Error("failed to make new request: ", err)
-	}
-
-	r := sporeq.WithContext(context.WithValue(sporeq.Context(), chi.RouteCtxKey, rctx))
-
-	rrPatch := httptest.NewRecorder()
-	hPatch.ServeHTTP(rrPatch, r)
-	if rrPatch.Code != http.StatusOK {
-		t.Log("result: ", rrPatch.Body.String())
-		t.Error("was expecting an ok response: ", rrPatch.Code)
+		t.Error("failed to make new service: ", err)
 	}
 
 	req, err := http.NewRequest("GET", "/parameters", nil)
@@ -59,7 +61,11 @@ func TestGetParametersController(t *testing.T) {
 		t.Error("failed to make new request: ", err)
 	}
 
-	r = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rctx := chi.NewRouteContext()
+	r := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	// add the parameters merge bucket to context
+	r = req.WithContext(context.WithValue(r.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
 
 	rrGet := httptest.NewRecorder()
 	hGet.ServeHTTP(rrGet, r)
@@ -75,7 +81,8 @@ func TestGetParametersController(t *testing.T) {
 	if params.BATRate != 0 {
 		t.Error("was expecting 0 for the bat rate")
 	}
-	if params.PayoutStatus.Uphold != "processing" {
+
+	if params.PayoutStatus == nil || params.PayoutStatus.Uphold != "processing" {
 		t.Error("was expecting uphold to be set to processing")
 	}
 	if len(params.AutoContribute.Choices) == 0 {

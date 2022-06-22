@@ -41,6 +41,7 @@ func RestRun(command *cobra.Command, args []string) {
 	ctx = context.WithValue(ctx, appctx.RatiosCacheExpiryDurationCTXKey, viper.GetDuration("ratios-client-cache-expiry"))
 	ctx = context.WithValue(ctx, appctx.RatiosCachePurgeDurationCTXKey, viper.GetDuration("ratios-client-cache-purge"))
 	ctx = context.WithValue(ctx, appctx.DefaultACChoiceCTXKey, viper.GetFloat64("default-ac-choice"))
+	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.GetFloat64("merge-param-bucket"))
 
 	// parse default-monthly-choices and default-tip-choices
 
@@ -74,7 +75,6 @@ func RestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r.Get("/v1/parameters", middleware.InstrumentHandler(
 		"GetParametersHandler", rewards.GetParametersHandler(s)).ServeHTTP)
-	r.Method("PATCH", "/v1/parameters/payoutStatus", middleware.SimpleTokenAuthorizedOnly(middleware.InstrumentHandler("SetPayoutStatusHandler", rewards.SetPayoutStatusHandler(s))))
 
 	// make sure exceptions go to sentry
 	defer sentry.Flush(time.Second * 2)

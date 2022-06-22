@@ -129,6 +129,11 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
+	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
+	// AWSRegionCTXKey - the context key for getting the rate limit
+	AWSRegionCTXKey CTXKey = "aws_region"
 )
 
 var (
