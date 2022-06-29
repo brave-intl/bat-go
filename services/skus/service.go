@@ -65,18 +65,18 @@ const (
 
 // Service contains datastore
 type Service struct {
-	wallet           *wallet.Service
-	cbClient         cbr.Client
-	geminiClient     gemini.Client
-	geminiConf       *gemini.Conf
-	scClient         *client.API
-	Datastore        Datastore
-	codecs           map[string]*goavro.Codec
-	kafkaWriter      *kafka.Writer
-	kafkaDialer      *kafka.Dialer
-	jobs             []srv.Job
-	pauseVoteUntil   time.Time
-	pauseVoteUntilMu sync.RWMutex
+	wallet                             *wallet.Service
+	cbClient                           cbr.Client
+	geminiClient                       gemini.Client
+	geminiConf                         *gemini.Conf
+	scClient                           *client.API
+	Datastore                          Datastore
+	codecs                             map[string]*goavro.Codec
+	kafkaWriter                        *kafka.Writer
+	kafkaDialer                        *kafka.Dialer
+	jobs                               []srv.Job
+	pauseVoteUntil                     time.Time
+	pauseVoteUntilMu                   sync.RWMutex
 	kafkaOrderCredsSignedRequestReader kafkautils.KafkaReader
 }
 
