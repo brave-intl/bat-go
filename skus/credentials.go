@@ -237,6 +237,10 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		// If no issuer exists for the sku then create a new one
 		// This only happens in event of a new sku being created
 		issuer, err := s.Datastore.GetIssuer(issuerID)
+		if err != nil {
+			return fmt.Errorf("error getting issuer: %w", err)
+		}
+
 		if issuer == nil {
 
 			if orderItem.ValidForISO == nil {
