@@ -69,7 +69,7 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 			)
 		}
 
-		orderCreds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), req.ItemID, false)
+		orderCreds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), req.ItemID)
 		if err != nil {
 			logging.FromContext(r.Context()).
 				Err(err).Msg("create order request v2")
@@ -101,7 +101,7 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 // GetOrderCredsV2 is the handler for fetching order credentials
 func GetOrderCredsV2(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
@@ -119,12 +119,12 @@ func GetOrderCredsV2(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "Error getting credentials", status)
 		}
 		return handlers.RenderContent(r.Context(), creds, w, status)
-	})
+	}
 }
 
 // GetOrderCredsByIDV2 is the handler for fetching order credentials by an item id
 func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 
 		// get the IDs from the URL
 		var (
@@ -153,7 +153,7 @@ func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
 				validationPayload)
 		}
 
-		creds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), *itemID.UUID(), false)
+		creds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), *itemID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting claim", http.StatusBadRequest)
 		}
@@ -172,5 +172,5 @@ func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
 		}
 
 		return handlers.RenderContent(r.Context(), creds, w, status)
-	})
+	}
 }

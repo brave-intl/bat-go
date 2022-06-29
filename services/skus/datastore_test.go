@@ -152,7 +152,7 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2CredsByItemID_Success()
 
 	// assert
 
-	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID, false)
+	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(order.ID, timeLimitedV2Creds.OrderID)
@@ -190,7 +190,7 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2Creds_Success() {
 
 	// assert
 
-	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2Creds(order.ID, false)
+	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2Creds(order.ID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(2, len(*timeLimitedV2Creds))
@@ -255,7 +255,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_Success() {
 
 	time.Sleep(time.Millisecond)
 
-	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID, false)
+	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
 	suite.Require().NoError(err)
 
 	suite.Assert().Equal(signingOrderResult.Data[0].PublicKey, *actual.Credentials[0].PublicKey)

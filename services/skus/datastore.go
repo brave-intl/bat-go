@@ -65,10 +65,10 @@ type Datastore interface {
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
-	// GetOrderTimeLimitedV2Creds returns all order credentials for an order
-	GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool) (*[]TimeLimitedV2Creds, error)
-	// GetOrderTimeLimitedV2CredsByItemID returns order credentials by order and item id
-	GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*TimeLimitedV2Creds, error)
+	// GetOrderTimeLimitedV2Creds returns all unsigned order credentials for an order
+	GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error)
+	// GetOrderTimeLimitedV2CredsByItemID returns unsigned order credentials by order and item
+	GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error)
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
@@ -820,13 +820,13 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2Creds returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool) (*[]TimeLimitedV2Creds, error) {
+// GetOrderTimeLimitedV2Creds returns all unsigned order credentials for an order
+func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error) {
 	// each "order item" is a different record
 	var orderCreds []TimeLimitedV2Creds
 	var timeAwareCreds []TimeAwareSubIssuedCreds
 
-	// get all of the credentials related to the order_id
+	// get all the credentials related to the order_id
 	query := `
 		select
 			order_id, item_id,
@@ -839,10 +839,6 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool)
 			and metadata->'valid_from' notnull
 			and metadata->'valid_to' notnull
 	`
-
-	if isSigned {
-		query += " and signed_creds is not null"
-	}
 
 	err := pg.RawDB().Select(&timeAwareCreds, query, orderID)
 	if err != nil {
@@ -875,8 +871,8 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID, isSigned bool)
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2CredsByItemID returns the signed order credentials by order and item id
-func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*TimeLimitedV2Creds, error) {
+// GetOrderTimeLimitedV2CredsByItemID returns the unsigned order credentials by order and item
+func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select
 			order_id, item_id,
@@ -890,10 +886,6 @@ func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID
 			and metadata->'valid_from' notnull
 			and metadata->'valid_to' notnull
 	`
-
-	if isSigned {
-		query += " and signed_creds is not null"
-	}
 
 	var timeAwareCreds []TimeAwareSubIssuedCreds
 	err := pg.RawDB().Select(&timeAwareCreds, query, orderID, itemID)
