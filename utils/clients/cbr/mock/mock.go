@@ -49,6 +49,20 @@ func (mr *MockClientMockRecorder) CreateIssuer(ctx, issuer, maxTokens interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIssuer", reflect.TypeOf((*MockClient)(nil).CreateIssuer), ctx, issuer, maxTokens)
 }
 
+// CreateIssuerV3 mocks base method.
+func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.CreateIssuerV3) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateIssuerV3", ctx, createIssuerV3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateIssuerV3 indicates an expected call of CreateIssuerV3.
+func (mr *MockClientMockRecorder) CreateIssuerV3(ctx, createIssuerV3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIssuerV3", reflect.TypeOf((*MockClient)(nil).CreateIssuerV3), ctx, createIssuerV3)
+}
+
 // GetIssuer mocks base method.
 func (m *MockClient) GetIssuer(ctx context.Context, issuer string) (*cbr.IssuerResponse, error) {
 	m.ctrl.T.Helper()

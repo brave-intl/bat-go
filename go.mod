@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
+	github.com/actgardner/gogen-avro/v10 v10.2.1
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/alicebob/miniredis/v2 v2.22.0
 	github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496

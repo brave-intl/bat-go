@@ -2,21 +2,31 @@ package skus
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 )
 
 const (
 	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
+	cohort                    = 0
+	defaultBuffer             = 30
+	defaultOverlap            = 5
 )
+
+var ErrOrderUnpaid = errors.New("order not paid")
 
 func decodeIssuerID(issuerID string) (string, string, error) {
 	var (
@@ -79,22 +89,22 @@ type Issuer struct {
 }
 
 // CreateIssuer creates a new challenge bypass credential issuer, saving it's information into the datastore
-func (service *Service) CreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
+func (s *Service) CreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
 	issuer := &Issuer{MerchantID: merchantID}
 
-	err := service.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokensPerIssuer)
+	err := s.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokensPerIssuer)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := service.cbClient.GetIssuer(ctx, issuer.Name())
+	resp, err := s.cbClient.GetIssuer(ctx, issuer.Name())
 	if err != nil {
 		return nil, err
 	}
 
 	issuer.PublicKey = resp.PublicKey
 
-	return service.Datastore.InsertIssuer(issuer)
+	return s.Datastore.InsertIssuer(issuer)
 }
 
 // Name returns the name of the issuer as known by the challenge bypass server
@@ -103,10 +113,10 @@ func (issuer *Issuer) Name() string {
 }
 
 // GetOrCreateIssuer gets a matching issuer if one exists and otherwise creates one
-func (service *Service) GetOrCreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer, err := service.Datastore.GetIssuer(merchantID)
+func (s *Service) GetOrCreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
+	issuer, err := s.Datastore.GetIssuer(merchantID)
 	if issuer == nil {
-		issuer, err = service.CreateIssuer(ctx, merchantID)
+		issuer, err = s.CreateIssuer(ctx, merchantID)
 	}
 
 	return issuer, err
@@ -132,32 +142,35 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
+// TimeLimitedV2Creds encapsulates the credentials to be signed in response to a completed order
+type TimeLimitedV2Creds struct {
+	OrderID     uuid.UUID                 `json:"orderId"`
+	IssuerID    uuid.UUID                 `json:"issuerId" `
+	Credentials []TimeAwareSubIssuedCreds `json:"credentials"`
+}
+
 // TimeAwareSubIssuedCreds - sub issued time aware credentials
 type TimeAwareSubIssuedCreds struct {
 	OrderID      uuid.UUID                  `json:"-" db:"order_id"`
 	ItemID       uuid.UUID                  `json:"-" db:"item_id"`
 	IssuerID     uuid.UUID                  `json:"-" db:"issuer_id"`
-	ValidFrom    *time.Time                 `json:"validFrom" db:"valid_from"`
-	ValidTo      *time.Time                 `json:"validTo" db:"valid_to"`
+	ValidFrom    *string                    `json:"validFrom" db:"valid_from"`
+	ValidTo      *string                    `json:"validTo" db:"valid_to"`
 	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
 	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
 	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
 	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
-// TimeLimitedV2Creds encapsulates the credentials to be signed in response to a completed order
-type TimeLimitedV2Creds struct {
-	ID          uuid.UUID                 `json:"id" db:"item_id"`
-	OrderID     uuid.UUID                 `json:"orderId" db:"order_id"`
-	IssuerID    uuid.UUID                 `json:"issuerId" db:"issuer_id"`
-	Credentials []TimeAwareSubIssuedCreds `json:"credentials"`
-}
-
 // CreateOrderCreds if the order is complete
-func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
-	order, err := service.Datastore.GetOrder(orderID)
+func (s *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return errorutils.Wrap(err, "error finding order")
+	}
+
+	if order == nil {
+		return errorutils.Wrap(err, "error no order found")
 	}
 
 	if !order.IsPaid() {
@@ -174,7 +187,7 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 		}
 
 		// create the issuer
-		issuer, err := service.GetOrCreateIssuer(ctx, issuerID)
+		issuer, err := s.GetOrCreateIssuer(ctx, issuerID)
 		if err != nil {
 			return errorutils.Wrap(err, "error finding issuer")
 		}
@@ -190,9 +203,138 @@ func (service *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
 		}
 
-		err = service.Datastore.InsertOrderCreds(&orderCreds)
+		err = s.Datastore.InsertOrderCreds(&orderCreds)
 		if err != nil {
 			return errorutils.Wrap(err, "error inserting order creds")
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+	order, err := s.Datastore.GetOrder(orderID)
+	if err != nil {
+		return fmt.Errorf("error get order: %w", err)
+	}
+
+	if order == nil {
+		return fmt.Errorf("error retrieving orderID %s: %w", orderID, errorutils.ErrNotFound)
+	}
+
+	if !order.IsPaid() {
+		return ErrOrderUnpaid
+	}
+
+	// get the order items, need to create issuers based on the
+	// special sku values on the order items
+	for _, orderItem := range order.Items {
+		// generalized issuer based on sku and merchant id
+		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
+		if err != nil {
+			return errorutils.Wrap(err, "error encoding issuer name")
+		}
+
+		// If no issuer exists for the sku then create a new one
+		// This only happens in event of a new sku being created
+		issuer, err := s.Datastore.GetIssuer(issuerID)
+		if issuer == nil {
+
+			if orderItem.ValidForISO == nil {
+				return fmt.Errorf("error duration cannot be nil")
+			}
+
+			t := time.Now()
+
+			overlap, buffer, err := getOverlapAndBuffer(ctx, orderItem.SKU)
+			if err != nil {
+				return fmt.Errorf("error decoding overlap and buffer from macaroon")
+			}
+
+			c := cbr.CreateIssuerV3{
+				Name:      order.MerchantID,
+				Cohort:    cohort,
+				MaxTokens: defaultMaxTokensPerIssuer,
+				ValidFrom: &t, // TODO what these be
+				ExpiresAt: &t, // TODO  what should be used
+				Duration:  *orderItem.ValidForISO,
+				Overlap:   overlap,
+				Buffer:    buffer,
+			}
+
+			err = s.cbClient.CreateIssuerV3(ctx, c)
+			if err != nil {
+				return fmt.Errorf("error creating order credentials: error creating issuer v3: %w", err)
+			}
+
+		}
+
+		if len(blindedCreds) > orderItem.Quantity {
+			blindedCreds = blindedCreds[:orderItem.Quantity]
+		}
+
+		orderCreds := OrderCreds{
+			ID:           itemID,
+			OrderID:      orderID,
+			IssuerID:     issuer.ID,
+			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
+		}
+
+		err = s.Datastore.InsertOrderCreds(&orderCreds)
+		if err != nil {
+			return fmt.Errorf("error creating order creds: could not insert order creds: %w", err)
+		}
+
+		// write to kafka topic for signing
+
+		requestID, ok := ctx.Value(requestutils.RequestID).(string)
+		if !ok {
+			return errors.New("error retrieving requestID from context for create order credentials")
+		}
+
+		associatedData := make(map[string]string)
+		associatedData["order_id"] = orderID.String()
+		associatedData["item_id"] = itemID.String()
+
+		bytes, err := json.Marshal(associatedData)
+		if err != nil {
+			return fmt.Errorf("error serializing associated data: %w", err)
+		}
+
+		signingOrderRequest := SigningOrderRequest{
+			RequestID: requestID,
+			Data: []SigningOrder{
+				{
+					IssuerType:     orderItem.SKU,
+					IssuerCohort:   cohort,
+					BlindedTokens:  blindedCreds,
+					AssociatedData: bytes,
+				},
+			},
+		}
+
+		textual, err := json.Marshal(signingOrderRequest)
+		if err != nil {
+			return fmt.Errorf("error marshaling kafka msg: %w", err)
+		}
+
+		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(textual)
+		if err != nil {
+			return fmt.Errorf("error converting native from textual: %w", err)
+		}
+
+		binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
+		if err != nil {
+			return fmt.Errorf("error converting binary from native: %w", err)
+		}
+
+		err = s.kafkaWriter.WriteMessages(ctx, kafka.Message{
+			Topic: kafkaUnsignedOrderCredsTopic,
+			Key:   []byte(signingOrderRequest.RequestID),
+			Value: binary,
+		})
+		if err != nil {
+			return fmt.Errorf("error writting kafka message: %w", err)
 		}
 	}
 
@@ -205,9 +347,9 @@ type OrderWorker interface {
 }
 
 // SignOrderCreds signs the blinded credentials
-func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
+func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
 
-	resp, err := service.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
+	resp, err := s.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +365,40 @@ func (service *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, i
 	}
 
 	return creds, nil
+}
+
+type OrderCredentialsWorker interface {
+	FetchSignedOrderCredentials(ctx context.Context) (*SigningOrderResult, error)
+}
+
+func (s *Service) FetchSignedOrderCredentials(ctx context.Context) (*SigningOrderResult, error) {
+	message, err := s.kafkaOrderCredsSignedRequestReader.ReadMessage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
+	}
+
+	codec, ok := s.codecs[kafkaSignedOrderCredsTopic]
+	if !ok {
+		return nil, fmt.Errorf("read message: could not find codec %s", kafkaSignedOrderCredsTopic)
+	}
+
+	native, _, err := codec.NativeFromBinary(message.Value)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode naitve from binary %w", err)
+	}
+
+	textual, err := codec.TextualFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode textual from native %w", err)
+	}
+
+	var signedOrderResult SigningOrderResult
+	err = json.Unmarshal(textual, &signedOrderResult)
+	if err != nil {
+		return nil, fmt.Errorf("read message: error could not decode json from textual %w", err)
+	}
+
+	return &signedOrderResult, nil
 }
 
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
@@ -262,4 +438,43 @@ var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBin
 		requestCredentials[i].Signature = cb[i].Signature
 	}
 	return requestCredentials, nil
+}
+
+// TODO temp function, this should be removed when we move away from macaroons
+func getOverlapAndBuffer(ctx context.Context, sku string) (int, int, error) {
+	overlap := defaultOverlap
+	buffer := defaultBuffer
+
+	valid, err := validateHardcodedSku(ctx, sku)
+	if err != nil || !valid {
+		return overlap, buffer, fmt.Errorf("failed to validate sku: %w", err)
+	}
+
+	mac, err := decodeAndUnmarshalSku(sku)
+	if err != nil {
+		return overlap, buffer, fmt.Errorf("failed to create order item from macaroon: %w", err)
+	}
+
+	caveats := mac.Caveats()
+
+	for i := 0; i < len(caveats); i++ {
+		caveat := mac.Caveats()[i]
+		values := strings.Split(string(caveat.Id), "=")
+		key := strings.TrimSpace(values[0])
+		value := strings.TrimSpace(strings.Join(values[1:], "="))
+
+		switch key {
+		case "credential_valid_overlap":
+			overlap, err = strconv.Atoi(value)
+			if err != nil {
+				return buffer, overlap, fmt.Errorf("failed to unmarshal macaroon: error parsing overlap: %w", err)
+			}
+		case "credential_valid_buffer":
+			buffer, err = strconv.Atoi(value)
+			if err != nil {
+				return buffer, overlap, fmt.Errorf("failed to unmarshal macaroon: error parsing buffer: %w", err)
+			}
+		}
+	}
+	return overlap, buffer, nil
 }
