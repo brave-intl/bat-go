@@ -65,9 +65,9 @@ type Datastore interface {
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
-	// GetOrderTimeLimitedV2Creds returns all unsigned order credentials for an order
+	// GetOrderTimeLimitedV2Creds returns all order credentials for an order
 	GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error)
-	// GetOrderTimeLimitedV2CredsByItemID returns unsigned order credentials by order and item
+	// GetOrderTimeLimitedV2CredsByItemID returns order credentials by order and item
 	GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error)
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
@@ -820,7 +820,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2Creds returns all unsigned order credentials for an order
+// GetOrderTimeLimitedV2Creds returns all order credentials for an order
 func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error) {
 	// each "order item" is a different record
 	var orderCreds []TimeLimitedV2Creds
@@ -871,7 +871,7 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimite
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2CredsByItemID returns the unsigned order credentials by order and item
+// GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item
 func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select
