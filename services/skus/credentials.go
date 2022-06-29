@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -197,7 +196,7 @@ func (s *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemI
 		}
 
 		orderCreds := OrderCreds{
-			ID:           itemID,
+			ID:           orderItem.ID,
 			OrderID:      orderID,
 			IssuerID:     issuer.ID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
@@ -246,12 +245,25 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 
 			t := time.Now()
 
-			overlap, buffer, err := getOverlapAndBuffer(ctx, orderItem.SKU)
-			if err != nil {
-				return fmt.Errorf("error decoding overlap and buffer from macaroon")
+			overlap := defaultOverlap
+			o, ok := orderItem.Metadata["overlap"]
+			if ok {
+				overlap, err = strconv.Atoi(o)
+				if err != nil {
+					return fmt.Errorf("error converting overlap")
+				}
 			}
 
-			c := cbr.CreateIssuerV3{
+			buffer := defaultBuffer
+			b, ok := orderItem.Metadata["buffer"]
+			if ok {
+				overlap, err = strconv.Atoi(b)
+				if err != nil {
+					return fmt.Errorf("error converting buffer")
+				}
+			}
+
+			createIssuerV3 := cbr.CreateIssuerV3{
 				Name:      order.MerchantID,
 				Cohort:    cohort,
 				MaxTokens: defaultMaxTokensPerIssuer,
@@ -262,11 +274,23 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 				Buffer:    buffer,
 			}
 
-			err = s.cbClient.CreateIssuerV3(ctx, c)
+			err = s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
 			if err != nil {
 				return fmt.Errorf("error creating order credentials: error creating issuer v3: %w", err)
 			}
 
+			resp, err := s.cbClient.GetIssuer(ctx, createIssuerV3.Name)
+			if err != nil {
+				return fmt.Errorf("error getting issuer: %w", err)
+			}
+
+			issuer, err = s.Datastore.InsertIssuer(&Issuer{
+				MerchantID: resp.Name,
+				PublicKey:  resp.PublicKey,
+			})
+			if err != nil {
+				return fmt.Errorf("error creating new issuer: %w", err)
+			}
 		}
 
 		if len(blindedCreds) > orderItem.Quantity {
@@ -274,7 +298,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		}
 
 		orderCreds := OrderCreds{
-			ID:           itemID,
+			ID:           orderItem.ID,
 			OrderID:      orderID,
 			IssuerID:     issuer.ID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
@@ -438,43 +462,4 @@ var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBin
 		requestCredentials[i].Signature = cb[i].Signature
 	}
 	return requestCredentials, nil
-}
-
-// TODO temp function, this should be removed when we move away from macaroons
-func getOverlapAndBuffer(ctx context.Context, sku string) (int, int, error) {
-	overlap := defaultOverlap
-	buffer := defaultBuffer
-
-	valid, err := validateHardcodedSku(ctx, sku)
-	if err != nil || !valid {
-		return overlap, buffer, fmt.Errorf("failed to validate sku: %w", err)
-	}
-
-	mac, err := decodeAndUnmarshalSku(sku)
-	if err != nil {
-		return overlap, buffer, fmt.Errorf("failed to create order item from macaroon: %w", err)
-	}
-
-	caveats := mac.Caveats()
-
-	for i := 0; i < len(caveats); i++ {
-		caveat := mac.Caveats()[i]
-		values := strings.Split(string(caveat.Id), "=")
-		key := strings.TrimSpace(values[0])
-		value := strings.TrimSpace(strings.Join(values[1:], "="))
-
-		switch key {
-		case "credential_valid_overlap":
-			overlap, err = strconv.Atoi(value)
-			if err != nil {
-				return buffer, overlap, fmt.Errorf("failed to unmarshal macaroon: error parsing overlap: %w", err)
-			}
-		case "credential_valid_buffer":
-			buffer, err = strconv.Atoi(value)
-			if err != nil {
-				return buffer, overlap, fmt.Errorf("failed to unmarshal macaroon: error parsing buffer: %w", err)
-			}
-		}
-	}
-	return overlap, buffer, nil
 }

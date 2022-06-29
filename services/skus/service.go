@@ -45,23 +45,14 @@ import (
 var (
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
+	// TODO address in kafka refactor.
 	// kafka topic for requesting order credentials are signed, write to by sku service
-	kafkaUnsignedOrderCredsTopic = fmt.Sprintf("sometopic:%s", os.Getenv("ENV"))
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
 
 	// kafka topic which receives order creds once they have been signed, read by sku service
-	kafkaSignedOrderCredsTopic                = fmt.Sprintf("signedordercreds:%s", os.Getenv("ENV"))
+	kafkaSignedOrderCredsTopic                = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
 	KafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
-
-// SetKafkaUnsignedOrderCredsTopic used for testing
-func SetKafkaUnsignedOrderCredsTopic(newTopic string) {
-	kafkaUnsignedOrderCredsTopic = newTopic
-}
-
-// SetKafkaSignedOrderCredsTopic used for testing
-func SetKafkaSignedOrderCredsTopic(newTopic string) {
-	kafkaSignedOrderCredsTopic = newTopic
-}
 
 const (
 	// OrderStatusCanceled - string literal used in db for canceled status
@@ -127,7 +118,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka sigend order credentials reader: %w", err)
 	}
-	fmt.Println(kafkaSignedOrderCredsTopic)
+
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
 		"vote":                       voteSchema,
 		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
@@ -879,7 +870,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]Ti
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
-	creds, err := s.Datastore.GetOrderTimeLimitedV2Creds(order.ID, false)
+	creds, err := s.Datastore.GetOrderTimeLimitedV2Creds(order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
