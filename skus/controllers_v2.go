@@ -2,6 +2,9 @@ package skus
 
 import (
 	"context"
+	"errors"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
@@ -14,15 +17,19 @@ import (
 )
 
 // RouterV2 for order endpoints v2
-func RouterV2(service *Service) chi.Router {
+func RouterV2(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
+
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
-		cr.Method("POST", "/", middleware.InstrumentHandler(
+
+		cr.Method("POST", "/", instrumentHandler(
 			"CreateOrderCredsV2", CreateOrderCredsV2(service)))
+
 		cr.Method("GET", "/", middleware.InstrumentHandler(
 			"GetOrderCredsV2", GetOrderCredsV2(service)))
+
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler(
 			"GetOrderCredsByIDV2", GetOrderCredsByIDV2(service)))
 	})
@@ -32,17 +39,19 @@ func RouterV2(service *Service) chi.Router {
 
 // CreateOrderCredsV2Request includes the item ID and blinded credentials which to be signed
 type CreateOrderCredsV2Request struct {
-	ItemID       uuid.UUID `json:"itemId" valid:"uuid"`
+	ItemID       uuid.UUID `json:"itemId" valid:"-"`
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
 // CreateOrderCredsV2 is the handler for creating order credentials
 func CreateOrderCredsV2(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
 		var req CreateOrderCredsV2Request
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
-			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+			logging.FromContext(r.Context()).Err(err).Msg("create order request v2")
+			return handlers.WrapError(err, "error in request body", http.StatusBadRequest)
 		}
 
 		_, err = govalidator.ValidateStruct(req)
@@ -53,7 +62,7 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
-				"Error validating request url parameter",
+				"error validating request url parameter",
 				map[string]interface{}{
 					"orderID": err.Error(),
 				},
@@ -62,19 +71,32 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 		orderCreds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), req.ItemID, false)
 		if err != nil {
-			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
+			logging.FromContext(r.Context()).
+				Err(err).Msg("create order request v2")
+
+			return handlers.WrapError(err, "error retrieving order credentials",
+				http.StatusInternalServerError)
 		}
+
 		if orderCreds != nil {
-			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
+			return handlers.WrapError(err, "error order credentials already exist for order",
+				http.StatusBadRequest)
 		}
 
-		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
-			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
+			logging.FromContext(r.Context()).Err(err).Msg("create order credentials v2")
+			switch {
+			case errors.Is(err, ErrOrderUnpaid):
+				return handlers.WrapError(err, "error creating order credentials order not paid", http.StatusBadRequest)
+			case errors.As(err, &errorutils.ErrNotFound):
+				return handlers.WrapError(err, "error creating order credentials: order not found", http.StatusBadRequest)
+			}
+			return handlers.WrapError(err, "error creating order credentials", http.StatusInternalServerError)
 		}
 
-		return handlers.RenderContent(r.Context(), nil, w, http.StatusOK)
-	})
+		return handlers.RenderContent(r.Context(), nil, w, http.StatusCreated)
+	}
 }
 
 // GetOrderCredsV2 is the handler for fetching order credentials

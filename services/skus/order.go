@@ -135,7 +135,7 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
-	// validation prior to decoding/unmarshaling
+	// validation prior to decoding/unmarshalling
 	valid, err := validateHardcodedSku(ctx, sku)
 	if err != nil {
 		sublogger.Error().Err(err).Msg("failed to validate sku")
@@ -154,32 +154,6 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 		sublogger.Error().Err(err).Msg("failed to decode sku")
 		return nil, nil, fmt.Errorf("failed to create order item from macaroon: %w", err)
 	}
-
-	/*
-		 * TODO: macaroon library to validate macaroons
-		 * don't delete the below, when we have a good macaroon lib it will be applicable
-
-		// get the merchant's keys
-		keys, err := s.Datastore.GetKeys(mac.Location(), false)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get keys for merchant to validate macaroon: %w", err)
-		}
-
-		// check if any of the keys for the merchant will validate the mac
-		var valid bool
-		for _, k := range *keys {
-			// decrypt the merchant's secret key from db
-			if err := k.SetSecretKey(); err != nil {
-				return nil, nil, fmt.Errorf("unable to decrypt merchant key from db: %w", err)
-			}
-			// perform verify
-			if _, err := mac.VerifySignature([]byte(k.SecretKey), nil); err == nil {
-				// valid
-				valid = true
-				break
-			}
-		}
-	*/
 
 	caveats := mac.Caveats()
 	allowedPaymentMethods := new(Methods)

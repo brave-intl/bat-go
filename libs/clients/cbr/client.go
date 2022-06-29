@@ -3,8 +3,10 @@ package cbr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
@@ -13,6 +15,7 @@ import (
 // Client abstracts over the underlying client
 type Client interface {
 	CreateIssuer(ctx context.Context, issuer string, maxTokens int) error
+	CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3) error
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
@@ -55,6 +58,28 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/issuer/", &IssuerCreateRequest{Name: issuer, MaxTokens: maxTokens}, nil)
 	if err != nil {
 		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+
+	return err
+}
+
+type CreateIssuerV3 struct {
+	Name      string     `json:"name"`
+	Cohort    int        `json:"cohort"`
+	MaxTokens int        `json:"max_tokens"`
+	ValidFrom *time.Time `json:"valid_from"` // start of issuance
+	ExpiresAt *time.Time `json:"expires_at"`
+	Duration  string     `json:"duration"` // valid duration of each sub issuer
+	Overlap   int        `json:"overlap"`  // number of days sub issuer should overlap
+	Buffer    int        `json:"buffer"`   // number of sub issuers in the future
+}
+
+func (c *HTTPClient) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3) error {
+	req, err := c.client.NewRequest(ctx, "POST", "v3/issuer/", createIssuerV3, nil)
+	if err != nil {
+		return fmt.Errorf("error creating create issuer request v3: %w", err)
 	}
 
 	_, err = c.client.Do(ctx, req, nil)

@@ -599,6 +599,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 		if err != nil {
 			return handlers.WrapError(err, "Error validating no credentials exist for order", http.StatusBadRequest)
 		}
+
 		if orderCreds != nil {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}

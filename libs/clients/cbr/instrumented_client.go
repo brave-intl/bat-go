@@ -52,6 +52,20 @@ func (_d ClientWithPrometheus) CreateIssuer(ctx context.Context, issuer string, 
 	return _d.base.CreateIssuer(ctx, issuer, maxTokens)
 }
 
+// CreateIssuerV3 implements Client
+func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "CreateIssuerV3", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.CreateIssuerV3(ctx, createIssuerV3)
+}
+
 // GetIssuer implements Client
 func (_d ClientWithPrometheus) GetIssuer(ctx context.Context, issuer string) (ip1 *IssuerResponse, err error) {
 	_since := time.Now()

@@ -29,7 +29,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
-	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -38,13 +38,30 @@ import (
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 )
 
 var (
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
+
+	// kafka topic for requesting order credentials are signed, write to by sku service
+	kafkaUnsignedOrderCredsTopic = fmt.Sprintf("sometopic:%s", os.Getenv("ENV"))
+
+	// kafka topic which receives order creds once they have been signed, read by sku service
+	kafkaSignedOrderCredsTopic                = fmt.Sprintf("signedordercreds:%s", os.Getenv("ENV"))
+	KafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
+
+// SetKafkaUnsignedOrderCredsTopic used for testing
+func SetKafkaUnsignedOrderCredsTopic(newTopic string) {
+	kafkaUnsignedOrderCredsTopic = newTopic
+}
+
+// SetKafkaSignedOrderCredsTopic used for testing
+func SetKafkaSignedOrderCredsTopic(newTopic string) {
+	kafkaSignedOrderCredsTopic = newTopic
+}
 
 const (
 	// OrderStatusCanceled - string literal used in db for canceled status
@@ -69,6 +86,7 @@ type Service struct {
 	jobs             []srv.Job
 	pauseVoteUntil   time.Time
 	pauseVoteUntilMu sync.RWMutex
+	kafkaOrderCredsSignedRequestReader kafkautils.KafkaReader
 }
 
 // PauseWorker - pause worker until time specified
@@ -96,14 +114,24 @@ func (s *Service) InitKafka(ctx context.Context) error {
 	// TODO: eventually as cobra/viper
 	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, os.Getenv("KAFKA_BROKERS"))
 
+	// TODO address in kafka refactor
+	// passing an empty string will not set topic on writer, so it can be defined at message write time
 	var err error
-	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, voteTopic)
+	s.kafkaWriter, s.kafkaDialer, err = kafkautils.InitKafkaWriter(ctx, "")
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
+	s.kafkaOrderCredsSignedRequestReader, err = kafkautils.NewKafkaReader(ctx, KafkaOrderCredsSignedRequestReaderGroupID,
+		kafkaSignedOrderCredsTopic)
+	if err != nil {
+		return fmt.Errorf("failed to initialize kafka sigend order credentials reader: %w", err)
+	}
+	fmt.Println(kafkaSignedOrderCredsTopic)
 	s.codecs, err = kafkautils.GenerateCodecs(map[string]string{
-		"vote": voteSchema,
+		"vote":                       voteSchema,
+		kafkaUnsignedOrderCredsTopic: signingOrderRequestSchema,
+		kafkaSignedOrderCredsTopic:   signingOrderResultSchema,
 	})
 
 	if err != nil {
@@ -179,6 +207,11 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Func:    service.RunNextOrderJob,
 			Cadence: 500 * time.Millisecond,
 			Workers: 3,
+		},
+		{
+			Func:    service.RunStoreSignedOrderCredentialsJob,
+			Cadence: 500 * time.Millisecond,
+			Workers: 1,
 		},
 	}
 
@@ -372,7 +405,7 @@ func (s *Service) TransformStripeOrder(order *Order) (*Order, error) {
 	return order, nil
 }
 
-// CancelOrder - cancels an order, propogates to stripe if needed
+// CancelOrder - cancels an order, propagates to stripe if needed
 func (s *Service) CancelOrder(orderID uuid.UUID) error {
 	// check the order, do we have a stripe subscription?
 	ok, subID, err := s.Datastore.IsStripeSub(orderID)
@@ -826,7 +859,7 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	}
 
 	if creds == nil {
-		return nil, http.StatusNotFound, fmt.Errorf("Credentials do not exist")
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
 	}
 
 	status := http.StatusOK
@@ -1293,4 +1326,8 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {
+	return true, s.Datastore.StoreSignedOrderCredentials(ctx, s)
 }
