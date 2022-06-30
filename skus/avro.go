@@ -168,3 +168,16 @@ func (s *SignedOrderStatus) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+func (s SignedOrderStatus) String() string {
+	switch s {
+	case SignedOrderStatusOk:
+		return "ok"
+	case SignedOrderStatusInvalidIssuer:
+		return "invalid_issuer"
+	case SignedOrderStatusError:
+		return "error"
+	default:
+		return fmt.Sprintf("%d", int(s))
+	}
+}

@@ -1146,10 +1146,6 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 					len(signedOrderResult.Data))
 			}
 
-			if signedOrderResult.Data[0].Status != SignedOrderStatusOk {
-				return fmt.Errorf("error requestID %s", signedOrderResult.RequestID)
-			}
-
 			var metadata datastore.Metadata
 			err = json.Unmarshal(signedOrderResult.Data[0].AssociatedData, &metadata)
 			if err != nil {
@@ -1166,6 +1162,11 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				return fmt.Errorf("error itemID not found in associated data for requestID %s", signedOrderResult.RequestID)
 			}
 
+			if signedOrderResult.Data[0].Status != SignedOrderStatusOk {
+				return fmt.Errorf("error signing order creds for orderID %s itemID %s status %s",
+					orderID, itemID, signedOrderResult.Data[0].Status.String())
+			}
+
 			signedTokens := jsonutils.JSONStringArray(signedOrderResult.Data[0].SignedTokens)
 
 			result, err := pg.ExecContext(ctx, `update order_creds 
@@ -1174,16 +1175,16 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				&signedTokens, signedOrderResult.Data[0].Proof,
 				signedOrderResult.Data[0].PublicKey, metadata, orderID, itemID)
 			if err != nil {
-				return fmt.Errorf("error updating order creds for requestID %s: %w", signedOrderResult.RequestID, err)
+				return fmt.Errorf("error updating order creds for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
 
 			rows, err := result.RowsAffected()
 			if err != nil {
-				return fmt.Errorf("error getting updated row for order creds requestID %s: %w", signedOrderResult.RequestID, err)
+				return fmt.Errorf("error getting updated row for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
 
 			if rows != 1 {
-				return fmt.Errorf("error expected one row to be updated for order creds requestID %s: %w", signedOrderResult.RequestID, err)
+				return fmt.Errorf("error expected one row to be updated for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
 		}
 	}
