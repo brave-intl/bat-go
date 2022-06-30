@@ -246,14 +246,14 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		if issuer == nil {
 
 			if orderItem.ValidForISO == nil {
-				return fmt.Errorf("error duration cannot be nil")
+				return fmt.Errorf("error valid for iso cannot be nil for order item %s", orderItem.ID)
 			}
 
 			overlap := defaultOverlap
 			if over, ok := orderItem.Metadata["overlap"]; ok {
 				overlap, err = strconv.Atoi(over)
 				if err != nil {
-					return fmt.Errorf("error converting overlap")
+					return fmt.Errorf("error converting overlap for order item %s: %w", orderItem.ID, err)
 				}
 			}
 
@@ -261,7 +261,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			if buff, ok := orderItem.Metadata["buffer"]; ok {
 				buffer, err = strconv.Atoi(buff)
 				if err != nil {
-					return fmt.Errorf("error converting buffer")
+					return fmt.Errorf("error converting buffer for order item %s: %w", orderItem.ID, err)
 				}
 			}
 
@@ -282,7 +282,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 
 			resp, err := s.cbClient.GetIssuer(ctx, createIssuerV3.Name)
 			if err != nil {
-				return fmt.Errorf("error getting issuer: %w", err)
+				return fmt.Errorf("error getting issuer %s: %w", createIssuerV3.Name, err)
 			}
 
 			issuer, err = s.Datastore.InsertIssuer(&Issuer{
