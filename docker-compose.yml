@@ -173,7 +173,7 @@ services:
   challenge-bypass:
     platform: linux/amd64
     container_name: challenge-bypass
-    image: brave/challenge-bypass
+    image: brave/challenge-bypass:latest
     restart: always
     ports:
       - "2416:2416"
@@ -181,6 +181,17 @@ services:
       - "SENTRY_DSN"
       - "DATABASE_URL=postgres://btokens:password@challenge-bypass-postgres/btokens?sslmode=disable"
       - "DATABASE_MIGRATIONS_URL=file:///src/migrations"
+      - KAFKA_BROKERS=kafka:19092
+      - KAFKA_SSL_CA_LOCATION=/etc/kafka/secrets/snakeoil-ca-1.crt
+      - KAFKA_SSL_CERTIFICATE_LOCATION=/etc/kafka/secrets/consumer-ca1-signed.pem
+      - KAFKA_SSL_KEY_LOCATION=/etc/kafka/secrets/consumer.client.key
+      - KAFKA_REQUIRED_ACKS=1
+      - KAFKA_CONSUMERS_PER_NODE=1
+      - REDEEM_CONSUMER_TOPIC=redeem.consumer
+      - REDEEM_PRODUCER_TOPIC=redeem.producer
+      - SIGN_CONSUMER_TOPIC=sign.consumer
+      - SIGN_PRODUCER_TOPIC=sign.producer
+      - CONSUMER_GROUP=consumer.group
     depends_on:
       - challenge-bypass-postgres
     networks:
