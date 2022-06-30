@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/utils/ptr"
 	"net/url"
 	"strconv"
 	"time"
@@ -248,8 +249,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 				return fmt.Errorf("error duration cannot be nil")
 			}
 
-			t := time.Now()
-
 			overlap := defaultOverlap
 			if over, ok := orderItem.Metadata["overlap"]; ok {
 				overlap, err = strconv.Atoi(over)
@@ -270,8 +269,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 				Name:      order.MerchantID,
 				Cohort:    cohort,
 				MaxTokens: defaultMaxTokensPerIssuer,
-				ValidFrom: &t, // TODO what these be
-				ExpiresAt: &t, // TODO  what should be used
+				ValidFrom: ptr.FromTime(time.Now()),
 				Duration:  *orderItem.ValidForISO,
 				Overlap:   overlap,
 				Buffer:    buffer,
