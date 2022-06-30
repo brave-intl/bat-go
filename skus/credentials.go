@@ -250,18 +250,16 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			t := time.Now()
 
 			overlap := defaultOverlap
-			o, ok := orderItem.Metadata["overlap"]
-			if ok {
-				overlap, err = strconv.Atoi(o)
+			if over, ok := orderItem.Metadata["overlap"]; ok {
+				overlap, err = strconv.Atoi(over)
 				if err != nil {
 					return fmt.Errorf("error converting overlap")
 				}
 			}
 
 			buffer := defaultBuffer
-			b, ok := orderItem.Metadata["buffer"]
-			if ok {
-				overlap, err = strconv.Atoi(b)
+			if buff, ok := orderItem.Metadata["buffer"]; ok {
+				buffer, err = strconv.Atoi(buff)
 				if err != nil {
 					return fmt.Errorf("error converting buffer")
 				}
@@ -295,10 +293,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			if err != nil {
 				return fmt.Errorf("error creating new issuer: %w", err)
 			}
-		}
-
-		if len(blindedCreds) > orderItem.Quantity {
-			blindedCreds = blindedCreds[:orderItem.Quantity]
 		}
 
 		orderCreds := OrderCreds{
