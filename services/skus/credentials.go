@@ -234,13 +234,13 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			return errorutils.Wrap(err, "error encoding issuer name")
 		}
 
-		// If no issuer exists for the sku then create a new one
-		// This only happens in event of a new sku being created
 		issuer, err := s.Datastore.GetIssuer(issuerID)
 		if err != nil {
 			return fmt.Errorf("error getting issuer: %w", err)
 		}
 
+		// If no issuer exists for the sku then create a new one
+		// This only happens in event of a new sku being created
 		if issuer == nil {
 
 			if orderItem.ValidForISO == nil {

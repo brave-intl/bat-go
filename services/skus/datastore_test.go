@@ -5,6 +5,7 @@ package skus_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/brave-intl/bat-go/skus"
 	mockskus "github.com/brave-intl/bat-go/skus/mock"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -263,6 +264,46 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_Success() {
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), *actual.Credentials[0].SignedCreds)
 	suite.Assert().Equal(associatedData["valid_from"], *actual.Credentials[0].ValidFrom)
 	suite.Assert().Equal(associatedData["valid_to"], *actual.Credentials[0].ValidTo)
+}
+
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatus_Error() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// create paid order with unsigned creds
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
+	order := suite.createOrder(ctx, devBraveFirewallVPNPremiumTimeLimited)
+
+	associatedData := make(map[string]string)
+	associatedData["order_id"] = order.ID.String()
+	associatedData["item_id"] = order.Items[0].ID.String()
+
+	ad, err := json.Marshal(associatedData)
+	suite.Require().NoError(err)
+
+	signingOrderResult := &skus.SigningOrderResult{
+		RequestID: uuid.NewV4().String(),
+		Data: []skus.SignedOrder{
+			{
+				Status:         skus.SignedOrderStatusError,
+				AssociatedData: ad,
+			},
+		},
+	}
+
+	orderCredentialsWorker := mockskus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker.EXPECT().
+		FetchSignedOrderCredentials(ctx).
+		Return(signingOrderResult, nil).
+		AnyTimes()
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
+
+	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s status %s",
+		associatedData["order_id"], associatedData["item_id"], skus.SignedOrderStatusError.String()))
 }
 
 // helper to setup a paid order, order items, issuer and insert unsigned order credentials
