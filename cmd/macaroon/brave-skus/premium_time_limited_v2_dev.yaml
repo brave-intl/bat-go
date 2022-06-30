@@ -9,8 +9,6 @@ tokens:
       - description: "Brave Firewall + VPN"
       - credential_type: "time-limited-v2"
       - credential_valid_duration: "P1M"
-      - credential_valid_overlap: 1
-      - credential_valid_buffer: 1
       - allowed_payment_methods: "stripe"
       - metadata: '
 {

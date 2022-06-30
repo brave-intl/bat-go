@@ -71,9 +71,8 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 		orderCreds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), req.ItemID)
 		if err != nil {
-			logging.FromContext(r.Context()).
-				Err(err).Msg("create order request v2")
-
+			logging.FromContext(r.Context()).Err(err).Str("orderID", orderID.String()).
+				Msg("create order credentials v2")
 			return handlers.WrapError(err, "error retrieving order credentials",
 				http.StatusInternalServerError)
 		}
@@ -85,12 +84,13 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
-			logging.FromContext(r.Context()).Err(err).Msg("create order credentials v2")
+			logging.FromContext(r.Context()).Err(err).Str("orderID", orderID.String()).
+				Msg("create order credentials v2")
 			switch {
 			case errors.Is(err, ErrOrderUnpaid):
-				return handlers.WrapError(err, "error creating order credentials order not paid", http.StatusBadRequest)
+				return handlers.WrapError(err, "error creating order credentials", http.StatusBadRequest)
 			case errors.As(err, &errorutils.ErrNotFound):
-				return handlers.WrapError(err, "error creating order credentials: order not found", http.StatusBadRequest)
+				return handlers.WrapError(err, "error creating order credentials", http.StatusNotFound)
 			}
 			return handlers.WrapError(err, "error creating order credentials", http.StatusInternalServerError)
 		}
