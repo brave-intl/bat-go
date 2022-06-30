@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/handlers"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -150,6 +152,106 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Created_New_SKU() {
 	suite.Require().Equal(order.Items[0].ID.String(), metadata["item_id"])
 
 	suite.Assert().Equal(http.StatusCreated, rw.Code)
+}
+
+func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	env := os.Getenv("ENV")
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
+
+	// create unpaid order
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
+
+	service := Service{}
+	orderItem, methods, err := service.CreateOrderItemFromMacaroon(ctx, devBraveFirewallVPNPremiumTimeLimited, 1)
+	suite.Require().NoError(err)
+
+	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPending,
+		test.RandomString(), test.RandomString(), nil, []OrderItem{*orderItem}, methods)
+	suite.Require().NoError(err)
+
+	// create order creds v2 request
+
+	data := CreateOrderCredsV2Request{
+		ItemID:       order.Items[0].ID,
+		BlindedCreds: []string{base64.StdEncoding.EncodeToString([]byte(test.RandomString()))},
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	skuService, err := InitService(ctx, suite.storage, nil)
+	suite.Require().NoError(err)
+
+	router := RouterV2(skuService, instrumentHandler)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+
+	expected := handlers.AppError{
+		Cause:   nil,
+		Message: "error creating order credentials: order not paid",
+		Code:    http.StatusBadRequest,
+	}
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	suite.Require().Equal(http.StatusBadRequest, rw.Code)
+	suite.Require().Equal(expected, appError)
+}
+
+func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_NotFound() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	data := CreateOrderCredsV2Request{
+		ItemID:       uuid.NewV4(),
+		BlindedCreds: []string{base64.StdEncoding.EncodeToString([]byte(test.RandomString()))},
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		uuid.NewV4()), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	skuService, err := InitService(ctx, suite.storage, nil)
+	suite.Require().NoError(err)
+
+	router := RouterV2(skuService, instrumentHandler)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+
+	var appError handlers.AppError
+	err = json.NewDecoder(rw.Body).Decode(&appError)
+
+	suite.Require().Equal(http.StatusNotFound, rw.Code)
+	suite.Require().Contains(appError.Message, errorutils.ErrNotFound.Error())
 }
 
 func (suite *ControllersV2TestSuite) TestRunStoreSignedOrderCredentialsJob() {

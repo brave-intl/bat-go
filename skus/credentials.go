@@ -216,7 +216,7 @@ func (s *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemI
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
-		return fmt.Errorf("error get order: %w", err)
+		return fmt.Errorf("error retrieving order: %w", err)
 	}
 
 	if order == nil {
