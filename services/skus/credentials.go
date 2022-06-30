@@ -2,6 +2,7 @@ package skus
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -235,8 +236,8 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		}
 
 		issuer, err := s.Datastore.GetIssuer(issuerID)
-		if err != nil {
-			return fmt.Errorf("error getting issuer: %w", err)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("error getting issuerID %s: %w", issuerID, err)
 		}
 
 		// If no issuer exists for the sku then create a new one

@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/datastore"
 
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
@@ -101,11 +101,8 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Created_New_SKU() {
 	orderItem, methods, err := service.CreateOrderItemFromMacaroon(ctx, devBraveFirewallVPNPremiumTimeLimited, 1)
 	suite.Require().NoError(err)
 
-	orderItem1, methods, err := service.CreateOrderItemFromMacaroon(ctx, devBraveSearchPremiumYearTimeLimited, 1)
-	suite.Require().NoError(err)
-
 	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), nil, []OrderItem{*orderItem, *orderItem1}, methods)
+		test.RandomString(), test.RandomString(), nil, []OrderItem{*orderItem}, methods)
 	suite.Require().NoError(err)
 
 	// create order creds v2 request
@@ -139,18 +136,18 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Created_New_SKU() {
 	server.Handler.ServeHTTP(rw, r)
 
 	// assert we have written unsigned order creds to kafka
-	//signingOrderRequest := suite.ReadSigningOrderRequestMessage(ctx, kafkaUnsignedOrderCredsTopic)
-	//
-	//suite.Require().Equal(requestID, signingOrderRequest.RequestID)
-	//suite.Require().Equal(orderItem.SKU, signingOrderRequest.Data[0].IssuerType)
-	//suite.Require().Equal(cohort, signingOrderRequest.Data[0].IssuerCohort)
-	//
-	//var metadata datastore.Metadata
-	//err = json.Unmarshal(signingOrderRequest.Data[0].AssociatedData, &metadata)
-	//suite.Require().NoError(err)
-	//
-	//suite.Require().Equal(order.ID.String(), metadata["order_id"])
-	//suite.Require().Equal(order.Items[0].ID.String(), metadata["item_id"])
+	signingOrderRequest := suite.ReadSigningOrderRequestMessage(ctx, kafkaUnsignedOrderCredsTopic)
+
+	suite.Require().Equal(requestID, signingOrderRequest.RequestID)
+	suite.Require().Equal(orderItem.SKU, signingOrderRequest.Data[0].IssuerType)
+	suite.Require().Equal(cohort, signingOrderRequest.Data[0].IssuerCohort)
+
+	var metadata datastore.Metadata
+	err = json.Unmarshal(signingOrderRequest.Data[0].AssociatedData, &metadata)
+	suite.Require().NoError(err)
+
+	suite.Require().Equal(order.ID.String(), metadata["order_id"])
+	suite.Require().Equal(order.Items[0].ID.String(), metadata["item_id"])
 
 	suite.Assert().Equal(http.StatusCreated, rw.Code)
 }
@@ -342,14 +339,4 @@ func (suite *ControllersV2TestSuite) createOrder(ctx context.Context, sku string
 	suite.Require().NoError(err)
 
 	return order
-}
-
-func TestMeta(t *testing.T) {
-	var m = make(datastore.Metadata)
-	m["overlap"] = "1"
-	m["buffer"] = "1"
-	b, err := json.Marshal(m)
-	fmt.Println(err)
-	fmt.Println(string(b))
-
 }
