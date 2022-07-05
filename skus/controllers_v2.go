@@ -71,7 +71,9 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 		orderCreds, err := service.Datastore.GetOrderTimeLimitedV2CredsByItemID(*orderID.UUID(), req.ItemID)
 		if err != nil {
-			logging.FromContext(r.Context()).Err(err).Str("orderID", orderID.String()).
+			logging.FromContext(r.Context()).Error().Err(err).
+				Str("orderID", orderID.String()).
+				Str("itemID", req.ItemID.String()).
 				Msg("create order credentials v2")
 			return handlers.WrapError(err, "error retrieving order credentials",
 				http.StatusInternalServerError)
@@ -84,7 +86,9 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 
 		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
-			logging.FromContext(r.Context()).Err(err).Str("orderID", orderID.String()).
+			logging.FromContext(r.Context()).Error().Err(err).
+				Str("orderID", orderID.String()).
+				Str("itemID", req.ItemID.String()).
 				Msg("create order credentials v2")
 			switch {
 			case errors.Is(err, ErrOrderUnpaid):
