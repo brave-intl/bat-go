@@ -192,8 +192,6 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 
-	kafkaWriter.AllowAutoTopicCreation = true
-
 	return kafkaWriter, dialer, nil
 }
 
