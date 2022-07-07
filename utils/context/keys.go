@@ -6,6 +6,8 @@ import "errors"
 type CTXKey string
 
 const (
+	// MergeCustodialCTXKey - the context key for merge custodial
+	MergeCustodialCTXKey CTXKey = "merge_custodial"
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
 	// DatabaseTransactionCTXKey - context key for database transactions
@@ -145,6 +147,11 @@ const (
 
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
+
+	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
+	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
+	// AWSRegionCTXKey - the context key for getting the rate limit
+	AWSRegionCTXKey CTXKey = "aws_region"
 )
 
 var (

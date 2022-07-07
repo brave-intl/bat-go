@@ -20,6 +20,12 @@ func init() {
 
 	// setup the flags
 
+	// merge_param_bucket - defaults to ""
+	rewardsCmd.PersistentFlags().String("merge-param-bucket", "",
+		"the bucket for which parameters are merged into this service")
+	cmd.Must(viper.BindPFlag("merge-param-bucket", rewardsCmd.PersistentFlags().Lookup("merge-param-bucket")))
+	cmd.Must(viper.BindEnv("merge-param-bucket", "MERGE_PARAM_BUCKET"))
+
 	// defaultCurrency - defaults to USD
 	rewardsCmd.PersistentFlags().String("default-currency", "USD",
 		"the default base currency for the rewards system")

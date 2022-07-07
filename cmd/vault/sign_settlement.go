@@ -197,7 +197,7 @@ func SignSettlement(command *cobra.Command, args []string) error {
 				sublog.WithContext(
 					context.WithValue(
 						command.Context(),
-						"mergeCustodial",
+						appctx.MergeCustodialCTXKey,
 						mergeCustodial,
 					),
 				),
@@ -336,7 +336,7 @@ func createUpholdArtifact(
 
 	// Ensure that there is only one payment for a given Uphold wallet by combining
 	// multiples if they exist.
-	mergeCustodialRaw := ctx.Value("mergeCustodial")
+	mergeCustodialRaw := ctx.Value(appctx.MergeCustodialCTXKey)
 	mergeCustodial, ok := mergeCustodialRaw.(bool)
 	if ok && mergeCustodial == true {
 		transactionSet = upholdsettlement.FlattenPaymentsByWalletProviderID(
