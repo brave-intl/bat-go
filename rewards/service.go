@@ -106,7 +106,7 @@ func NewService(ctx context.Context, ratio ratios.Client, s3client S3GetObjectAP
 		logger.Info().Str("region", region).Msg("setting up s3 client")
 		// aws config
 		cfg, err := config.LoadDefaultConfig(
-			context.TODO(),
+			ctx,
 			config.WithLogger(&appLogger{logger}),
 			config.WithRegion(region))
 		if err != nil {
