@@ -27,7 +27,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	sentry "github.com/getsentry/sentry-go"
 	"github.com/linkedin/goavro"
 	stripe "github.com/stripe/stripe-go/v72"
 
@@ -751,8 +750,6 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 	for {
 		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
 		if err != nil {
-			sentry.CaptureMessage(err.Error())
-			sentry.Flush(time.Second * 2)
 			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
 		}
 		if !attempted {

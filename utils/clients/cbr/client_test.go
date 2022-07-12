@@ -71,16 +71,19 @@ func TestSignAndRedeemCredentials(t *testing.T) {
 		assert.NoError(t, err, "Must be able to connect to challenge-bypass db")
 	}
 
-	_, err = db.Exec("DELETE FROM issuers; DELETE from redemptions")
+	_, err = db.Exec("DELETE from v3_issuer_keys; DELETE FROM v3_issuers; DELETE from redemptions")
 	assert.NoError(t, err, "Must be able to clear issuers")
-
-	_, err = db.Exec("INSERT INTO issuers(issuer_type, signing_key, max_tokens) VALUES ($1, $2, $3)", issuerName, sKey, 100)
-	assert.NoError(t, err, "Must be able to insert issuer")
 
 	ctx := context.Background()
 
 	client, err := New()
 	assert.NoError(t, err, "Must be able to correctly initialize the client")
+
+	err = client.CreateIssuer(ctx, issuerName, 100)
+	assert.NoError(t, err, "Should be able to create issuer")
+
+	_, err = db.Exec("update v3_issuer_keys set signing_key=$1", sKey)
+	assert.NoError(t, err, "Must be able to insert issuer key")
 
 	issuer, err := client.GetIssuer(ctx, issuerName)
 	assert.NoError(t, err, "Should be able to get issuer")
