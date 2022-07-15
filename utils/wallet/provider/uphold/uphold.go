@@ -267,6 +267,14 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 		return "", false, fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
+	// no country data from uphold, block the linking attempt
+	// requires uphold destination country support prior to deploy
+	if uhResp.CitizenshipCountry == "" ||
+		uhResp.IdentityCountry == "" ||
+		uhResp.ResidenceCountry == "" {
+		return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
+	}
+
 	// do country blacklist checking
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
 		// check country code
