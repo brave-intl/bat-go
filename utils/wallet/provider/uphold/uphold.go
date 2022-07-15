@@ -32,6 +32,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -498,6 +499,20 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
+var (
+	countUpholdTxDestinationGeo = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_uphold_tx_destination_geo",
+			Help: "upon transfer record the destination geo information",
+		},
+		[]string{"citizenship_country", "identity_country", "residence_country"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(countUpholdTxDestinationGeo)
+}
+
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
 	logger := logging.FromContext(ctx)
@@ -520,6 +535,19 @@ func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurren
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyUnmarshal, err.Error())
+	}
+
+	// in the event we have geo information on the transaction report it through metrics
+	//[]string{, , },
+	if !( // if there is a destination and all three are not empty strings
+	uhResp.Destination.CitizenshipCountry == "" &&
+		uhResp.Destination.IdentityCountry == "" &&
+		uhResp.Destination.ResidenceCountry == "") {
+		countUpholdTxDestinationGeo.With(prometheus.Labels{
+			"citizenship_country": uhResp.Destination.CitizenshipCountry,
+			"identity_country":    uhResp.Destination.IdentityCountry,
+			"residence_country":   uhResp.Destination.ResidenceCountry,
+		}).Inc()
 	}
 
 	return uhResp.ToTransactionInfo(), nil
@@ -670,14 +698,17 @@ type upholdTransactionResponseDestinationNode struct {
 }
 
 type upholdTransactionResponseDestination struct {
-	Type        string                                   `json:"type"`
-	CardID      string                                   `json:"CardId,omitempty"`
-	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
-	Currency    string                                   `json:"currency"`
-	Amount      decimal.Decimal                          `json:"amount"`
-	ExchangeFee decimal.Decimal                          `json:"commission"`
-	TransferFee decimal.Decimal                          `json:"fee"`
-	IsMember    bool                                     `json:"isMember"`
+	Type               string                                   `json:"type"`
+	CardID             string                                   `json:"CardId,omitempty"`
+	Node               upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Currency           string                                   `json:"currency"`
+	Amount             decimal.Decimal                          `json:"amount"`
+	ExchangeFee        decimal.Decimal                          `json:"commission"`
+	TransferFee        decimal.Decimal                          `json:"fee"`
+	IsMember           bool                                     `json:"isMember"`
+	CitizenshipCountry string                                   `json:"citizenshipCountry"`
+	IdentityCountry    string                                   `json:"identityCountry"`
+	ResidenceCountry   string                                   `json:"residenceCountry"`
 }
 
 type upholdTransactionResponseParams struct {
