@@ -21,7 +21,8 @@ mock:
 	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
 	mockgen -source=./promotion/datastore.go -destination=promotion/mockdatastore.go -package=promotion
 	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
-	mockgen -source=./skus/credentials.go -destination=skus/mock/credentials.go -package=mockskus
+	mockgen -source=./skus/credentials.go -destination=skus/mockcredentials.go -package=skus
+	mockgen -source=./skus/datastore.go -destination=skus/mockdatastore.go -package=skus
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation

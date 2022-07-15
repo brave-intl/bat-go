@@ -1,6 +1,5 @@
+// Package test provides utilities for testing. Do not import this into non-test code.
 package test
-
-// This file provides some basic helpers to generate random values for testing only
 
 import (
 	"crypto/rand"
@@ -28,4 +27,10 @@ func RandomStringWithLen(length int) string {
 func RandomInt() int {
 	n, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt32))
 	return int(n.Int64())
+}
+
+// RandomNonZeroInt return a random int up to math.MaxInt32
+func RandomNonZeroInt() int {
+	n, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt32-1))
+	return int(n.Int64() + 1)
 }

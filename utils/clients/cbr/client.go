@@ -72,8 +72,8 @@ type CreateIssuerV3 struct {
 	ValidFrom *time.Time `json:"valid_from"` // start of issuance
 	ExpiresAt *time.Time `json:"expires_at"`
 	Duration  string     `json:"duration"` // valid duration of each sub issuer
-	Overlap   int        `json:"overlap"`  // number of days sub issuer should overlap
 	Buffer    int        `json:"buffer"`   // number of sub issuers in the future
+	Overlap   int        `json:"overlap"`  // number of days sub issuer should overlap
 }
 
 func (c *HTTPClient) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3) error {

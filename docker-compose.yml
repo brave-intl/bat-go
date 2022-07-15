@@ -174,7 +174,6 @@ services:
     networks:
       - grant
   challenge-bypass:
-    platform: linux/amd64
     container_name: challenge-bypass
     image: brave/challenge-bypass:latest
     restart: always
@@ -200,7 +199,6 @@ services:
     networks:
       - grant
   zookeeper:
-    platform: linux/amd64
     container_name: grant-zookeeper
     image: confluentinc/cp-zookeeper:7.1.1
     environment:
@@ -210,7 +208,6 @@ services:
     networks:
       - grant
   kafka:
-    platform: linux/amd64
     container_name: grant-kafka
     image: confluentinc/cp-kafka:7.1.1
     ports:

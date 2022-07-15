@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,32 +14,23 @@ import (
 	"sync"
 	"time"
 
-	session "github.com/stripe/stripe-go/v72/checkout/session"
-	client "github.com/stripe/stripe-go/v72/client"
-	sub "github.com/stripe/stripe-go/v72/sub"
-
-	"errors"
-
+	"github.com/brave-intl/bat-go/utils/backoff"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/brave-intl/bat-go/utils/logging"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/stripe/stripe-go/v72"
-
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
-	walletutils "github.com/brave-intl/bat-go/utils/wallet"
-	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -50,7 +42,7 @@ var (
 
 	// kafka topic which receives order creds once they have been signed, read by sku service
 	kafkaSignedOrderCredsTopic                = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
-	KafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
+	kafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
 
 const (
@@ -60,6 +52,12 @@ const (
 	OrderStatusPaid = "paid"
 	// OrderStatusPending - string literal used in db for pending status
 	OrderStatusPending = "pending"
+)
+
+// Default issuer V3 config default values
+const (
+	defaultBuffer  = 30
+	defaultOverlap = 5
 )
 
 // Service contains datastore
@@ -77,6 +75,7 @@ type Service struct {
 	pauseVoteUntil                     time.Time
 	pauseVoteUntilMu                   sync.RWMutex
 	kafkaOrderCredsSignedRequestReader kafkautils.KafkaReader
+	retry                              backoff.RetryFunc
 }
 
 // PauseWorker - pause worker until time specified
@@ -112,7 +111,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
-	s.kafkaOrderCredsSignedRequestReader, err = kafkautils.NewKafkaReader(ctx, KafkaOrderCredsSignedRequestReaderGroupID,
+	s.kafkaOrderCredsSignedRequestReader, err = kafkautils.NewKafkaReader(ctx, kafkaOrderCredsSignedRequestReaderGroupID,
 		kafkaSignedOrderCredsTopic)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka sigend order credentials reader: %w", err)
@@ -182,6 +181,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		scClient:         scClient,
 		Datastore:        datastore,
 		pauseVoteUntilMu: sync.RWMutex{},
+		retry:            backoff.Retry,
 	}
 
 	// setup runnable jobs
@@ -190,11 +190,6 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Func:    service.RunNextVoteDrainJob,
 			Cadence: 2 * time.Second,
 			Workers: 1,
-		},
-		{
-			Func:    service.RunNextOrderJob,
-			Cadence: 500 * time.Millisecond,
-			Workers: 3,
 		},
 		{
 			Func:    service.RunStoreSignedOrderCredentialsJob,
@@ -214,21 +209,36 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 // CreateOrderFromRequest creates an order from the request
 func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderRequest) (*Order, error) {
 	totalPrice := decimal.New(0, 0)
-	orderItems := []OrderItem{}
 	var (
 		currency              string
+		orderItems            []OrderItem
 		location              string
 		validFor              *time.Duration
 		stripeSuccessURI      string
 		stripeCancelURI       string
 		status                string
 		allowedPaymentMethods = new(Methods)
+		merchantID            = "brave.com"
 	)
 
 	for i := 0; i < len(req.Items); i++ {
-		orderItem, pm, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
+		orderItem, pm, issuerConfig, err := s.CreateOrderItemFromMacaroon(ctx, req.Items[i].SKU, req.Items[i].Quantity)
 		if err != nil {
 			return nil, err
+		}
+
+		// Create issuer for sku. This only happens when a new sku is created.
+		switch orderItem.CredentialType {
+		case singleUse:
+			err = s.CreateIssuer(ctx, merchantID, *orderItem)
+			if err != nil {
+				return nil, errorutils.Wrap(err, "error finding issuer")
+			}
+		case timeLimitedV2:
+			err = s.CreateIssuerV3(ctx, merchantID, *orderItem, *issuerConfig)
+			if err != nil {
+				return nil, fmt.Errorf("error creating issuer for order item %s: %w", orderItem.ID, err)
+			}
 		}
 
 		// make sure all the order item skus have the same allowed Payment Methods
@@ -283,14 +293,15 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		status = OrderStatusPending
 	}
 
-	order, err := s.Datastore.CreateOrder(totalPrice, "brave.com", status, currency, location, validFor, orderItems, allowedPaymentMethods)
+	order, err := s.Datastore.CreateOrder(totalPrice, merchantID, status, currency,
+		location, validFor, orderItems, allowedPaymentMethods)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create order: %w", err)
 	}
 
 	if !order.IsPaid() && order.IsStripePayable() {
-		// brand new order, contains an email in the request
+		// brand-new order, contains an email in the request
 		checkoutSession, err := order.CreateStripeCheckoutSession(
 			req.Email,
 			parseURLAddOrderIDParam(stripeSuccessURI, order.ID),
@@ -767,19 +778,6 @@ func (s *Service) IsOrderPaid(orderID uuid.UUID) (bool, error) {
 	}
 
 	return sum.GreaterThanOrEqual(order.TotalPrice), nil
-}
-
-// RunNextOrderJob takes the next order job and completes it
-func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
-	for {
-		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
-		if err != nil {
-			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
-		}
-		if !attempted {
-			return attempted, err
-		}
-	}
 }
 
 func parseURLAddOrderIDParam(u string, orderID uuid.UUID) string {
