@@ -30,7 +30,13 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
+	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
+	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/client"
+	"github.com/stripe/stripe-go/v72/sub"
 )
 
 var (

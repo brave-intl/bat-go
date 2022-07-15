@@ -41,7 +41,7 @@ var (
 	}
 	dbs = map[string]*sqlx.DB{}
 	// CurrentMigrationVersion holds the default migration version
-	CurrentMigrationVersion = uint(45)
+	CurrentMigrationVersion = uint(46)
 	// MigrationTracks holds the migration version for a given track (eyeshade, promotion, wallet)
 	MigrationTracks = map[string]uint{
 		"eyeshade": 20,
@@ -121,7 +121,7 @@ func (pg *Postgres) Migrate(currentMigrationVersions ...uint) error {
 		return fmt.Errorf("failed to get migration version: %w", err)
 	}
 
-	// Don't attempt the migration if our number is less than the active db version or if the migration is in dirty state
+	// Don't attempt the migration if our currentMigrationVersion is less than the active db version or if the migration is in dirty state
 	if currentMigrationVersion < activeMigrationVersion || dirty {
 		subLogger.Error().Msg("migration not attempted")
 		sentry.CaptureMessage(
