@@ -18,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
@@ -450,9 +451,6 @@ type ValidateAccountRes struct {
 	CountryCode string `json:"countryCode"`
 }
 
-// ErrInvalidCountry - invalid country error for validation
-var ErrInvalidCountry = errors.New("invalid country")
-
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
 func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
 	// create the query string parameters
@@ -485,7 +483,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 						"status":       "failure",
 					}).Inc()
 				}
-				return "", ErrInvalidCountry
+				return "", errorutils.ErrInvalidCountry
 			}
 		}
 	}
