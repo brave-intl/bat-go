@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
+	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/ptr"
+	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -22,64 +25,15 @@ import (
 
 const (
 	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
-	cohort                    = 0
-	defaultBuffer             = 30
-	defaultOverlap            = 5
+	defaultCohort             = 0
+)
+
+var (
+	retryPolicy        = retrypolicy.DefaultRetry
+	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden}
 )
 
 var ErrOrderUnpaid = errors.New("order not paid")
-
-func decodeIssuerID(issuerID string) (string, string, error) {
-	var (
-		merchantID string
-		sku        string
-	)
-
-	u, err := url.Parse(issuerID)
-	if err != nil {
-		return "", "", fmt.Errorf("parse issuer name: %w", err)
-	}
-
-	sku = u.Query().Get("sku")
-	u.RawQuery = ""
-	merchantID = u.String()
-
-	return merchantID, sku, nil
-}
-
-func encodeIssuerID(merchantID, sku string) (string, error) {
-	v := url.Values{}
-	v.Add("sku", sku)
-
-	u, err := url.Parse(merchantID + "?" + v.Encode())
-	if err != nil {
-		return "", fmt.Errorf("parse merchant id: %w", err)
-	}
-
-	return u.String(), nil
-}
-
-// CredentialBinding includes info needed to redeem a single credential
-type CredentialBinding struct {
-	PublicKey     string `json:"publicKey" valid:"base64"`
-	TokenPreimage string `json:"t" valid:"base64"`
-	Signature     string `json:"signature" valid:"base64"`
-}
-
-// DeduplicateCredentialBindings - given a list of tokens return a deduplicated list
-func DeduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
-	var (
-		seen   = map[string]bool{}
-		result = []CredentialBinding{}
-	)
-	for _, t := range tokens {
-		if !seen[t.TokenPreimage] {
-			seen[t.TokenPreimage] = true
-			result = append(result, t)
-		}
-	}
-	return result
-}
 
 // Issuer includes information about a particular credential issuer
 type Issuer struct {
@@ -89,38 +43,142 @@ type Issuer struct {
 	PublicKey  string    `json:"publicKey" db:"public_key"`
 }
 
-// CreateIssuer creates a new challenge bypass credential issuer, saving it's information into the datastore
-func (s *Service) CreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer := &Issuer{MerchantID: merchantID}
-
-	err := s.cbClient.CreateIssuer(ctx, issuer.Name(), defaultMaxTokensPerIssuer)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.cbClient.GetIssuer(ctx, issuer.Name())
-	if err != nil {
-		return nil, err
-	}
-
-	issuer.PublicKey = resp.PublicKey
-
-	return s.Datastore.InsertIssuer(issuer)
-}
-
 // Name returns the name of the issuer as known by the challenge bypass server
 func (issuer *Issuer) Name() string {
 	return issuer.MerchantID
 }
 
-// GetOrCreateIssuer gets a matching issuer if one exists and otherwise creates one
-func (s *Service) GetOrCreateIssuer(ctx context.Context, merchantID string) (*Issuer, error) {
-	issuer, err := s.Datastore.GetIssuer(merchantID)
-	if issuer == nil {
-		issuer, err = s.CreateIssuer(ctx, merchantID)
+// CreateIssuer creates a new v1 issuer if it does not exist. This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem OrderItem) error {
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
 	}
 
-	return issuer, err
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	}
+
+	if issuer == nil {
+		requestOperation := func() (interface{}, error) {
+			return nil, s.cbClient.CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer)
+		}
+
+		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
+		}
+
+		requestOperation = func() (interface{}, error) {
+			return s.cbClient.GetIssuer(ctx, issuerID)
+		}
+
+		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error getting issuer %s: %w", issuerID, err)
+		}
+
+		issuerResponse, ok := response.(*cbr.IssuerResponse)
+		if !ok {
+			return fmt.Errorf("error converting issuer response: %w", err)
+		}
+
+		_, err = s.Datastore.InsertIssuer(&Issuer{
+			MerchantID: issuerResponse.Name,
+			PublicKey:  issuerResponse.PublicKey,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating new issuer: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// CreateIssuerV3 creates a new v3 issuer if it does not exist. This only happens in the event of a new sku being created.
+func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig issuerConfig) error {
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	if err != nil {
+		return errorutils.Wrap(err, "error encoding issuer name")
+	}
+
+	issuer, err := s.Datastore.GetIssuer(issuerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error get issuer for issuerID %s: %w", issuerID, err)
+	}
+
+	// Create a new issuer if one is not present.
+	if issuer == nil {
+		logging.FromContext(ctx).Info().
+			Str("issuerID", issuerID).
+			Msg("creating new issuer")
+
+		if orderItem.ValidForISO == nil {
+			return fmt.Errorf("error valid iso is empty for order item sku %s", orderItem.SKU)
+		}
+
+		createIssuerV3 := cbr.CreateIssuerV3{
+			Name:      issuerID,
+			Cohort:    defaultCohort,
+			MaxTokens: defaultMaxTokensPerIssuer,
+			ValidFrom: ptr.FromTime(time.Now()),
+			Duration:  *orderItem.ValidForISO,
+			Buffer:    issuerConfig.buffer,
+			Overlap:   issuerConfig.overlap,
+		}
+
+		requestOperation := func() (interface{}, error) {
+			return nil, s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
+		}
+
+		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
+		}
+
+		requestOperation = func() (interface{}, error) {
+			return s.cbClient.GetIssuer(ctx, createIssuerV3.Name)
+		}
+
+		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return fmt.Errorf("error getting issuer %s: %w", createIssuerV3.Name, err)
+		}
+
+		issuerResponse, ok := response.(*cbr.IssuerResponse)
+		if !ok {
+			return fmt.Errorf("error converting issuer response: %w", err)
+		}
+
+		_, err = s.Datastore.InsertIssuer(&Issuer{
+			MerchantID: issuerResponse.Name,
+			PublicKey:  issuerResponse.PublicKey,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating new issuer: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func canRetry(nonRetriableErrors []int) func(error) bool {
+	return func(err error) bool {
+		var eb *errorutils.ErrorBundle
+		switch {
+		case errors.As(err, &eb):
+			if hs, ok := eb.Data().(clients.HTTPState); ok {
+				for _, httpStatusCode := range nonRetriableErrors {
+					if hs.Status == httpStatusCode {
+						return false
+					}
+				}
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // OrderCreds encapsulates the credentials to be signed in response to a completed order
@@ -163,56 +221,6 @@ type TimeAwareSubIssuedCreds struct {
 	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
-// CreateOrderCreds if the order is complete
-func (s *Service) CreateOrderCreds(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
-	order, err := s.Datastore.GetOrder(orderID)
-	if err != nil {
-		return errorutils.Wrap(err, "error finding order")
-	}
-
-	if order == nil {
-		return errorutils.Wrap(err, "error no order found")
-	}
-
-	if !order.IsPaid() {
-		return errors.New("order has not yet been paid")
-	}
-
-	// get the order items, need to create issuers based on the
-	// special sku values on the order items
-	for _, orderItem := range order.Items {
-		// generalized issuer based on sku and merchant id
-		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
-		if err != nil {
-			return errorutils.Wrap(err, "error encoding issuer name")
-		}
-
-		// create the issuer
-		issuer, err := s.GetOrCreateIssuer(ctx, issuerID)
-		if err != nil {
-			return errorutils.Wrap(err, "error finding issuer")
-		}
-
-		if len(blindedCreds) > orderItem.Quantity {
-			blindedCreds = blindedCreds[:orderItem.Quantity]
-		}
-
-		orderCreds := OrderCreds{
-			ID:           orderItem.ID,
-			OrderID:      orderID,
-			IssuerID:     issuer.ID,
-			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
-		}
-
-		err = s.Datastore.InsertOrderCreds(&orderCreds)
-		if err != nil {
-			return errorutils.Wrap(err, "error inserting order creds")
-		}
-	}
-
-	return nil
-}
-
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
@@ -227,8 +235,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		return ErrOrderUnpaid
 	}
 
-	// get the order items, need to create issuers based on the
-	// special sku values on the order items
 	for _, orderItem := range order.Items {
 		// generalized issuer based on sku and merchant id
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
@@ -237,61 +243,8 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		}
 
 		issuer, err := s.Datastore.GetIssuer(issuerID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("error getting issuerID %s: %w", issuerID, err)
-		}
-
-		// If no issuer exists for the sku then create a new one
-		// This only happens in event of a new sku being created
-		if issuer == nil {
-
-			if orderItem.ValidForISO == nil {
-				return fmt.Errorf("error valid for iso cannot be nil for order item %s", orderItem.ID)
-			}
-
-			overlap := defaultOverlap
-			if over, ok := orderItem.Metadata["overlap"]; ok {
-				overlap, err = strconv.Atoi(over)
-				if err != nil {
-					return fmt.Errorf("error converting overlap for order item %s: %w", orderItem.ID, err)
-				}
-			}
-
-			buffer := defaultBuffer
-			if buff, ok := orderItem.Metadata["buffer"]; ok {
-				buffer, err = strconv.Atoi(buff)
-				if err != nil {
-					return fmt.Errorf("error converting buffer for order item %s: %w", orderItem.ID, err)
-				}
-			}
-
-			createIssuerV3 := cbr.CreateIssuerV3{
-				Name:      order.MerchantID,
-				Cohort:    cohort,
-				MaxTokens: defaultMaxTokensPerIssuer,
-				ValidFrom: ptr.FromTime(time.Now()),
-				Duration:  *orderItem.ValidForISO,
-				Overlap:   overlap,
-				Buffer:    buffer,
-			}
-
-			err = s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
-			if err != nil {
-				return fmt.Errorf("error creating order credentials: error creating issuer v3: %w", err)
-			}
-
-			resp, err := s.cbClient.GetIssuer(ctx, createIssuerV3.Name)
-			if err != nil {
-				return fmt.Errorf("error getting issuer %s: %w", createIssuerV3.Name, err)
-			}
-
-			issuer, err = s.Datastore.InsertIssuer(&Issuer{
-				MerchantID: resp.Name,
-				PublicKey:  resp.PublicKey,
-			})
-			if err != nil {
-				return fmt.Errorf("error creating new issuer: %w", err)
-			}
+		if err != nil {
+			return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
 		}
 
 		orderCreds := OrderCreds{
@@ -301,13 +254,13 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
 		}
 
+		// insert unsigned order creds
 		err = s.Datastore.InsertOrderCreds(&orderCreds)
 		if err != nil {
 			return fmt.Errorf("error creating order creds: could not insert order creds: %w", err)
 		}
 
 		// write to kafka topic for signing
-
 		requestID, ok := ctx.Value(requestutils.RequestID).(string)
 		if !ok {
 			return errors.New("error retrieving requestID from context for create order credentials")
@@ -327,7 +280,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			Data: []SigningOrder{
 				{
 					IssuerType:     orderItem.SKU,
-					IssuerCohort:   cohort,
+					IssuerCohort:   defaultCohort,
 					BlindedTokens:  blindedCreds,
 					AssociatedData: bytes,
 				},
@@ -369,7 +322,6 @@ type OrderWorker interface {
 
 // SignOrderCreds signs the blinded credentials
 func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer Issuer, blindedCreds []string) (*OrderCreds, error) {
-
 	resp, err := s.cbClient.SignCredentials(ctx, issuer.Name(), blindedCreds)
 	if err != nil {
 		return nil, err
@@ -425,7 +377,7 @@ func (s *Service) FetchSignedOrderCredentials(ctx context.Context) (*SigningOrde
 // generateCredentialRedemptions - helper to create credential redemptions from cred bindings
 var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBinding) ([]cbr.CredentialRedemption, error) {
 	// deduplicate credential bindings
-	cb = DeduplicateCredentialBindings(cb...)
+	cb = deduplicateCredentialBindings(cb...)
 
 	var (
 		requestCredentials = make([]cbr.CredentialRedemption, len(cb))
@@ -459,4 +411,56 @@ var generateCredentialRedemptions = func(ctx context.Context, cb []CredentialBin
 		requestCredentials[i].Signature = cb[i].Signature
 	}
 	return requestCredentials, nil
+}
+
+// CredentialBinding includes info needed to redeem a single credential
+type CredentialBinding struct {
+	PublicKey     string `json:"publicKey" valid:"base64"`
+	TokenPreimage string `json:"t" valid:"base64"`
+	Signature     string `json:"signature" valid:"base64"`
+}
+
+// deduplicateCredentialBindings - given a list of tokens return a deduplicated list
+func deduplicateCredentialBindings(tokens ...CredentialBinding) []CredentialBinding {
+	var (
+		seen   = map[string]bool{}
+		result []CredentialBinding
+	)
+	for _, t := range tokens {
+		if !seen[t.TokenPreimage] {
+			seen[t.TokenPreimage] = true
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+func decodeIssuerID(issuerID string) (string, string, error) {
+	var (
+		merchantID string
+		sku        string
+	)
+
+	u, err := url.Parse(issuerID)
+	if err != nil {
+		return "", "", fmt.Errorf("parse issuer name: %w", err)
+	}
+
+	sku = u.Query().Get("sku")
+	u.RawQuery = ""
+	merchantID = u.String()
+
+	return merchantID, sku, nil
+}
+
+func encodeIssuerID(merchantID, sku string) (string, error) {
+	v := url.Values{}
+	v.Add("sku", sku)
+
+	u, err := url.Parse(merchantID + "?" + v.Encode())
+	if err != nil {
+		return "", fmt.Errorf("parse merchant id: %w", err)
+	}
+
+	return u.String(), nil
 }

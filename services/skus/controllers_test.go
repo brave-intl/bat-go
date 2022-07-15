@@ -9,14 +9,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
-	"log"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
@@ -38,20 +38,30 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
-	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
+	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 )
 
 var (
 	// these skus will be generated with the appropriate merchant key in setup
+	UserWalletVoteToken             macarooncmd.Token
 	UserWalletVoteTestSkuToken      string
+	UserWalletVoteSmallToken        macarooncmd.Token
 	UserWalletVoteTestSmallSkuToken string
-	AnonCardVoteTestSkuToken        string
-	FreeTestSkuToken                string
-	FreeTLTestSkuToken              string
-	FreeTLTest1MSkuToken            string
-	InvalidFreeTestSkuToken         string
+
+	AnonCardToken            macarooncmd.Token
+	AnonCardVoteTestSkuToken string
+
+	FreeTestToken    macarooncmd.Token
+	FreeTestSkuToken string
+
+	FreeTLTestToken    macarooncmd.Token
+	FreeTLTestSkuToken string
+
+	FreeTLTest1MToken    macarooncmd.Token
+	FreeTLTest1MSkuToken string
+
+	InvalidFreeTestSkuToken string
 )
 
 type ControllersTestSuite struct {
@@ -66,6 +76,7 @@ func TestControllersTestSuite(t *testing.T) {
 }
 
 func (suite *ControllersTestSuite) SetupSuite() {
+	retryPolicy = retrypolicy.NoRetry // set this so we fail fast for cbr http requests
 	govalidator.SetFieldsRequiredByDefault(true)
 
 	AnonCardC := macarooncmd.Caveats{
@@ -120,45 +131,45 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	}
 
 	// create sku using key
-	UserWalletToken := macarooncmd.Token{
+	UserWalletVoteToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletC},
 	}
 
-	UserWalletSmallToken := macarooncmd.Token{
+	UserWalletVoteSmallToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletSmallC},
 	}
 
-	AnonCardToken := macarooncmd.Token{
+	AnonCardToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{AnonCardC},
 	}
 
-	FreeTestToken := macarooncmd.Token{
+	FreeTestToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeC},
 	}
 
-	FreeTLTestToken := macarooncmd.Token{
+	FreeTLTestToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeTLC},
 	}
 
-	FreeTLTest1MToken := macarooncmd.Token{
+	FreeTLTest1MToken = macarooncmd.Token{
 		ID: "id", Version: 2, Location: "brave.com",
 		FirstPartyCaveats: []macarooncmd.Caveats{FreeTL1MC},
 	}
 
 	var err error
 	// setup our global skus
-	UserWalletVoteTestSkuToken, err = UserWalletToken.Generate("testing123")
+	UserWalletVoteTestSkuToken, err = UserWalletVoteToken.Generate("testing123")
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
 	skuMap["development"][UserWalletVoteTestSkuToken] = true
 
-	UserWalletVoteTestSmallSkuToken, err = UserWalletSmallToken.Generate("testing123")
+	UserWalletVoteTestSmallSkuToken, err = UserWalletVoteSmallToken.Generate("testing123")
 	suite.Require().NoError(err)
 
 	// hacky, put this in development sku check
@@ -189,7 +200,6 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	// signed with wrong signing string
 	InvalidFreeTestSkuToken, err = FreeTestToken.Generate("123testing")
 	suite.Require().NoError(err)
-
 }
 
 func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
@@ -223,9 +233,9 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 		wallet: &wallet.Service{
 			Datastore: walletDB,
 		},
+		retry: backoff.Retry,
 	}
 
-	suite.CleanDB()
 	// encrypt merchant key
 	cipher, nonce, err := cryptography.EncryptMessage(byteEncryptionKey, []byte("testing123"))
 	suite.Require().NoError(err)
@@ -252,7 +262,35 @@ func (suite *ControllersTestSuite) CleanDB() {
 	}
 }
 
-func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity int) Order {
+func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macarooncmd.Token, quantity int) (Order, *Issuer) {
+	// mock issuer calls
+	var issuer *Issuer
+
+	if credType, ok := token.FirstPartyCaveats[0]["credential_type"]; ok {
+		if credType == singleUse {
+			issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
+			suite.Require().NoError(err)
+
+			suite.mockCB.EXPECT().
+				CreateIssuer(gomock.Any(), issuerID, gomock.Any()).
+				Return(nil)
+
+			issuerResponse := &cbr.IssuerResponse{
+				Name:      issuerID,
+				PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
+			}
+			suite.mockCB.EXPECT().
+				GetIssuer(gomock.Any(), gomock.Any()).
+				Return(issuerResponse, nil)
+
+			issuer = &Issuer{
+				MerchantID: issuerResponse.Name,
+				PublicKey:  issuerResponse.PublicKey,
+			}
+		}
+	}
+
+	// create order
 	handler := CreateOrder(suite.service)
 
 	createRequest := &CreateOrderRequest{
@@ -263,6 +301,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity in
 			},
 		},
 	}
+
 	body, err := json.Marshal(&createRequest)
 	suite.Require().NoError(err)
 
@@ -280,7 +319,7 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity in
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
 	suite.Require().NoError(err)
 
-	return order
+	return order, issuer
 }
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
@@ -344,7 +383,7 @@ func (suite *ControllersTestSuite) TestAndroidWebhook() {
 }
 
 func (suite *ControllersTestSuite) TestCreateOrder() {
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 40)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
@@ -362,7 +401,7 @@ func (suite *ControllersTestSuite) TestCreateOrder() {
 }
 
 func (suite *ControllersTestSuite) TestCreateFreeOrderWhitelistedSKU() {
-	order := suite.setupCreateOrder(FreeTestSkuToken, 10)
+	order, _ := suite.setupCreateOrder(FreeTestSkuToken, FreeTestToken, 10)
 
 	// Check the order
 	suite.Assert().Equal("0", order.TotalPrice.String())
@@ -406,7 +445,7 @@ func (suite *ControllersTestSuite) TestCreateInvalidOrder() {
 }
 
 func (suite *ControllersTestSuite) TestGetOrder() {
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 20)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 20)
 
 	req, err := http.NewRequest("GET", "/v1/orders/{orderID}", nil)
 	suite.Require().NoError(err)
@@ -456,7 +495,7 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 	service := &Service{
 		Datastore: pg,
 	}
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 1/.25)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 1/.25)
 
 	handler := CreateGeminiTransaction(service)
 
@@ -567,10 +606,9 @@ func (suite *ControllersTestSuite) TestE2EOrdersGeminiTransactions() {
 }
 
 func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
-
 	orderAmount := decimal.NewFromFloat(0.00000000000000001)
 
-	order := suite.setupCreateOrder(UserWalletVoteTestSmallSkuToken, 1)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSmallSkuToken, UserWalletVoteToken, 1)
 
 	handler := CreateUpholdTransaction(suite.service)
 
@@ -673,9 +711,8 @@ func (suite *ControllersTestSuite) TestE2EOrdersUpholdTransactions() {
 }
 
 func (suite *ControllersTestSuite) TestGetTransactions() {
-
 	// External transaction has 12 BAT
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 12/.25)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 12/.25)
 
 	handler := CreateUpholdTransaction(suite.service)
 
@@ -839,180 +876,120 @@ func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Conte
 	return
 }
 
-func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, service *Service, mockCB *mockcb.MockClient, order Order, firstTime bool) (issuerName, issuerPublicKey, sig, preimage string, ordercreds []OrderCreds) {
-	issuerName = "brave.com?sku=" + order.Items[0].SKU
-	issuerPublicKey = "dHuiBIasUO0khhXsWgygqpVasZhtQraDSZxzJW2FKQ4="
-	blindedCred := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
-	blindedCreds := []string{"XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY=", "XhBPMjh4vMw+yoNjE7C5OtoTz2rCtfuOXO/Vk7UwWzY="}
-	signedCreds := []string{"NJnOyyL6YAKMYo6kSAuvtG+/04zK1VNaD9KdKwuzAjU="}
-	proof := "IiKqfk10e7SJ54Ud/8FnCf+sLYQzS4WiVtYAM5+RVgApY6B9x4CVbMEngkDifEBRD6szEqnNlc3KA8wokGV5Cw=="
-	sig = "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
-	preimage = "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server *http.Server, order Order, issuer Issuer) (signature, tokenPreimage string, ordercreds []OrderCreds) {
+	signature = "PsavkSWaqsTzZjmoDBmSu6YxQ7NZVrs2G8DQ+LkW5xOejRF6whTiuUJhr9dJ1KlA+79MDbFeex38X5KlnLzvJw=="
+	tokenPreimage = "125KIuuwtHGEl35cb5q1OLSVepoDTgxfsvwTc7chSYUM2Zr80COP19EuMpRQFju1YISHlnB04XJzZYN2ieT9Ng=="
+
+	// perform create order creds request
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
 
 	credsReq := CreateOrderCredsRequest{
 		ItemID:       order.Items[0].ID,
-		BlindedCreds: blindedCreds,
+		BlindedCreds: []string{base64.StdEncoding.EncodeToString([]byte(test.RandomString()))},
 	}
-
-	body, err := json.Marshal(&credsReq)
+	body, err := json.Marshal(credsReq)
 	suite.Require().NoError(err)
 
-	handler := CreateOrderCreds(service)
-	req, err := http.NewRequest("POST", "/{orderID}/credentials", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	if firstTime {
-		mockCB.EXPECT().CreateIssuer(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(defaultMaxTokensPerIssuer)).Return(nil)
-		mockCB.EXPECT().GetIssuer(gomock.Any(), gomock.Eq(issuerName)).Return(&cbr.IssuerResponse{
-			Name:      issuerName,
-			PublicKey: issuerPublicKey,
-		}, nil)
-	}
-	mockCB.EXPECT().SignCredentials(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(blindedCred)).Return(&cbr.CredentialsIssueResponse{
-		BatchProof:   proof,
-		SignedTokens: signedCreds,
-	}, nil)
-
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials", order.ID),
+		bytes.NewBuffer(body)).WithContext(ctx)
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	// Check to see if we have HTTP Accepted
-	handler = GetOrderCreds(service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
+	// check to see if order creds are waiting to be processed.
+	// We can expect a http accepted status when a job is submitted but not processed.
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
+	rr = httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(rr, req)
+	suite.Require().Equal(http.StatusAccepted, rr.Code)
+
+	// The CreateOrderCreds request writes to kafka signing request topic, we need to write to signing order result
+	// to mock cbr signing. RunStoreJobShouldProcesses which was started in the goroutine
+	// will then process the signed creds.
+	associatedData := make(map[string]string)
+	associatedData["order_id"] = order.ID.String()
+	associatedData["item_id"] = order.Items[0].ID.String()
+	associatedData["valid_to"] = time.Now().String()
+	associatedData["valid_from"] = time.Now().String()
+
+	b, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)
 
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-
-	// check status code for error, or until status is okay (from accepted)
-	for rr.Code != http.StatusOK {
-		if rr.Code == http.StatusAccepted {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				time.Sleep(500 * time.Millisecond)
-				rr = httptest.NewRecorder()
-				handler.ServeHTTP(rr, req)
-			}
-		} else if rr.Code > 299 {
-			// error condition bail out
-			suite.Require().True(false, "error status code, expecting 2xx")
-		}
+	signingOrderResult := SigningOrderResult{
+		RequestID: requestID,
+		Data: []SignedOrder{
+			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				SignedTokens:   []string{test.RandomString()},
+				AssociatedData: b,
+			},
+		},
 	}
+	writeSigningOrderResultMessage(suite.T(), ctx, signingOrderResult, kafkaSignedOrderCredsTopic)
 
-	// see if we can get our order creds
-	handler = GetOrderCreds(service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
+	time.Sleep(time.Millisecond * 100)
 
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	// get the signed order credentials
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
 
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	for rr.Code != http.StatusOK {
-		if rr.Code == http.StatusBadRequest {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			break
-		default:
-			time.Sleep(50 * time.Millisecond)
-			rr = httptest.NewRecorder()
-			handler.ServeHTTP(rr, req)
-		}
-	}
-
-	suite.Require().Equal(http.StatusOK, rr.Code, "Async signing timed out")
-
-	err = json.Unmarshal([]byte(rr.Body.String()), &ordercreds)
+	err = json.NewDecoder(rr.Body).Decode(&ordercreds)
 	suite.Require().NoError(err)
 
 	return
 }
 
-func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
-	numVotes := 1
-
-	// Create connection to Kafka
-	// FIXME stick kafka setup in suite setup
-	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
-
-	dialer, _, err := kafkautils.TLSDialer()
-	suite.Require().NoError(err)
-	conn, err := dialer.DialLeader(context.Background(), "tcp", strings.Split(kafkaBrokers, ",")[0], "vote", 0)
-	suite.Require().NoError(err)
-
-	// create topics
-	err = conn.CreateTopics(kafka.TopicConfig{Topic: voteTopic, NumPartitions: 1, ReplicationFactor: 1})
-	suite.Require().NoError(err)
-
-	offset, err := conn.ReadLastOffset()
-	suite.Require().NoError(err)
-
-	err = suite.service.InitKafka(context.Background())
-	suite.Require().NoError(err, "Failed to initialize kafka")
-
-	// kick off async goroutine to monitor the vote
-	// queue of uncommitted votes in postgres, and
-	// push the votes through redemption and kafka
+func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	voteTopic = test.RandomString()
+	kafkaSignedOrderCredsTopic = test.RandomString()
+	kafkaOrderCredsSignedRequestReaderGroupID = test.RandomString()
+
+	ctx = skustest.SetupKafka(suite.T(), ctx, voteTopic,
+		kafkaUnsignedOrderCredsTopic, kafkaSignedOrderCredsTopic)
+
+	err := suite.service.InitKafka(ctx)
+	suite.Require().NoError(err)
+
+	// setup router and server with mock instrument handler
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+	router := Router(suite.service, instrumentHandler)
+	router.Mount("/vote", VoteRouter(suite.service, instrumentHandler))
+	server := &http.Server{Addr: ":8080", Handler: router}
+
+	// start job workers
+	// NextVoteDrainJob monitors vote queue
+	// RunStoreSignedOrderCredentialsJob reads signed order credentials from kafka
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				break
 			default:
-				_, err := suite.service.RunNextVoteDrainJob(ctx)
-				suite.Require().NoError(err, "Failed to drain vote queue")
-				_, err = suite.service.RunNextOrderJob(ctx)
-				suite.Require().NoError(err, "Failed to drain order queue")
+				_, _ = suite.service.RunNextVoteDrainJob(ctx)
 				<-time.After(50 * time.Millisecond)
 			}
 		}
 	}()
-	defer cancel()
+	go func() {
+		_, _ = suite.service.RunStoreSignedOrderCredentialsJob(ctx)
+	}()
 
-	// Create the order first
-	handler := CreateOrder(suite.service)
-	createRequest := &CreateOrderRequest{
-		Items: []OrderItemRequest{
-			{
-				SKU:      AnonCardVoteTestSkuToken,
-				Quantity: numVotes,
-			},
-		},
-	}
-
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("POST", "/v1/orders", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusCreated, rr.Code)
-
-	var order Order
-	err = json.Unmarshal([]byte(rr.Body.String()), &order)
-	suite.Require().NoError(err)
+	numVotes := 1
+	order, issuer := suite.setupCreateOrder(AnonCardVoteTestSkuToken, AnonCardToken, numVotes)
 
 	userWallet := generateWallet(ctx, suite.T())
 	err = suite.service.wallet.Datastore.UpsertWallet(ctx, &userWallet.Info)
@@ -1037,135 +1014,87 @@ func (suite *ControllersTestSuite) TestAnonymousCardE2E() {
 	}
 
 	suite.Require().True(balanceAfter.GreaterThan(balanceBefore.TotalProbi), "balance should have increased")
-	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice), uphold.SettlementDestination, "bat-go:grant-server.TestAC", "", nil)
+	txn, err := userWallet.PrepareTransaction(altcurrency.BAT, altcurrency.BAT.ToProbi(order.TotalPrice),
+		uphold.SettlementDestination, "bat-go:grant-server.TestAC", "", nil)
 	suite.Require().NoError(err)
 
 	walletID, err := uuid.FromString(userWallet.ID)
 	suite.Require().NoError(err)
 
+	// create anonymous card
 	anonCardRequest := CreateAnonCardTransactionRequest{
 		WalletID:    walletID,
 		Transaction: txn,
 	}
-
-	body, err = json.Marshal(&anonCardRequest)
+	body, err := json.Marshal(anonCardRequest)
 	suite.Require().NoError(err)
 
-	handler = CreateAnonCardTransaction(suite.service)
-	req, err = http.NewRequest("POST", "/{orderID}/transactions/anonymouscard", bytes.NewBuffer(body))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/transactions/anonymousCard",
+		order.ID), bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
 
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusCreated, rr.Code)
 
-	issuerName, issuerPublicKey, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true)
+	signature, tokenPreimage, orderCreds := suite.fetchCredentials(ctx, server, order, *issuer)
+	suite.Require().Equal(len(*(*[]string)(orderCreds[0].SignedCreds)), order.Items[0].Quantity)
 
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	// Test getting the same order by item ID
-	handler = GetOrderCredsByID(suite.service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials/{itemID}", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	rctx.URLParams.Add("itemID", order.Items[0].ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	// setup our make vote handler
-	handler = MakeVote(suite.service)
-
+	// setup vote
 	vote := Vote{
 		Type:    "auto-contribute",
 		Channel: "brave.com",
 	}
-
-	voteBytes, err := json.Marshal(&vote)
+	voteBytes, err := json.Marshal(vote)
 	suite.Require().NoError(err)
+
 	votePayload := base64.StdEncoding.EncodeToString(voteBytes)
 
+	suite.mockCB.EXPECT().RedeemCredentials(gomock.Any(),
+		[]cbr.CredentialRedemption{
+			{
+				Issuer:        issuer.Name(),
+				TokenPreimage: tokenPreimage,
+				Signature:     signature,
+			},
+		}, votePayload).Return(nil)
+
+	// perform create vote request
 	voteReq := VoteRequest{
 		Vote: votePayload,
 		Credentials: []CredentialBinding{{
-			PublicKey:     issuerPublicKey,
-			Signature:     sig,
-			TokenPreimage: preimage,
+			PublicKey:     ptr.String(orderCreds[0].PublicKey),
+			TokenPreimage: tokenPreimage,
+			Signature:     signature,
 		}},
 	}
 
-	body, err = json.Marshal(&voteReq)
+	body, err = json.Marshal(voteReq)
 	suite.Require().NoError(err)
 
-	// mocked redeem creds
-	suite.mockCB.EXPECT().RedeemCredentials(gomock.Any(), gomock.Eq([]cbr.CredentialRedemption{{
-		Issuer:        issuerName,
-		TokenPreimage: preimage,
-		Signature:     sig,
-	}}), gomock.Eq(votePayload)).Return(nil)
-
-	// perform post to vote endpoint
-	req, err = http.NewRequest("POST", "/vote", bytes.NewBuffer(body))
+	req = httptest.NewRequest(http.MethodPost, "/vote", bytes.NewBuffer(body))
 	suite.Require().NoError(err)
 
-	// actually perform the call
 	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+
+	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusOK, rr.Code)
 
-	body, _ = ioutil.ReadAll(rr.Body)
-
 	<-time.After(5 * time.Second)
-	// Test the Kafka Event was put into place
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:          strings.Split(kafkaBrokers, ","),
-		Topic:            voteTopic,
-		Dialer:           suite.service.kafkaDialer,
-		MaxWait:          time.Second,
-		RebalanceTimeout: time.Second,
-		Logger:           kafka.LoggerFunc(log.Printf),
-	})
 
-	codec := suite.service.codecs["vote"]
+	voteEvent := suite.ReadKafkaVoteEvent(ctx)
 
-	// :cry:
-	err = r.SetOffset(offset)
-	suite.Require().NoError(err)
-
-	voteEventBinary, err := r.ReadMessage(context.Background())
-	suite.Require().NoError(err)
-
-	voteEvent, _, err := codec.NativeFromBinary(voteEventBinary.Value)
-	suite.Require().NoError(err)
-
-	voteEventJSON, err := codec.TextualFromNative(nil, voteEvent)
-	suite.Require().NoError(err)
-
-	suite.Assert().Contains(string(voteEventJSON), "id")
-
-	var ve = new(VoteEvent)
-
-	err = json.Unmarshal(voteEventJSON, ve)
-	suite.Require().NoError(err)
-
-	suite.Assert().Equal(ve.Type, vote.Type)
-	suite.Assert().Equal(ve.Channel, vote.Channel)
+	suite.Assert().Equal(vote.Type, voteEvent.Type)
+	suite.Assert().Equal(vote.Channel, voteEvent.Channel)
 	// should be number of credentials for the vote
-	suite.Assert().Equal(ve.VoteTally, int64(len(voteReq.Credentials)))
+	suite.Assert().Equal(int64(len(voteReq.Credentials)), voteEvent.VoteTally)
 	// check that the funding source matches the issuer
-	suite.Assert().Equal(ve.FundingSource, "anonymous-card") // from SKU...
+	suite.Assert().Equal("anonymous-card", voteEvent.FundingSource) // from SKU...
 }
 
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation1M() {
-	order := suite.setupCreateOrder(FreeTLTest1MSkuToken, 1)
+	order, _ := suite.setupCreateOrder(FreeTLTest1MSkuToken, FreeTLTest1MToken, 1)
 
 	// setup a key for our merchant
 	k := suite.SetupCreateKey(order.MerchantID)
@@ -1218,11 +1147,10 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation1
 		lastIssued = issued
 		lastExpired = expires
 	}
-
 }
 
 func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation() {
-	order := suite.setupCreateOrder(FreeTLTestSkuToken, 1)
+	order, _ := suite.setupCreateOrder(FreeTLTestSkuToken, FreeTLTestToken, 1)
 
 	// setup a key for our merchant
 	k := suite.SetupCreateKey(order.MerchantID)
@@ -1275,175 +1203,10 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 		lastIssued = issued
 		lastExpired = expires
 	}
-
-}
-
-func (suite *ControllersTestSuite) TestResetCredentialsVerifyPresentation() {
-	ctx, cancel := context.WithCancel(context.Background())
-	var err error
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				break
-			default:
-				_, err = suite.service.RunNextOrderJob(ctx)
-				suite.Require().NoError(err, "Failed to drain order queue")
-				<-time.After(50 * time.Millisecond)
-			}
-		}
-	}()
-	defer cancel()
-
-	order := suite.setupCreateOrder(FreeTestSkuToken, 1)
-
-	_, _, _, _, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, true)
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	handler := DeleteOrderCreds(suite.service)
-	req, err := http.NewRequest("DELETE", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Reset should succeed
-	suite.Require().Equal(http.StatusOK, rr.Code)
-
-	handler = GetOrderCreds(suite.service)
-	req, err = http.NewRequest("GET", "/{orderID}/credentials", nil)
-	suite.Require().NoError(err)
-
-	rctx = chi.NewRouteContext()
-	rctx.URLParams.Add("orderID", order.ID.String())
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Credentials should be cleared out
-	suite.Assert().Equal(http.StatusNotFound, rr.Code)
-
-	// Signing after reset should proceed normally
-	issuerName, _, sig, preimage, ordercreds := suite.fetchCredentials(ctx, suite.service, suite.mockCB, order, false)
-	suite.Require().Equal(len(*(*[]string)(ordercreds[0].SignedCreds)), order.Items[0].Quantity)
-
-	presentation := cbr.CredentialRedemption{
-		Issuer:        issuerName,
-		TokenPreimage: preimage,
-		Signature:     sig,
-	}
-
-	presentationBytes, err := json.Marshal(&presentation)
-	suite.Require().NoError(err)
-	presentationPayload := base64.StdEncoding.EncodeToString(presentationBytes)
-
-	verifyRequest := VerifyCredentialRequestV1{
-		Type:         "single-use",
-		Version:      1,
-		SKU:          "incorrect-sku",
-		MerchantID:   "brave.com",
-		Presentation: presentationPayload,
-	}
-
-	body, err := json.Marshal(&verifyRequest)
-	suite.Require().NoError(err)
-
-	handler = VerifyCredentialV1(suite.service)
-	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Verification should fail when outer sku does not match inner presentation
-	suite.Assert().Equal(http.StatusBadRequest, rr.Code)
-
-	// Correct the SKU
-	verifyRequest.SKU = "integration-test-free"
-
-	body, err = json.Marshal(&verifyRequest)
-	suite.Require().NoError(err)
-
-	handler = VerifyCredentialV1(suite.service)
-	req, err = http.NewRequest("POST", "/subscription/verifications", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	// Need to add faux auth details to context
-	req = req.WithContext(context.WithValue(req.Context(), merchantCtxKey{}, "brave.com"))
-
-	// mocked redeem creds
-	suite.mockCB.EXPECT().RedeemCredential(gomock.Any(), gomock.Eq(issuerName), gomock.Eq(preimage), gomock.Eq(sig), gomock.Eq(issuerName))
-
-	rr = httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
-	// Verification should succeed if SKU and merchant are correct
-	suite.Assert().Equal(http.StatusOK, rr.Code)
-}
-
-func (suite *ControllersTestSuite) SetupCreateKey(merchantID string) Key {
-	createRequest := &CreateKeyRequest{
-		Name: "BAT-GO",
-	}
-
-	body, err := json.Marshal(&createRequest)
-	suite.Require().NoError(err)
-	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	createAPIHandler := CreateKey(suite.service)
-	rctx := chi.NewRouteContext()
-	//rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
-	rctx.URLParams.Add("merchantID", merchantID)
-	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	createAPIHandler.ServeHTTP(rr, postReq)
-
-	suite.Assert().Equal(http.StatusOK, rr.Code)
-
-	var key Key
-	err = json.Unmarshal(rr.Body.Bytes(), &key)
-	suite.Assert().NoError(err)
-
-	return key
-}
-
-func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
-	deleteRequest := &DeleteKeyRequest{
-		DelaySeconds: 0,
-	}
-
-	body, err := json.Marshal(&deleteRequest)
-	suite.Require().NoError(err)
-
-	req, err := http.NewRequest("DELETE", "/v1/merchants/id/key/{id}", bytes.NewBuffer(body))
-	suite.Require().NoError(err)
-
-	deleteAPIHandler := DeleteKey(suite.service)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", key.ID)
-	deleteReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	deleteAPIHandler.ServeHTTP(rr, deleteReq)
-	suite.Assert().Equal(http.StatusOK, rr.Code)
-
-	var deletedKey Key
-	err = json.Unmarshal(rr.Body.Bytes(), &deletedKey)
-	suite.Assert().NoError(err)
-
-	return deletedKey
 }
 
 func (suite *ControllersTestSuite) TestCreateKey() {
 	Key := suite.SetupCreateKey("48dc25ed-4121-44ef-8147-4416a76201f7")
-
 	suite.Assert().Equal("48dc25ed-4121-44ef-8147-4416a76201f7", Key.Merchant)
 }
 
@@ -1539,5 +1302,81 @@ func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 	suite.Require().True(creds == nil, "should not get creds back")
 	suite.Require().True(status == http.StatusBadRequest, "should not get creds back")
 	suite.Require().Error(err, "should get an error")
+}
 
+func (suite *ControllersTestSuite) ReadKafkaVoteEvent(ctx context.Context) VoteEvent {
+	kafkaVoteReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), voteTopic)
+	suite.Require().NoError(err)
+
+	msg, err := kafkaVoteReader.ReadMessage(context.Background())
+	suite.Require().NoError(err)
+
+	codec := suite.service.codecs["vote"]
+
+	native, _, err := codec.NativeFromBinary(msg.Value)
+	suite.Require().NoError(err)
+
+	textual, err := codec.TextualFromNative(nil, native)
+	suite.Require().NoError(err)
+
+	var voteEvent VoteEvent
+	err = json.Unmarshal(textual, &voteEvent)
+	suite.Require().NoError(err)
+
+	return voteEvent
+}
+
+func (suite *ControllersTestSuite) SetupCreateKey(merchantID string) Key {
+	createRequest := &CreateKeyRequest{
+		Name: "BAT-GO",
+	}
+
+	body, err := json.Marshal(&createRequest)
+	suite.Require().NoError(err)
+	req, err := http.NewRequest("POST", "/v1/merchants/{merchantID}/key", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	createAPIHandler := CreateKey(suite.service)
+	rctx := chi.NewRouteContext()
+	//rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
+	rctx.URLParams.Add("merchantID", merchantID)
+	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	createAPIHandler.ServeHTTP(rr, postReq)
+
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var key Key
+	err = json.Unmarshal(rr.Body.Bytes(), &key)
+	suite.Assert().NoError(err)
+
+	return key
+}
+
+func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
+	deleteRequest := &DeleteKeyRequest{
+		DelaySeconds: 0,
+	}
+
+	body, err := json.Marshal(&deleteRequest)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("DELETE", "/v1/merchants/id/key/{id}", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	deleteAPIHandler := DeleteKey(suite.service)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", key.ID)
+	deleteReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	deleteAPIHandler.ServeHTTP(rr, deleteReq)
+	suite.Assert().Equal(http.StatusOK, rr.Code)
+
+	var deletedKey Key
+	err = json.Unmarshal(rr.Body.Bytes(), &deletedKey)
+	suite.Assert().NoError(err)
+
+	return deletedKey
 }

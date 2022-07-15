@@ -5,20 +5,154 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/utils/backoff"
+	"github.com/brave-intl/bat-go/utils/clients"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mock_cbr "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	mockdialer "github.com/brave-intl/bat-go/utils/kafka/mock"
-	testutils "github.com/brave-intl/bat-go/utils/test"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/test"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
-func TestDeduplicateCredentialBindings(t *testing.T) {
+func TestCreateIssuerV3_NewIssuer(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
+	ctx := context.Background()
+
+	merchantID := "brave.com"
+
+	orderItem := OrderItem{
+		ID:          uuid.NewV4(),
+		SKU:         test.RandomString(),
+		ValidForISO: ptr.FromString("P1M"),
+	}
+
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	assert.NoError(t, err)
+
+	issuerConfig := issuerConfig{
+		buffer:  test.RandomInt(),
+		overlap: test.RandomInt(),
+	}
+
+	// mock issuer calls
+	cbrClient := mock_cbr.NewMockClient(ctrl)
+
+	createIssuerV3 := cbr.CreateIssuerV3{
+		Name:      issuerID,
+		Cohort:    defaultCohort,
+		MaxTokens: defaultMaxTokensPerIssuer,
+		ValidFrom: ptr.FromTime(time.Now()),
+		Duration:  *orderItem.ValidForISO,
+		Buffer:    issuerConfig.buffer,
+		Overlap:   issuerConfig.overlap,
+	}
+	cbrClient.EXPECT().
+		CreateIssuerV3(ctx, isCreateIssuerV3(createIssuerV3)).
+		Return(nil)
+
+	issuerResponse := &cbr.IssuerResponse{
+		Name:      issuerID,
+		PublicKey: test.RandomString(),
+	}
+	cbrClient.EXPECT().
+		GetIssuer(ctx, createIssuerV3.Name).
+		Return(issuerResponse, nil)
+
+	// mock datastore
+	datastore := NewMockDatastore(ctrl)
+
+	datastore.EXPECT().
+		GetIssuer(issuerID).
+		Return(nil, nil)
+
+	issuer := &Issuer{
+		MerchantID: issuerResponse.Name,
+		PublicKey:  issuerResponse.PublicKey,
+	}
+	datastore.EXPECT().
+		InsertIssuer(issuer).
+		Return(issuer, nil)
+
+	// act, assert
+	s := Service{
+		cbClient:  cbrClient,
+		Datastore: datastore,
+		retry:     backoff.Retry,
+	}
+
+	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
+	assert.NoError(t, err)
+}
+
+func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	merchantID := "brave.com"
+
+	orderItem := OrderItem{
+		ID:          uuid.NewV4(),
+		SKU:         test.RandomString(),
+		ValidForISO: ptr.FromString("P1M"),
+	}
+
+	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
+	assert.NoError(t, err)
+
+	issuerConfig := issuerConfig{
+		buffer:  test.RandomInt(),
+		overlap: test.RandomInt(),
+	}
+
+	// mock datastore
+	datastore := NewMockDatastore(ctrl)
+
+	issuer := &Issuer{
+		MerchantID: test.RandomString(),
+		PublicKey:  test.RandomString(),
+	}
+	datastore.EXPECT().
+		GetIssuer(issuerID).
+		Return(issuer, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	err = s.CreateIssuerV3(ctx, merchantID, orderItem, issuerConfig)
+	assert.NoError(t, err)
+}
+
+func TestCanRetry_True(t *testing.T) {
+	httpError := clients.NewHTTPError(errors.New(test.RandomString()), test.RandomString(),
+		test.RandomString(), http.StatusRequestTimeout, nil)
+	f := canRetry(nonRetriableErrors)
+	assert.True(t, f(httpError))
+}
+
+func TestCanRetry_False(t *testing.T) {
+	httpError := clients.NewHTTPError(errors.New(test.RandomString()), test.RandomString(),
+		test.RandomString(), http.StatusForbidden, nil)
+	f := canRetry(nonRetriableErrors)
+	assert.False(t, f(httpError))
+}
+
+func TestDeduplicateCredentialBindings(t *testing.T) {
 	var tokens = []CredentialBinding{
 		{
 			TokenPreimage: "totally_random",
@@ -33,13 +167,13 @@ func TestDeduplicateCredentialBindings(t *testing.T) {
 			TokenPreimage: "totally_random_2",
 		},
 	}
-	var seen = []CredentialBinding{}
 
-	var result = DeduplicateCredentialBindings(tokens...)
+	var result = deduplicateCredentialBindings(tokens...)
 	if len(result) > len(tokens) {
 		t.Error("result should be less than number of tokens")
 	}
 
+	var seen []CredentialBinding
 	for _, v := range result {
 		for _, vv := range seen {
 			if v == vv {
@@ -75,9 +209,7 @@ func TestIssuerID(t *testing.T) {
 	}
 
 	for _, v := range cases {
-
 		issuerID, err := encodeIssuerID(v.MerchantID, v.SKU)
-		fmt.Println(issuerID)
 		if err != nil {
 			t.Error("failed to encode: ", err)
 		}
@@ -195,15 +327,38 @@ func TestFetchSignedOrderCredentials_Success(t *testing.T) {
 
 func makeMsg() *SigningOrderResult {
 	return &SigningOrderResult{
-		RequestID: testutils.RandomString(),
+		RequestID: test.RandomString(),
 		Data: []SignedOrder{
 			{
-				PublicKey:      testutils.RandomString(),
-				Proof:          testutils.RandomString(),
+				PublicKey:      test.RandomString(),
+				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
-				SignedTokens:   []string{testutils.RandomString()},
+				SignedTokens:   []string{test.RandomString()},
 				AssociatedData: []byte{},
 			},
 		},
 	}
+}
+
+func isCreateIssuerV3(expected cbr.CreateIssuerV3) gomock.Matcher {
+	return createIssuerV3Matcher{expected: expected}
+}
+
+type createIssuerV3Matcher struct {
+	expected cbr.CreateIssuerV3
+}
+
+func (c createIssuerV3Matcher) Matches(arg interface{}) bool {
+	actual := arg.(cbr.CreateIssuerV3)
+	return c.expected.Name == actual.Name &&
+		c.expected.Cohort == actual.Cohort &&
+		c.expected.MaxTokens == actual.MaxTokens &&
+		c.expected.ValidFrom.Before(*actual.ValidFrom) &&
+		c.expected.Duration == actual.Duration &&
+		c.expected.Buffer == actual.Buffer &&
+		c.expected.Overlap == actual.Overlap
+}
+
+func (c createIssuerV3Matcher) String() string {
+	return "does not match"
 }

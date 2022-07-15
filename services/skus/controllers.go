@@ -43,7 +43,7 @@ func corsMiddleware(allowedMethods []string) func(next http.Handler) http.Handle
 }
 
 // Router for order endpoints
-func Router(service *Service) chi.Router {
+func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
 	merchantSignedMiddleware := service.MerchantSignedMiddleware()
 
@@ -63,7 +63,7 @@ func Router(service *Service) chi.Router {
 	r.Method("GET", "/{orderID}/transactions", middleware.InstrumentHandler("GetTransactions", GetTransactions(service)))
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
-	r.Method("POST", "/{orderID}/transactions/anonymousCard", middleware.InstrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	// api routes for order receipt validation
 	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
@@ -72,10 +72,8 @@ func Router(service *Service) chi.Router {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
-
-		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
-
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 	})
 
 	return r
@@ -237,9 +235,9 @@ func GetKeys(service *Service) handlers.AppHandler {
 }
 
 // VoteRouter for voting endpoint
-func VoteRouter(service *Service) chi.Router {
+func VoteRouter(service *Service, instrumentHandler middleware.InstrumentHandlerDef) chi.Router {
 	r := chi.NewRouter()
-	r.Method("POST", "/", middleware.InstrumentHandler("MakeVote", MakeVote(service)))
+	r.Method("POST", "/", instrumentHandler("MakeVote", MakeVote(service)))
 	return r
 }
 
@@ -604,7 +602,7 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 			return handlers.WrapError(err, "There are existing order credentials created for this order", http.StatusConflict)
 		}
 
-		err = service.CreateOrderCreds(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
 		if err != nil {
 			return handlers.WrapError(err, "Error creating order creds", http.StatusBadRequest)
 		}

@@ -6,16 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/brave-intl/bat-go/skus"
-	mockskus "github.com/brave-intl/bat-go/skus/mock"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/datastore"
-	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/utils/ptr"
-	"github.com/brave-intl/bat-go/utils/test"
-	"github.com/golang/mock/gomock"
-	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/suite"
 	"os"
 	"strings"
 	"testing"
@@ -24,8 +14,19 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/datastore/grantserver"
+	"github.com/brave-intl/bat-go/skus"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/test"
+	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
 )
 
 const (
@@ -243,7 +244,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_Success() {
 		},
 	}
 
-	orderCredentialsWorker := mockskus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker := skus.NewMockOrderCredentialsWorker(ctrl)
 	orderCredentialsWorker.EXPECT().
 		FetchSignedOrderCredentials(ctx).
 		Return(signingOrderResult, nil).
@@ -294,7 +295,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 		},
 	}
 
-	orderCredentialsWorker := mockskus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker := skus.NewMockOrderCredentialsWorker(ctrl)
 	orderCredentialsWorker.EXPECT().
 		FetchSignedOrderCredentials(ctx).
 		Return(signingOrderResult, nil).
@@ -314,7 +315,7 @@ func (suite *PostgresTestSuite) createOrder(ctx context.Context, sku ...string) 
 	var methods skus.Methods
 
 	for _, s := range sku {
-		orderItem, method, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
+		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
 		suite.Require().NoError(err)
 		orderItems = append(orderItems, *orderItem)
 		methods = append(methods, *method...)
