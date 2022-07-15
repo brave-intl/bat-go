@@ -29,21 +29,24 @@ type Info struct {
 // TransactionInfo contains information about a transaction like the denomination, amount in probi,
 // destination address, status and identifier
 type TransactionInfo struct {
-	Probi        decimal.Decimal          `json:"probi"`
-	AltCurrency  *altcurrency.AltCurrency `json:"altcurrency"`
-	Destination  string                   `json:"address"`
-	TransferFee  decimal.Decimal          `json:"fee"`
-	ExchangeFee  decimal.Decimal          `json:"-"`
-	Status       string                   `json:"status"`
-	ID           string                   `json:"id"`
-	DestCurrency string                   `json:"-"`
-	DestAmount   decimal.Decimal          `json:"-"`
-	ValidUntil   time.Time                `json:"-"`
-	Source       string                   `json:"-"`
-	Time         time.Time                `json:"-"`
-	Note         string                   `json:"-"`
-	UserID       string                   `json:"-"`
-	KYC          bool                     `json:"-"`
+	Probi              decimal.Decimal          `json:"probi"`
+	AltCurrency        *altcurrency.AltCurrency `json:"altcurrency"`
+	Destination        string                   `json:"address"`
+	TransferFee        decimal.Decimal          `json:"fee"`
+	ExchangeFee        decimal.Decimal          `json:"-"`
+	Status             string                   `json:"status"`
+	ID                 string                   `json:"id"`
+	DestCurrency       string                   `json:"-"`
+	DestAmount         decimal.Decimal          `json:"-"`
+	ValidUntil         time.Time                `json:"-"`
+	Source             string                   `json:"-"`
+	Time               time.Time                `json:"-"`
+	Note               string                   `json:"-"`
+	UserID             string                   `json:"-"`
+	KYC                bool                     `json:"-"`
+	CitizenshipCountry string                   `json:"-"`
+	IdentityCountry    string                   `json:"-"`
+	ResidenceCountry   string                   `json:"-"`
 }
 
 // String returns the transaction info as an easily readable string
