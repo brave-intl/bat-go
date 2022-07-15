@@ -280,8 +280,8 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 					"residence_country":   uhResp.ResidenceCountry,
 					"status":              "failure",
 				}).Inc()
+				return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
 			}
-			return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
 		}
 	}
 
@@ -792,10 +792,6 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	}
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message
-	txInfo.KYC = destination.IsMember
-
-	txInfo.KYC = destination.IsMember
-	txInfo.KYC = destination.IsMember
 	txInfo.KYC = destination.IsMember
 
 	txInfo.CitizenshipCountry = destination.CitizenshipCountry
