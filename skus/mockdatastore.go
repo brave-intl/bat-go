@@ -516,21 +516,6 @@ func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
 
-// RunNextOrderJob mocks base method.
-func (m *MockDatastore) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextOrderJob", ctx, worker)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RunNextOrderJob indicates an expected call of RunNextOrderJob.
-func (mr *MockDatastoreMockRecorder) RunNextOrderJob(ctx, worker interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextOrderJob", reflect.TypeOf((*MockDatastore)(nil).RunNextOrderJob), ctx, worker)
-}
-
 // RunNextTypedOrderJob mocks base method.
 func (m *MockDatastore) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error) {
 	m.ctrl.T.Helper()

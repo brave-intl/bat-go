@@ -98,7 +98,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 	cbrClient.EXPECT().
-		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3{})).
+		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3Request{})).
 		Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
@@ -197,7 +197,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
 
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 	cbrClient.EXPECT().
-		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3{})).
+		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3Request{})).
 		Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
