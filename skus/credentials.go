@@ -118,7 +118,7 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 			return fmt.Errorf("error valid iso is empty for order item sku %s", orderItem.SKU)
 		}
 
-		createIssuerV3 := cbr.CreateIssuerV3{
+		createIssuerV3 := cbr.CreateIssuerV3Request{
 			Name:      issuerID,
 			Cohort:    defaultCohort,
 			MaxTokens: defaultMaxTokensPerIssuer,

@@ -50,7 +50,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	// mock issuer calls
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 
-	createIssuerV3 := cbr.CreateIssuerV3{
+	createIssuerV3 := cbr.CreateIssuerV3Request{
 		Name:      issuerID,
 		Cohort:    defaultCohort,
 		MaxTokens: defaultMaxTokensPerIssuer,
@@ -340,16 +340,16 @@ func makeMsg() *SigningOrderResult {
 	}
 }
 
-func isCreateIssuerV3(expected cbr.CreateIssuerV3) gomock.Matcher {
+func isCreateIssuerV3(expected cbr.CreateIssuerV3Request) gomock.Matcher {
 	return createIssuerV3Matcher{expected: expected}
 }
 
 type createIssuerV3Matcher struct {
-	expected cbr.CreateIssuerV3
+	expected cbr.CreateIssuerV3Request
 }
 
 func (c createIssuerV3Matcher) Matches(arg interface{}) bool {
-	actual := arg.(cbr.CreateIssuerV3)
+	actual := arg.(cbr.CreateIssuerV3Request)
 	return c.expected.Name == actual.Name &&
 		c.expected.Cohort == actual.Cohort &&
 		c.expected.MaxTokens == actual.MaxTokens &&

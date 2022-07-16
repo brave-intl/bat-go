@@ -53,7 +53,7 @@ func (_d ClientWithPrometheus) CreateIssuer(ctx context.Context, issuer string, 
 }
 
 // CreateIssuerV3 implements Client
-func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3) (err error) {
+func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3Request) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

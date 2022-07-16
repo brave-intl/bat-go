@@ -5,9 +5,12 @@ package cbr
 import (
 	"context"
 	"database/sql"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/test"
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -100,4 +103,22 @@ func TestSignAndRedeemCredentials(t *testing.T) {
 
 	err = client.RedeemCredentials(ctx, []CredentialRedemption{{Issuer: issuerName, TokenPreimage: preimage, Signature: sig}}, payload)
 	assert.NoError(t, err, "Should be able to bulk redeem tokens")
+}
+
+func TestCreateIssuerV3(t *testing.T) {
+	client, err := New()
+	assert.NoError(t, err)
+
+	request := CreateIssuerV3Request{
+		Name:      test.RandomString(),
+		Cohort:    test.RandomInt(),
+		MaxTokens: test.RandomInt(),
+		ValidFrom: ptr.FromTime(time.Now()),
+		Duration:  "P1M",
+		Buffer:    test.RandomInt(),
+		Overlap:   test.RandomInt(),
+	}
+
+	err = client.CreateIssuerV3(context.Background(), request)
+	assert.NoError(t, err)
 }

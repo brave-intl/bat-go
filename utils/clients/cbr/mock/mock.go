@@ -50,7 +50,7 @@ func (mr *MockClientMockRecorder) CreateIssuer(ctx, issuer, maxTokens interface{
 }
 
 // CreateIssuerV3 mocks base method.
-func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.CreateIssuerV3) error {
+func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.CreateIssuerV3Request) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateIssuerV3", ctx, createIssuerV3)
 	ret0, _ := ret[0].(error)
