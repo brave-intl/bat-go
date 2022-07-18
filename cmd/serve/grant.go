@@ -51,6 +51,11 @@ func init() {
 
 	flagBuilder := cmd.NewFlagBuilder(GrantServerCmd)
 
+	flagBuilder.Flag().Bool("require-uphold-destination-country", false,
+		"require responses for linkings to uphold to contain country identity information").
+		Bind("require-uphold-destination-country").
+		Env("REQUIRE_UPHOLD_DESTINATION_COUNTRY")
+
 	flagBuilder.Flag().Bool("enable-job-workers", true,
 		"enable job workers (defaults true)").
 		Bind("enable-job-workers").
@@ -445,6 +450,9 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
 	ctx = context.WithValue(ctx, appctx.StripeWebhookSecretCTXKey, viper.GetString("stripe-webhook-secret"))
 	ctx = context.WithValue(ctx, appctx.StripeSecretCTXKey, viper.GetString("stripe-secret"))
+
+	// require country present from uphold txs
+	ctx = context.WithValue(ctx, appctx.RequireUpholdCountryCTXKey, viper.GetBool("require-uphold-destination-country"))
 
 	// whitelisted skus
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
