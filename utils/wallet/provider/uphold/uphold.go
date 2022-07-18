@@ -273,6 +273,12 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 		if uhResp.CitizenshipCountry == "" ||
 			uhResp.IdentityCountry == "" ||
 			uhResp.ResidenceCountry == "" {
+			countUpholdWalletAccountValidation.With(prometheus.Labels{
+				"citizenship_country": uhResp.CitizenshipCountry,
+				"identity_country":    uhResp.IdentityCountry,
+				"residence_country":   uhResp.ResidenceCountry,
+				"status":              "failure",
+			}).Inc()
 			return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
 		}
 	}
@@ -293,6 +299,12 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 			}
 		}
 	}
+	countUpholdWalletAccountValidation.With(prometheus.Labels{
+		"citizenship_country": uhResp.CitizenshipCountry,
+		"identity_country":    uhResp.IdentityCountry,
+		"residence_country":   uhResp.ResidenceCountry,
+		"status":              "success",
+	}).Inc()
 
 	return uhResp.UserID, uhResp.KYC, nil
 }
