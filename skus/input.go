@@ -12,7 +12,7 @@ import (
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob
 type VerifyCredentialRequestV1 struct {
-	Type         string  `json:"type" valid:"in(single-use|time-limited)"`
+	Type         string  `json:"type" valid:"in(single-use|time-limited|time-limited-v2)"`
 	Version      float64 `json:"version" valid:"-"`
 	SKU          string  `json:"sku" valid:"-"`
 	MerchantID   string  `json:"merchantId" valid:"-"`
