@@ -26,6 +26,7 @@ elif [ "${service}" = "/ia2" ]; then
     # setup proxy that allows the enclave to talk to Let's Encrypt and our Kafka
     # cluster
     export SOCKS_PROXY_ALLOWED_FQDNS="acme-v02.api.letsencrypt.org,${KAFKA_BROKERS}"
+    export SOCKS_PROXY_ALLOWED_ADDRS=""
     export SOCKS_PROXY_LISTEN_ADDR="127.0.0.1:1080"
     /enclave/socksproxy > /tmp/socksproxy.log &
 
