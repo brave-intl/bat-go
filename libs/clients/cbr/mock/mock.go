@@ -78,6 +78,21 @@ func (mr *MockClientMockRecorder) GetIssuer(ctx, issuer interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuer", reflect.TypeOf((*MockClient)(nil).GetIssuer), ctx, issuer)
 }
 
+// GetIssuerV2 mocks base method.
+func (m *MockClient) GetIssuerV2(ctx context.Context, issuer string, cohort int) (*cbr.IssuerResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIssuerV2", ctx, issuer, cohort)
+	ret0, _ := ret[0].(*cbr.IssuerResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIssuerV2 indicates an expected call of GetIssuerV2.
+func (mr *MockClientMockRecorder) GetIssuerV2(ctx, issuer, cohort interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIssuerV2", reflect.TypeOf((*MockClient)(nil).GetIssuerV2), ctx, issuer, cohort)
+}
+
 // RedeemCredential mocks base method.
 func (m *MockClient) RedeemCredential(ctx context.Context, issuer, preimage, signature, payload string) error {
 	m.ctrl.T.Helper()
@@ -90,6 +105,20 @@ func (m *MockClient) RedeemCredential(ctx context.Context, issuer, preimage, sig
 func (mr *MockClientMockRecorder) RedeemCredential(ctx, issuer, preimage, signature, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredential", reflect.TypeOf((*MockClient)(nil).RedeemCredential), ctx, issuer, preimage, signature, payload)
+}
+
+// RedeemCredentialV3 mocks base method.
+func (m *MockClient) RedeemCredentialV3(ctx context.Context, issuer, preimage, signature, payload string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RedeemCredentialV3", ctx, issuer, preimage, signature, payload)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RedeemCredentialV3 indicates an expected call of RedeemCredentialV3.
+func (mr *MockClientMockRecorder) RedeemCredentialV3(ctx, issuer, preimage, signature, payload interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RedeemCredentialV3", reflect.TypeOf((*MockClient)(nil).RedeemCredentialV3), ctx, issuer, preimage, signature, payload)
 }
 
 // RedeemCredentials mocks base method.

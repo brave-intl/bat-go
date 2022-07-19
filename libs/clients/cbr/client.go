@@ -14,12 +14,18 @@ import (
 
 // Client abstracts over the underlying client
 type Client interface {
+	// CreateIssuer creates an issuer.
 	CreateIssuer(ctx context.Context, issuer string, maxTokens int) error
+	// CreateIssuerV3 creates a version 3 issuer.
 	CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3Request) error
+	// GetIssuer returns issuers prior to version 3.
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
+	// GetIssuerV2 returns version 3 issuers.
+	GetIssuerV2(ctx context.Context, issuer string, cohort int) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
+	RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 }
 
 // HTTPClient wraps http.Client for interacting with the cbr server
@@ -51,6 +57,8 @@ type IssuerCreateRequest struct {
 type IssuerResponse struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	Cohort    int    `json:"cohort,omitempty"`
 }
 
 // CreateIssuer with the provided name and token cap
@@ -110,6 +118,22 @@ type CredentialsIssueRequest struct {
 type CredentialsIssueResponse struct {
 	BatchProof   string   `json:"batch_proof"`
 	SignedTokens []string `json:"signed_tokens"`
+}
+
+func (c *HTTPClient) GetIssuerV2(ctx context.Context, issuer string, cohort int) (*IssuerResponse, error) {
+	payload := struct {
+		Cohort int `json:"cohort"`
+	}{cohort}
+
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "v2/issuer/"+issuer, &payload, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp IssuerResponse
+	_, err = c.client.Do(ctx, req, &resp)
+
+	return &resp, err
 }
 
 // SignCredentials using a particular issuer
@@ -225,6 +249,18 @@ type CredentialsRedeemRequest struct {
 // RedeemCredentials that were issued by the specified issuer
 func (c *HTTPClient) RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error {
 	req, err := c.client.NewRequest(ctx, "POST", "v1/blindedToken/bulk/redemption/", &CredentialsRedeemRequest{Credentials: credentials, Payload: payload}, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Do(ctx, req, nil)
+	return handleRedeemError(err)
+}
+
+// RedeemCredentialV3 redeems a version 3 token that was issued by the specified issuer
+func (c *HTTPClient) RedeemCredentialV3(ctx context.Context, issuer string, preimage string, signature string, payload string) error {
+	req, err := c.client.NewRequest(ctx, "POST", "v3/blindedToken/"+issuer+"/redemption/",
+		&CredentialRedeemRequest{TokenPreimage: preimage, Signature: signature, Payload: payload}, nil)
 	if err != nil {
 		return err
 	}
