@@ -5,8 +5,6 @@ package cbr
 import (
 	"context"
 	"database/sql"
-	"github.com/brave-intl/bat-go/utils/ptr"
-	"github.com/brave-intl/bat-go/utils/test"
 	"net/http"
 	"os"
 	"testing"
@@ -14,6 +12,8 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/clients"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/test"
 	_ "github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
@@ -120,5 +120,85 @@ func TestCreateIssuerV3(t *testing.T) {
 	}
 
 	err = client.CreateIssuerV3(context.Background(), request)
+	assert.NoError(t, err)
+}
+
+func TestGetIssuerV2(t *testing.T) {
+	ctx := context.Background()
+
+	client, err := New()
+	assert.NoError(t, err)
+
+	request := CreateIssuerV3Request{
+		Name:      test.RandomString(),
+		Cohort:    5,
+		MaxTokens: test.RandomInt(),
+		ValidFrom: ptr.FromTime(time.Now()),
+		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
+		Duration:  "P1M",
+		Buffer:    test.RandomInt(),
+		Overlap:   test.RandomInt(),
+	}
+
+	err = client.CreateIssuerV3(context.Background(), request)
+	assert.NoError(t, err)
+
+	issuer, err := client.GetIssuerV2(ctx, request.Name, request.Cohort)
+	assert.NoError(t, err)
+
+	assert.Equal(t, request.Name, issuer.Name)
+	assert.Equal(t, request.Cohort, issuer.Cohort)
+	assert.NotEmpty(t, issuer.ExpiresAt)
+	assert.NotEmpty(t, issuer.PublicKey)
+}
+
+func TestSignAndRedeemCredentialsV3(t *testing.T) {
+	databaseURL := os.Getenv("CHALLENGE_BYPASS_DATABASE_URL")
+
+	sKey := "fzJbqh6l/xWAjT6Ulmu+/Taxz8XZ7SDnJ/dUXPgtnQE="
+	blindedToken := "yoGo7zfMr5vAzwyyFKwoFEsUcyUlXKY75VvWLfYi7go="
+	signedToken := "ohwnBITMSphAFK/06LtbC+PYl6PmmEhOdybvsfqZjG4="
+	preimage := "Aa61pQzyxsy3Z6tSwccnOqiW23fNYp0z3xw6XGlA5FG8O/EqlxR87DWnas49U2JUau44dpiveAt7kBXDH5RjPQ=="
+	sig := "zx1zdMhN4Et8WnrkVQOad6xhUBAJ7Pq4b8A0n96CRE0QdAQ+tJe0/eFiJqIPMuKkyfQ6VncIkGj9VzkByh9uFA=="
+	payload := "test message"
+
+	db, err := sql.Open("postgres", databaseURL)
+	if err != nil {
+		assert.NoError(t, err, "Must be able to connect to challenge-bypass db")
+	}
+
+	_, err = db.Exec("DELETE from v3_issuer_keys; DELETE FROM v3_issuers; DELETE from redemptions")
+	assert.NoError(t, err, "Must be able to clear issuers")
+
+	ctx := context.Background()
+
+	client, err := New()
+	assert.NoError(t, err)
+
+	request := CreateIssuerV3Request{
+		Name:      test.RandomString(),
+		Cohort:    test.RandomInt(),
+		MaxTokens: test.RandomInt(),
+		ValidFrom: ptr.FromTime(time.Now()),
+		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
+		Duration:  "P1M",
+		Buffer:    test.RandomInt(),
+		Overlap:   test.RandomInt(),
+	}
+
+	err = client.CreateIssuerV3(context.Background(), request)
+	assert.NoError(t, err)
+
+	_, err = db.Exec("update v3_issuer_keys set signing_key=$1", sKey)
+	assert.NoError(t, err)
+
+	resp, err := client.SignCredentials(ctx, request.Name, []string{blindedToken})
+	assert.NoError(t, err)
+	assert.Equal(t, resp.SignedTokens[0], signedToken)
+
+	err = client.RedeemCredentialV3(ctx, request.Name, preimage, sig, payload)
+	assert.NoError(t, err)
+
+	_, err = db.Exec("DELETE from redemptions")
 	assert.NoError(t, err)
 }

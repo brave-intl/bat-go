@@ -1080,6 +1080,7 @@ type credential interface {
 	GetPresentation(context.Context) string
 }
 
+// TODO refactor this see issue #1502
 // verifyCredential - given a credential, verify it.
 func (s *Service) verifyCredential(ctx context.Context, req credential, w http.ResponseWriter) *handlers.AppError {
 	logger := logging.Logger(ctx, "verifyCredential")
@@ -1117,7 +1118,7 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 	}
 	logger.Debug().Msg("caveats validated")
 
-	if req.GetType(ctx) == "single-use" {
+	if req.GetType(ctx) == singleUse || req.GetType(ctx) == timeLimitedV2 {
 		var bytes []byte
 		bytes, err = base64.StdEncoding.DecodeString(req.GetPresentation(ctx))
 		if err != nil {
@@ -1139,7 +1140,18 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 			return handlers.WrapError(nil, "Error, outer merchant and sku don't match issuer", http.StatusBadRequest)
 		}
 
-		err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage, decodedCredential.Signature, decodedCredential.Issuer)
+		switch req.GetType(ctx) {
+		case singleUse:
+			err = s.cbClient.RedeemCredential(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+				decodedCredential.Signature, decodedCredential.Issuer)
+		case timeLimitedV2:
+			err = s.cbClient.RedeemCredentialV3(ctx, decodedCredential.Issuer, decodedCredential.TokenPreimage,
+				decodedCredential.Signature, decodedCredential.Issuer)
+		default:
+			return handlers.WrapError(fmt.Errorf("credential type %s not suppoted", req.GetType(ctx)),
+				"unknown credential type %s", http.StatusBadRequest)
+		}
+
 		if err != nil {
 			// if this is a duplicate redemption these are not verified
 			if err.Error() == cbr.ErrDupRedeem.Error() || err.Error() == cbr.ErrBadRequest.Error() {
@@ -1149,7 +1161,9 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		}
 
 		return handlers.RenderContent(ctx, "Credentials successfully verified", w, http.StatusOK)
-	} else if req.GetType(ctx) == "time-limited" {
+	}
+
+	if req.GetType(ctx) == "time-limited" {
 		// Presentation includes a token and token metadata test test
 		type Presentation struct {
 			IssuedAt  string `json:"issuedAt"`
