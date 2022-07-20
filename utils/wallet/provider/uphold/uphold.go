@@ -554,7 +554,7 @@ var (
 			Name: "count_uphold_tx_destination_geo",
 			Help: "upon transfer record the destination geo information",
 		},
-		[]string{"citizenship_country", "identity_country", "residence_country", "drain"},
+		[]string{"citizenship_country", "identity_country", "residence_country", "type"},
 	)
 )
 
