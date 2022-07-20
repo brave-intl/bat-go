@@ -584,17 +584,17 @@ func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurren
 
 	// in the event we have geo information on the transaction report it through metrics
 	if !( // if there is a destination and all three are not empty strings
-	uhResp.Destination.CitizenshipCountry == "" &&
-		uhResp.Destination.IdentityCountry == "" &&
-		uhResp.Destination.ResidenceCountry == "") {
+	uhResp.Destination.Node.User.CitizenshipCountry == "" &&
+		uhResp.Destination.Node.User.IdentityCountry == "" &&
+		uhResp.Destination.Node.User.ResidenceCountry == "") {
 		var t = "linking"
 		if !uhResp.Denomination.Amount.IsZero() {
 			t = "drain"
 		}
 		countUpholdTxDestinationGeo.With(prometheus.Labels{
-			"citizenship_country": uhResp.Destination.CitizenshipCountry,
-			"identity_country":    uhResp.Destination.IdentityCountry,
-			"residence_country":   uhResp.Destination.ResidenceCountry,
+			"citizenship_country": uhResp.Destination.Node.User.CitizenshipCountry,
+			"identity_country":    uhResp.Destination.Node.User.IdentityCountry,
+			"residence_country":   uhResp.Destination.Node.User.ResidenceCountry,
 			"type":                t,
 		}).Inc()
 	}
@@ -737,7 +737,10 @@ func (w *Wallet) VerifyAnonCardTransaction(ctx context.Context, transactionB64 s
 }
 
 type upholdTransactionResponseDestinationNodeUser struct {
-	ID string `json:"id"`
+	ID                 string `json:"id"`
+	CitizenshipCountry string `json:"citizenshipCountry"`
+	IdentityCountry    string `json:"identityCountry"`
+	ResidenceCountry   string `json:"residenceCountry"`
 }
 
 type upholdTransactionResponseDestinationNode struct {
@@ -747,17 +750,14 @@ type upholdTransactionResponseDestinationNode struct {
 }
 
 type upholdTransactionResponseDestination struct {
-	Type               string                                   `json:"type"`
-	CardID             string                                   `json:"CardId,omitempty"`
-	Node               upholdTransactionResponseDestinationNode `json:"node,omitempty"`
-	Currency           string                                   `json:"currency"`
-	Amount             decimal.Decimal                          `json:"amount"`
-	ExchangeFee        decimal.Decimal                          `json:"commission"`
-	TransferFee        decimal.Decimal                          `json:"fee"`
-	IsMember           bool                                     `json:"isMember"`
-	CitizenshipCountry string                                   `json:"citizenshipCountry"`
-	IdentityCountry    string                                   `json:"identityCountry"`
-	ResidenceCountry   string                                   `json:"residenceCountry"`
+	Type        string                                   `json:"type"`
+	CardID      string                                   `json:"CardId,omitempty"`
+	Node        upholdTransactionResponseDestinationNode `json:"node,omitempty"`
+	Currency    string                                   `json:"currency"`
+	Amount      decimal.Decimal                          `json:"amount"`
+	ExchangeFee decimal.Decimal                          `json:"commission"`
+	TransferFee decimal.Decimal                          `json:"fee"`
+	IsMember    bool                                     `json:"isMember"`
 }
 
 type upholdTransactionResponseParams struct {
@@ -815,9 +815,9 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	txInfo.Note = resp.Message
 	txInfo.KYC = destination.IsMember
 
-	txInfo.CitizenshipCountry = destination.CitizenshipCountry
-	txInfo.IdentityCountry = destination.IdentityCountry
-	txInfo.ResidenceCountry = destination.ResidenceCountry
+	txInfo.CitizenshipCountry = destination.Node.User.CitizenshipCountry
+	txInfo.IdentityCountry = destination.Node.User.IdentityCountry
+	txInfo.ResidenceCountry = destination.Node.User.ResidenceCountry
 
 	return &txInfo
 }
