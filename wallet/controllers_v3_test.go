@@ -501,6 +501,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		gomock.Any(),
 	).Return(
 		accountID.String(),
+		"",
 		nil,
 	)
 
@@ -616,6 +617,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		gomock.Any(),
 	).Return(
 		accountID.String(),
+		"",
 		nil,
 	)
 
