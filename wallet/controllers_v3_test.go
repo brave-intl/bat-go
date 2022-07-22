@@ -100,6 +100,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mockReputation.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
+		gomock.Any(), // country
 	).Return(
 		true,
 		[]int{},
@@ -410,6 +411,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mockReputation.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
+		gomock.Any(), // country
 	).Return(
 		true,
 		[]int{},
@@ -480,6 +482,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
+		gomock.Any(), // country
 	).Return(
 		true,
 		[]int{},
@@ -619,6 +622,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mockReputationClient.EXPECT().IsLinkingReputable(
 		gomock.Any(), // ctx
 		gomock.Any(), // wallet id
+		gomock.Any(), // country
 	).Return(
 		true,
 		[]int{},
