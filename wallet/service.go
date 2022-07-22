@@ -152,7 +152,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer", "")
+	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer", "JP")
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
