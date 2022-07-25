@@ -19,7 +19,7 @@ type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
-	IsLinkingReputable(ctx context.Context, id uuid.UUID) (bool, []int, error)
+	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -83,12 +83,13 @@ var (
 func (c *HTTPClient) IsLinkingReputable(
 	ctx context.Context,
 	paymentID uuid.UUID,
+	country string,
 ) (bool, []int, error) {
 
 	req, err := c.client.NewRequest(
 		ctx,
 		"GET",
-		"v2/reputation/"+paymentID.String()+"/grants",
+		"v2/reputation/"+paymentID.String()+"/grants?country="+country,
 		nil,
 		nil,
 	)

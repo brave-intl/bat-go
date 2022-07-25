@@ -211,7 +211,7 @@ func (_d DatastoreWithPrometheus) InsertWallet(ctx context.Context, wallet *wall
 }
 
 // LinkWallet implements Datastore
-func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string) (err error) {
+func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string, country string) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -221,7 +221,7 @@ func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, pro
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "LinkWallet", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.LinkWallet(ctx, ID, providerID, providerLinkingID, anonymousAddress, depositProvider)
+	return _d.base.LinkWallet(ctx, ID, providerID, providerLinkingID, anonymousAddress, depositProvider, country)
 }
 
 // Migrate implements Datastore
