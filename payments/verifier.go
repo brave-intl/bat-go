@@ -10,6 +10,7 @@ import (
 )
 
 // the list of payment verifiers, mapping to individuals in payments-ops
+// see payments/docs/key-management-policy.md for additional details about this table
 var validVerifiers = map[string]bool{
 	"2b2ddfcfba5045fac57efaf9c6a21e61a0bd7eee3c75e4ad1ee159c7e83cee43": true,
 	"7f5fd7dab95cf7e4925651e18fb71b4e64b23734736f6834f3d633a44fd371d8": true,
