@@ -383,7 +383,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		// v3/captcha
 		r.Mount("/v3/captcha", proxyRouter)
 		// declare geo
-		r.Mount("/v1/declaregeo", proxyRouter)
+		r.Mount("/v1/declare", proxyRouter)
 	}
 
 	return ctx, r, promotionService, jobs
