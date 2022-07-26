@@ -109,7 +109,7 @@ func CreateKey(ctx context.Context, encryptionKey, attenuation string) error {
 	}
 
 	logger.Info().
-		Str("keyID", fmt.Sprintf("%x", encryptedBytes)).
+		Str("keyID", fmt.Sprintf("%s", keyID)).
 		Str("encryptedMerchantSecret", fmt.Sprintf("%x", encryptedBytes)).
 		Str("encryptedMerchantNonce", fmt.Sprintf("%x", n)).
 		Msg("encrypted secrets for insertion into database")
