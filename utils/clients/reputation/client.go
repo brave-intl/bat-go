@@ -77,6 +77,16 @@ var (
 	CohortWithdrawalLimits = 4
 )
 
+// IsLinkingReputableRequestQSB - query string "body" for is linking reputable requests
+type IsLinkingReputableRequestQSB struct {
+	Country string `url:"country,omitempty"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (ilrrqsb *IsLinkingReputableRequestQSB) GenerateQueryString() (url.Values, error) {
+	return query.Values(ilrrqsb)
+}
+
 // IsLinkingReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
 // to claim a grant
@@ -89,9 +99,9 @@ func (c *HTTPClient) IsLinkingReputable(
 	req, err := c.client.NewRequest(
 		ctx,
 		"GET",
-		"v2/reputation/"+paymentID.String()+"/grants?country="+country,
+		"v2/reputation/"+paymentID.String()+"/grants",
 		nil,
-		nil,
+		&IsLinkingReputableRequestQSB{Country: country},
 	)
 	if err != nil {
 		return false, []int{CohortNil}, err
