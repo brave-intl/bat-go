@@ -226,7 +226,7 @@ type createCardRequest struct {
 }
 
 // IsUserKYC - is this user a "member"
-func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, error) {
+func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, string, error) {
 	logger := logging.FromContext(ctx)
 
 	// in order to get the isMember status of the wallet, we need to start
@@ -235,12 +235,12 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	gwPublicKey, err := hex.DecodeString(grantWalletPublicKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system public key")
-		return "", false, fmt.Errorf("invalid system public key: %w", err)
+		return "", false, "", fmt.Errorf("invalid system public key: %w", err)
 	}
 	gwPrivateKey, err := hex.DecodeString(grantWalletPrivateKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system private key")
-		return "", false, fmt.Errorf("invalid system private key: %w", err)
+		return "", false, "", fmt.Errorf("invalid system private key: %w", err)
 	}
 
 	grantWallet := Wallet{
@@ -257,14 +257,14 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "", "", nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
-		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
+		return "", false, "", fmt.Errorf("failed to prepare transaction: %w", err)
 	}
 
 	// submit the transaction the payload
 	uhResp, err := grantWallet.SubmitTransaction(ctx, transactionB64, false)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to submit transaction")
-		return "", false, fmt.Errorf("failed to submit transaction: %w", err)
+		return "", false, "", fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
 	if requireCountry, ok := ctx.Value(appctx.RequireUpholdCountryCTXKey).(bool); ok && requireCountry {
@@ -279,7 +279,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 				"residence_country":   uhResp.ResidenceCountry,
 				"status":              "failure",
 			}).Inc()
-			return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
+			return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
 		}
 	}
 	// do country blacklist checking
@@ -295,7 +295,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 					"residence_country":   uhResp.ResidenceCountry,
 					"status":              "failure",
 				}).Inc()
-				return uhResp.UserID, uhResp.KYC, errorutils.ErrInvalidCountry
+				return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
 			}
 		}
 	}
@@ -306,7 +306,7 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 		"status":              "success",
 	}).Inc()
 
-	return uhResp.UserID, uhResp.KYC, nil
+	return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, nil
 }
 
 // sign registration for this wallet with Uphold with label
