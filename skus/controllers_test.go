@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/asaskevich/govalidator"
 	macarooncmd "github.com/brave-intl/bat-go/cmd/macaroon"
 	"github.com/brave-intl/bat-go/skus/skustest"
@@ -45,6 +43,7 @@ import (
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
 )
 
 var (
@@ -73,6 +72,7 @@ type ControllersTestSuite struct {
 	service  *Service
 	mockCB   *mockcb.MockClient
 	mockCtrl *gomock.Controller
+	storage  Datastore
 	suite.Suite
 }
 
@@ -81,8 +81,12 @@ func TestControllersTestSuite(t *testing.T) {
 }
 
 func (suite *ControllersTestSuite) SetupSuite() {
+	skustest.Migrate(suite.T())
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast for cbr http requests
 	govalidator.SetFieldsRequiredByDefault(true)
+
+	storage, _ := NewPostgres("", false, "")
+	suite.storage = storage
 
 	AnonCardC := macarooncmd.Caveats{
 		"sku":             "anon-card-vote",
@@ -211,17 +215,6 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	pg, err := NewPostgres("", false, "")
 	suite.Require().NoError(err, "Failed to get postgres conn")
 
-	m, err := pg.NewMigrate()
-	suite.Require().NoError(err, "Failed to create migrate instance")
-
-	ver, dirty, _ := m.Version()
-	if dirty {
-		suite.Require().NoError(m.Force(int(ver)))
-	}
-	if ver > 0 {
-		suite.Require().NoError(m.Down(), "Failed to migrate down cleanly")
-	}
-
 	suite.mockCtrl = gomock.NewController(suite.T())
 	suite.mockCB = mockcb.NewMockClient(suite.mockCtrl)
 
@@ -231,7 +224,6 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 	EncryptionKey = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0"
 	InitEncryptionKeys()
 
-	suite.Require().NoError(pg.Migrate(), "Failed to fully migrate")
 	suite.service = &Service{
 		Datastore: pg,
 		cbClient:  suite.mockCB,
@@ -251,20 +243,8 @@ func (suite *ControllersTestSuite) BeforeTest(sn, tn string) {
 }
 
 func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
-	suite.CleanDB()
+	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 	suite.mockCtrl.Finish()
-}
-
-func (suite *ControllersTestSuite) CleanDB() {
-	tables := []string{
-		"vote_drain", "api_keys", "transactions", "order_creds", "order_cred_issuers", "order_items", "orders"}
-
-	if suite.service != nil {
-		for _, table := range tables {
-			_, err := suite.service.Datastore.RawDB().Exec("delete from " + table)
-			suite.Require().NoError(err, "Failed to get clean table")
-		}
-	}
 }
 
 func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macarooncmd.Token, quantity int) (Order, *Issuer) {
@@ -857,11 +837,12 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 	associatedData := make(map[string]string)
 	associatedData["order_id"] = order.ID.String()
 	associatedData["item_id"] = order.Items[0].ID.String()
-	associatedData["valid_to"] = time.Now().String()
-	associatedData["valid_from"] = time.Now().String()
 
 	b, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)
+
+	to := time.Now().Add(time.Hour).Format(time.RFC3339)
+	from := time.Now().Local().Format(time.RFC3339)
 
 	signingOrderResult := SigningOrderResult{
 		RequestID: requestID,
@@ -871,6 +852,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": to},
+				ValidFrom:      &UnionNullString{"string": from},
 				AssociatedData: b,
 			},
 		},
@@ -894,8 +877,8 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 }
 
 func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
+	defer ctx.Done()
 
 	voteTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
@@ -985,6 +968,16 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 
 	signature, tokenPreimage, orderCreds := suite.fetchCredentials(ctx, server, order, *issuer)
 	suite.Require().Equal(len(*(*[]string)(orderCreds[0].SignedCreds)), order.Items[0].Quantity)
+
+	// Check we can retrieve the order by order and item id
+	r := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials/%s",
+		order.ID, order.Items[0].ID), nil)
+
+	rw := httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(rw, r)
+
+	suite.Require().Equal(http.StatusOK, rw.Code)
 
 	// setup vote
 	vote := Vote{

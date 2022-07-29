@@ -352,7 +352,7 @@ func (_d DatastoreWithPrometheus) InsertIssuer(issuer *Issuer) (ip1 *Issuer, err
 }
 
 // InsertOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) InsertOrderCreds(creds *OrderCreds) (err error) {
+func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -362,7 +362,7 @@ func (_d DatastoreWithPrometheus) InsertOrderCreds(creds *OrderCreds) (err error
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertOrderCreds", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertOrderCreds(creds)
+	return _d.base.InsertOrderCreds(ctx, tx, creds)
 }
 
 // InsertVote implements Datastore

@@ -3,9 +3,10 @@ package skus
 import (
 	"context"
 	"errors"
+	"net/http"
+
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
-	"net/http"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
@@ -46,7 +47,6 @@ type CreateOrderCredsV2Request struct {
 // CreateOrderCredsV2 is the handler for creating order credentials
 func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
 		var req CreateOrderCredsV2Request
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
 		if err != nil {
@@ -129,7 +129,6 @@ func GetOrderCredsV2(service *Service) handlers.AppHandler {
 // GetOrderCredsByIDV2 is the handler for fetching order credentials by an item id
 func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
 		// get the IDs from the URL
 		var (
 			orderID           = new(inputs.ID)

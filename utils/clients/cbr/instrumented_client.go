@@ -53,7 +53,7 @@ func (_d ClientWithPrometheus) CreateIssuer(ctx context.Context, issuer string, 
 }
 
 // CreateIssuerV3 implements Client
-func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3Request) (err error) {
+func (_d ClientWithPrometheus) CreateIssuerV3(ctx context.Context, createIssuerV3 IssuerRequest) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -81,7 +81,7 @@ func (_d ClientWithPrometheus) GetIssuer(ctx context.Context, issuer string) (ip
 }
 
 // GetIssuerV2 implements Client
-func (_d ClientWithPrometheus) GetIssuerV2(ctx context.Context, issuer string, cohort int) (ip1 *IssuerResponse, err error) {
+func (_d ClientWithPrometheus) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (ip1 *IssuerResponse, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

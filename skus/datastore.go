@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	timeutils "github.com/brave-intl/bat-go/utils/time"
+
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 
 	"github.com/brave-intl/bat-go/utils/datastore"
@@ -55,7 +57,7 @@ type Datastore interface {
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
 	GetIssuer(merchantID string) (*Issuer, error)
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	InsertOrderCreds(creds *OrderCreds) error
+	InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error
 	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
@@ -746,7 +748,7 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 }
 
 // InsertOrderCreds inserts the given order creds
-func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
+func (pg *Postgres) InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error {
 	blindedCredsJSON, err := json.Marshal(creds.BlindedCreds)
 	if err != nil {
 		return err
@@ -755,7 +757,7 @@ func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
 	statement := `
 	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
 	values ($1, $2, $3, $4)`
-	_, err = pg.RawDB().Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
+	_, err = tx.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
 	return err
 }
 
@@ -792,15 +794,12 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimite
 	// get all the credentials related to the order_id
 	query := `
 		select
-			order_id, item_id,
-			metadata->>'valid_from' as valid_from,
-			metadata->>'valid_to' as valid_to,
-			issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+			order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
 		from order_creds
 		where
 			order_id = $1
-			and metadata->'valid_from' notnull
-			and metadata->'valid_to' notnull
+		  	and valid_to is not null
+			and valid_from is not null
 	`
 
 	err := pg.RawDB().Select(&timeAwareCreds, query, orderID)
@@ -836,18 +835,16 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimite
 
 // GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item
 func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	fmt.Println("LOOKING", orderID, itemID)
 	query := `
 		select
-			order_id, item_id,
-			metadata->>'valid_from' as valid_from,
-			metadata->>'valid_to' as valid_to,
-			issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+			order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
 		from order_creds
 		where
 			order_id = $1
 			and item_id = $2
-			and metadata->'valid_from' notnull
-			and metadata->'valid_to' notnull
+		  	and valid_to is not null
+			and valid_from is not null
 	`
 
 	var timeAwareCreds []TimeAwareSubIssuedCreds
@@ -1043,7 +1040,7 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				return fmt.Errorf("error fetching signed order request %w", err)
 			}
 
-			if len(signedOrderResult.Data) != 1 {
+			if len(signedOrderResult.Data) < 1 {
 				return fmt.Errorf("error invalid number of signing results expecetd 1 got %d",
 					len(signedOrderResult.Data))
 			}
@@ -1069,13 +1066,32 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 					orderID, itemID, signedOrderResult.Data[0].Status.String())
 			}
 
+			var validTo *time.Time
+			if signedOrderResult.Data[0].ValidTo != nil {
+				validTo, err = timeutils.ParseStringToTime(signedOrderResult.Data[0].ValidTo.Value())
+				if err != nil {
+					return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+				}
+			}
+
+			var validFrom *time.Time
+			if signedOrderResult.Data[0].ValidFrom != nil {
+				validFrom, err = timeutils.ParseStringToTime(signedOrderResult.Data[0].ValidFrom.Value())
+				if err != nil {
+					return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+				}
+			}
+
+			fmt.Println("TIMES ", validTo, validFrom)
+
 			signedTokens := jsonutils.JSONStringArray(signedOrderResult.Data[0].SignedTokens)
 
 			result, err := pg.ExecContext(ctx, `update order_creds 
-													set signed_creds = $1, batch_proof = $2, public_key = $3, metadata = $4 
-													where order_id = $5 and item_id = $6`,
+													set signed_creds = $1, batch_proof = $2, public_key = $3, 
+													    valid_to = $4, valid_from = $5 
+													where order_id = $6 and item_id = $7`,
 				&signedTokens, signedOrderResult.Data[0].Proof,
-				signedOrderResult.Data[0].PublicKey, metadata, orderID, itemID)
+				signedOrderResult.Data[0].PublicKey, validTo, validFrom, orderID, itemID)
 			if err != nil {
 				return fmt.Errorf("error updating order creds for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
@@ -1085,8 +1101,8 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				return fmt.Errorf("error getting updated row for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
 
-			if rows != 1 {
-				return fmt.Errorf("error expected one row to be updated for orderID %s itemID %s: %w", orderID, itemID, err)
+			if rows < 1 {
+				return fmt.Errorf("error expected rows to be updated for orderID %s itemID %s", orderID, itemID)
 			}
 		}
 	}

@@ -50,7 +50,7 @@ func (mr *MockClientMockRecorder) CreateIssuer(ctx, issuer, maxTokens interface{
 }
 
 // CreateIssuerV3 mocks base method.
-func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.CreateIssuerV3Request) error {
+func (m *MockClient) CreateIssuerV3(ctx context.Context, createIssuerV3 cbr.IssuerRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateIssuerV3", ctx, createIssuerV3)
 	ret0, _ := ret[0].(error)
@@ -79,7 +79,7 @@ func (mr *MockClientMockRecorder) GetIssuer(ctx, issuer interface{}) *gomock.Cal
 }
 
 // GetIssuerV2 mocks base method.
-func (m *MockClient) GetIssuerV2(ctx context.Context, issuer string, cohort int) (*cbr.IssuerResponse, error) {
+func (m *MockClient) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*cbr.IssuerResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetIssuerV2", ctx, issuer, cohort)
 	ret0, _ := ret[0].(*cbr.IssuerResponse)
