@@ -367,10 +367,7 @@ func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreS
 	// start processing all messages
 	go func(ctx context.Context) {
 		for {
-			_, err := skuService.RunStoreSignedOrderCredentialsJob(ctx)
-			if err != nil {
-				fmt.Println(err)
-			}
+			_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
 		}
 	}(ctx)
 

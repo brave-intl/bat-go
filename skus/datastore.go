@@ -835,7 +835,6 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimite
 
 // GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item
 func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
-	fmt.Println("LOOKING", orderID, itemID)
 	query := `
 		select
 			order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
@@ -1081,8 +1080,6 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 					return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", orderID, itemID, err)
 				}
 			}
-
-			fmt.Println("TIMES ", validTo, validFrom)
 
 			signedTokens := jsonutils.JSONStringArray(signedOrderResult.Data[0].SignedTokens)
 
