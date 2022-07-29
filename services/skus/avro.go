@@ -3,6 +3,8 @@ package skus
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/brave-intl/bat-go/utils/ptr"
 )
 
 const voteSchema = `{
@@ -67,7 +69,7 @@ type SigningOrder struct {
 	AssociatedData []byte   `json:"associated_data"`
 	BlindedTokens  []string `json:"blinded_tokens"`
 	IssuerType     string   `json:"issuer_type"`
-	IssuerCohort   int      `json:"issuer_cohort"`
+	IssuerCohort   int16    `json:"issuer_cohort"`
 }
 
 const signingOrderResultSchema = `{
@@ -98,6 +100,8 @@ const signingOrderResultSchema = `{
                         },
                         {"name": "public_key", "type": "string"},
                         {"name": "proof", "type": "string"},
+                        {"name": "valid_from", "type": ["null", "string"], "default": null},
+                        {"name": "valid_to", "type": ["null", "string"], "default": null},
                         {"name": "status", "type": {
                             "name": "SigningResultStatus",
                             "type": "enum",
@@ -121,6 +125,8 @@ type SignedOrder struct {
 	Proof          string            `json:"proof"`
 	Status         SignedOrderStatus `json:"status"`
 	SignedTokens   []string          `json:"signed_tokens"`
+	ValidTo        *UnionNullString  `json:"valid_to"`
+	ValidFrom      *UnionNullString  `json:"valid_from"`
 	AssociatedData []byte            `json:"associated_data"`
 }
 
@@ -180,4 +186,28 @@ func (s SignedOrderStatus) String() string {
 	default:
 		return fmt.Sprintf("%d", int(s))
 	}
+}
+
+type UnionNullString map[string]interface{}
+
+func (u *UnionNullString) UnmarshalJSON(data []byte) error {
+	var temp map[string]interface{}
+	err := json.Unmarshal(data, &temp)
+	if err != nil {
+		return fmt.Errorf("error deserializing union: %w", err)
+	}
+	*u = temp
+	return nil
+}
+
+func (u UnionNullString) Value() *string {
+	s, ok := u["string"]
+	if ok {
+		return ptr.FromString(s.(string))
+	}
+	_, ok = u["null"]
+	if ok {
+		return nil
+	}
+	panic("unknown value for union")
 }

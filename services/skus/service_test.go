@@ -61,8 +61,6 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 	associatedData := make(map[string]string)
 	associatedData["order_id"] = order.ID.String()
 	associatedData["item_id"] = order.Items[0].ID.String()
-	associatedData["valid_to"] = time.Now().String()
-	associatedData["valid_from"] = time.Now().String()
 
 	b, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)
@@ -75,6 +73,8 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": time.Now().Format(time.RFC3339)},
+				ValidFrom:      &UnionNullString{"string": time.Now().Add(time.Hour).Format(time.RFC3339)},
 				AssociatedData: b,
 			},
 		},
@@ -98,6 +98,8 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), *actual.Credentials[0].SignedCreds)
 	suite.Assert().Equal(signingOrderResult.Data[0].PublicKey, *actual.Credentials[0].PublicKey)
 	suite.Assert().Equal(signingOrderResult.Data[0].Proof, *actual.Credentials[0].BatchProof)
+	suite.Assert().NotEmpty(*actual.Credentials[0].ValidTo)
+	suite.Assert().NotEmpty(*actual.Credentials[0].ValidFrom)
 }
 
 func TestCredChunkFn(t *testing.T) {
@@ -165,6 +167,9 @@ func (suite *ServiceTestSuite) createOrder(ctx context.Context, sku string) *Ord
 	issuer, err = suite.storage.InsertIssuer(issuer)
 	suite.Require().NoError(err)
 
+	tx, err := suite.storage.RawDB().Beginx()
+	suite.Require().NoError(err)
+
 	// insert order creds
 	oc := &OrderCreds{
 		ID:           order.Items[0].ID, // item_id
@@ -174,7 +179,7 @@ func (suite *ServiceTestSuite) createOrder(ctx context.Context, sku string) *Ord
 		BatchProof:   ptr.FromString(test.RandomString()),
 		PublicKey:    ptr.FromString(pk),
 	}
-	err = suite.storage.InsertOrderCreds(oc)
+	err = suite.storage.InsertOrderCreds(ctx, tx, oc)
 	suite.Require().NoError(err)
 
 	return order

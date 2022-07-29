@@ -67,12 +67,12 @@ import (
 var (
 	voteTopic = os.Getenv("ENV") + ".payment.vote"
 
-	// TODO address in kafka refactor.
+	// TODO address in kafka refactor. Check topics are correct
 	// kafka topic for requesting order credentials are signed, write to by sku service
-	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
 
 	// kafka topic which receives order creds once they have been signed, read by sku service
-	kafkaSignedOrderCredsTopic                = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsTopic                = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
 	kafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
 
@@ -226,7 +226,7 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 		},
 		{
 			Func:    service.RunStoreSignedOrderCredentialsJob,
-			Cadence: 500 * time.Millisecond,
+			Cadence: 200 * time.Millisecond,
 			Workers: 1,
 		},
 	}
@@ -270,7 +270,8 @@ func (s *Service) CreateOrderFromRequest(ctx context.Context, req CreateOrderReq
 		case timeLimitedV2:
 			err = s.CreateIssuerV3(ctx, merchantID, *orderItem, *issuerConfig)
 			if err != nil {
-				return nil, fmt.Errorf("error creating issuer for order item %s: %w", orderItem.ID, err)
+				return nil, fmt.Errorf("error creating issuer for merchantID %s and sku %s: %w",
+					merchantID, orderItem.SKU, err)
 			}
 		}
 

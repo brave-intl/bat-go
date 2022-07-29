@@ -5,11 +5,16 @@ package cbr
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/brave-intl/bat-go/utils/clients"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/ptr"
@@ -21,7 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateIssuer(t *testing.T) {
+func TestCreateIssuerV1(t *testing.T) {
 	ctx := context.Background()
 
 	client, err := New()
@@ -31,7 +36,7 @@ func TestCreateIssuer(t *testing.T) {
 	assert.NoError(t, err, "Should be able to create issuer")
 }
 
-func TestGetIssuer(t *testing.T) {
+func TestGetIssuerV1(t *testing.T) {
 	ctx := context.Background()
 
 	client, err := New()
@@ -57,7 +62,7 @@ func TestGetIssuer(t *testing.T) {
 	assert.NotEqual(t, len(issuer.PublicKey), 0, "Should have public key")
 }
 
-func TestSignAndRedeemCredentials(t *testing.T) {
+func TestSignAndRedeemCredentialsV1(t *testing.T) {
 	databaseURL := os.Getenv("CHALLENGE_BYPASS_DATABASE_URL")
 
 	sKey := "fzJbqh6l/xWAjT6Ulmu+/Taxz8XZ7SDnJ/dUXPgtnQE="
@@ -111,14 +116,14 @@ func TestCreateIssuerV3(t *testing.T) {
 	client, err := New()
 	assert.NoError(t, err)
 
-	request := CreateIssuerV3Request{
+	request := IssuerRequest{
 		Name:      test.RandomString(),
-		Cohort:    test.RandomInt(),
-		MaxTokens: test.RandomInt(),
+		Cohort:    int16(test.RandomIntWithMax(10)),
+		MaxTokens: test.RandomIntWithMax(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		Duration:  "P1M",
-		Buffer:    test.RandomInt(),
-		Overlap:   test.RandomInt(),
+		Buffer:    test.RandomIntWithMax(10),
+		Overlap:   test.RandomIntWithMax(10),
 	}
 
 	err = client.CreateIssuerV3(context.Background(), request)
@@ -131,26 +136,26 @@ func TestGetIssuerV2(t *testing.T) {
 	client, err := New()
 	assert.NoError(t, err)
 
-	request := CreateIssuerV3Request{
+	issuerRequest := IssuerRequest{
 		Name:      test.RandomString(),
-		Cohort:    5,
-		MaxTokens: test.RandomInt(),
+		Cohort:    int16(test.RandomIntWithMax(10)),
+		MaxTokens: test.RandomIntWithMax(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
 		Duration:  "P1M",
-		Buffer:    test.RandomInt(),
-		Overlap:   test.RandomInt(),
+		Buffer:    test.RandomIntWithMax(30),
+		Overlap:   test.RandomIntWithMax(5),
 	}
 
-	err = client.CreateIssuerV3(context.Background(), request)
+	err = client.CreateIssuerV3(ctx, issuerRequest)
 	assert.NoError(t, err)
 
-	issuer, err := client.GetIssuerV2(ctx, request.Name, request.Cohort)
+	issuer, err := client.GetIssuerV2(ctx, issuerRequest.Name, issuerRequest.Cohort)
 	assert.NoError(t, err)
 
-	assert.Equal(t, request.Name, issuer.Name)
-	assert.Equal(t, request.Cohort, issuer.Cohort)
-	assert.NotEmpty(t, issuer.ExpiresAt)
+	assert.Equal(t, issuerRequest.Name, issuer.Name)
+	assert.Equal(t, issuerRequest.Cohort, issuer.Cohort)
+	assert.Equal(t, issuerRequest.ExpiresAt.Format(time.RFC3339), issuer.ExpiresAt)
 	assert.NotEmpty(t, issuer.PublicKey)
 }
 
@@ -172,35 +177,117 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	_, err = db.Exec("DELETE from v3_issuer_keys; DELETE FROM v3_issuers; DELETE from redemptions")
 	assert.NoError(t, err, "Must be able to clear issuers")
 
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	var config = &aws.Config{
+		Region:   aws.String("us-west-2"),
+		Endpoint: aws.String(os.Getenv("DYNAMODB_ENDPOINT")),
+	}
+	config.DisableSSL = aws.Bool(true)
+	svc := dynamodb.New(sess, config)
+	err = setupDynamodbTables(svc)
+	assert.NoError(t, err)
+
 	ctx := context.Background()
 
 	client, err := New()
 	assert.NoError(t, err)
 
-	request := CreateIssuerV3Request{
+	// If we use cohort 1 we can use the v1 SignCredentials call to mock the signing process.
+	// This maybe deprecated in the future then we will need to use kafka
+	issuerRequest := IssuerRequest{
 		Name:      test.RandomString(),
-		Cohort:    test.RandomInt(),
-		MaxTokens: test.RandomInt(),
+		Cohort:    1,
+		MaxTokens: test.RandomIntWithMax(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
 		Duration:  "P1M",
-		Buffer:    test.RandomInt(),
-		Overlap:   test.RandomInt(),
+		Buffer:    test.RandomIntWithMax(10),
+		Overlap:   test.RandomIntWithMax(10),
 	}
 
-	err = client.CreateIssuerV3(context.Background(), request)
+	err = client.CreateIssuerV3(context.Background(), issuerRequest)
 	assert.NoError(t, err)
+
+	issuer, err := client.GetIssuerV2(ctx, issuerRequest.Name, issuerRequest.Cohort)
+	assert.NoError(t, err)
+
+	assert.Equal(t, issuerRequest.Name, issuer.Name)
+	assert.Equal(t, issuerRequest.Cohort, issuer.Cohort)
+	assert.Equal(t, issuerRequest.ExpiresAt.Format(time.RFC3339), issuer.ExpiresAt)
+	assert.NotEmpty(t, issuer.PublicKey)
 
 	_, err = db.Exec("update v3_issuer_keys set signing_key=$1", sKey)
 	assert.NoError(t, err)
 
-	resp, err := client.SignCredentials(ctx, request.Name, []string{blindedToken})
+	resp, err := client.SignCredentials(ctx, issuerRequest.Name, []string{blindedToken})
 	assert.NoError(t, err)
 	assert.Equal(t, resp.SignedTokens[0], signedToken)
 
-	err = client.RedeemCredentialV3(ctx, request.Name, preimage, sig, payload)
+	err = client.RedeemCredentialV3(ctx, issuerRequest.Name, preimage, sig, payload)
 	assert.NoError(t, err)
 
 	_, err = db.Exec("DELETE from redemptions")
 	assert.NoError(t, err)
+}
+
+// setupDynamodbTables this function sets up tables for use in dynamodb tests.
+func setupDynamodbTables(db *dynamodb.DynamoDB) error {
+	_, _ = db.DeleteTable(&dynamodb.DeleteTableInput{
+		TableName: ptr.FromString("redemptions"),
+	})
+
+	input := &dynamodb.CreateTableInput{
+		TableName:   ptr.FromString("redemptions"),
+		BillingMode: ptr.FromString("PAY_PER_REQUEST"),
+		AttributeDefinitions: []*dynamodb.AttributeDefinition{
+			{
+				AttributeName: aws.String("id"),
+				AttributeType: aws.String("S"),
+			},
+		},
+		KeySchema: []*dynamodb.KeySchemaElement{
+			{
+				AttributeName: aws.String("id"),
+				KeyType:       aws.String("HASH"),
+			},
+		},
+	}
+
+	_, err := db.CreateTable(input)
+	if err != nil {
+		return fmt.Errorf("error creating dynamodb table %w", err)
+	}
+
+	err = tableIsActive(db, *input.TableName, time.Second, 10*time.Millisecond)
+	if err != nil {
+		return fmt.Errorf("error table is not active %w", err)
+	}
+
+	return nil
+}
+
+func tableIsActive(db *dynamodb.DynamoDB, tableName string, timeout, duration time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.New("timed out while waiting for table status to become ACTIVE")
+		case <-time.After(duration):
+			table, err := db.DescribeTable(&dynamodb.DescribeTableInput{
+				TableName: aws.String(tableName),
+			})
+			if err != nil {
+				return fmt.Errorf("instance.DescribeTable error %w", err)
+			}
+			if table.Table == nil || table.Table.TableStatus == nil || *table.Table.TableStatus != "ACTIVE" {
+				continue
+			}
+			return nil
+		}
+	}
 }

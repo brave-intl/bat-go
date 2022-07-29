@@ -372,17 +372,17 @@ func (mr *MockDatastoreMockRecorder) InsertIssuer(issuer interface{}) *gomock.Ca
 }
 
 // InsertOrderCreds mocks base method.
-func (m *MockDatastore) InsertOrderCreds(creds *OrderCreds) error {
+func (m *MockDatastore) InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InsertOrderCreds", creds)
+	ret := m.ctrl.Call(m, "InsertOrderCreds", ctx, tx, creds)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // InsertOrderCreds indicates an expected call of InsertOrderCreds.
-func (mr *MockDatastoreMockRecorder) InsertOrderCreds(creds interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) InsertOrderCreds(ctx, tx, creds interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertOrderCreds", reflect.TypeOf((*MockDatastore)(nil).InsertOrderCreds), creds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertOrderCreds", reflect.TypeOf((*MockDatastore)(nil).InsertOrderCreds), ctx, tx, creds)
 }
 
 // InsertVote mocks base method.

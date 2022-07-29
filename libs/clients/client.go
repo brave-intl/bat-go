@@ -167,7 +167,7 @@ func (c *SimpleHTTPClient) newRequest(
 		RawQuery: qs,
 	})
 
-	if body != nil && method != "GET" {
+	if body != nil {
 		buf = new(bytes.Buffer)
 		err := json.NewEncoder(buf).Encode(body)
 		if err != nil {

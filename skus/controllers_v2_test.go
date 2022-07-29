@@ -80,10 +80,6 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 				SKU:      token,
 				Quantity: 1,
 			},
-			{
-				SKU:      token,
-				Quantity: 1,
-			},
 		},
 	}
 
@@ -98,7 +94,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 	cbrClient.EXPECT().
-		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3Request{})).
+		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.IssuerRequest{})).
 		Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
@@ -106,7 +102,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 		PublicKey: test.RandomString(),
 	}
 	cbrClient.EXPECT().
-		GetIssuer(ctx, issuerID).
+		GetIssuerV2(ctx, issuerID, defaultCohort).
 		Return(issuerResponse, nil)
 
 	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
@@ -148,7 +144,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 	signingOrderRequest := suite.ReadSigningOrderRequestMessage(ctx, kafkaUnsignedOrderCredsTopic)
 
 	suite.Require().Equal(requestID, signingOrderRequest.RequestID)
-	suite.Require().Equal(order.Items[0].SKU, signingOrderRequest.Data[0].IssuerType)
+	suite.Require().Equal(issuerID, signingOrderRequest.Data[0].IssuerType)
 	suite.Require().Equal(defaultCohort, signingOrderRequest.Data[0].IssuerCohort)
 
 	var metadata datastore.Metadata
@@ -197,7 +193,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
 
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 	cbrClient.EXPECT().
-		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.CreateIssuerV3Request{})).
+		CreateIssuerV3(ctx, gomock.AssignableToTypeOf(cbr.IssuerRequest{})).
 		Return(nil)
 
 	issuerResponse := &cbr.IssuerResponse{
@@ -205,7 +201,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
 		PublicKey: test.RandomString(),
 	}
 	cbrClient.EXPECT().
-		GetIssuer(ctx, issuerID).
+		GetIssuerV2(ctx, issuerID, defaultCohort).
 		Return(issuerResponse, nil)
 
 	// create orders
@@ -296,6 +292,116 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_NotFound() {
 	suite.Require().Contains(appError.Message, errorutils.ErrNotFound.Error())
 }
 
+func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreSignedOrderCredentials() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	env := os.Getenv("ENV")
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
+
+	// setup kafka
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
+	kafkaOrderCredsSignedRequestReaderGroupID = test.RandomString()
+	ctx = skustest.SetupKafka(suite.T(), ctx, kafkaUnsignedOrderCredsTopic, kafkaSignedOrderCredsTopic)
+
+	// create macaroon token for sku and whitelist
+	sku := test.RandomString()
+	price := 0
+	token := suite.CreateMacaroon(sku, price)
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
+
+	// create order with order items
+	request := CreateOrderRequest{
+		Email: test.RandomString(),
+		Items: []OrderItemRequest{
+			{
+				SKU:      token,
+				Quantity: 1,
+			},
+		},
+	}
+
+	client, err := cbr.New()
+	suite.Require().NoError(err)
+
+	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
+
+	// create order and also create issuer
+	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	order, err := service.CreateOrderFromRequest(ctx, request)
+	suite.Require().NoError(err)
+
+	//blindedCreds := "HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=" // this is already base64 encoded
+
+	data := CreateOrderCredsV2Request{
+		ItemID: order.Items[0].ID,
+		// these are already base64 encoded
+		BlindedCreds: []string{"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo=", "YG07TqExOSoo/46SIWK42OG0of3z94Y5SzCswW6sYSw="},
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	skuService, err := InitService(ctx, suite.storage, nil)
+	suite.Require().NoError(err)
+
+	router := RouterV2(skuService, instrumentHandler)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+
+	// start processing all messages
+	go func(ctx context.Context) {
+		for {
+			_, err := skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}(ctx)
+
+	time.Sleep(30 * time.Second)
+
+	// retrieve the newly signed order creds by orderID and itemID.
+	// wrap in backoff to mimic polling
+	var recorder *httptest.ResponseRecorder
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials/%s",
+		order.ID, order.Items[0].ID), nil)
+
+	recorder = httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(recorder, req)
+
+	var response TimeLimitedV2Creds
+	err = json.NewDecoder(recorder.Body).Decode(&response)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(order.ID, response.OrderID)
+	suite.Assert().Equal(order.Items[0].OrderID, response.Credentials[0].OrderID)
+	suite.Assert().Equal(order.Items[0].ID, response.Credentials[0].ItemID)
+	suite.Assert().NotEmpty(response.Credentials[0].SignedCreds)
+	suite.Assert().NotEmpty(response.Credentials[0].ValidFrom)
+	suite.Assert().NotEmpty(response.Credentials[0].ValidTo)
+
+	ctx.Done()
+}
+
+// ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
 func (suite *ControllersV2TestSuite) ReadSigningOrderRequestMessage(ctx context.Context, topic string) SigningOrderRequest {
 	kafkaReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), topic)
 	suite.Require().NoError(err)
@@ -328,8 +434,8 @@ func (suite *ControllersV2TestSuite) CreateMacaroon(sku string, price int) strin
 		"currency":                  "usd",
 		"credential_type":           "time-limited-v2",
 		"credential_valid_duration": "P1M",
-		"issuer_token_buffer":       strconv.Itoa(test.RandomInt()),
-		"issuer_token_overlap":      strconv.Itoa(test.RandomInt()),
+		"issuer_token_buffer":       strconv.Itoa(3),
+		"issuer_token_overlap":      strconv.Itoa(0),
 		"allowed_payment_methods":   test.RandomString(),
 		"metadata": `
 				{

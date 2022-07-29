@@ -24,13 +24,13 @@ import (
 )
 
 const (
-	defaultMaxTokensPerIssuer = 4000000 // ~1M BAT
-	defaultCohort             = 0
+	defaultMaxTokensPerIssuer       = 4000000 // ~1M BAT
+	defaultCohort             int16 = 1
 )
 
 var (
 	retryPolicy        = retrypolicy.DefaultRetry
-	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden}
+	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError, http.StatusConflict}
 )
 
 var ErrOrderUnpaid = errors.New("order not paid")
@@ -61,13 +61,17 @@ func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem
 	}
 
 	if issuer == nil {
+		logging.FromContext(ctx).Info().
+			Msgf("creating new issuer %s", issuerID)
+
 		requestOperation := func() (interface{}, error) {
 			return nil, s.cbClient.CreateIssuer(ctx, issuerID, defaultMaxTokensPerIssuer)
 		}
 
+		// The create issuer endpoint returns a conflict if the issuer already exists
 		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
-			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
+		if err != nil && !isConflict(err) {
+			return fmt.Errorf("error calling cbr create issuer: %w", err)
 		}
 
 		requestOperation = func() (interface{}, error) {
@@ -111,14 +115,13 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 	// Create a new issuer if one is not present.
 	if issuer == nil {
 		logging.FromContext(ctx).Info().
-			Str("issuerID", issuerID).
-			Msg("creating new issuer")
+			Msgf("creating new v3 issuer %s", issuerID)
 
 		if orderItem.ValidForISO == nil {
 			return fmt.Errorf("error valid iso is empty for order item sku %s", orderItem.SKU)
 		}
 
-		createIssuerV3 := cbr.CreateIssuerV3Request{
+		createIssuerV3 := cbr.IssuerRequest{
 			Name:      issuerID,
 			Cohort:    defaultCohort,
 			MaxTokens: defaultMaxTokensPerIssuer,
@@ -132,13 +135,14 @@ func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderIt
 			return nil, s.cbClient.CreateIssuerV3(ctx, createIssuerV3)
 		}
 
+		// The create issuer v3 endpoints returns a conflict if the issuer already exists.
 		_, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
-		if err != nil {
+		if err != nil && !isConflict(err) {
 			return fmt.Errorf("error calling cbr create issuer v3: %w", err)
 		}
 
 		requestOperation = func() (interface{}, error) {
-			return s.cbClient.GetIssuer(ctx, createIssuerV3.Name)
+			return s.cbClient.GetIssuerV2(ctx, createIssuerV3.Name, createIssuerV3.Cohort)
 		}
 
 		response, err := s.retry(ctx, requestOperation, retryPolicy, canRetry(nonRetriableErrors))
@@ -181,6 +185,16 @@ func canRetry(nonRetriableErrors []int) func(error) bool {
 	}
 }
 
+func isConflict(err error) bool {
+	var eb *errorutils.ErrorBundle
+	if errors.As(err, &eb) {
+		if httpState, ok := eb.Data().(clients.HTTPState); ok {
+			return httpState.Status == http.StatusConflict
+		}
+	}
+	return false
+}
+
 // OrderCreds encapsulates the credentials to be signed in response to a completed order
 type OrderCreds struct {
 	ID           uuid.UUID                  `json:"id" db:"item_id"`
@@ -213,8 +227,8 @@ type TimeAwareSubIssuedCreds struct {
 	OrderID      uuid.UUID                  `json:"-" db:"order_id"`
 	ItemID       uuid.UUID                  `json:"-" db:"item_id"`
 	IssuerID     uuid.UUID                  `json:"-" db:"issuer_id"`
-	ValidFrom    *string                    `json:"validFrom" db:"valid_from"`
-	ValidTo      *string                    `json:"validTo" db:"valid_to"`
+	ValidTo      *time.Time                 `json:"validTo" db:"valid_to"`
+	ValidFrom    *time.Time                 `json:"validFrom" db:"valid_from"`
 	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
 	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
 	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
@@ -222,6 +236,14 @@ type TimeAwareSubIssuedCreds struct {
 }
 
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+	tx, err := s.Datastore.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("error beginning transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -249,13 +271,13 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 
 		orderCreds := OrderCreds{
 			ID:           orderItem.ID,
-			OrderID:      orderID,
+			OrderID:      order.ID,
 			IssuerID:     issuer.ID,
 			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
 		}
 
 		// insert unsigned order creds
-		err = s.Datastore.InsertOrderCreds(&orderCreds)
+		err = s.Datastore.InsertOrderCreds(ctx, tx, &orderCreds)
 		if err != nil {
 			return fmt.Errorf("error creating order creds: could not insert order creds: %w", err)
 		}
@@ -267,8 +289,8 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		}
 
 		associatedData := make(map[string]string)
-		associatedData["order_id"] = orderID.String()
-		associatedData["item_id"] = itemID.String()
+		associatedData["order_id"] = order.ID.String()
+		associatedData["item_id"] = orderItem.ID.String()
 
 		bytes, err := json.Marshal(associatedData)
 		if err != nil {
@@ -279,7 +301,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			RequestID: requestID,
 			Data: []SigningOrder{
 				{
-					IssuerType:     orderItem.SKU,
+					IssuerType:     issuerID,
 					IssuerCohort:   defaultCohort,
 					BlindedTokens:  blindedCreds,
 					AssociatedData: bytes,
@@ -310,6 +332,11 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		if err != nil {
 			return fmt.Errorf("error writting kafka message: %w", err)
 		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error commiting transaction: %w", err)
 	}
 
 	return nil

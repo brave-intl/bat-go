@@ -50,7 +50,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	// mock issuer calls
 	cbrClient := mock_cbr.NewMockClient(ctrl)
 
-	createIssuerV3 := cbr.CreateIssuerV3Request{
+	createIssuerV3 := cbr.IssuerRequest{
 		Name:      issuerID,
 		Cohort:    defaultCohort,
 		MaxTokens: defaultMaxTokensPerIssuer,
@@ -68,7 +68,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 		PublicKey: test.RandomString(),
 	}
 	cbrClient.EXPECT().
-		GetIssuer(ctx, createIssuerV3.Name).
+		GetIssuerV2(ctx, createIssuerV3.Name, createIssuerV3.Cohort).
 		Return(issuerResponse, nil)
 
 	// mock datastore
@@ -334,22 +334,24 @@ func makeMsg() *SigningOrderResult {
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
+				ValidFrom:      &UnionNullString{"string": time.Now().String()},
+				ValidTo:        nil,
 				AssociatedData: []byte{},
 			},
 		},
 	}
 }
 
-func isCreateIssuerV3(expected cbr.CreateIssuerV3Request) gomock.Matcher {
+func isCreateIssuerV3(expected cbr.IssuerRequest) gomock.Matcher {
 	return createIssuerV3Matcher{expected: expected}
 }
 
 type createIssuerV3Matcher struct {
-	expected cbr.CreateIssuerV3Request
+	expected cbr.IssuerRequest
 }
 
 func (c createIssuerV3Matcher) Matches(arg interface{}) bool {
-	actual := arg.(cbr.CreateIssuerV3Request)
+	actual := arg.(cbr.IssuerRequest)
 	return c.expected.Name == actual.Name &&
 		c.expected.Cohort == actual.Cohort &&
 		c.expected.MaxTokens == actual.MaxTokens &&

@@ -17,11 +17,11 @@ type Client interface {
 	// CreateIssuer creates an issuer.
 	CreateIssuer(ctx context.Context, issuer string, maxTokens int) error
 	// CreateIssuerV3 creates a version 3 issuer.
-	CreateIssuerV3(ctx context.Context, createIssuerV3 CreateIssuerV3Request) error
+	CreateIssuerV3(ctx context.Context, createIssuerV3 IssuerRequest) error
 	// GetIssuer returns issuers prior to version 3.
 	GetIssuer(ctx context.Context, issuer string) (*IssuerResponse, error)
-	// GetIssuerV2 returns version 3 issuers.
-	GetIssuerV2(ctx context.Context, issuer string, cohort int) (*IssuerResponse, error)
+	// GetIssuerV2 returns issuers based on issuer name and cohort. Should be used when retrieving version 3 issuers.
+	GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*IssuerResponse, error)
 	SignCredentials(ctx context.Context, issuer string, creds []string) (*CredentialsIssueResponse, error)
 	RedeemCredential(ctx context.Context, issuer string, preimage string, signature string, payload string) error
 	RedeemCredentials(ctx context.Context, credentials []CredentialRedemption, payload string) error
@@ -58,7 +58,7 @@ type IssuerResponse struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
 	ExpiresAt string `json:"expires_at,omitempty"`
-	Cohort    int    `json:"cohort,omitempty"`
+	Cohort    int16  `json:"cohort,omitempty"`
 }
 
 // CreateIssuer with the provided name and token cap
@@ -73,9 +73,10 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 	return err
 }
 
-type CreateIssuerV3Request struct {
+type IssuerRequest struct {
 	Name      string     `json:"name"`
-	Cohort    int        `json:"cohort"`
+	Version   int        `json:"version"`
+	Cohort    int16      `json:"cohort"`
 	MaxTokens int        `json:"max_tokens"`
 	ValidFrom *time.Time `json:"valid_from"` // start of issuance
 	ExpiresAt *time.Time `json:"expires_at"`
@@ -85,8 +86,9 @@ type CreateIssuerV3Request struct {
 }
 
 // CreateIssuerV3 creates a version 3 issuer.
-func (c *HTTPClient) CreateIssuerV3(ctx context.Context, createIssuerV3Request CreateIssuerV3Request) error {
-	req, err := c.client.NewRequest(ctx, "POST", "v3/issuer/", createIssuerV3Request, nil)
+func (c *HTTPClient) CreateIssuerV3(ctx context.Context, issuerRequest IssuerRequest) error {
+	issuerRequest.Version = 3
+	req, err := c.client.NewRequest(ctx, http.MethodPost, "v3/issuer/", issuerRequest, nil)
 	if err != nil {
 		return fmt.Errorf("error creating create issuer request v3: %w", err)
 	}
@@ -120,12 +122,12 @@ type CredentialsIssueResponse struct {
 	SignedTokens []string `json:"signed_tokens"`
 }
 
-func (c *HTTPClient) GetIssuerV2(ctx context.Context, issuer string, cohort int) (*IssuerResponse, error) {
+func (c *HTTPClient) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*IssuerResponse, error) {
 	payload := struct {
-		Cohort int `json:"cohort"`
+		Cohort int16 `json:"cohort"`
 	}{cohort}
 
-	req, err := c.client.NewRequest(ctx, http.MethodPost, "v2/issuer/"+issuer, &payload, nil)
+	req, err := c.client.NewRequest(ctx, http.MethodGet, "v2/issuer/"+issuer, &payload, nil)
 	if err != nil {
 		return nil, err
 	}
