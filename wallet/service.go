@@ -211,6 +211,7 @@ func (service *Service) LinkWallet(
 
 	var (
 		userID          string
+		country         string
 		depositProvider string
 		probi           decimal.Decimal
 	)
@@ -223,7 +224,7 @@ func (service *Service) LinkWallet(
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
+	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -237,6 +238,7 @@ func (service *Service) LinkWallet(
 			http.StatusForbidden)
 	} else {
 		userID = uID
+		country = c
 	}
 
 	// check kyc user id validity
@@ -252,7 +254,7 @@ func (service *Service) LinkWallet(
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider, transactionInfo.IdentityCountry)
+	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider, country)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
