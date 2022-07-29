@@ -252,7 +252,6 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 
 	go func() {
 		err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-		fmt.Println(err)
 		suite.Require().NoError(err)
 	}()
 
