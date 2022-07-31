@@ -126,10 +126,11 @@ func GetOrderCredsV2(service *Service) handlers.AppHandler {
 	}
 }
 
-// GetOrderCredsByIDV2 is the handler for fetching order credentials by an item id
+// GetOrderCredsByIDV2 is the handler for fetching order credentials by an item id.
+// If the order credentials are singed it returns a status of http.StatusOK.
+// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted
 func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		// get the IDs from the URL
 		var (
 			orderID           = new(inputs.ID)
 			itemID            = new(inputs.ID)
@@ -137,19 +138,16 @@ func GetOrderCredsByIDV2(service *Service) handlers.AppHandler {
 			err               error
 		)
 
-		// decode and validate orderID url param
 		if err = inputs.DecodeAndValidateString(
 			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			validationPayload["orderID"] = err.Error()
 		}
 
-		// decode and validate itemID url param
 		if err = inputs.DecodeAndValidateString(
 			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
 			validationPayload["itemID"] = err.Error()
 		}
 
-		// did we get any validation errors?
 		if len(validationPayload) > 0 {
 			return handlers.ValidationError(
 				"Error validating request url parameter",
