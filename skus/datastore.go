@@ -1098,8 +1098,8 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				return fmt.Errorf("error getting updated row for orderID %s itemID %s: %w", orderID, itemID, err)
 			}
 
-			if rows < 1 {
-				return fmt.Errorf("error expected rows to be updated for orderID %s itemID %s", orderID, itemID)
+			if rows == 0 {
+				return fmt.Errorf("error no rows updated for orderID %s itemID %s", orderID, itemID)
 			}
 		}
 	}

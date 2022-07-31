@@ -224,9 +224,9 @@ type TimeLimitedV2Creds struct {
 
 // TimeAwareSubIssuedCreds - sub issued time aware credentials
 type TimeAwareSubIssuedCreds struct {
-	OrderID      uuid.UUID                  `json:"-" db:"order_id"`
-	ItemID       uuid.UUID                  `json:"-" db:"item_id"`
-	IssuerID     uuid.UUID                  `json:"-" db:"issuer_id"`
+	OrderID      uuid.UUID                  `json:"orderId" db:"order_id"`
+	ItemID       uuid.UUID                  `json:"itemId" db:"item_id"`
+	IssuerID     uuid.UUID                  `json:"issuerId" db:"issuer_id"`
 	ValidTo      *time.Time                 `json:"validTo" db:"valid_to"`
 	ValidFrom    *time.Time                 `json:"validFrom" db:"valid_from"`
 	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
