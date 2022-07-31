@@ -384,8 +384,6 @@ func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreS
 
 	server.Handler.ServeHTTP(recorder, req)
 
-	fmt.Println("RECORDER STRING ", recorder.Body.String())
-
 	var response TimeLimitedV2Creds
 	err = json.NewDecoder(recorder.Body).Decode(&response)
 	suite.Require().NoError(err)
