@@ -589,7 +589,8 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
-	ErrUnusualActivity   = errors.New("unusual activity")
+	ErrUnusualActivity = errors.New("unusual activity")
+	// ErrGeoResetDifferent - error for wallets with reset geo
 	ErrGeoResetDifferent = errors.New("geo reset is different")
 )
 
