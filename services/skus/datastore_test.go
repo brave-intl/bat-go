@@ -1,6 +1,6 @@
 //go:build integration
 
-package skus_test
+package skus
 
 import (
 	"context"
@@ -11,34 +11,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/skus/skustest"
-	timeutils "github.com/brave-intl/bat-go/utils/time"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	"github.com/brave-intl/bat-go/skus"
+	"github.com/brave-intl/bat-go/skus/skustest"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/brave-intl/bat-go/utils/test"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-)
-
-const (
-	devBraveSearchPremiumYearTimeLimited  = "MDAyM2xvY2F0aW9uIHNlYXJjaC5icmF2ZS5zb2Z0d2FyZQowMDM2aWRlbnRpZmllciBicmF2ZS1zZWFyY2gtcHJlbWl1bS15ZWFyIHNrdSB0b2tlbiB2MQowMDIwY2lkIHNrdT1icmF2ZS1zZWFyY2gtYWRmcmVlCjAwMTRjaWQgcHJpY2U9MzAuMDAKMDAxNWNpZCBjdXJyZW5jeT1VU0QKMDAzM2NpZCBkZXNjcmlwdGlvbj1QcmVtaXVtIGFjY2VzcyB0byBCcmF2ZSBTZWFyY2gKMDAyNWNpZCBjcmVkZW50aWFsX3R5cGU9dGltZS1saW1pdGVkCjAwMjZjaWQgY3JlZGVudGlhbF92YWxpZF9kdXJhdGlvbj1QMVkKMDAxZWNpZCBpc3N1YW5jZV9pbnRlcnZhbD1QMU0KMDAyN2NpZCBhbGxvd2VkX3BheW1lbnRfbWV0aG9kcz1zdHJpcGUKMDExNWNpZCBtZXRhZGF0YT0geyAic3RyaXBlX3Byb2R1Y3RfaWQiOiAicHJvZF9KelNldnlaTTVpQlNyZiIsICJzdHJpcGVfaXRlbV9pZCI6ICJwcmljZV8xSm9YdkZIb2YyMGJwaEc2eUg2a1FpUEciLCAic3RyaXBlX3N1Y2Nlc3NfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9hY2NvdW50Lz9pbnRlbnQ9cHJvdmlzaW9uIiwgInN0cmlwZV9jYW5jZWxfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9wbGFucy8/aW50ZW50PWNoZWNrb3V0IiB9CjAwMmZzaWduYXR1cmUgfSNU9u0uAbGm1Vi8dKoa9hcK71VeMzGUWq77io6sJgUK"
-	devBraveFirewallVPNPremiumTimeLimited = "MDAyMGxvY2F0aW9uIHZwbi5icmF2ZS5zb2Z0d2FyZQowMDM3aWRlbnRpZmllciBicmF2ZS1maXJld2FsbC12cG4tcHJlbWl1bSBza3UgdG9rZW4gdjEKMDAyN2NpZCBza3U9YnJhdmUtZmlyZXdhbGwtdnBuLXByZW1pdW0KMDAxM2NpZCBwcmljZT05Ljk5CjAwMTVjaWQgY3VycmVuY3k9VVNECjAwMjljaWQgZGVzY3JpcHRpb249QnJhdmUgRmlyZXdhbGwgKyBWUE4KMDAyNWNpZCBjcmVkZW50aWFsX3R5cGU9dGltZS1saW1pdGVkCjAwMjZjaWQgY3JlZGVudGlhbF92YWxpZF9kdXJhdGlvbj1QMU0KMDAyN2NpZCBhbGxvd2VkX3BheW1lbnRfbWV0aG9kcz1zdHJpcGUKMDExNWNpZCBtZXRhZGF0YT0geyAic3RyaXBlX3Byb2R1Y3RfaWQiOiAicHJvZF9LMWM4VzNvTTRtVXNHdyIsICJzdHJpcGVfaXRlbV9pZCI6ICJwcmljZV8xSk5ZdU5Ib2YyMGJwaEc2QnZnZVlFbnQiLCAic3RyaXBlX3N1Y2Nlc3NfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9hY2NvdW50Lz9pbnRlbnQ9cHJvdmlzaW9uIiwgInN0cmlwZV9jYW5jZWxfdXJpIjogImh0dHBzOi8vYWNjb3VudC5icmF2ZS5zb2Z0d2FyZS9wbGFucy8/aW50ZW50PWNoZWNrb3V0IiB9CjAwMmZzaWduYXR1cmUgZoDg2iXb36IocwS9/MZnvP5Hk2NfAdJ6qMs0kBSyinUK"
 )
 
 type PostgresTestSuite struct {
 	suite.Suite
-	storage skus.Datastore
+	storage Datastore
 }
 
 func TestPostgresTestSuite(t *testing.T) {
@@ -47,7 +41,7 @@ func TestPostgresTestSuite(t *testing.T) {
 
 func (suite *PostgresTestSuite) SetupSuite() {
 	skustest.Migrate(suite.T())
-	storage, _ := skus.NewPostgres("", false, "")
+	storage, _ := NewPostgres("", false, "")
 	suite.storage = storage
 }
 
@@ -74,7 +68,7 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 
 	// setup inputs
 	merchantID := uuid.NewV4()
-	ctx, pagination, err := inputs.NewPagination(ctx, "/?page=2&items=50&order=id.asc&order=createdAt.desc", new(skus.Transaction))
+	ctx, pagination, err := inputs.NewPagination(ctx, "/?page=2&items=50&order=id.asc&order=createdAt.desc", new(Transaction))
 	if err != nil {
 		t.Errorf("failed to create pagination: %s\n", err)
 	}
@@ -129,7 +123,7 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2CredsByItemID_Success()
 
 	// create paid order with unsigned creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order := suite.createOrderAndCredentials(ctx, devBraveFirewallVPNPremiumTimeLimited)
+	order := suite.createOrderAndCredentials(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	validTo, err := timeutils.ParseStringToTime(&to)
@@ -166,7 +160,7 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2Creds_Success() {
 
 	// create paid order with unsigned creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited})
-	order := suite.createOrderAndCredentials(ctx, devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited) // insert initial order creds
+	order := suite.createOrderAndCredentials(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited) // insert initial order creds
 
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	validTo, err := timeutils.ParseStringToTime(&to)
@@ -183,7 +177,7 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2Creds_Success() {
 	suite.Require().NoError(err)
 
 	// add to map so we can compare the correct items
-	orderItems := make(map[uuid.UUID]skus.OrderItem)
+	orderItems := make(map[uuid.UUID]OrderItem)
 	orderItems[order.Items[0].ID] = order.Items[0]
 	orderItems[order.Items[1].ID] = order.Items[1]
 
@@ -215,7 +209,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 
 	// create paid order with unsigned creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order := suite.createOrderAndCredentials(ctx, devBraveFirewallVPNPremiumTimeLimited)
+	order := suite.createOrderAndCredentials(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	publicKey := test.RandomString()
 
@@ -229,22 +223,22 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 	vFrom := time.Now().Local().Format(time.RFC3339)
 	vTo := time.Now().Local().Add(time.Hour).Format(time.RFC3339)
 
-	signingOrderResult := &skus.SigningOrderResult{
+	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
-		Data: []skus.SignedOrder{
+		Data: []SignedOrder{
 			{
 				PublicKey:      publicKey,
 				Proof:          test.RandomString(),
-				Status:         skus.SignedOrderStatusOk,
+				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
-				ValidTo:        &skus.UnionNullString{"string": vTo},
-				ValidFrom:      &skus.UnionNullString{"string": vFrom},
+				ValidTo:        &UnionNullString{"string": vTo},
+				ValidFrom:      &UnionNullString{"string": vFrom},
 				AssociatedData: ad,
 			},
 		},
 	}
 
-	orderCredentialsWorker := skus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
 	orderCredentialsWorker.EXPECT().
 		FetchSignedOrderCredentials(ctx).
 		Return(signingOrderResult, nil).
@@ -286,7 +280,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 
 	// create paid order with unsigned creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order := suite.createOrderAndCredentials(ctx, devBraveFirewallVPNPremiumTimeLimited)
+	order := suite.createOrderAndCredentials(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	publicKey := test.RandomString()
 
@@ -297,20 +291,20 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 	ad, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)
 
-	signingOrderResult := &skus.SigningOrderResult{
+	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
-		Data: []skus.SignedOrder{
+		Data: []SignedOrder{
 			{
 				PublicKey:      publicKey,
 				Proof:          test.RandomString(),
-				Status:         skus.SignedOrderStatusOk,
+				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
 				AssociatedData: ad,
 			},
 		},
 	}
 
-	orderCredentialsWorker := skus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
 	orderCredentialsWorker.EXPECT().
 		FetchSignedOrderCredentials(ctx).
 		Return(signingOrderResult, nil).
@@ -343,7 +337,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 
 	// create paid order with unsigned creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order := suite.createOrderAndCredentials(ctx, devBraveFirewallVPNPremiumTimeLimited)
+	order := suite.createOrderAndCredentials(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	associatedData := make(map[string]string)
 	associatedData["order_id"] = order.ID.String()
@@ -352,17 +346,17 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 	ad, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)
 
-	signingOrderResult := &skus.SigningOrderResult{
+	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
-		Data: []skus.SignedOrder{
+		Data: []SignedOrder{
 			{
-				Status:         skus.SignedOrderStatusError,
+				Status:         SignedOrderStatusError,
 				AssociatedData: ad,
 			},
 		},
 	}
 
-	orderCredentialsWorker := skus.NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
 	orderCredentialsWorker.EXPECT().
 		FetchSignedOrderCredentials(ctx).
 		Return(signingOrderResult, nil).
@@ -371,40 +365,39 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 	err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
 
 	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s status %s",
-		associatedData["order_id"], associatedData["item_id"], skus.SignedOrderStatusError.String()))
+		associatedData["order_id"], associatedData["item_id"], SignedOrderStatusError.String()))
 }
 
 // helper to setup a paid order, order items, issuer and insert unsigned order credentials
-func (suite *PostgresTestSuite) createOrderAndCredentials(ctx context.Context, sku ...string) *skus.Order {
-	service := skus.Service{}
-
-	var orderItems []skus.OrderItem
-	var methods skus.Methods
+func (suite *PostgresTestSuite) createOrderAndCredentials(t *testing.T, ctx context.Context, sku ...string) *Order {
+	service := Service{}
+	var orderItems []OrderItem
+	var methods Methods
 
 	for _, s := range sku {
 		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
-		suite.Require().NoError(err)
+		assert.NoError(t, err)
 		orderItems = append(orderItems, *orderItem)
 		methods = append(methods, *method...)
 	}
 
-	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), skus.OrderStatusPaid,
+	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
 		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	// create issuer
 	pk := test.RandomString()
 
-	issuer := &skus.Issuer{
+	issuer := &Issuer{
 		MerchantID: test.RandomString(),
 		PublicKey:  pk,
 	}
 
 	issuer, err = suite.storage.InsertIssuer(issuer)
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	tx, err := suite.storage.RawDB().BeginTxx(ctx, nil)
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	defer func() {
 		_ = tx.Rollback()
@@ -412,7 +405,7 @@ func (suite *PostgresTestSuite) createOrderAndCredentials(ctx context.Context, s
 
 	// insert order creds
 	for _, orderItem := range order.Items {
-		oc := &skus.OrderCreds{
+		oc := &OrderCreds{
 			ID:           orderItem.ID, // item_id
 			OrderID:      order.ID,
 			IssuerID:     issuer.ID,
@@ -421,11 +414,11 @@ func (suite *PostgresTestSuite) createOrderAndCredentials(ctx context.Context, s
 			PublicKey:    ptr.FromString(pk),
 		}
 		err = suite.storage.InsertOrderCreds(ctx, tx, oc)
-		suite.Require().NoError(err)
+		assert.NoError(t, err)
 	}
 
 	err = tx.Commit()
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	return order
 }
