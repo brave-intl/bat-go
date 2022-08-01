@@ -5,7 +5,6 @@ package skus
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 	"time"
@@ -14,13 +13,12 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
-	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/brave-intl/bat-go/utils/test"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
-	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -50,7 +48,8 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 
 	// create paid order and insert order creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveSearchPremiumYearTimeLimited})
-	order := suite.createOrder(ctx, devBraveSearchPremiumYearTimeLimited)
+	pg := PostgresTestSuite{storage: suite.storage}
+	order := pg.createOrderAndCredentials(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
 	// setup kafka and write expected signed creds to topic. Overwrite topics so fresh for each test
 	kafkaSignedOrderCredsTopic = test.RandomString()
@@ -83,10 +82,10 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 	// act
 	go func() {
 		service, _ := InitService(ctx, suite.storage, nil)
-		_, err = service.RunStoreSignedOrderCredentialsJob(ctx)
+		_, _ = service.RunStoreSignedOrderCredentialsJob(ctx)
 	}()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	// assert
 	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
@@ -144,44 +143,6 @@ func TestCredChunkFn(t *testing.T) {
 	if next.Month() != 2 {
 		t.Errorf("mo - the next month should be 2")
 	}
-}
-
-func (suite *ServiceTestSuite) createOrder(ctx context.Context, sku string) *Order {
-	service := Service{}
-	orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, sku, 1)
-	suite.Require().NoError(err)
-
-	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
-		test.RandomString(), test.RandomString(), nil, []OrderItem{*orderItem}, method)
-	suite.Require().NoError(err)
-
-	// create issuer
-	pk := test.RandomString()
-
-	issuer := &Issuer{
-		MerchantID: test.RandomString(),
-		PublicKey:  pk,
-	}
-
-	issuer, err = suite.storage.InsertIssuer(issuer)
-	suite.Require().NoError(err)
-
-	tx, err := suite.storage.RawDB().Beginx()
-	suite.Require().NoError(err)
-
-	// insert order creds
-	oc := &OrderCreds{
-		ID:           order.Items[0].ID, // item_id
-		OrderID:      order.ID,
-		IssuerID:     issuer.ID,
-		BlindedCreds: nil,
-		BatchProof:   ptr.FromString(test.RandomString()),
-		PublicKey:    ptr.FromString(pk),
-	}
-	err = suite.storage.InsertOrderCreds(ctx, tx, oc)
-	suite.Require().NoError(err)
-
-	return order
 }
 
 func writeSigningOrderResultMessage(t *testing.T, ctx context.Context, signingOrderResult SigningOrderResult, topic string) {

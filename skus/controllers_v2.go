@@ -44,7 +44,7 @@ type CreateOrderCredsV2Request struct {
 	BlindedCreds []string  `json:"blindedCreds" valid:"base64"`
 }
 
-// CreateOrderCredsV2 is the handler for creating order credentials
+// CreateOrderCredsV2 handles the creation of order credentials for a given order item.
 func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req CreateOrderCredsV2Request
@@ -84,7 +84,7 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 				http.StatusBadRequest)
 		}
 
-		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.ItemID, req.BlindedCreds)
+		err = service.CreateOrderCredentials(r.Context(), *orderID.UUID(), req.BlindedCreds)
 		if err != nil {
 			logging.FromContext(r.Context()).Error().Err(err).
 				Str("orderID", orderID.String()).
@@ -93,7 +93,7 @@ func CreateOrderCredsV2(service *Service) handlers.AppHandler {
 			switch {
 			case errors.Is(err, ErrOrderUnpaid):
 				return handlers.WrapError(err, "error creating order credentials", http.StatusBadRequest)
-			case errors.As(err, &errorutils.ErrNotFound):
+			case errors.Is(err, errorutils.ErrNotFound):
 				return handlers.WrapError(err, "error creating order credentials", http.StatusNotFound)
 			}
 			return handlers.WrapError(err, "error creating order credentials", http.StatusInternalServerError)

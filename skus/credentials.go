@@ -235,7 +235,7 @@ type TimeAwareSubIssuedCreds struct {
 	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
-func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, itemID uuid.UUID, blindedCreds []string) error {
+func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
 	tx, err := s.Datastore.RawDB().Beginx()
 	if err != nil {
 		return fmt.Errorf("error beginning transaction: %w", err)

@@ -1039,68 +1039,67 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 				return fmt.Errorf("error fetching signed order request %w", err)
 			}
 
-			if len(signedOrderResult.Data) < 1 {
-				return fmt.Errorf("error invalid number of signing results expecetd 1 got %d",
-					len(signedOrderResult.Data))
-			}
+			for _, so := range signedOrderResult.Data {
 
-			var metadata datastore.Metadata
-			err = json.Unmarshal(signedOrderResult.Data[0].AssociatedData, &metadata)
-			if err != nil {
-				return fmt.Errorf("error unmarshalling associated data for requestID %s", signedOrderResult.RequestID)
-			}
-
-			orderID, ok := metadata["order_id"]
-			if !ok {
-				return fmt.Errorf("error orderID not found in associated data for requestID %s", signedOrderResult.RequestID)
-			}
-
-			itemID, ok := metadata["item_id"]
-			if !ok {
-				return fmt.Errorf("error itemID not found in associated data for requestID %s", signedOrderResult.RequestID)
-			}
-
-			if signedOrderResult.Data[0].Status != SignedOrderStatusOk {
-				return fmt.Errorf("error signing order creds for orderID %s itemID %s status %s",
-					orderID, itemID, signedOrderResult.Data[0].Status.String())
-			}
-
-			var validTo *time.Time
-			if signedOrderResult.Data[0].ValidTo != nil {
-				validTo, err = timeutils.ParseStringToTime(signedOrderResult.Data[0].ValidTo.Value())
+				var metadata datastore.Metadata
+				err = json.Unmarshal(so.AssociatedData, &metadata)
 				if err != nil {
-					return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+					return fmt.Errorf("error unmarshalling associated data for requestID %s", signedOrderResult.RequestID)
 				}
-			}
 
-			var validFrom *time.Time
-			if signedOrderResult.Data[0].ValidFrom != nil {
-				validFrom, err = timeutils.ParseStringToTime(signedOrderResult.Data[0].ValidFrom.Value())
-				if err != nil {
-					return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+				orderID, ok := metadata["order_id"]
+				if !ok {
+					return fmt.Errorf("error orderID not found in associated data for requestID %s", signedOrderResult.RequestID)
 				}
-			}
 
-			signedTokens := jsonutils.JSONStringArray(signedOrderResult.Data[0].SignedTokens)
+				itemID, ok := metadata["item_id"]
+				if !ok {
+					return fmt.Errorf("error itemID not found in associated data for requestID %s", signedOrderResult.RequestID)
+				}
 
-			result, err := pg.ExecContext(ctx, `update order_creds 
+				if so.Status != SignedOrderStatusOk {
+					return fmt.Errorf("error signing order creds for orderID %s itemID %s status %s",
+						orderID, itemID, so.Status.String())
+				}
+
+				var validTo *time.Time
+				if so.ValidTo != nil {
+					validTo, err = timeutils.ParseStringToTime(so.ValidTo.Value())
+					if err != nil {
+						return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+					}
+				}
+
+				var validFrom *time.Time
+				if so.ValidFrom != nil {
+					validFrom, err = timeutils.ParseStringToTime(so.ValidFrom.Value())
+					if err != nil {
+						return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w", orderID, itemID, err)
+					}
+				}
+
+				signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+
+				result, err := pg.ExecContext(ctx, `update order_creds 
 													set signed_creds = $1, batch_proof = $2, public_key = $3, 
 													    valid_to = $4, valid_from = $5 
 													where order_id = $6 and item_id = $7`,
-				&signedTokens, signedOrderResult.Data[0].Proof,
-				signedOrderResult.Data[0].PublicKey, validTo, validFrom, orderID, itemID)
-			if err != nil {
-				return fmt.Errorf("error updating order creds for orderID %s itemID %s: %w", orderID, itemID, err)
+					&signedTokens, so.Proof, so.PublicKey, validTo, validFrom, orderID, itemID)
+				if err != nil {
+					return fmt.Errorf("error updating order creds for orderID %s itemID %s: %w", orderID, itemID, err)
+				}
+
+				rows, err := result.RowsAffected()
+				if err != nil {
+					return fmt.Errorf("error getting updated row for orderID %s itemID %s: %w", orderID, itemID, err)
+				}
+
+				if rows == 0 {
+					return fmt.Errorf("error no rows updated for orderID %s itemID %s", orderID, itemID)
+				}
 			}
 
-			rows, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("error getting updated row for orderID %s itemID %s: %w", orderID, itemID, err)
-			}
-
-			if rows == 0 {
-				return fmt.Errorf("error no rows updated for orderID %s itemID %s", orderID, itemID)
-			}
+			return fmt.Errorf("error no signing order result data is empty")
 		}
 	}
 }
