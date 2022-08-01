@@ -590,6 +590,8 @@ func (pg *Postgres) IncreaseLinkingLimit(ctx context.Context, providerLinkingID 
 var (
 	// ErrUnusualActivity - error for wallets with unusual activity
 	ErrUnusualActivity = errors.New("unusual activity")
+	// ErrGeoResetDifferent - error for wallets with reset geo
+	ErrGeoResetDifferent = errors.New("geo reset is different")
 )
 
 // LinkWallet links a wallet together
@@ -611,17 +613,26 @@ func (pg *Postgres) LinkWallet(ctx context.Context, ID string, userDepositDestin
 			return fmt.Errorf("failed to check wallet rep: %w", err)
 		}
 
-		var isTooYoung = false
+		var (
+			isTooYoung        = false
+			geoResetDifferent = false
+		)
 		for _, v := range cohorts {
 			if isTooYoung = (v == reputation.CohortTooYoung); isTooYoung {
 				break
 			}
+			if geoResetDifferent = (v == reputation.CohortGeoResetDifferent); geoResetDifferent {
+				break
+			}
 		}
 
-		if !reputable && !isTooYoung {
+		if !reputable && !isTooYoung && !geoResetDifferent {
 			sublogger.Info().Msg("wallet linking attempt failed - unusual activity")
 			countLinkingFlaggedUnusual.Inc()
 			return ErrUnusualActivity
+		} else if geoResetDifferent {
+			sublogger.Info().Msg("wallet linking attempt failed - geo reset is different")
+			return ErrGeoResetDifferent
 		}
 	}
 

@@ -75,6 +75,8 @@ var (
 	CohortTooYoung = 2
 	// CohortWithdrawalLimits - limited cohort
 	CohortWithdrawalLimits = 4
+	// CohortGeoResetDifferent - different geo than orig
+	CohortGeoResetDifferent = 7
 )
 
 // IsLinkingReputableRequestQSB - query string "body" for is linking reputable requests

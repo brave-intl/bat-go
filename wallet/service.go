@@ -161,6 +161,9 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
 		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
+		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
 	return nil
@@ -193,6 +196,9 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
@@ -262,6 +268,9 @@ func (service *Service) LinkWallet(
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
@@ -410,6 +419,9 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}
