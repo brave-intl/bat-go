@@ -631,7 +631,7 @@ func (pg *Postgres) GetWithdrawalsAssociated(walletID, claimID *uuid.UUID) (*uui
 			claims
 		where
 			drained=true and
-			wallet_id in (select id from wallets where provider_linking_id = (select provider_linking_id from wallets where id = $1 limit 1)) and
+			wallet_id in (select wallet_id from wallet_custodian where linking_id in (select linking_id from wallet_custodian where wallet_id = $1 )) and
 			promotion_id= (select promotion_id from claims where id= $2 limit 1)
 		group by
 			promotion_id;

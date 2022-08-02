@@ -24,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/digest"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
@@ -32,6 +33,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -90,6 +92,8 @@ var (
 )
 
 func init() {
+	prometheus.MustRegister(countUpholdWalletAccountValidation)
+	prometheus.MustRegister(countUpholdTxDestinationGeo)
 
 	// Default back to BAT_SETTLEMENT_ADDRESS
 	if AnonCardSettlementAddress == "" {
@@ -222,7 +226,7 @@ type createCardRequest struct {
 }
 
 // IsUserKYC - is this user a "member"
-func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, error) {
+func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, bool, string, error) {
 	logger := logging.FromContext(ctx)
 
 	// in order to get the isMember status of the wallet, we need to start
@@ -231,12 +235,12 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	gwPublicKey, err := hex.DecodeString(grantWalletPublicKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system public key")
-		return "", false, fmt.Errorf("invalid system public key: %w", err)
+		return "", false, "", fmt.Errorf("invalid system public key: %w", err)
 	}
 	gwPrivateKey, err := hex.DecodeString(grantWalletPrivateKey)
 	if err != nil {
 		logger.Error().Err(err).Msg("invalid system private key")
-		return "", false, fmt.Errorf("invalid system private key: %w", err)
+		return "", false, "", fmt.Errorf("invalid system private key: %w", err)
 	}
 
 	grantWallet := Wallet{
@@ -253,17 +257,56 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	transactionB64, err := grantWallet.PrepareTransaction(altcurrency.BAT, decimal.New(0, 1), destination, "", "", nil)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to prepare transaction")
-		return "", false, fmt.Errorf("failed to prepare transaction: %w", err)
+		return "", false, "", fmt.Errorf("failed to prepare transaction: %w", err)
 	}
 
 	// submit the transaction the payload
 	uhResp, err := grantWallet.SubmitTransaction(ctx, transactionB64, false)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to submit transaction")
-		return "", false, fmt.Errorf("failed to submit transaction: %w", err)
+		return "", false, "", fmt.Errorf("failed to submit transaction: %w", err)
 	}
 
-	return uhResp.UserID, uhResp.KYC, nil
+	if requireCountry, ok := ctx.Value(appctx.RequireUpholdCountryCTXKey).(bool); ok && requireCountry {
+		// no country data from uphold, block the linking attempt
+		// requires uphold destination country support prior to deploy
+		if uhResp.CitizenshipCountry == "" ||
+			uhResp.IdentityCountry == "" ||
+			uhResp.ResidenceCountry == "" {
+			countUpholdWalletAccountValidation.With(prometheus.Labels{
+				"citizenship_country": uhResp.CitizenshipCountry,
+				"identity_country":    uhResp.IdentityCountry,
+				"residence_country":   uhResp.ResidenceCountry,
+				"status":              "failure",
+			}).Inc()
+			return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
+		}
+	}
+	// do country blacklist checking
+	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
+		// check country code
+		for _, v := range blacklist {
+			if strings.EqualFold(uhResp.CitizenshipCountry, v) ||
+				strings.EqualFold(uhResp.IdentityCountry, v) ||
+				strings.EqualFold(uhResp.ResidenceCountry, v) {
+				countUpholdWalletAccountValidation.With(prometheus.Labels{
+					"citizenship_country": uhResp.CitizenshipCountry,
+					"identity_country":    uhResp.IdentityCountry,
+					"residence_country":   uhResp.ResidenceCountry,
+					"status":              "failure",
+				}).Inc()
+				return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
+			}
+		}
+	}
+	countUpholdWalletAccountValidation.With(prometheus.Labels{
+		"citizenship_country": uhResp.CitizenshipCountry,
+		"identity_country":    uhResp.IdentityCountry,
+		"residence_country":   uhResp.ResidenceCountry,
+		"status":              "success",
+	}).Inc()
+
+	return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, nil
 }
 
 // sign registration for this wallet with Uphold with label
@@ -498,6 +541,23 @@ func (w *Wallet) PrepareTransaction(altcurrency altcurrency.AltCurrency, probi d
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
+var (
+	countUpholdWalletAccountValidation = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_uphold_wallet_account_validation",
+			Help: "Counts the number of uphold wallets requesting account validation partitioned by country code",
+		},
+		[]string{"citizenship_country", "identity_country", "residence_country", "status"},
+	)
+	countUpholdTxDestinationGeo = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "count_uphold_tx_destination_geo",
+			Help: "upon transfer record the destination geo information",
+		},
+		[]string{"citizenship_country", "identity_country", "residence_country", "type"},
+	)
+)
+
 // Transfer moves funds out of the associated wallet and to the specific destination
 func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurrency, probi decimal.Decimal, destination string) (*walletutils.TransactionInfo, error) {
 	logger := logging.FromContext(ctx)
@@ -520,6 +580,23 @@ func (w *Wallet) Transfer(ctx context.Context, altcurrency altcurrency.AltCurren
 	err = json.Unmarshal(respBody, &uhResp)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errorutils.ErrFailedBodyUnmarshal, err.Error())
+	}
+
+	// in the event we have geo information on the transaction report it through metrics
+	if !( // if there is a destination and all three are not empty strings
+	uhResp.Destination.Node.User.CitizenshipCountry == "" &&
+		uhResp.Destination.Node.User.IdentityCountry == "" &&
+		uhResp.Destination.Node.User.ResidenceCountry == "") {
+		var t = "linking"
+		if !uhResp.Denomination.Amount.IsZero() {
+			t = "drain"
+		}
+		countUpholdTxDestinationGeo.With(prometheus.Labels{
+			"citizenship_country": uhResp.Destination.Node.User.CitizenshipCountry,
+			"identity_country":    uhResp.Destination.Node.User.IdentityCountry,
+			"residence_country":   uhResp.Destination.Node.User.ResidenceCountry,
+			"type":                t,
+		}).Inc()
 	}
 
 	return uhResp.ToTransactionInfo(), nil
@@ -660,7 +737,10 @@ func (w *Wallet) VerifyAnonCardTransaction(ctx context.Context, transactionB64 s
 }
 
 type upholdTransactionResponseDestinationNodeUser struct {
-	ID string `json:"id"`
+	ID                 string `json:"id"`
+	CitizenshipCountry string `json:"citizenshipCountry"`
+	IdentityCountry    string `json:"identityCountry"`
+	ResidenceCountry   string `json:"residenceCountry"`
 }
 
 type upholdTransactionResponseDestinationNode struct {
@@ -734,6 +814,10 @@ func (resp upholdTransactionResponse) ToTransactionInfo() *walletutils.Transacti
 	txInfo.ID = resp.ID
 	txInfo.Note = resp.Message
 	txInfo.KYC = destination.IsMember
+
+	txInfo.CitizenshipCountry = destination.Node.User.CitizenshipCountry
+	txInfo.IdentityCountry = destination.Node.User.IdentityCountry
+	txInfo.ResidenceCountry = destination.Node.User.ResidenceCountry
 
 	return &txInfo
 }

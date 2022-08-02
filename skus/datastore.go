@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -937,9 +938,6 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
-
-	logger := logging.Logger(ctx, "RunNextOrderJob")
-
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
 	if err != nil {
@@ -992,18 +990,28 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 		if errors.As(err, &eb) {
 			// pull out the data and see if this is an http client error
 			if hs, ok := eb.Data().(clients.HTTPState); ok {
-				// this is an http client error from cbr
-				// get more details about the failure
-				logger.Error().Err(eb.Cause()).Str("status", fmt.Sprintf("%d", hs.Status)).Str(
-					"body", fmt.Sprintf("%+v", hs.Body)).Msg("failed to call SignOrderCreds")
-				return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
-					hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
+				// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
+				// and keep retrying over and over. We want to filter this out and set batch proof
+				// to empty string, so it will not be picked up again
+				if strings.Contains("cannot decompress edwards point",
+					strings.ToLower(fmt.Sprintf("%+v", hs.Body))) {
+					bp := ""
+					creds = &OrderCreds{
+						ID:           job.OrderID,
+						BlindedCreds: job.BlindedCreds,
+						BatchProof:   &bp, // signals if the job needs to run, setting to empty string will stop it from being run
+					}
+				} else {
+					// this is a retry able error
+					return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
+						hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
+				}
 			}
+		} else {
+			// Unknown error
+			return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
+				job.ID, job.OrderID, err)
 		}
-
-		// Unknown error
-		return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
-			job.ID, job.OrderID, err)
 	}
 
 	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,

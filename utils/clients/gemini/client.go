@@ -18,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/go-querystring/query"
 	"github.com/prometheus/client_golang/prometheus"
@@ -264,7 +265,7 @@ func (pr PayoutResult) GenerateLog() string {
 // Client abstracts over the underlying client
 type Client interface {
 	// ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-	ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error)
+	ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error)
 	// FetchAccountList requests account information to scope future requests
 	FetchAccountList(ctx context.Context, APIKey string, signer cryptography.HMACKey, payload string) (*[]Account, error)
 	// FetchBalances requests balance information for a given account
@@ -282,9 +283,10 @@ type HTTPClient struct {
 
 // Conf some common gemini configuration values
 type Conf struct {
-	ClientID string
-	APIKey   string
-	Secret   string
+	ClientID          string
+	APIKey            string
+	Secret            string
+	SettlementAddress string
 }
 
 // New returns a new HTTPClient, retrieving the base URL from the environment
@@ -449,11 +451,8 @@ type ValidateAccountRes struct {
 	CountryCode string `json:"countryCode"`
 }
 
-// ErrInvalidCountry - invalid country error for validation
-var ErrInvalidCountry = errors.New("invalid country")
-
 // ValidateAccount - given a verificationToken validate the token is authentic and get the unique account id
-func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, error) {
+func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, recipientID string) (string, string, error) {
 	// create the query string parameters
 	var (
 		res = new(ValidateAccountRes)
@@ -466,12 +465,12 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 	})
 
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	_, err = c.client.Do(ctx, req, res)
 	if err != nil {
-		return "", err
+		return "", res.CountryCode, err
 	}
 
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
@@ -484,7 +483,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 						"status":       "failure",
 					}).Inc()
 				}
-				return "", ErrInvalidCountry
+				return "", res.CountryCode, errorutils.ErrInvalidCountry
 			}
 		}
 	}
@@ -496,7 +495,7 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		}).Inc()
 	}
 
-	return res.ID, nil
+	return res.ID, res.CountryCode, nil
 }
 
 // FetchAccountList fetches the list of accounts associated with the given api key

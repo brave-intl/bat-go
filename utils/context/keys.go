@@ -6,6 +6,8 @@ import "errors"
 type CTXKey string
 
 const (
+	// MergeCustodialCTXKey - the context key for merge custodial
+	MergeCustodialCTXKey CTXKey = "merge_custodial"
 	// DatastoreCTXKey - the context key for getting the datastore
 	DatastoreCTXKey CTXKey = "datastore"
 	// DatabaseTransactionCTXKey - context key for database transactions
@@ -63,6 +65,24 @@ const (
 	GeminiAPISecretCTXKey CTXKey = "gemini_api_secret"
 	// GeminiSettlementAddressCTXKey - context key for the gemini settlement address
 	GeminiSettlementAddressCTXKey CTXKey = "gemini_settlement_address"
+
+	// for skus ac validation
+
+	// SkusGeminiClientCTXKey - context key for the build time of code
+	SkusGeminiClientCTXKey CTXKey = "skus_gemini_client"
+	// SkusGeminiBrowserClientIDCTXKey - context key for the gemini browser client id
+	SkusGeminiBrowserClientIDCTXKey CTXKey = "skus_gemini_browser_client_id"
+	// SkusGeminiClientIDCTXKey - context key for the gemini client id
+	SkusGeminiClientIDCTXKey CTXKey = "skus_gemini_client_id"
+	// SkusGeminiClientSecretCTXKey - context key for the gemini client secret
+	SkusGeminiClientSecretCTXKey CTXKey = "skus_gemini_client_secret"
+	// SkusGeminiAPIKeyCTXKey - context key for the gemini api key
+	SkusGeminiAPIKeyCTXKey CTXKey = "skus_gemini_api_key"
+	// SkusGeminiAPISecretCTXKey - context key for the gemini api secret
+	SkusGeminiAPISecretCTXKey CTXKey = "skus_gemini_api_secret"
+	// SkusGeminiSettlementAddressCTXKey - context key for the gemini settlement address
+	SkusGeminiSettlementAddressCTXKey CTXKey = "skus_gemini_settlement_address"
+
 	// Kafka509CertCTXKey - context key for the build time of code
 	Kafka509CertCTXKey CTXKey = "kafka_x509_cert"
 	// KafkaBrokersCTXKey - context key for the build time of code
@@ -130,6 +150,12 @@ const (
 
 	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
 	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
+	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
+	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
+	// AWSRegionCTXKey - the context key for getting the rate limit
+	AWSRegionCTXKey CTXKey = "aws_region"
+	// RequireUpholdCountryCTXKey - the context key for getting the rate limit
+	RequireUpholdCountryCTXKey CTXKey = "require_uphold_country"
 )
 
 var (

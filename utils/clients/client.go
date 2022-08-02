@@ -287,7 +287,11 @@ func (c *SimpleHTTPClient) do(ctx context.Context, req *http.Request, v interfac
 		return resp, nil
 	}
 
-	logger.Warn().Int("response_status", status).Err(err).Msg("failed http client call")
+	logger.Warn().
+		Int("response_status", status).
+		Err(err).
+		Str("body", string(bodyBytes)). // add errored body into the messaging
+		Msg("failed http client call")
 	logger.Debug().Str("host", req.URL.Host).Str("path", req.URL.Path).Str("body", string(bodyBytes)).Msg("failed http client call")
 	return resp, errors.Wrap(err, ErrProtocolError)
 }

@@ -1,19 +1,29 @@
 package rewards
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/utils/clients/ratios"
 	ratiosmock "github.com/brave-intl/bat-go/utils/clients/ratios/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 )
+
+type mockGetObjectAPI func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+
+func (m mockGetObjectAPI) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	return m(ctx, params, optFns...)
+}
 
 func TestGetParametersController(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
@@ -26,10 +36,25 @@ func TestGetParametersController(t *testing.T) {
 				"bat": decimal.Zero,
 			}}, nil)
 
+	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewBufferString(`{
+				"uphold":"processing",
+				"gemini":"off",
+				"bitflyer":"off",
+				"unverified":"off"
+			}
+			`)),
+		}, nil
+	})
 	var (
-		h      = GetParametersHandler(NewService(context.Background(), mockRatios))
+		s, err = NewService(context.Background(), mockRatios, mockS3)
+		hGet   = GetParametersHandler(s)
 		params = new(ParametersV1)
 	)
+	if err != nil {
+		t.Error("failed to make new service: ", err)
+	}
 
 	req, err := http.NewRequest("GET", "/parameters", nil)
 	if err != nil {
@@ -39,19 +64,26 @@ func TestGetParametersController(t *testing.T) {
 	rctx := chi.NewRouteContext()
 	r := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, r)
-	if rr.Code != http.StatusOK {
-		t.Log("result: ", rr.Body.String())
-		t.Error("was expecting an ok response: ", rr.Code)
+	// add the parameters merge bucket to context
+	r = req.WithContext(context.WithValue(r.Context(), appctx.ParametersMergeBucketCTXKey, "something"))
+
+	rrGet := httptest.NewRecorder()
+	hGet.ServeHTTP(rrGet, r)
+	if rrGet.Code != http.StatusOK {
+		t.Log("result: ", rrGet.Body.String())
+		t.Error("was expecting an ok response: ", rrGet.Code)
 	}
 
-	if err = json.Unmarshal(rr.Body.Bytes(), &params); err != nil {
+	if err = json.Unmarshal(rrGet.Body.Bytes(), &params); err != nil {
 		t.Error("should be no error with unmarshalling response: ", err)
 	}
 
 	if params.BATRate != 0 {
 		t.Error("was expecting 0 for the bat rate")
+	}
+
+	if params.PayoutStatus == nil || params.PayoutStatus.Uphold != "processing" {
+		t.Error("was expecting uphold to be set to processing")
 	}
 	if len(params.AutoContribute.Choices) == 0 {
 		t.Error("was expecting more than one ac choices")

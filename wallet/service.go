@@ -152,7 +152,7 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 	// we assume that since we got linkingInfo signed from BF that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountHash)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer")
+	err := service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "bitflyer", "JP")
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
@@ -160,6 +160,11 @@ func (service *Service) LinkBitFlyerWallet(ctx context.Context, walletID uuid.UU
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
+			// TODO: eventual correct this behavior when client can support
+			// return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link bitflyer wallets", status)
 	}
@@ -177,7 +182,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	}
 
 	// perform an Account Validation call to gemini to get the accountID
-	accountID, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
+	accountID, country, err := geminiClient.ValidateAccount(ctx, verificationToken, depositID)
 	if err != nil {
 		return fmt.Errorf("failed to validate account: %w", err)
 	}
@@ -185,7 +190,7 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 	// we assume that since we got linking_info(VerificationToken) signed from Gemini that they are KYC
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, accountID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "gemini")
+	err = service.Datastore.LinkWallet(ctx, walletID.String(), depositID, providerLinkingID, nil, "gemini", country)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
@@ -193,6 +198,11 @@ func (service *Service) LinkGeminiWallet(ctx context.Context, walletID uuid.UUID
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
+			// TODO: eventual correct this behavior when client can support
+			// return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link gemini wallets", status)
 	}
@@ -211,6 +221,7 @@ func (service *Service) LinkWallet(
 
 	var (
 		userID          string
+		country         string
 		depositProvider string
 		probi           decimal.Decimal
 	)
@@ -223,7 +234,7 @@ func (service *Service) LinkWallet(
 	}
 
 	// verify that the user is kyc from uphold. (for all wallet provider cases)
-	if uID, ok, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
+	if uID, ok, c, err := wallet.IsUserKYC(ctx, transactionInfo.Destination); err != nil {
 		// there was an error
 		return handlers.WrapError(err,
 			"wallet could not be kyc checked",
@@ -237,6 +248,7 @@ func (service *Service) LinkWallet(
 			http.StatusForbidden)
 	} else {
 		userID = uID
+		country = c
 	}
 
 	// check kyc user id validity
@@ -252,7 +264,7 @@ func (service *Service) LinkWallet(
 
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, userID)
 	// tx.Destination will be stored as UserDepositDestination in the wallet info upon linking
-	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider)
+	err = service.Datastore.LinkWallet(ctx, info.ID, transactionInfo.Destination, providerLinkingID, anonymousAddress, depositProvider, country)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
@@ -260,6 +272,11 @@ func (service *Service) LinkWallet(
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
+			// TODO: eventual correct this behavior when client can support
+			// return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link uphold wallets", status)
 	}
@@ -399,7 +416,7 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 	providerLinkingID := uuid.NewV5(WalletClaimNamespace, to.String())
 
 	// "to" will be stored as UserDepositDestination in the wallet info upon linking
-	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave"); err != nil {
+	if err := service.Datastore.LinkWallet(ctx, from.String(), to.String(), providerLinkingID, nil, "brave", ""); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrTooManyCardsLinked) {
 			// we are not allowing draining to wallets that exceed the linking limits
@@ -408,6 +425,11 @@ func (service *Service) LinkBraveWallet(ctx context.Context, from, to uuid.UUID)
 		}
 		if errors.Is(err, ErrUnusualActivity) {
 			return handlers.WrapError(err, "unable to link - unusual activity", http.StatusBadRequest)
+		}
+		if errors.Is(err, ErrGeoResetDifferent) {
+			return handlers.WrapError(errors.New("wallets do not match"), "mismatched provider accounts", http.StatusForbidden)
+			// TODO: eventual correct this behavior when client can support
+			// return handlers.WrapError(err, "unable to link - geo-reset different", http.StatusBadRequest)
 		}
 		return handlers.WrapError(err, "unable to link brave wallets", status)
 	}

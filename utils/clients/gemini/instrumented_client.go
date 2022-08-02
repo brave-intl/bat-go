@@ -96,7 +96,7 @@ func (_d ClientWithPrometheus) UploadBulkPayout(ctx context.Context, APIKey stri
 }
 
 // ValidateAccount implements Client
-func (_d ClientWithPrometheus) ValidateAccount(ctx context.Context, verificationToken string, recipientID string) (s1 string, err error) {
+func (_d ClientWithPrometheus) ValidateAccount(ctx context.Context, verificationToken string, recipientID string) (s1 string, s2 string, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"

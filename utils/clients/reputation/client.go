@@ -19,7 +19,7 @@ type Client interface {
 	IsWalletReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsWalletAdsReputable(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 	IsDrainReputable(ctx context.Context, id, promotionID uuid.UUID, withdrawAmount decimal.Decimal) (bool, []int, error)
-	IsLinkingReputable(ctx context.Context, id uuid.UUID) (bool, []int, error)
+	IsLinkingReputable(ctx context.Context, id uuid.UUID, country string) (bool, []int, error)
 	IsWalletOnPlatform(ctx context.Context, id uuid.UUID, platform string) (bool, error)
 }
 
@@ -75,7 +75,19 @@ var (
 	CohortTooYoung = 2
 	// CohortWithdrawalLimits - limited cohort
 	CohortWithdrawalLimits = 4
+	// CohortGeoResetDifferent - different geo than orig
+	CohortGeoResetDifferent = 7
 )
+
+// IsLinkingReputableRequestQSB - query string "body" for is linking reputable requests
+type IsLinkingReputableRequestQSB struct {
+	Country string `url:"country,omitempty"`
+}
+
+// GenerateQueryString - implement the QueryStringBody interface
+func (ilrrqsb *IsLinkingReputableRequestQSB) GenerateQueryString() (url.Values, error) {
+	return query.Values(ilrrqsb)
+}
 
 // IsLinkingReputable makes the request to the reputation server
 // and returns whether a paymentId has enough reputation
@@ -83,6 +95,7 @@ var (
 func (c *HTTPClient) IsLinkingReputable(
 	ctx context.Context,
 	paymentID uuid.UUID,
+	country string,
 ) (bool, []int, error) {
 
 	req, err := c.client.NewRequest(
@@ -90,7 +103,7 @@ func (c *HTTPClient) IsLinkingReputable(
 		"GET",
 		"v2/reputation/"+paymentID.String()+"/grants",
 		nil,
-		nil,
+		&IsLinkingReputableRequestQSB{Country: country},
 	)
 	if err != nil {
 		return false, []int{CohortNil}, err
