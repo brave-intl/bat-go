@@ -124,15 +124,17 @@ func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2CredsByItemID_Success()
 	orderCredentials := suite.createOrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	// act
-	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(orderCredentials[0].ID, orderCredentials[0].OrderID)
+	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(orderCredentials[0].OrderID, orderCredentials[0].ID)
 	suite.Require().NoError(err)
 
 	// assert
+	suite.Require().NotNil(timeLimitedV2Creds)
 	suite.Assert().Equal(1, len(timeLimitedV2Creds.Credentials))
-	suite.Assert().Equal(orderCredentials[0].ID, timeLimitedV2Creds.OrderID)
 	suite.Assert().Equal(orderCredentials[0].ID, timeLimitedV2Creds.Credentials[0].ItemID)
+	suite.Assert().Equal(orderCredentials[0].OrderID, timeLimitedV2Creds.Credentials[0].OrderID)
 	suite.Assert().Equal(*orderCredentials[0].ValidTo, *timeLimitedV2Creds.Credentials[0].ValidTo)
 	suite.Assert().Equal(*orderCredentials[0].ValidFrom, *timeLimitedV2Creds.Credentials[0].ValidFrom)
+	suite.Assert().Equal(orderCredentials[0].BlindedCreds, timeLimitedV2Creds.Credentials[0].BlindedCreds)
 }
 
 func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2Creds_Success() {
@@ -170,11 +172,8 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// create paid order with unsigned creds
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	publicKey := test.RandomString()
@@ -213,11 +212,10 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 		AnyTimes()
 
 	go func() {
-		err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-		suite.Require().NoError(err)
+		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
 	}()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Millisecond)
 
 	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
 	suite.Require().NoError(err)
@@ -236,19 +234,14 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Succes
 
 	suite.Assert().Equal(*to, *actual.Credentials[0].ValidTo)
 	suite.Assert().Equal(*from, *actual.Credentials[0].ValidFrom)
-
-	ctx.Done()
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Success() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// create paid order with unsigned creds
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	publicKey := test.RandomString()
@@ -281,8 +274,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 		AnyTimes()
 
 	go func() {
-		err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-		suite.Require().NoError(err)
+		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
 	}()
 
 	time.Sleep(time.Millisecond)
@@ -294,19 +286,14 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 	suite.Assert().Equal(signingOrderResult.Data[0].PublicKey, *actual.PublicKey)
 	suite.Assert().Equal(signingOrderResult.Data[0].Proof, *actual.BatchProof)
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), *actual.SignedCreds)
-
-	ctx.Done()
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatus_Error() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// create paid order with unsigned creds
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
 
 	associatedData := make(map[string]string)
@@ -339,7 +326,7 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 		associatedData["order_id"], associatedData["item_id"], SignedOrderStatusError.String()))
 }
 
-// helper to setup a paid order, order items and issuer.
+// helper to set up a paid order, order items and issuer.
 func (suite *PostgresTestSuite) createOrderAndIssuer(t *testing.T, ctx context.Context, sku ...string) (*Order, *Issuer) {
 	service := Service{}
 	var orderItems []OrderItem
@@ -407,11 +394,11 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	validTo, err := timeutils.ParseStringToTime(&to)
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	from := time.Now().Local().Format(time.RFC3339)
 	validFrom, err := timeutils.ParseStringToTime(&from)
-	suite.Require().NoError(err)
+	assert.NoError(t, err)
 
 	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
 
