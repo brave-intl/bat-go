@@ -238,14 +238,6 @@ type TimeAwareSubIssuedCreds struct {
 }
 
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
-	tx, err := s.Datastore.RawDB().Beginx()
-	if err != nil {
-		return fmt.Errorf("error beginning transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return fmt.Errorf("error retrieving order: %w", err)
@@ -322,11 +314,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		if err != nil {
 			return fmt.Errorf("error writting kafka message: %w", err)
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("error commiting transaction: %w", err)
 	}
 
 	return nil
