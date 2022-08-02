@@ -54,8 +54,7 @@ func (suite *ControllersV2TestSuite) AfterTest() {
 }
 
 func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
+	ctx := context.Background()
 
 	env := os.Getenv("ENV")
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
@@ -158,8 +157,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_NewSku() {
 }
 
 func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
+	ctx := context.Background()
 
 	env := os.Getenv("ENV")
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
@@ -254,8 +252,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_Unpaid() {
 }
 
 func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_NotFound() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	data := CreateOrderCredsV2Request{
 		ItemID:       uuid.NewV4(),
@@ -293,8 +290,7 @@ func (suite *ControllersV2TestSuite) TestCreateOrderCredsV2_Order_NotFound() {
 }
 
 func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreSignedOrderCredentials() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	env := os.Getenv("ENV")
 	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
@@ -332,8 +328,6 @@ func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreS
 	order, err := service.CreateOrderFromRequest(ctx, request)
 	suite.Require().NoError(err)
 
-	//blindedCreds := "HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=" // this is already base64 encoded
-
 	data := CreateOrderCredsV2Request{
 		ItemID: order.Items[0].ID,
 		// these are already base64 encoded
@@ -367,7 +361,8 @@ func (suite *ControllersV2TestSuite) TestE2E_CreateOrder_CreateOrderCreds_StoreS
 	// start processing all messages
 	go func(ctx context.Context) {
 		for {
-			_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			_, err := skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			fmt.Println(err)
 		}
 	}(ctx)
 

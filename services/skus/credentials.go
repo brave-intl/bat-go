@@ -200,6 +200,8 @@ type OrderCreds struct {
 	ID           uuid.UUID                  `json:"id" db:"item_id"`
 	OrderID      uuid.UUID                  `json:"orderId" db:"order_id"`
 	IssuerID     uuid.UUID                  `json:"issuerId" db:"issuer_id"`
+	ValidTo      *time.Time                 `json:"validTo,omitempty" db:"valid_to"`
+	ValidFrom    *time.Time                 `json:"validFrom,omitempty" db:"valid_from"`
 	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
 	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
 	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
@@ -269,19 +271,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
 		}
 
-		orderCreds := OrderCreds{
-			ID:           orderItem.ID,
-			OrderID:      order.ID,
-			IssuerID:     issuer.ID,
-			BlindedCreds: jsonutils.JSONStringArray(blindedCreds),
-		}
-
-		// insert unsigned order creds
-		err = s.Datastore.InsertOrderCreds(ctx, tx, &orderCreds)
-		if err != nil {
-			return fmt.Errorf("error creating order creds: could not insert order creds: %w", err)
-		}
-
 		// write to kafka topic for signing
 		requestID, ok := ctx.Value(requestutils.RequestID).(string)
 		if !ok {
@@ -291,6 +280,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		associatedData := make(map[string]string)
 		associatedData["order_id"] = order.ID.String()
 		associatedData["item_id"] = orderItem.ID.String()
+		associatedData["issuer_id"] = issuer.ID.String()
 
 		bytes, err := json.Marshal(associatedData)
 		if err != nil {

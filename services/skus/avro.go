@@ -100,14 +100,19 @@ const signingOrderResultSchema = `{
                         },
                         {"name": "public_key", "type": "string"},
                         {"name": "proof", "type": "string"},
-                        {"name": "valid_from", "type": ["null", "string"], "default": null},
-                        {"name": "valid_to", "type": ["null", "string"], "default": null},
                         {"name": "status", "type": {
                             "name": "SigningResultStatus",
                             "type": "enum",
                             "symbols": ["ok", "invalid_issuer", "error"]
                         }},
-                        {"name": "associated_data", "type": "bytes", "doc": "contains METADATA"}
+                        {"name": "associated_data", "type": "bytes", "doc": "contains METADATA"},
+                        {"name": "valid_to", "type": ["null", "string"], "default": null},
+                        {"name": "valid_from", "type": ["null", "string"], "default": null},
+                        {
+                            "name": "blinded_tokens",
+                            "type": {"type" : "array", "items": {"type": "string"}},
+                            "default": []
+                        }
                     ]
                 }
             }
@@ -125,6 +130,7 @@ type SignedOrder struct {
 	Proof          string            `json:"proof"`
 	Status         SignedOrderStatus `json:"status"`
 	SignedTokens   []string          `json:"signed_tokens"`
+	BlindedTokens  []string          `json:"blinded_tokens"`
 	ValidTo        *UnionNullString  `json:"valid_to"`
 	ValidFrom      *UnionNullString  `json:"valid_from"`
 	AssociatedData []byte            `json:"associated_data"`
