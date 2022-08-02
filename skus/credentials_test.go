@@ -334,9 +334,10 @@ func makeMsg() *SigningOrderResult {
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
 				SignedTokens:   []string{test.RandomString()},
+				AssociatedData: []byte{},
 				ValidFrom:      &UnionNullString{"string": time.Now().String()},
 				ValidTo:        nil,
-				AssociatedData: []byte{},
+				BlindedTokens:  []string{test.RandomString()},
 			},
 		},
 	}

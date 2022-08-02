@@ -49,7 +49,7 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 	// create paid order and insert order creds
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveSearchPremiumYearTimeLimited})
 	pg := PostgresTestSuite{storage: suite.storage}
-	order := pg.createOrderAndCredentials(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
+	order, issuer := pg.createOrderAndIssuer(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
 	// setup kafka and write expected signed creds to topic. Overwrite topics so fresh for each test
 	kafkaSignedOrderCredsTopic = test.RandomString()
@@ -59,6 +59,7 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 	associatedData := make(map[string]string)
 	associatedData["order_id"] = order.ID.String()
 	associatedData["item_id"] = order.Items[0].ID.String()
+	associatedData["issuer_id"] = issuer.ID.String()
 
 	b, err := json.Marshal(associatedData)
 	suite.Require().NoError(err)

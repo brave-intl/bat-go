@@ -484,8 +484,8 @@ func (_d DatastoreWithPrometheus) RollbackTxAndHandle(tx *sqlx.Tx) (err error) {
 	return _d.base.RollbackTxAndHandle(tx)
 }
 
-// RunNextTypedOrderJob implements Datastore
-func (_d DatastoreWithPrometheus) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (b1 bool, err error) {
+// RunNextOrderJob implements Datastore
+func (_d DatastoreWithPrometheus) RunNextOrderJob(ctx context.Context, worker OrderWorker) (b1 bool, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -493,9 +493,9 @@ func (_d DatastoreWithPrometheus) RunNextTypedOrderJob(ctx context.Context, cred
 			result = "error"
 		}
 
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextTypedOrderJob", result).Observe(time.Since(_since).Seconds())
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "RunNextOrderJob", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.RunNextTypedOrderJob(ctx, credType, worker)
+	return _d.base.RunNextOrderJob(ctx, worker)
 }
 
 // SetOrderTrialDays implements Datastore

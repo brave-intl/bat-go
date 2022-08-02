@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/clients"
 
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 
@@ -62,11 +65,12 @@ type Datastore interface {
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
+	// RunNextOrderJob Deprecated.
+	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
 	// GetOrderTimeLimitedV2Creds returns all order credentials for an order
 	GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error)
 	// GetOrderTimeLimitedV2CredsByItemID returns order credentials by order and item
 	GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error)
-	RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error)
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
 	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
@@ -755,9 +759,9 @@ func (pg *Postgres) InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *Or
 	}
 
 	statement := `
-	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
-	values ($1, $2, $3, $4)`
-	_, err = tx.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
+	insert into order_creds (item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_to, valid_from)
+	values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	_, err = tx.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON, creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ValidTo, creds.ValidFrom)
 	return err
 }
 
@@ -999,10 +1003,100 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 	return nil
 }
 
-// RunNextTypedOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
-func (pg *Postgres) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error) {
-	// TODO: implement for new type of credential (time-aware)
-	return false, errorutils.ErrNotImplemented
+// RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
+// TODO: deprecated, remove once all existing order creds have been processed.
+// TODO: This should not pick credentials waiting to be signed as they are only inserted with a non null batch proof.
+func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
+	tx, err := pg.RawDB().Beginx()
+	attempted := false
+	if err != nil {
+		return attempted, err
+	}
+	defer pg.RollbackTx(tx)
+
+	type SigningJob struct {
+		Issuer
+		OrderID      uuid.UUID                 `db:"order_id"`
+		BlindedCreds jsonutils.JSONStringArray `db:"blinded_creds"`
+	}
+
+	statement := `
+SELECT
+	order_cred_issuers.id,
+	order_cred_issuers.created_at,
+	order_cred_issuers.merchant_id,
+	order_cred_issuers.public_key,
+	order_cred.order_id,
+	order_cred.blinded_creds
+FROM
+	(
+		SELECT item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
+		FROM order_creds
+		WHERE batch_proof is null
+		FOR UPDATE skip locked
+		limit 1
+	) order_cred
+INNER JOIN order_cred_issuers
+ON order_cred.issuer_id = order_cred_issuers.id`
+
+	jobs := []SigningJob{}
+	err = tx.Select(&jobs, statement)
+	if err != nil {
+		return attempted, fmt.Errorf("order job: failed to retrieve jobs: %w", err)
+	}
+
+	if len(jobs) != 1 {
+		return attempted, nil
+	}
+
+	job := jobs[0]
+
+	attempted = true
+	creds, err := worker.SignOrderCreds(ctx, job.OrderID, job.Issuer, job.BlindedCreds)
+	if err != nil {
+		// is this a cbr client error
+		var eb *errorutils.ErrorBundle
+		if errors.As(err, &eb) {
+			// pull out the data and see if this is an http client error
+			if hs, ok := eb.Data().(clients.HTTPState); ok {
+				// if the error is from CBR and contains "Cannot decompress Edwards point" this job will never complete
+				// and keep retrying over and over. We want to filter this out and set batch proof
+				// to empty string, so it will not be picked up again
+				if strings.Contains("cannot decompress edwards point",
+					strings.ToLower(fmt.Sprintf("%+v", hs.Body))) {
+					bp := ""
+					creds = &OrderCreds{
+						ID:           job.OrderID,
+						BlindedCreds: job.BlindedCreds,
+						BatchProof:   &bp, // signals if the job needs to run, setting to empty string will stop it from being run
+					}
+				} else {
+					// this is a retry able error
+					return attempted, fmt.Errorf("order job: cbr error - %d %+v - jobID %s orderID %s: %w",
+						hs.Status, hs.Body, job.ID, job.OrderID, eb.Cause())
+				}
+			}
+		} else {
+			// Unknown error
+			return attempted, fmt.Errorf("order job: failed to sign credentials for jobID %s orderID %s: %w",
+				job.ID, job.OrderID, err)
+		}
+	}
+
+	_, err = tx.Exec(`update order_creds set signed_creds = $1, batch_proof = $2, public_key = $3 where order_id = $4`,
+		creds.SignedCreds, creds.BatchProof, creds.PublicKey, creds.ID)
+	if err != nil {
+		return attempted, fmt.Errorf("order job: failed to exec update order creds for jobID %s orderID %s: %w",
+			job.ID, job.OrderID, err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return attempted, fmt.Errorf("order job: failed to commit update for jobID %s orderID %s: %w",
+			job.ID, job.OrderID, err)
+	}
+
+	return attempted, nil
 }
 
 // UpdateOrderMetadata adds a key value pair to an order's metadata
@@ -1057,6 +1151,11 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 					return fmt.Errorf("error itemID not found in associated data for requestID %s", signedOrderResult.RequestID)
 				}
 
+				issuerID, ok := metadata["issuer_id"]
+				if !ok {
+					return fmt.Errorf("error issuerID not found in associated data for requestID %s", signedOrderResult.RequestID)
+				}
+
 				if so.Status != SignedOrderStatusOk {
 					return fmt.Errorf("error signing order creds for orderID %s itemID %s status %s",
 						orderID, itemID, so.Status.String())
@@ -1078,13 +1177,20 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker Orde
 					}
 				}
 
-				signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+				blindedCreds, err := json.Marshal(so.BlindedTokens)
+				if err != nil {
+					return fmt.Errorf("error marshaling blinded creds order creds orderID %s itemID %s: %w", orderID, itemID, err)
+				}
 
-				result, err := pg.ExecContext(ctx, `update order_creds 
-													set signed_creds = $1, batch_proof = $2, public_key = $3, 
-													    valid_to = $4, valid_from = $5 
-													where order_id = $6 and item_id = $7`,
-					&signedTokens, so.Proof, so.PublicKey, validTo, validFrom, orderID, itemID)
+				signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+				if len(signedTokens) == 0 {
+					return fmt.Errorf("error sigend tokens is empty order creds orderID %s itemID %s: %w", orderID, itemID, err)
+				}
+
+				result, err := pg.ExecContext(ctx, `insert into order_creds(item_id, order_id, issuer_id, blinded_creds, 
+                        signed_creds, batch_proof, public_key, valid_to, valid_from) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					itemID, orderID, issuerID, blindedCreds, &signedTokens, so.Proof, so.PublicKey, validTo, validFrom)
+
 				if err != nil {
 					return fmt.Errorf("error updating order creds for orderID %s itemID %s: %w", orderID, itemID, err)
 				}

@@ -878,7 +878,6 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 
 func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	ctx := context.Background()
-	defer ctx.Done()
 
 	voteTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()

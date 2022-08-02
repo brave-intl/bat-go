@@ -516,19 +516,19 @@ func (mr *MockDatastoreMockRecorder) RollbackTxAndHandle(tx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackTxAndHandle", reflect.TypeOf((*MockDatastore)(nil).RollbackTxAndHandle), tx)
 }
 
-// RunNextTypedOrderJob mocks base method.
-func (m *MockDatastore) RunNextTypedOrderJob(ctx context.Context, credType string, worker OrderWorker) (bool, error) {
+// RunNextOrderJob mocks base method.
+func (m *MockDatastore) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RunNextTypedOrderJob", ctx, credType, worker)
+	ret := m.ctrl.Call(m, "RunNextOrderJob", ctx, worker)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RunNextTypedOrderJob indicates an expected call of RunNextTypedOrderJob.
-func (mr *MockDatastoreMockRecorder) RunNextTypedOrderJob(ctx, credType, worker interface{}) *gomock.Call {
+// RunNextOrderJob indicates an expected call of RunNextOrderJob.
+func (mr *MockDatastoreMockRecorder) RunNextOrderJob(ctx, worker interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextTypedOrderJob", reflect.TypeOf((*MockDatastore)(nil).RunNextTypedOrderJob), ctx, credType, worker)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunNextOrderJob", reflect.TypeOf((*MockDatastore)(nil).RunNextOrderJob), ctx, worker)
 }
 
 // SetOrderTrialDays mocks base method.
