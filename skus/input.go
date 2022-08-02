@@ -167,13 +167,15 @@ type SubmitReceiptRequestV1 struct {
 
 // Decode - take raw input and populate the struct
 func (srrv1 *SubmitReceiptRequestV1) Decode(ctx context.Context, input []byte) error {
+	buf := make([]byte, base64.StdEncoding.DecodedLen(len(input)))
+
 	// base64 decode the bytes
-	buf := []byte{}
-	if _, err := base64.StdEncoding.Decode(buf, input); err != nil {
+	n, err := base64.StdEncoding.Decode(buf, input)
+	if err != nil {
 		return fmt.Errorf("failed to decode input base64: %w", err)
 	}
 	// read the json values
-	if err := json.Unmarshal(buf, srrv1); err != nil {
+	if err := json.Unmarshal(buf[:n], srrv1); err != nil {
 		return fmt.Errorf("failed to decode input json: %w", err)
 	}
 	return nil
