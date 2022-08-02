@@ -74,6 +74,7 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 				SignedTokens:   []string{test.RandomString()},
 				ValidTo:        &UnionNullString{"string": time.Now().Format(time.RFC3339)},
 				ValidFrom:      &UnionNullString{"string": time.Now().Add(time.Hour).Format(time.RFC3339)},
+				BlindedTokens:  []string{test.RandomString()},
 				AssociatedData: b,
 			},
 		},
@@ -86,7 +87,7 @@ func (suite *ServiceTestSuite) TestRunStoreSignedOrderCredentialsJob() {
 		_, _ = service.RunStoreSignedOrderCredentialsJob(ctx)
 	}()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// assert
 	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
