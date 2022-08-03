@@ -19,7 +19,8 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/go-querystring v1.1.0
-	github.com/hashicorp/vault v1.11.1
+	github.com/google/uuid v1.3.0
+	github.com/hashicorp/vault v1.11.2
 	github.com/hashicorp/vault/api v1.7.2
 	github.com/hashicorp/vault/sdk v0.5.3
 	github.com/jmoiron/sqlx v1.3.5
@@ -109,7 +110,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/go-metrics-stackdriver v0.2.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
