@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var tables = []string{"vote_drain", "api_keys", "transactions", "order_creds",
+var tables = []string{"vote_drain", "api_keys", "transactions", "time_limited_v2_order_creds", "order_creds",
 	"order_cred_issuers", "order_items", "orders"}
 
 func Migrate(t *testing.T) {

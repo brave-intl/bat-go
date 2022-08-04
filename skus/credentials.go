@@ -200,8 +200,6 @@ type OrderCreds struct {
 	ID           uuid.UUID                  `json:"id" db:"item_id"`
 	OrderID      uuid.UUID                  `json:"orderId" db:"order_id"`
 	IssuerID     uuid.UUID                  `json:"issuerId" db:"issuer_id"`
-	ValidTo      *time.Time                 `json:"validTo,omitempty" db:"valid_to"`
-	ValidFrom    *time.Time                 `json:"validFrom,omitempty" db:"valid_from"`
 	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
 	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
 	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
@@ -215,26 +213,6 @@ type TimeLimitedCreds struct {
 	IssuedAt  string    `json:"issuedAt"`
 	ExpiresAt string    `json:"expiresAt"`
 	Token     string    `json:"token"`
-}
-
-// TimeLimitedV2Creds encapsulates the credentials to be signed in response to a completed order
-type TimeLimitedV2Creds struct {
-	OrderID     uuid.UUID                 `json:"orderId"`
-	IssuerID    uuid.UUID                 `json:"issuerId" `
-	Credentials []TimeAwareSubIssuedCreds `json:"credentials"`
-}
-
-// TimeAwareSubIssuedCreds - sub issued time aware credentials
-type TimeAwareSubIssuedCreds struct {
-	OrderID      uuid.UUID                  `json:"orderId" db:"order_id"`
-	ItemID       uuid.UUID                  `json:"itemId" db:"item_id"`
-	IssuerID     uuid.UUID                  `json:"issuerId" db:"issuer_id"`
-	ValidTo      *time.Time                 `json:"validTo" db:"valid_to"`
-	ValidFrom    *time.Time                 `json:"validFrom" db:"valid_from"`
-	BlindedCreds jsonutils.JSONStringArray  `json:"blindedCreds" db:"blinded_creds"`
-	SignedCreds  *jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
-	BatchProof   *string                    `json:"batchProof" db:"batch_proof"`
-	PublicKey    *string                    `json:"publicKey" db:"public_key"`
 }
 
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
@@ -269,12 +247,14 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			return errors.New("error retrieving requestID from context for create order credentials")
 		}
 
-		associatedData := make(map[string]string)
-		associatedData["order_id"] = order.ID.String()
-		associatedData["item_id"] = orderItem.ID.String()
-		associatedData["issuer_id"] = issuer.ID.String()
+		metadata := Metadata{
+			ItemID:         orderItem.ID,
+			OrderID:        order.ID,
+			IssuerID:       issuer.ID,
+			CredentialType: orderItem.CredentialType,
+		}
 
-		bytes, err := json.Marshal(associatedData)
+		associatedData, err := json.Marshal(metadata)
 		if err != nil {
 			return fmt.Errorf("error serializing associated data: %w", err)
 		}
@@ -286,7 +266,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 					IssuerType:     issuerID,
 					IssuerCohort:   defaultCohort,
 					BlindedTokens:  blindedCreds,
-					AssociatedData: bytes,
+					AssociatedData: associatedData,
 				},
 			},
 		}
@@ -306,6 +286,7 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			return fmt.Errorf("error converting binary from native: %w", err)
 		}
 
+		// batch these for all order items
 		err = s.kafkaWriter.WriteMessages(ctx, kafka.Message{
 			Topic: kafkaUnsignedOrderCredsTopic,
 			Key:   []byte(signingOrderRequest.RequestID),
@@ -313,6 +294,11 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		})
 		if err != nil {
 			return fmt.Errorf("error writting kafka message: %w", err)
+		}
+
+		err = s.Datastore.InsertSigningRequestSubmitted(ctx, order.ID)
+		if err != nil {
+			return fmt.Errorf("error inserting siging request submitted for order item %s: %w", orderItem.ID, err)
 		}
 	}
 

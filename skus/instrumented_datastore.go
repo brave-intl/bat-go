@@ -212,7 +212,7 @@ func (_d DatastoreWithPrometheus) GetOrder(orderID uuid.UUID) (op1 *Order, err e
 }
 
 // GetOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderCreds(orderID uuid.UUID, isSigned bool) (oap1 *[]OrderCreds, err error) {
+func (_d DatastoreWithPrometheus) GetOrderCreds(orderID uuid.UUID, isSigned bool) (oa1 []OrderCreds, err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -239,34 +239,6 @@ func (_d DatastoreWithPrometheus) GetOrderCredsByItemID(orderID uuid.UUID, itemI
 	return _d.base.GetOrderCredsByItemID(orderID, itemID, isSigned)
 }
 
-// GetOrderTimeLimitedV2Creds implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (tap1 *[]TimeLimitedV2Creds, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderTimeLimitedV2Creds", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetOrderTimeLimitedV2Creds(orderID)
-}
-
-// GetOrderTimeLimitedV2CredsByItemID implements Datastore
-func (_d DatastoreWithPrometheus) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
-	_since := time.Now()
-	defer func() {
-		result := "ok"
-		if err != nil {
-			result = "error"
-		}
-
-		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetOrderTimeLimitedV2CredsByItemID", result).Observe(time.Since(_since).Seconds())
-	}()
-	return _d.base.GetOrderTimeLimitedV2CredsByItemID(orderID, itemID)
-}
-
 // GetPagedMerchantTransactions implements Datastore
 func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (tap1 *[]Transaction, i1 int, err error) {
 	_since := time.Now()
@@ -281,6 +253,20 @@ func (_d DatastoreWithPrometheus) GetPagedMerchantTransactions(ctx context.Conte
 	return _d.base.GetPagedMerchantTransactions(ctx, merchantID, pagination)
 }
 
+// GetSigningRequestSubmitted implements Datastore
+func (_d DatastoreWithPrometheus) GetSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) (sa1 []SigningRequestSubmitted, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSigningRequestSubmitted", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetSigningRequestSubmitted(ctx, orderID)
+}
+
 // GetSumForTransactions implements Datastore
 func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 decimal.Decimal, err error) {
 	_since := time.Now()
@@ -293,6 +279,34 @@ func (_d DatastoreWithPrometheus) GetSumForTransactions(orderID uuid.UUID) (d1 d
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetSumForTransactions", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.GetSumForTransactions(orderID)
+}
+
+// GetTimeLimitedV2OrderCredsByOrder implements Datastore
+func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByOrder", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTimeLimitedV2OrderCredsByOrder(orderID)
+}
+
+// GetTimeLimitedV2OrderCredsByOrderItem implements Datastore
+func (_d DatastoreWithPrometheus) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (tp1 *TimeLimitedV2Creds, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "GetTimeLimitedV2OrderCredsByOrderItem", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.GetTimeLimitedV2OrderCredsByOrderItem(itemID)
 }
 
 // GetTransaction implements Datastore
@@ -352,7 +366,7 @@ func (_d DatastoreWithPrometheus) InsertIssuer(issuer *Issuer) (ip1 *Issuer, err
 }
 
 // InsertOrderCreds implements Datastore
-func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, tx *sqlx.Tx, creds *OrderCreds) (err error) {
+func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, creds *OrderCreds) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -362,7 +376,35 @@ func (_d DatastoreWithPrometheus) InsertOrderCreds(ctx context.Context, tx *sqlx
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertOrderCreds", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.InsertOrderCreds(ctx, tx, creds)
+	return _d.base.InsertOrderCreds(ctx, creds)
+}
+
+// InsertSigningRequestSubmitted implements Datastore
+func (_d DatastoreWithPrometheus) InsertSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertSigningRequestSubmitted", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertSigningRequestSubmitted(ctx, orderID)
+}
+
+// InsertTimeLimitedV2OrderCreds implements Datastore
+func (_d DatastoreWithPrometheus) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertTimeLimitedV2OrderCreds", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertTimeLimitedV2OrderCreds(ctx, tlv2)
 }
 
 // InsertVote implements Datastore

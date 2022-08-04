@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/utils/ptr"
+	uuid "github.com/satori/go.uuid"
 )
 
 const voteSchema = `{
@@ -70,6 +71,13 @@ type SigningOrder struct {
 	BlindedTokens  []string `json:"blinded_tokens"`
 	IssuerType     string   `json:"issuer_type"`
 	IssuerCohort   int16    `json:"issuer_cohort"`
+}
+
+type Metadata struct {
+	ItemID         uuid.UUID `json:"id"`
+	OrderID        uuid.UUID `json:"orderId"`
+	IssuerID       uuid.UUID `json:"issuerId"`
+	CredentialType string    `json:"credential_type"`
 }
 
 const signingOrderResultSchema = `{

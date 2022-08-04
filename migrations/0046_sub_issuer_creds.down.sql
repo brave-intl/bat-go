@@ -1,7 +1,3 @@
-alter table order_creds drop constraint order_creds_pkey;
-alter table order_creds drop column id;
-alter table order_creds add primary key (item_id);
-
-alter table order_creds drop column valid_from;
-alter table order_creds drop column valid_to;
-alter table order_creds drop column credential_type;
+drop table if exists time_limited_v2_order_creds;
+drop table if exists signing_request_submitted;
+drop index if exists signing_request_submitted_item_id_idx;
