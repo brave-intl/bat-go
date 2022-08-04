@@ -268,27 +268,23 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	}
 
 	if requireCountry, ok := ctx.Value(appctx.RequireUpholdCountryCTXKey).(bool); ok && requireCountry {
-		// no country data from uphold, block the linking attempt
+		// no identity country data from uphold, block the linking attempt
 		// requires uphold destination country support prior to deploy
-		if uhResp.CitizenshipCountry == "" ||
-			uhResp.IdentityCountry == "" ||
-			uhResp.ResidenceCountry == "" {
+		if uhResp.IdentityCountry == "" {
 			countUpholdWalletAccountValidation.With(prometheus.Labels{
 				"citizenship_country": uhResp.CitizenshipCountry,
 				"identity_country":    uhResp.IdentityCountry,
 				"residence_country":   uhResp.ResidenceCountry,
 				"status":              "failure",
 			}).Inc()
-			return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
+			return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrNoIdentityCountry
 		}
 	}
 	// do country blacklist checking
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
 		// check country code
 		for _, v := range blacklist {
-			if strings.EqualFold(uhResp.CitizenshipCountry, v) ||
-				strings.EqualFold(uhResp.IdentityCountry, v) ||
-				strings.EqualFold(uhResp.ResidenceCountry, v) {
+			if strings.EqualFold(uhResp.IdentityCountry, v) {
 				countUpholdWalletAccountValidation.With(prometheus.Labels{
 					"citizenship_country": uhResp.CitizenshipCountry,
 					"identity_country":    uhResp.IdentityCountry,
