@@ -68,6 +68,7 @@ var skuMap = map[string]map[string]bool{
 		devBraveSearchPremiumTimeLimitedV2:      true,
 		devBraveSearchPremiumYearTimeLimited:    true,
 		devBraveFirewallVPNPremiumTimeLimitedV2: true,
+		devFreeTimeLimitedV2:                    true,
 	},
 }
 
