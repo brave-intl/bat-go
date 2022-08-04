@@ -340,14 +340,14 @@ func (c *HTTPClient) FetchCoinMarkets(
 	limit int,
 ) (*CoinMarketResponse, time.Time, error) {
 	updated := time.Now()
-	cgUrl := "/api/v3/coins/markets"
+	cgURL := "/api/v3/coins/markets"
 	params := &coinMarketParams{
 		baseParams: c.baseParams,
 		VsCurrency: vsCurrency,
 		Limit:      limit,
 	}
 
-	cacheKey, err := c.cacheKey(ctx, cgUrl, params)
+	cacheKey, err := c.cacheKey(ctx, cgURL, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -378,7 +378,7 @@ func (c *HTTPClient) FetchCoinMarkets(
 		}
 	}
 
-	req, err := c.client.NewRequest(ctx, "GET", cgUrl, nil, params)
+	req, err := c.client.NewRequest(ctx, "GET", cgURL, nil, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -396,12 +396,12 @@ func (c *HTTPClient) FetchCoinMarkets(
 
 	// Replace image URL with our own proxy
 	for _, market := range body {
-		imageUrl, err := url.Parse(market.Image)
+		imageURL, err := url.Parse(market.Image)
 		if err != nil {
 			return nil, updated, err
 		}
-		imageUrl.Host = "api.cgproxy.brave.com"
-		market.Image = imageUrl.String()
+		imageURL.Host = "api.cgproxy.brave.com"
+		market.Image = imageURL.String()
 	}
 
 	bodyBytes, err := json.Marshal(&body)
