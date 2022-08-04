@@ -115,154 +115,84 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 	}
 }
 
-func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2CredsByItemID_Success() {
-	env := os.Getenv("ENV")
-	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
-
-	// create paid order with unsigned creds
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	orderCredentials := suite.createOrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
-
-	// act
-	timeLimitedV2Creds, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(orderCredentials[0].OrderID, orderCredentials[0].ID)
-	suite.Require().NoError(err)
-
-	// assert
-	suite.Require().NotNil(timeLimitedV2Creds)
-	suite.Assert().Equal(1, len(timeLimitedV2Creds.Credentials))
-	suite.Assert().Equal(orderCredentials[0].ID, timeLimitedV2Creds.Credentials[0].ItemID)
-	suite.Assert().Equal(orderCredentials[0].OrderID, timeLimitedV2Creds.Credentials[0].OrderID)
-	suite.Assert().Equal(*orderCredentials[0].ValidTo, *timeLimitedV2Creds.Credentials[0].ValidTo)
-	suite.Assert().Equal(*orderCredentials[0].ValidFrom, *timeLimitedV2Creds.Credentials[0].ValidFrom)
-	suite.Assert().Equal(orderCredentials[0].BlindedCreds, timeLimitedV2Creds.Credentials[0].BlindedCreds)
-}
-
-func (suite *PostgresTestSuite) TestGetOrderTimeLimitedV2Creds_Success() {
+func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrder_Success() {
 	env := os.Getenv("ENV")
 	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
 
 	// create paid order with two order items
-	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited})
-	orderCredentials := suite.createOrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited, devBraveSearchPremiumYearTimeLimited)
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited})
 
-	// add to map so we can compare the correct items
-	orderCreds := make(map[uuid.UUID]*OrderCreds)
-	orderCreds[orderCredentials[0].ID] = orderCredentials[0]
-	orderCreds[orderCredentials[1].ID] = orderCredentials[1]
+	orderCredentials := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited)
+
+	// create an unrelated order which should not be returned
+	_ = suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
 	// both order items have same orderID so can use the first element to retrieve all order creds
-	timeLimitedCredsV2, err := suite.storage.GetOrderTimeLimitedV2Creds(orderCredentials[0].OrderID)
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrder(orderCredentials[0].OrderID)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(2, len(*timeLimitedCredsV2))
-
-	for _, actual := range *timeLimitedCredsV2 {
-		expected, ok := orderCreds[actual.Credentials[0].ItemID]
-		suite.Require().True(ok)
-
-		suite.Require().Equal(1, len(actual.Credentials))
-		suite.Require().Equal(expected.OrderID, actual.OrderID)
-		suite.Assert().Equal(expected.ID, actual.Credentials[0].ItemID)
-		suite.Assert().Equal(*expected.ValidTo, *actual.Credentials[0].ValidTo)
-		suite.Assert().Equal(*expected.ValidFrom, *actual.Credentials[0].ValidFrom)
-	}
+	suite.Assert().Equal(orderCredentials[0].OrderID, actual.OrderID)
+	suite.Assert().Equal(orderCredentials[0].IssuerID, actual.IssuerID)
+	// this will contain all the order creds for each of the order items
+	suite.Assert().ElementsMatch(orderCredentials, actual.Credentials)
 }
 
-func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAware_Success() {
-	ctrl := gomock.NewController(suite.T())
-	defer ctrl.Finish()
+func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrderItem_Success() {
+	env := os.Getenv("ENV")
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
 
-	// create paid order with unsigned creds
-	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
+	// create paid order with two order items
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited})
 
-	publicKey := test.RandomString()
+	orderCredentials := suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited,
+		devBraveSearchPremiumYearTimeLimited)
 
-	associatedData := make(map[string]string)
-	associatedData["order_id"] = order.ID.String()
-	associatedData["item_id"] = order.Items[0].ID.String()
-	associatedData["issuer_id"] = issuer.ID.String()
+	// create an unrelated order which should not be returned
+	_ = suite.createTimeLimitedV2OrderCreds(suite.T(), ctx, devBraveSearchPremiumYearTimeLimited)
 
-	ad, err := json.Marshal(associatedData)
+	// retrieve the first order credential from our newly created order items
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(orderCredentials[0].ItemID)
 	suite.Require().NoError(err)
 
-	vFrom := time.Now().Local().Format(time.RFC3339)
-	vTo := time.Now().Local().Add(time.Hour).Format(time.RFC3339)
+	suite.Assert().Equal(orderCredentials[0].OrderID, actual.OrderID)
+	suite.Assert().Equal(orderCredentials[0].IssuerID, actual.IssuerID)
 
-	signingOrderResult := &SigningOrderResult{
-		RequestID: uuid.NewV4().String(),
-		Data: []SignedOrder{
-			{
-				PublicKey:      publicKey,
-				Proof:          test.RandomString(),
-				Status:         SignedOrderStatusOk,
-				SignedTokens:   []string{test.RandomString()},
-				ValidTo:        &UnionNullString{"string": vTo},
-				ValidFrom:      &UnionNullString{"string": vFrom},
-				BlindedTokens:  []string{test.RandomString()},
-				AssociatedData: ad,
-			},
-		},
-	}
-
-	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
-	orderCredentialsWorker.EXPECT().
-		FetchSignedOrderCredentials(ctx).
-		Return(signingOrderResult, nil).
-		AnyTimes()
-
-	go func() {
-		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-	}()
-
-	time.Sleep(time.Millisecond)
-
-	actual, err := suite.storage.GetOrderTimeLimitedV2CredsByItemID(order.ID, order.Items[0].ID)
-	suite.Require().NoError(err)
-
-	suite.Require().NotNil(actual)
-	suite.Assert().Equal(signingOrderResult.Data[0].PublicKey, *actual.Credentials[0].PublicKey)
-	suite.Assert().Equal(signingOrderResult.Data[0].Proof, *actual.Credentials[0].BatchProof)
-	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), *actual.Credentials[0].SignedCreds)
-	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].BlindedTokens), actual.Credentials[0].BlindedCreds)
-
-	to, err := timeutils.ParseStringToTime(&vTo)
-	suite.Require().NoError(err)
-
-	from, err := timeutils.ParseStringToTime(&vFrom)
-	suite.Require().NoError(err)
-
-	suite.Assert().Equal(*to, *actual.Credentials[0].ValidTo)
-	suite.Assert().Equal(*from, *actual.Credentials[0].ValidFrom)
+	// credentials should only contain the order cred for the first item we retrieved
+	suite.Assert().Equal(1, len(actual.Credentials))
+	suite.Assert().ElementsMatch(orderCredentials[0:1], actual.Credentials)
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Success() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	// create paid order with unsigned creds
-	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
+	// create an issuer and a paid order with one order item and a single use credential type.
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devUserWalletVote})
+	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devUserWalletVote)
 
-	publicKey := test.RandomString()
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
+	}
 
-	associatedData := make(map[string]string)
-	associatedData["order_id"] = order.ID.String()
-	associatedData["item_id"] = order.Items[0].ID.String()
-	associatedData["issuer_id"] = issuer.ID.String()
-
-	ad, err := json.Marshal(associatedData)
+	associatedData, err := json.Marshal(metadata)
 	suite.Require().NoError(err)
 
 	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
 		Data: []SignedOrder{
 			{
-				PublicKey:      publicKey,
+				PublicKey:      issuer.PublicKey,
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
+				BlindedTokens:  []string{test.RandomString()},
 				SignedTokens:   []string{test.RandomString()},
-				AssociatedData: ad,
+				AssociatedData: associatedData,
 			},
 		},
 	}
@@ -288,28 +218,99 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), *actual.SignedCreds)
 }
 
-func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatus_Error() {
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Success() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	// create paid order with unsigned creds
-	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devBraveFirewallVPNPremiumTimeLimited})
-	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devBraveFirewallVPNPremiumTimeLimited)
+	// create an issuer and a paid order with one order item and a time limited v2 credential type.
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
+	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devFreeTimeLimitedV2)
 
-	associatedData := make(map[string]string)
-	associatedData["order_id"] = order.ID.String()
-	associatedData["item_id"] = order.Items[0].ID.String()
-	associatedData["issuer_id"] = issuer.ID.String()
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
+	}
 
-	ad, err := json.Marshal(associatedData)
+	associatedData, err := json.Marshal(metadata)
 	suite.Require().NoError(err)
+
+	vFrom := time.Now().Local().Format(time.RFC3339)
+	vTo := time.Now().Local().Add(time.Hour).Format(time.RFC3339)
 
 	signingOrderResult := &SigningOrderResult{
 		RequestID: uuid.NewV4().String(),
 		Data: []SignedOrder{
 			{
+				PublicKey:      issuer.PublicKey,
+				Proof:          test.RandomString(),
+				Status:         SignedOrderStatusOk,
+				BlindedTokens:  []string{test.RandomString()},
+				SignedTokens:   []string{test.RandomString()},
+				ValidTo:        &UnionNullString{"string": vTo},
+				ValidFrom:      &UnionNullString{"string": vFrom},
+				AssociatedData: associatedData,
+			},
+		},
+	}
+
+	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
+	orderCredentialsWorker.EXPECT().
+		FetchSignedOrderCredentials(ctx).
+		Return(signingOrderResult, nil).
+		AnyTimes()
+
+	go func() {
+		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
+	}()
+
+	time.Sleep(time.Millisecond)
+
+	actual, err := suite.storage.GetTimeLimitedV2OrderCredsByOrderItem(order.Items[0].ID)
+	suite.Require().NoError(err)
+
+	suite.Require().NotNil(actual)
+	suite.Assert().Equal(signingOrderResult.Data[0].PublicKey, actual.Credentials[0].PublicKey)
+	suite.Assert().Equal(signingOrderResult.Data[0].Proof, actual.Credentials[0].BatchProof)
+	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].SignedTokens), actual.Credentials[0].SignedCreds)
+	suite.Assert().Equal(jsonutils.JSONStringArray(signingOrderResult.Data[0].BlindedTokens), actual.Credentials[0].BlindedCreds)
+
+	to, err := timeutils.ParseStringToTime(&vTo)
+	suite.Require().NoError(err)
+
+	from, err := timeutils.ParseStringToTime(&vFrom)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(*to, actual.Credentials[0].ValidTo)
+	suite.Assert().Equal(*from, actual.Credentials[0].ValidFrom)
+}
+
+func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatus_Error() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	// create free order and order items
+	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
+	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devFreeTimeLimitedV2)
+
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	suite.Require().NoError(err)
+
+	// created a failed signing result
+	signingOrderResult := &SigningOrderResult{
+		RequestID: uuid.NewV4().String(),
+		Data: []SignedOrder{
+			{
 				Status:         SignedOrderStatusError,
-				AssociatedData: ad,
+				AssociatedData: associatedData,
 			},
 		},
 	}
@@ -322,8 +323,8 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 
 	err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
 
-	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s status %s",
-		associatedData["order_id"], associatedData["item_id"], SignedOrderStatusError.String()))
+	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
+		metadata.OrderID, metadata.ItemID, metadata.IssuerID, SignedOrderStatusError.String()))
 }
 
 // helper to set up a paid order, order items and issuer.
@@ -344,17 +345,75 @@ func (suite *PostgresTestSuite) createOrderAndIssuer(t *testing.T, ctx context.C
 	assert.NoError(t, err)
 
 	// create issuer
-	pk := test.RandomString()
-
 	issuer := &Issuer{
 		MerchantID: test.RandomString(),
-		PublicKey:  pk,
+		PublicKey:  test.RandomString(),
 	}
-
 	issuer, err = suite.storage.InsertIssuer(issuer)
 	assert.NoError(t, err)
 
 	return order, issuer
+}
+
+// helper to setup a paid order, order items, issuer and insert time limited v2 order credentials
+func (suite *PostgresTestSuite) createTimeLimitedV2OrderCreds(t *testing.T, ctx context.Context, sku ...string) []TimeAwareSubIssuedCreds {
+	// create the order and the order items from our skus
+	service := Service{}
+	var orderItems []OrderItem
+	var methods Methods
+
+	for _, s := range sku {
+		orderItem, method, _, err := service.CreateOrderItemFromMacaroon(ctx, s, 1)
+		assert.NoError(t, err)
+		orderItems = append(orderItems, *orderItem)
+		methods = append(methods, *method...)
+	}
+
+	order, err := suite.storage.CreateOrder(decimal.NewFromInt32(int32(test.RandomInt())), test.RandomString(), OrderStatusPaid,
+		test.RandomString(), test.RandomString(), nil, orderItems, &methods)
+	assert.NoError(t, err)
+
+	// create issuer
+	issuer := &Issuer{
+		MerchantID: test.RandomString(),
+		PublicKey:  test.RandomString(),
+	}
+	issuer, err = suite.storage.InsertIssuer(issuer)
+	assert.NoError(t, err)
+
+	// create the time limited order credentials for each of the order items in our order
+	to := time.Now().Add(time.Hour).Format(time.RFC3339)
+	validTo, err := timeutils.ParseStringToTime(&to)
+	assert.NoError(t, err)
+
+	from := time.Now().Local().Format(time.RFC3339)
+	validFrom, err := timeutils.ParseStringToTime(&from)
+	assert.NoError(t, err)
+
+	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
+
+	var orderCredentials []TimeAwareSubIssuedCreds
+
+	for _, orderItem := range order.Items {
+		tlv2 := TimeAwareSubIssuedCreds{
+			ItemID:       orderItem.ID,
+			OrderID:      order.ID,
+			IssuerID:     issuer.ID,
+			BlindedCreds: []string{test.RandomString()},
+			SignedCreds:  signedCreds,
+			BatchProof:   test.RandomString(),
+			PublicKey:    issuer.PublicKey,
+			ValidTo:      *validTo,
+			ValidFrom:    *validFrom,
+		}
+
+		err = suite.storage.InsertTimeLimitedV2OrderCreds(ctx, tlv2)
+		assert.NoError(t, err)
+
+		orderCredentials = append(orderCredentials, tlv2)
+	}
+
+	return orderCredentials
 }
 
 // helper to setup a paid order, order items, issuer and insert unsigned order credentials
@@ -385,21 +444,6 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 	issuer, err = suite.storage.InsertIssuer(issuer)
 	assert.NoError(t, err)
 
-	tx, err := suite.storage.RawDB().BeginTxx(ctx, nil)
-	assert.NoError(t, err)
-
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	to := time.Now().Add(time.Hour).Format(time.RFC3339)
-	validTo, err := timeutils.ParseStringToTime(&to)
-	assert.NoError(t, err)
-
-	from := time.Now().Local().Format(time.RFC3339)
-	validFrom, err := timeutils.ParseStringToTime(&from)
-	assert.NoError(t, err)
-
 	signedCreds := jsonutils.JSONStringArray([]string{test.RandomString()})
 
 	var orderCredentials []*OrderCreds
@@ -414,16 +458,11 @@ func (suite *PostgresTestSuite) createOrderCreds(t *testing.T, ctx context.Conte
 			SignedCreds:  &signedCreds,
 			BatchProof:   ptr.FromString(test.RandomString()),
 			PublicKey:    ptr.FromString(pk),
-			ValidTo:      validTo,
-			ValidFrom:    validFrom,
 		}
-		err = suite.storage.InsertOrderCreds(ctx, tx, oc)
+		err = suite.storage.InsertOrderCreds(ctx, oc)
 		assert.NoError(t, err)
 		orderCredentials = append(orderCredentials, oc)
 	}
-
-	err = tx.Commit()
-	assert.NoError(t, err)
 
 	return orderCredentials
 }

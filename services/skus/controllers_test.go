@@ -13,10 +13,33 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/brave-intl/bat-go/cmd/macaroon"
+	"github.com/brave-intl/bat-go/skus/skustest"
+	"github.com/brave-intl/bat-go/utils/altcurrency"
+	"github.com/brave-intl/bat-go/utils/backoff"
+	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
+	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	mockgemini "github.com/brave-intl/bat-go/utils/clients/gemini/mock"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/utils/httpsignature"
+	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	logutils "github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/requestutils"
+	"github.com/brave-intl/bat-go/utils/test"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
+	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/wallet"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
@@ -35,6 +58,7 @@ import (
 	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
+	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -43,21 +67,21 @@ import (
 
 var (
 	// these skus will be generated with the appropriate merchant key in setup
-	UserWalletVoteToken             macarooncmd.Token
+	UserWalletVoteToken             macaroon.Token
 	UserWalletVoteTestSkuToken      string
-	UserWalletVoteSmallToken        macarooncmd.Token
+	UserWalletVoteSmallToken        macaroon.Token
 	UserWalletVoteTestSmallSkuToken string
 
-	AnonCardToken            macarooncmd.Token
+	AnonCardToken            macaroon.Token
 	AnonCardVoteTestSkuToken string
 
-	FreeTestToken    macarooncmd.Token
+	FreeTestToken    macaroon.Token
 	FreeTestSkuToken string
 
-	FreeTLTestToken    macarooncmd.Token
+	FreeTLTestToken    macaroon.Token
 	FreeTLTestSkuToken string
 
-	FreeTLTest1MToken    macarooncmd.Token
+	FreeTLTest1MToken    macaroon.Token
 	FreeTLTest1MSkuToken string
 
 	InvalidFreeTestSkuToken string
@@ -83,7 +107,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	storage, _ := NewPostgres("", false, "")
 	suite.storage = storage
 
-	AnonCardC := macarooncmd.Caveats{
+	AnonCardC := macaroon.Caveats{
 		"sku":             "anon-card-vote",
 		"description":     "brave anon-card-vote sku token v1",
 		"credential_type": "single-use",
@@ -91,7 +115,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.25",
 	}
 
-	UserWalletC := macarooncmd.Caveats{
+	UserWalletC := macaroon.Caveats{
 		"sku":             "user-wallet-vote",
 		"description":     "brave user-wallet-vote sku token v1",
 		"credential_type": "single-use",
@@ -99,7 +123,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.25",
 	}
 
-	UserWalletSmallC := macarooncmd.Caveats{
+	UserWalletSmallC := macaroon.Caveats{
 		"sku":             "user-wallet-vote",
 		"description":     "brave user-wallet-vote sku token v1",
 		"credential_type": "single-use",
@@ -107,7 +131,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.00000000000000001",
 	}
 
-	FreeC := macarooncmd.Caveats{
+	FreeC := macaroon.Caveats{
 		"sku":             "integration-test-free",
 		"description":     "integration test free sku token",
 		"credential_type": "single-use",
@@ -115,7 +139,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":           "0.00",
 	}
 
-	FreeTLC := macarooncmd.Caveats{
+	FreeTLC := macaroon.Caveats{
 		"sku":                       "integration-test-free",
 		"description":               "integration test free sku token",
 		"credential_type":           "time-limited",
@@ -124,7 +148,7 @@ func (suite *ControllersTestSuite) SetupSuite() {
 		"price":                     "0.00",
 	}
 
-	FreeTL1MC := macarooncmd.Caveats{
+	FreeTL1MC := macaroon.Caveats{
 		"sku":                       "integration-test-free-1m",
 		"description":               "integration test free sku token",
 		"credential_type":           "time-limited",
@@ -135,34 +159,34 @@ func (suite *ControllersTestSuite) SetupSuite() {
 	}
 
 	// create sku using key
-	UserWalletVoteToken = macarooncmd.Token{
+	UserWalletVoteToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletC},
+		FirstPartyCaveats: []macaroon.Caveats{UserWalletC},
 	}
 
-	UserWalletVoteSmallToken = macarooncmd.Token{
+	UserWalletVoteSmallToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{UserWalletSmallC},
+		FirstPartyCaveats: []macaroon.Caveats{UserWalletSmallC},
 	}
 
-	AnonCardToken = macarooncmd.Token{
+	AnonCardToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{AnonCardC},
+		FirstPartyCaveats: []macaroon.Caveats{AnonCardC},
 	}
 
-	FreeTestToken = macarooncmd.Token{
+	FreeTestToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{FreeC},
+		FirstPartyCaveats: []macaroon.Caveats{FreeC},
 	}
 
-	FreeTLTestToken = macarooncmd.Token{
+	FreeTLTestToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{FreeTLC},
+		FirstPartyCaveats: []macaroon.Caveats{FreeTLC},
 	}
 
-	FreeTLTest1MToken = macarooncmd.Token{
+	FreeTLTest1MToken = macaroon.Token{
 		ID: "id", Version: 2, Location: "brave.com",
-		FirstPartyCaveats: []macarooncmd.Caveats{FreeTL1MC},
+		FirstPartyCaveats: []macaroon.Caveats{FreeTL1MC},
 	}
 
 	var err error
@@ -242,19 +266,16 @@ func (suite *ControllersTestSuite) AfterTest(sn, tn string) {
 	suite.mockCtrl.Finish()
 }
 
-func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macarooncmd.Token, quantity int) (Order, *Issuer) {
-	// mock issuer calls
-	var issuer *Issuer
+func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macaroon.Token, quantity int) (Order, *Issuer) {
+	issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
+	suite.Require().NoError(err)
 
+	// mock out create issuer calls before we create the order
 	if credType, ok := token.FirstPartyCaveats[0]["credential_type"]; ok {
 		if credType == singleUse {
-			issuerID, err := encodeIssuerID(token.Location, token.FirstPartyCaveats[0]["sku"])
-			suite.Require().NoError(err)
-
 			suite.mockCB.EXPECT().
 				CreateIssuer(gomock.Any(), issuerID, gomock.Any()).
 				Return(nil)
-
 			issuerResponse := &cbr.IssuerResponse{
 				Name:      issuerID,
 				PublicKey: base64.StdEncoding.EncodeToString([]byte(test.RandomString())),
@@ -262,15 +283,10 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 			suite.mockCB.EXPECT().
 				GetIssuer(gomock.Any(), gomock.Any()).
 				Return(issuerResponse, nil)
-
-			issuer = &Issuer{
-				MerchantID: issuerResponse.Name,
-				PublicKey:  issuerResponse.PublicKey,
-			}
 		}
 	}
 
-	// create order
+	// create order this will also create the issuer
 	handler := CreateOrder(suite.service)
 
 	createRequest := &CreateOrderRequest{
@@ -298,6 +314,8 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	var order Order
 	err = json.Unmarshal(rr.Body.Bytes(), &order)
 	suite.Require().NoError(err)
+
+	issuer, _ := suite.storage.GetIssuer(issuerID)
 
 	return order, issuer
 }
@@ -889,15 +907,18 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 	// The CreateOrderCreds request writes to kafka signing request topic, we need to write to signing order result
 	// to mock cbr signing. RunStoreJobShouldProcesses which was started in the goroutine
 	// will then process the signed creds.
-	associatedData := make(map[string]string)
-	associatedData["order_id"] = order.ID.String()
-	associatedData["item_id"] = order.Items[0].ID.String()
-
-	b, err := json.Marshal(associatedData)
-	suite.Require().NoError(err)
-
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	from := time.Now().Local().Format(time.RFC3339)
+
+	metadata := Metadata{
+		ItemID:         order.Items[0].ID,
+		OrderID:        order.ID,
+		IssuerID:       issuer.ID,
+		CredentialType: order.Items[0].CredentialType,
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	suite.Require().NoError(err)
 
 	signingOrderResult := SigningOrderResult{
 		RequestID: requestID,
@@ -906,10 +927,11 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 				PublicKey:      issuer.PublicKey,
 				Proof:          test.RandomString(),
 				Status:         SignedOrderStatusOk,
+				BlindedTokens:  credsReq.BlindedCreds,
 				SignedTokens:   []string{test.RandomString()},
 				ValidTo:        &UnionNullString{"string": to},
 				ValidFrom:      &UnionNullString{"string": from},
-				AssociatedData: b,
+				AssociatedData: associatedData,
 			},
 		},
 	}
@@ -1281,7 +1303,7 @@ func (suite *ControllersTestSuite) TestExpiredTimeLimitedCred() {
 
 	order := &Order{
 		Location: datastore.NullString{
-			sql.NullString{
+			NullString: sql.NullString{
 				Valid: true, String: "brave.com",
 			},
 		},
@@ -1330,7 +1352,6 @@ func (suite *ControllersTestSuite) SetupCreateKey(merchantID string) Key {
 
 	createAPIHandler := CreateKey(suite.service)
 	rctx := chi.NewRouteContext()
-	//rctx.URLParams.Add("merchantID", "48dc25ed-4121-44ef-8147-4416a76201f7")
 	rctx.URLParams.Add("merchantID", merchantID)
 	postReq := req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
@@ -1371,4 +1392,173 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 	suite.Assert().NoError(err)
 
 	return deletedKey
+}
+
+// This test performs a full e2e test using challenge bypass server to sign time limited v2 order credentials.
+// It uses three tokens and expects three signing results which translates to three order credentials being stored
+// for the single order item.
+func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
+	env := os.Getenv("ENV")
+	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
+
+	// setup kafka
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
+	kafkaOrderCredsSignedRequestReaderGroupID = test.RandomString()
+	ctx = skustest.SetupKafka(suite.T(), ctx, kafkaUnsignedOrderCredsTopic, kafkaSignedOrderCredsTopic)
+
+	// create macaroon token for sku and whitelist
+	sku := test.RandomString()
+	price := 0
+	token := suite.CreateMacaroon(sku, price)
+	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, []string{token})
+
+	// create order with order items
+	request := CreateOrderRequest{
+		Email: test.RandomString(),
+		Items: []OrderItemRequest{
+			{
+				SKU:      token,
+				Quantity: 1,
+			},
+		},
+	}
+
+	client, err := cbr.New()
+	suite.Require().NoError(err)
+
+	retryPolicy = retrypolicy.NoRetry // set this so we fail fast
+
+	// create order and also create issuer
+	service := Service{Datastore: suite.storage, cbClient: client, retry: backoff.Retry}
+	order, err := service.CreateOrderFromRequest(ctx, request)
+	suite.Require().NoError(err)
+
+	data := CreateOrderCredsRequest{
+		ItemID: order.Items[0].ID,
+		// these are already base64 encoded
+		BlindedCreds: []string{"HLLrM7uBm4gVWr8Bsgx3M/yxDHVJX3gNow8Sx6sAPAY=",
+			"Hi1j/9Pen5vRvGSLn6eZCxgtkgZX7LU9edmOD2w5CWo=", "YG07TqExOSoo/46SIWK42OG0of3z94Y5SzCswW6sYSw="},
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	requestID := uuid.NewV4().String()
+	ctx = context.WithValue(ctx, requestutils.RequestID, requestID)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/%s/credentials",
+		order.ID), bytes.NewBuffer(payload)).WithContext(ctx)
+
+	rw := httptest.NewRecorder()
+
+	instrumentHandler := func(name string, h http.Handler) http.Handler {
+		return h
+	}
+
+	skuService, err := InitService(ctx, suite.storage, nil)
+	suite.Require().NoError(err)
+
+	router := Router(skuService, instrumentHandler)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, r)
+
+	// start processing all messages
+	go func(ctx context.Context) {
+		for {
+			_, err := skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			fmt.Println(err)
+		}
+	}(ctx)
+	// TODO wrap in poller
+	time.Sleep(30 * time.Second)
+
+	// retrieve the newly signed order creds by orderID and itemID.
+	var recorder *httptest.ResponseRecorder
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials/%s/time-limited-v2",
+		order.ID, order.Items[0].ID), nil)
+
+	recorder = httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(recorder, req)
+
+	var response TimeLimitedV2Creds
+	err = json.NewDecoder(recorder.Body).Decode(&response)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(order.ID, response.OrderID)
+	suite.Assert().NotEmpty(response.IssuerID)
+	suite.Assert().Equal(3, len(response.Credentials))
+
+	// assert we have the correct credentials for our order items
+	// use a map so, we can retrieve them against our order items.
+	tc := make(map[uuid.UUID]TimeAwareSubIssuedCreds)
+	for _, cred := range response.Credentials {
+		tc[cred.ItemID] = cred
+	}
+	for _, orderItem := range order.Items {
+		cred, ok := tc[orderItem.ID]
+		suite.Assert().True(ok)
+		suite.Assert().Equal(orderItem.OrderID, cred.OrderID)
+	}
+}
+
+// ReadSigningOrderRequestMessage reads messages from the unsigned order request topic
+func (suite *ControllersTestSuite) ReadSigningOrderRequestMessage(ctx context.Context, topic string) SigningOrderRequest {
+	kafkaReader, err := kafkautils.NewKafkaReader(ctx, test.RandomString(), topic)
+	suite.Require().NoError(err)
+
+	msg, err := kafkaReader.ReadMessage(ctx)
+	suite.Require().NoError(err)
+
+	codec, err := goavro.NewCodec(signingOrderRequestSchema)
+	suite.Require().NoError(err)
+
+	native, _, err := codec.NativeFromBinary(msg.Value)
+	suite.Require().NoError(err)
+
+	textual, err := codec.TextualFromNative(nil, native)
+	suite.Require().NoError(err)
+
+	var signingOrderRequest SigningOrderRequest
+	err = json.Unmarshal(textual, &signingOrderRequest)
+	suite.Require().NoError(err)
+
+	return signingOrderRequest
+}
+
+// To create an unpaid order item set price to 0
+func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string {
+	c := macaroon.Caveats{
+		"sku":                       sku,
+		"price":                     strconv.Itoa(price),
+		"description":               test.RandomString(),
+		"currency":                  "usd",
+		"credential_type":           "time-limited-v2",
+		"credential_valid_duration": "P1M",
+		"issuer_token_buffer":       strconv.Itoa(3),
+		"issuer_token_overlap":      strconv.Itoa(0),
+		"allowed_payment_methods":   test.RandomString(),
+		"metadata": `
+				{
+					"stripe_product_id":"stripe_product_id",
+					"stripe_success_url":"stripe_success_url",
+					"stripe_cancel_url":"stripe_cancel_url"
+				}
+			`,
+	}
+
+	t := macaroon.Token{
+		ID: test.RandomString(), Version: 1, Location: "brave.com",
+		FirstPartyCaveats: []macaroon.Caveats{c},
+	}
+
+	mac, err := t.Generate("secret")
+	suite.Require().NoError(err)
+
+	skuMap["development"][mac] = true
+
+	return mac
 }

@@ -866,9 +866,10 @@ func (s *Service) GetCredentials(ctx context.Context, orderID uuid.UUID) (interf
 	return nil, http.StatusConflict, errInvalidCredentialType
 }
 
-// GetSingleUseCreds get an order's single use creds
+// GetSingleUseCreds returns all the single use credentials for a given order.
+// If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
+// If the credentials have been signed it will return a http.StatusOK and the order credentials.
 func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderCreds, int, error) {
-
 	if order == nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
@@ -878,46 +879,49 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds == nil {
-		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	if creds != nil {
+		return creds, http.StatusOK, nil
 	}
 
-	status := http.StatusOK
-	for i := 0; i < len(*creds); i++ {
-		if (*creds)[i].SignedCreds == nil {
-			status = http.StatusAccepted
-			break
-		}
-	}
-	return *creds, status, nil
-}
-
-// GetTimeLimitedV2Creds get an order's v2 time limited creds
-func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) ([]TimeLimitedV2Creds, int, error) {
-
-	if order == nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
-	}
-
-	creds, err := s.Datastore.GetOrderTimeLimitedV2Creds(order.ID)
+	submitted, err := s.Datastore.GetSigningRequestSubmitted(ctx, order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds == nil {
-		return nil, http.StatusNotFound, fmt.Errorf("Credentials do not exist")
+	if len(submitted) > 0 {
+		return nil, http.StatusAccepted, nil
 	}
 
-	status := http.StatusOK
-	for i := 0; i < len(*creds); i++ {
-		for j := 0; j < len((*creds)[i].Credentials); j++ {
-			if (*creds)[i].Credentials[j].SignedCreds == nil {
-				status = http.StatusAccepted
-				break
-			}
-		}
+	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+}
+
+// GetTimeLimitedV2Creds returns all the single use credentials for a given order.
+// If the credentials have been submitted but not yet signed it returns a http.StatusAccepted and an empty body.
+// If the credentials have been signed it will return a http.StatusOK and the time limited v2 credentials.
+func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*TimeLimitedV2Creds, int, error) {
+	if order == nil {
+		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
-	return *creds, status, nil
+
+	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if creds != nil {
+		return creds, http.StatusOK, nil
+	}
+
+	submitted, err := s.Datastore.GetSigningRequestSubmitted(ctx, order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
+	}
+
+	if len(submitted) > 0 {
+		return nil, http.StatusAccepted, nil
+	}
+
+	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant

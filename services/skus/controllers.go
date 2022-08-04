@@ -73,6 +73,7 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
 		cr.Method("GET", "/", middleware.InstrumentHandler("GetOrderCreds", GetOrderCreds(service)))
 		cr.Method("GET", "/{itemID}", middleware.InstrumentHandler("GetOrderCredsByID", GetOrderCredsByID(service)))
+		cr.Method("GET", "/{itemID}/time-limited-v2", instrumentHandler("GetTimeLimitedV2OrderCredsByOrderItem", GetTimeLimitedV2OrderCredsByOrderItem(service)))
 		cr.Method("DELETE", "/", middleware.InstrumentHandler("DeleteOrderCreds", merchantSignedMiddleware(DeleteOrderCreds(service))))
 	})
 
@@ -611,10 +612,10 @@ func CreateOrderCreds(service *Service) handlers.AppHandler {
 	})
 }
 
-// GetOrderCreds is the handler for fetching order credentials
+// GetOrderCreds is the handler for fetching all order credentials associated with an order.
+// This endpoint handles the retrieval of all order credential types i.e. single-use, time-limited and time-limited-v2.
 func GetOrderCreds(service *Service) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
 		var orderID = new(inputs.ID)
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
 			return handlers.ValidationError(
@@ -625,7 +626,6 @@ func GetOrderCreds(service *Service) handlers.AppHandler {
 			)
 		}
 
-		// get credentials, either single-use/time-limited
 		creds, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
 		if err != nil {
 			return handlers.WrapError(err, "Error getting credentials", status)
@@ -1061,6 +1061,56 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 
 		return handlers.RenderContent(r.Context(), "event received", w, http.StatusOK)
 	})
+}
+
+// GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.
+// If the order credentials are signed it returns a status of http.StatusOK.
+// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted.
+func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		var (
+			orderID           = new(inputs.ID)
+			itemID            = new(inputs.ID)
+			validationPayload = map[string]interface{}{}
+			err               error
+		)
+
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationPayload["orderID"] = err.Error()
+		}
+
+		if err = inputs.DecodeAndValidateString(
+			context.Background(), itemID, chi.URLParam(r, "itemID")); err != nil {
+			validationPayload["itemID"] = err.Error()
+		}
+
+		if len(validationPayload) > 0 {
+			return handlers.ValidationError(
+				"error validating request url parameter",
+				validationPayload)
+		}
+
+		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID())
+		if err != nil {
+			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
+		}
+
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "could not find credentials",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		status := http.StatusOK
+		if len(creds.Credentials) < 0 || creds.Credentials[0].SignedCreds == nil {
+			status = http.StatusAccepted
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, status)
+	}
 }
 
 // SubmitReceipt submit a vendor verifiable receipt that proves order is paid
