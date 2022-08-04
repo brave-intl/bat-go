@@ -261,7 +261,7 @@ func setupDynamodbTables(db *dynamodb.DynamoDB) error {
 		return fmt.Errorf("error creating dynamodb table %w", err)
 	}
 
-	err = tableIsActive(db, *input.TableName, time.Second, 10*time.Millisecond)
+	err = tableIsActive(db, *input.TableName, 5*time.Second, 10*time.Millisecond)
 	if err != nil {
 		return fmt.Errorf("error table is not active %w", err)
 	}
