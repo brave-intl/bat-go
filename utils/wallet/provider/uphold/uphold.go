@@ -282,9 +282,11 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 	}
 	// do country blacklist checking
 	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
-		// check country code
+		// check all three country codes to see if any are equal to a blacklist item
 		for _, v := range blacklist {
-			if strings.EqualFold(uhResp.IdentityCountry, v) {
+			if strings.EqualFold(uhResp.IdentityCountry, v) ||
+				strings.EqualFold(uhResp.CitizenshipCountry, v) ||
+				strings.EqualFold(uhResp.ResidenceCountry, v) {
 				countUpholdWalletAccountValidation.With(prometheus.Labels{
 					"citizenship_country": uhResp.CitizenshipCountry,
 					"identity_country":    uhResp.IdentityCountry,
