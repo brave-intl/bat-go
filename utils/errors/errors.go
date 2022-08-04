@@ -10,6 +10,9 @@ var (
 	// ErrInvalidCountry - invalid country error for validation
 	ErrInvalidCountry = errors.New("invalid country")
 
+	// ErrNoIdentityCountry - no specified identity country
+	ErrNoIdentityCountry = errors.New("no identity country")
+
 	// ErrConflictBAPReportEvent is an error created when trying to update a bat loss event with a different amount
 	ErrConflictBAPReportEvent = errors.New("unable to record BAP report")
 	// ErrConflictBATLossEvent is an error created when trying to update a bat loss event with a different amount
