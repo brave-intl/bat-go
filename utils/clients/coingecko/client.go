@@ -327,7 +327,7 @@ type CoinMarket struct {
 }
 
 // CoinMarketResponse is the coingecko response for FetchCoinMarkets
-type CoinMarketResponse []CoinMarket
+type CoinMarketResponse []*CoinMarket
 
 func (cmr *CoinMarketResponse) applyLimit(limit int) CoinMarketResponse {
 	return (*cmr)[:limit]
@@ -340,14 +340,14 @@ func (c *HTTPClient) FetchCoinMarkets(
 	limit int,
 ) (*CoinMarketResponse, time.Time, error) {
 	updated := time.Now()
-	url := "/api/v3/coins/markets"
+	cgUrl := "/api/v3/coins/markets"
 	params := &coinMarketParams{
 		baseParams: c.baseParams,
 		VsCurrency: vsCurrency,
 		Limit:      limit,
 	}
 
-	cacheKey, err := c.cacheKey(ctx, url, params)
+	cacheKey, err := c.cacheKey(ctx, cgUrl, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -357,9 +357,9 @@ func (c *HTTPClient) FetchCoinMarkets(
 
 	var body CoinMarketResponse
 	var entry cacheEntry
-	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
 
 	// Check cache first before making request to Coingecko
+	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
 	if err == nil {
 		err = json.Unmarshal(entryBytes, &entry)
 		if err != nil {
@@ -377,7 +377,8 @@ func (c *HTTPClient) FetchCoinMarkets(
 			return &body, entry.LastUpdated, err
 		}
 	}
-	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
+
+	req, err := c.client.NewRequest(ctx, "GET", cgUrl, nil, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -391,6 +392,16 @@ func (c *HTTPClient) FetchCoinMarkets(
 		}
 
 		return nil, updated, err
+	}
+
+	// Replace image URL with our own proxy
+	for _, market := range body {
+		imageUrl, err := url.Parse(market.Image)
+		if err != nil {
+			return nil, updated, err
+		}
+		imageUrl.Host = "api.cgproxy.brave.com"
+		market.Image = imageUrl.String()
 	}
 
 	bodyBytes, err := json.Marshal(&body)
