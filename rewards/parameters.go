@@ -14,8 +14,9 @@ type Tips struct {
 
 // ParametersV1 - structure of reward parameters
 type ParametersV1 struct {
-	PayoutStatus   *PayoutStatus  `json:"payoutStatus"`
-	BATRate        float64        `json:"batRate,omitempty"`
-	AutoContribute AutoContribute `json:"autocontribute,omitempty"`
-	Tips           Tips           `json:"tips,omitempty"`
+	PayoutStatus     *PayoutStatus     `json:"payoutStatus"`
+	CustodianRegions *CustodianRegions `json:"custodianRegions"`
+	BATRate          float64           `json:"batRate,omitempty"`
+	AutoContribute   AutoContribute    `json:"autocontribute,omitempty"`
+	Tips             Tips              `json:"tips,omitempty"`
 }
