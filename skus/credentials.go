@@ -10,6 +10,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/segmentio/kafka-go"
 	"net/http"
 	"net/url"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
 )
 
 const (
@@ -229,6 +229,8 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 		return ErrOrderUnpaid
 	}
 
+	var signingOrderRequests []SigningOrderRequest
+
 	for _, orderItem := range order.Items {
 		// generalized issuer based on sku and merchant id
 		issuerID, err := encodeIssuerID(order.MerchantID, orderItem.SKU)
@@ -241,7 +243,6 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			return fmt.Errorf("error getting issuer for issuerID %s: %w", issuerID, err)
 		}
 
-		// write to kafka topic for signing
 		requestID, ok := ctx.Value(requestutils.RequestID).(string)
 		if !ok {
 			return errors.New("error retrieving requestID from context for create order credentials")
@@ -271,35 +272,12 @@ func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID,
 			},
 		}
 
-		textual, err := json.Marshal(signingOrderRequest)
-		if err != nil {
-			return fmt.Errorf("error marshaling kafka msg: %w", err)
-		}
+		signingOrderRequests = append(signingOrderRequests, signingOrderRequest)
+	}
 
-		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(textual)
-		if err != nil {
-			return fmt.Errorf("error converting native from textual: %w", err)
-		}
-
-		binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
-		if err != nil {
-			return fmt.Errorf("error converting binary from native: %w", err)
-		}
-
-		// batch these for all order items
-		err = s.kafkaWriter.WriteMessages(ctx, kafka.Message{
-			Topic: kafkaUnsignedOrderCredsTopic,
-			Key:   []byte(signingOrderRequest.RequestID),
-			Value: binary,
-		})
-		if err != nil {
-			return fmt.Errorf("error writting kafka message: %w", err)
-		}
-
-		err = s.Datastore.InsertSigningRequestSubmitted(ctx, order.ID)
-		if err != nil {
-			return fmt.Errorf("error inserting siging request submitted for order item %s: %w", orderItem.ID, err)
-		}
+	err = s.Datastore.InsertSigningOrderRequestOutbox(ctx, order.ID, signingOrderRequests)
+	if err != nil {
+		return fmt.Errorf("error inserting signing order request outbox orderID %s: %w", order.ID, err)
 	}
 
 	return nil
@@ -328,6 +306,32 @@ func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer 
 	}
 
 	return creds, nil
+}
+
+type SigningRequestWriter interface {
+	WriteMessage(ctx context.Context, message []byte) error
+}
+
+func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
+	native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(message)
+	if err != nil {
+		return fmt.Errorf("error converting native from textual: %w", err)
+	}
+
+	binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
+	if err != nil {
+		return fmt.Errorf("error converting binary from native: %w", err)
+	}
+
+	err = s.kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Topic: kafkaUnsignedOrderCredsTopic,
+		Value: binary,
+	})
+	if err != nil {
+		return fmt.Errorf("error writting kafka message: %w", err)
+	}
+
+	return nil
 }
 
 type OrderCredentialsWorker interface {

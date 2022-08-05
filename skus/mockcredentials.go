@@ -50,6 +50,43 @@ func (mr *MockOrderWorkerMockRecorder) SignOrderCreds(ctx, orderID, issuer, blin
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignOrderCreds", reflect.TypeOf((*MockOrderWorker)(nil).SignOrderCreds), ctx, orderID, issuer, blindedCreds)
 }
 
+// MockSigningRequestWriter is a mock of SigningRequestWriter interface.
+type MockSigningRequestWriter struct {
+	ctrl     *gomock.Controller
+	recorder *MockSigningRequestWriterMockRecorder
+}
+
+// MockSigningRequestWriterMockRecorder is the mock recorder for MockSigningRequestWriter.
+type MockSigningRequestWriterMockRecorder struct {
+	mock *MockSigningRequestWriter
+}
+
+// NewMockSigningRequestWriter creates a new mock instance.
+func NewMockSigningRequestWriter(ctrl *gomock.Controller) *MockSigningRequestWriter {
+	mock := &MockSigningRequestWriter{ctrl: ctrl}
+	mock.recorder = &MockSigningRequestWriterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSigningRequestWriter) EXPECT() *MockSigningRequestWriterMockRecorder {
+	return m.recorder
+}
+
+// WriteMessage mocks base method.
+func (m *MockSigningRequestWriter) WriteMessage(ctx context.Context, message []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteMessage", ctx, message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteMessage indicates an expected call of WriteMessage.
+func (mr *MockSigningRequestWriterMockRecorder) WriteMessage(ctx, message interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessage", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessage), ctx, message)
+}
+
 // MockOrderCredentialsWorker is a mock of OrderCredentialsWorker interface.
 type MockOrderCredentialsWorker struct {
 	ctrl     *gomock.Controller

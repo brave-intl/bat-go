@@ -78,9 +78,10 @@ type Datastore interface {
 	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error
+	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
 	StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error
-	GetSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) ([]SigningRequestSubmitted, error)
-	InsertSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) error
+	GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
+	InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -1208,28 +1209,92 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
 	return nil
 }
 
-type SigningRequestSubmitted struct {
-	ID      uuid.UUID `db:"id"`
-	OrderID uuid.UUID `db:"order_id"`
+type SigningOrderRequestOutbox struct {
+	ID      uuid.UUID       `db:"id"`
+	Ack     bool            `db:"ack"`
+	OrderID uuid.UUID       `db:"order_id"`
+	Message json.RawMessage `db:"message_data" json:"message"`
 }
 
-func (pg *Postgres) InsertSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) error {
-	query := `insert into signing_request_submitted(order_id) values ($1)`
-	_, err := pg.ExecContext(ctx, query, orderID)
-	if err != nil {
-		return fmt.Errorf("error inserting row: %w", err)
-	}
-	return nil
-}
-
-func (pg *Postgres) GetSigningRequestSubmitted(ctx context.Context, orderID uuid.UUID) ([]SigningRequestSubmitted, error) {
-	var signingRequestSubmitted []SigningRequestSubmitted
-	err := pg.RawDB().SelectContext(ctx, &signingRequestSubmitted,
-		`select id, order_id from signing_request_submitted where order_id = $1`, orderID)
+func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
+	var signingRequestOutbox []SigningOrderRequestOutbox
+	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
+		`select id, ack, order_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
 	}
-	return signingRequestSubmitted, nil
+	return signingRequestOutbox, nil
+}
+
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("error insert signing order request outbox could not begin tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	for _, sor := range signingOrderRequests {
+		message, err := json.Marshal(sor)
+		if err != nil {
+			return fmt.Errorf("error marshalling signing order request: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `insert into signing_order_request_outbox(order_id, message_data) 
+											values ($1, $2)`, orderID, message)
+		if err != nil {
+			return fmt.Errorf("error inserting order request outbox row: %w", err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error insert signing order request outbox: %w", err)
+	}
+
+	return nil
+}
+
+func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("error send signing request could not begin tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	var soro SigningOrderRequestOutbox
+	err = tx.GetContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
+													where ack = false for update skip locked limit 1`)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("error could not get signing order request outbox: %w", err)
+	}
+
+	err = signingRequestWriter.WriteMessage(ctx, soro.Message)
+	if err != nil {
+		return fmt.Errorf("error writing signing request message to kafka: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, `update signing_order_request_outbox set ack = true where id = $1`, soro.ID)
+	if err != nil {
+		return fmt.Errorf("error updating outbox message: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting updated outbox message rows: %w", err)
+	}
+
+	if rows != 1 {
+		return fmt.Errorf("error updating outbox message: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error updating signing order request outbox: %w", err)
+	}
+
+	return nil
 }
 
 func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error {
