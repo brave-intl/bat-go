@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +37,7 @@ func TestGetParametersController(t *testing.T) {
 				"bat": decimal.Zero,
 			}}, nil)
 
-	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	var mockS3PayoutStatus = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
 		return &s3.GetObjectOutput{
 			Body: io.NopCloser(bytes.NewBufferString(`{
 				"uphold":"processing",
@@ -47,6 +48,35 @@ func TestGetParametersController(t *testing.T) {
 			`)),
 		}, nil
 	})
+
+	var mockS3CustodianRegions = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewBufferString(`{
+				"uphold": {
+					"allow": [],
+					"block": []
+				},
+				"gemini": {
+					"allow": [],
+					"block": []
+				},
+				"bitflyer": {
+					"allow": [],
+					"block": []
+				}
+			}`)),
+		}, nil
+	})
+
+	var mockS3 = mockGetObjectAPI(func(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		if *params.Key == "payout-status.json" {
+			return mockS3PayoutStatus(ctx, params, optFns...)
+		} else if *params.Key == "custodian-regions.json" {
+			return mockS3CustodianRegions(ctx, params, optFns...)
+		}
+		return nil, errors.New("invalid key")
+	})
+
 	var (
 		s, err = NewService(context.Background(), mockRatios, mockS3)
 		hGet   = GetParametersHandler(s)

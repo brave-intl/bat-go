@@ -29,9 +29,69 @@ type PayoutStatus struct {
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
 }
 
+// GeoAllowBlockMap - this is the allow / block list of geos for a custodian
+type GeoAllowBlockMap struct {
+	Allow []string `json:"allow"`
+	Block []string `json:"block"`
+}
+
+// CustodianRegions - Supported Regions
+type CustodianRegions struct {
+	Uphold   GeoAllowBlockMap `json:"uphold"`
+	Gemini   GeoAllowBlockMap `json:"gemini"`
+	Bitflyer GeoAllowBlockMap `json:"bitflyer"`
+}
+
+// HandleErrors - handle any errors in input
+func (cr *CustodianRegions) HandleErrors(err error) *handlers.AppError {
+	return handlers.ValidationError("invalid custodian regions", err)
+}
+
+// Decode - implement decodable
+func (cr *CustodianRegions) Decode(ctx context.Context, input []byte) error {
+	return json.Unmarshal(input, cr)
+}
+
+// Validate - implement validatable
+func (cr *CustodianRegions) Validate(ctx context.Context) error {
+	isValid, err := govalidator.ValidateStruct(cr)
+	if err != nil {
+		return err
+	}
+	if !isValid {
+		return errors.New("invalid input")
+	}
+	return nil
+}
+
 // S3GetObjectAPI - interface to allow for a GetObject mock
 type S3GetObjectAPI interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+}
+
+func extractCustodianRegions(ctx context.Context, client S3GetObjectAPI, bucket, object string) (*CustodianRegions, error) {
+	logger := logging.Logger(ctx, "rewards.extractPayoutStatus")
+	// get the object with the client
+	out, err := client.GetObject(
+		ctx, &s3.GetObjectInput{
+			Bucket: &bucket,
+			Key:    &object,
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payout status: %w", err)
+	}
+	defer func() {
+		err := out.Body.Close()
+		logger.Error().Err(err).Msg("failed to close s3 result body")
+	}()
+	var custodianRegions = new(CustodianRegions)
+
+	// parse body json
+	if err := inputs.DecodeAndValidateReader(ctx, custodianRegions, out.Body); err != nil {
+		return nil, custodianRegions.HandleErrors(err)
+	}
+
+	return custodianRegions, nil
 }
 
 func extractPayoutStatus(ctx context.Context, client S3GetObjectAPI, bucket, object string) (*PayoutStatus, error) {
@@ -193,22 +253,33 @@ func (s *Service) GetParameters(ctx context.Context, currency *BaseCurrency) (*P
 
 	// merge in static s3 attributes into response
 	var (
-		payoutStatus *PayoutStatus
-		bucket, ok   = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+		payoutStatus     *PayoutStatus
+		custodianRegions *CustodianRegions
+		bucket, ok       = ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	)
 	logger.Debug().Str("bucket", bucket).Msg("merge bucket env var")
 	if ok {
+		// get payout status
 		logger.Debug().Str("bucket", bucket).Msg("extracting payout status")
 		payoutStatus, err = extractPayoutStatus(ctx, s.s3Client, bucket, "payout-status.json")
 		if err != nil {
 			return nil, fmt.Errorf("failed to get payout status parameters: %w", err)
 		}
 		logger.Debug().Str("bucket", bucket).Str("payout status", fmt.Sprintf("%+v", *payoutStatus)).Msg("payout status")
+
+		// get the custodian regions
+		logger.Debug().Str("bucket", bucket).Msg("extracting custodian regions")
+		custodianRegions, err = extractCustodianRegions(ctx, s.s3Client, bucket, "custodian-regions.json")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get custodian regions parameters: %w", err)
+		}
+		logger.Debug().Str("bucket", bucket).Str("custodian regions", fmt.Sprintf("%+v", *custodianRegions)).Msg("custodianRegions")
 	}
 
 	return &ParametersV1{
-		PayoutStatus: payoutStatus,
-		BATRate:      rate,
+		PayoutStatus:     payoutStatus,
+		CustodianRegions: custodianRegions,
+		BATRate:          rate,
 		AutoContribute: AutoContribute{
 			DefaultChoice: defaultChoice,
 			Choices:       choices,
