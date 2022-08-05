@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/ptr"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd/macaroon"
 	"github.com/brave-intl/bat-go/skus/skustest"
@@ -33,7 +35,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/test"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
@@ -827,9 +828,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusAccepted, rr.Code)
 
-	// The CreateOrderCreds request writes to a db signing request outbox where RunSendSigningRequest started in the
-	// goroutine will the message to kafka, we need to write to signing order result to mock cbr signing.
-	// RunStoreJobShouldProcesses which was started in the goroutine will then process the signed creds.
+	// The CreateOrderCreds request writes to the db table signing_order_request_outbox. RunSendSigningRequest (started in the
+	// goroutine) will read the message and send to kafka, we need mock cbr signing.
+	// The RunStoreJobShouldProcesses which was started in the goroutine will then process the signed creds.
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	from := time.Now().Local().Format(time.RFC3339)
 
@@ -914,23 +915,28 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	}()
 
 	// RunSendSigningRequestJob sends messages to the signing request topic.
-	// This runs normally runs in the job runner so, we need to mock that here using for select.
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				break
 			default:
-				_, _ = suite.service.RunNextVoteDrainJob(ctx)
+				_, _ = suite.service.RunSendSigningRequestJob(ctx)
 				<-time.After(50 * time.Millisecond)
 			}
 		}
 	}()
 
 	// RunStoreSignedOrderCredentialsJob reads signed order credentials from kafka.
-	// This runs in its own loop so don't need to mock the job runner.
 	go func() {
-		_, _ = suite.service.RunStoreSignedOrderCredentialsJob(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, _ = suite.service.RunStoreSignedOrderCredentialsJob(ctx)
+			}
+		}
 	}()
 
 	numVotes := 1
@@ -1339,8 +1345,11 @@ func (suite *ControllersTestSuite) SetupDeleteKey(key Key) Key {
 // It uses three tokens and expects three signing results which translates to three order credentials being stored
 // for the single order item.
 func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCredentials_TimeLimitedV2() {
+	ctx := context.Background()
+	defer ctx.Done()
+
 	env := os.Getenv("ENV")
-	ctx := context.WithValue(context.Background(), appctx.EnvironmentCTXKey, env)
+	ctx = context.WithValue(ctx, appctx.EnvironmentCTXKey, env)
 
 	// setup kafka
 	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
@@ -1406,22 +1415,28 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	server.Handler.ServeHTTP(rw, r)
 
 	// start processing all messages
-	go func(ctx context.Context) {
+	go func() {
 		for {
-			_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
+			}
 		}
-	}(ctx)
+	}()
 
-	go func(ctx context.Context) {
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				break
 			default:
 				_, _ = skuService.RunSendSigningRequestJob(ctx)
+				<-time.After(50 * time.Millisecond)
 			}
 		}
-	}(ctx)
+	}()
 
 	// TODO wrap in poller
 	time.Sleep(30 * time.Second)
@@ -1455,8 +1470,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		suite.Assert().True(ok)
 		suite.Assert().Equal(orderItem.OrderID, cred.OrderID)
 	}
-
-	ctx.Done()
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic

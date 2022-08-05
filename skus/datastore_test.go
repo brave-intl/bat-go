@@ -216,8 +216,11 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
+	ctx := context.Background()
+	defer ctx.Done()
+
 	// create an issuer and a paid order with one order item and a single use credential type.
-	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devUserWalletVote})
+	ctx = context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devUserWalletVote})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devUserWalletVote)
 
 	metadata := Metadata{
@@ -269,8 +272,11 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Succ
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
+	ctx := context.Background()
+	defer ctx.Done()
+
 	// create an issuer and a paid order with one order item and a time limited v2 credential type.
-	ctx := context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
+	ctx = context.WithValue(context.Background(), appctx.WhitelistSKUsCTXKey, []string{devFreeTimeLimitedV2})
 	order, issuer := suite.createOrderAndIssuer(suite.T(), ctx, devFreeTimeLimitedV2)
 
 	metadata := Metadata{
