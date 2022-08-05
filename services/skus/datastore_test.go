@@ -45,7 +45,7 @@ func (suite *PostgresTestSuite) SetupSuite() {
 	suite.storage = storage
 }
 
-func (suite *PostgresTestSuite) BeforeTest() {
+func (suite *PostgresTestSuite) SetupTest() {
 	skustest.CleanDB(suite.T(), suite.storage.RawDB())
 }
 
