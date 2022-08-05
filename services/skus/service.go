@@ -225,6 +225,16 @@ func InitService(ctx context.Context, datastore Datastore, walletService *wallet
 			Workers: 1,
 		},
 		{
+			Func:    service.RunNextOrderJob,
+			Cadence: 500 * time.Millisecond,
+			Workers: 3,
+		},
+		{
+			Func:    service.RunSendSigningRequestJob,
+			Cadence: 100 * time.Millisecond,
+			Workers: 1,
+		},
+		{
 			Func:    service.RunStoreSignedOrderCredentialsJob,
 			Cadence: 200 * time.Millisecond,
 			Workers: 1,
@@ -883,12 +893,13 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 		return creds, http.StatusOK, nil
 	}
 
-	submitted, err := s.Datastore.GetSigningRequestSubmitted(ctx, order.ID)
+	// check to see if messages are in outbox
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if len(submitted) > 0 {
+	if len(outboxMessages) > 0 {
 		return nil, http.StatusAccepted, nil
 	}
 
@@ -912,12 +923,13 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 		return creds, http.StatusOK, nil
 	}
 
-	submitted, err := s.Datastore.GetSigningRequestSubmitted(ctx, order.ID)
+	// check to see if messages are in outbox
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if len(submitted) > 0 {
+	if len(outboxMessages) > 0 {
 		return nil, http.StatusAccepted, nil
 	}
 
@@ -1364,6 +1376,23 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+// RunNextOrderJob Deprecated. Takes the next order job and completes it.
+func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
+	for {
+		attempted, err := s.Datastore.RunNextOrderJob(ctx, s)
+		if err != nil {
+			return attempted, fmt.Errorf("failed to attempt run next order job: %w", err)
+		}
+		if !attempted {
+			return attempted, err
+		}
+	}
+}
+
+func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
+	return true, s.Datastore.SendSigningRequest(ctx, s)
 }
 
 func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {

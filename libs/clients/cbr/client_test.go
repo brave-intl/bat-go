@@ -118,12 +118,12 @@ func TestCreateIssuerV3(t *testing.T) {
 
 	request := IssuerRequest{
 		Name:      test.RandomString(),
-		Cohort:    int16(test.RandomIntWithMax(10)),
-		MaxTokens: test.RandomIntWithMax(10),
+		Cohort:    int16(test.RandomNonZeroInt(10)),
+		MaxTokens: test.RandomNonZeroInt(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		Duration:  "P1M",
-		Buffer:    test.RandomIntWithMax(10),
-		Overlap:   test.RandomIntWithMax(10),
+		Buffer:    test.RandomNonZeroInt(10),
+		Overlap:   test.RandomNonZeroInt(10),
 	}
 
 	err = client.CreateIssuerV3(context.Background(), request)
@@ -138,13 +138,13 @@ func TestGetIssuerV2(t *testing.T) {
 
 	issuerRequest := IssuerRequest{
 		Name:      test.RandomString(),
-		Cohort:    int16(test.RandomIntWithMax(10)),
-		MaxTokens: test.RandomIntWithMax(10),
+		Cohort:    int16(test.RandomNonZeroInt(10)),
+		MaxTokens: test.RandomNonZeroInt(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
 		Duration:  "P1M",
-		Buffer:    test.RandomIntWithMax(30),
-		Overlap:   test.RandomIntWithMax(5),
+		Buffer:    test.RandomNonZeroInt(30),
+		Overlap:   test.RandomNonZeroInt(10),
 	}
 
 	err = client.CreateIssuerV3(ctx, issuerRequest)
@@ -200,12 +200,12 @@ func TestSignAndRedeemCredentialsV3(t *testing.T) {
 	issuerRequest := IssuerRequest{
 		Name:      test.RandomString(),
 		Cohort:    1,
-		MaxTokens: test.RandomIntWithMax(10),
+		MaxTokens: test.RandomNonZeroInt(10),
 		ValidFrom: ptr.FromTime(time.Now()),
 		ExpiresAt: ptr.FromTime(time.Now().Add(time.Hour)),
 		Duration:  "P1M",
-		Buffer:    test.RandomIntWithMax(10),
-		Overlap:   test.RandomIntWithMax(10),
+		Buffer:    test.RandomNonZeroInt(10),
+		Overlap:   test.RandomNonZeroInt(10),
 	}
 
 	err = client.CreateIssuerV3(context.Background(), issuerRequest)

@@ -810,7 +810,7 @@ func generateWallet(ctx context.Context, t *testing.T) *uphold.Wallet {
 	return newWallet
 }
 
-func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(ctx context.Context, service *Service, order Order) (ordercreds []TimeLimitedCreds) {
+func (suite *ControllersTestSuite) fetchTimeLimitedCredentials(service *Service, order Order) (ordercreds []TimeLimitedCreds) {
 
 	o, err := suite.service.Datastore.GetOrder(order.ID)
 	var ii string
@@ -904,9 +904,9 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 	server.Handler.ServeHTTP(rr, req)
 	suite.Require().Equal(http.StatusAccepted, rr.Code)
 
-	// The CreateOrderCreds request writes to kafka signing request topic, we need to write to signing order result
-	// to mock cbr signing. RunStoreJobShouldProcesses which was started in the goroutine
-	// will then process the signed creds.
+	// The CreateOrderCreds request writes to a db signing request outbox where RunSendSigningRequest started in the
+	// goroutine will the message to kafka, we need to write to signing order result to mock cbr signing.
+	// RunStoreJobShouldProcesses which was started in the goroutine will then process the signed creds.
 	to := time.Now().Add(time.Hour).Format(time.RFC3339)
 	from := time.Now().Local().Format(time.RFC3339)
 
@@ -937,7 +937,7 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 	}
 	writeSigningOrderResultMessage(suite.T(), ctx, signingOrderResult, kafkaSignedOrderCredsTopic)
 
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(100 * time.Millisecond)
 
 	// get the signed order credentials
 	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/%s/credentials", order.ID), nil)
@@ -955,6 +955,7 @@ func (suite *ControllersTestSuite) fetchCredentials(ctx context.Context, server 
 
 func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	ctx := context.Background()
+	defer ctx.Done()
 
 	voteTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
@@ -975,8 +976,8 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	server := &http.Server{Addr: ":8080", Handler: router}
 
 	// start job workers
+
 	// NextVoteDrainJob monitors vote queue
-	// RunStoreSignedOrderCredentialsJob reads signed order credentials from kafka
 	go func() {
 		for {
 			select {
@@ -988,6 +989,23 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 			}
 		}
 	}()
+
+	// RunSendSigningRequestJob sends messages to the signing request topic.
+	// This runs normally runs in the job runner so, we need to mock that here using for select.
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, _ = suite.service.RunNextVoteDrainJob(ctx)
+				<-time.After(50 * time.Millisecond)
+			}
+		}
+	}()
+
+	// RunStoreSignedOrderCredentialsJob reads signed order credentials from kafka.
+	// This runs in its own loop so don't need to mock the job runner.
 	go func() {
 		_, _ = suite.service.RunStoreSignedOrderCredentialsJob(ctx)
 	}()
@@ -1121,7 +1139,7 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation1
 	secret, err := key.GetSecretKey()
 	suite.Require().NoError(err, "unable to decrypt secret")
 
-	ordercreds := suite.fetchTimeLimitedCredentials(context.Background(), suite.service, order)
+	ordercreds := suite.fetchTimeLimitedCredentials(suite.service, order)
 
 	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free-1m")
 	suite.Require().NoError(err, "error attempting to encode issuer id")
@@ -1177,7 +1195,7 @@ func (suite *ControllersTestSuite) TestTimeLimitedCredentialsVerifyPresentation(
 	secret, err := key.GetSecretKey()
 	suite.Require().NoError(err, "unable to decrypt secret")
 
-	ordercreds := suite.fetchTimeLimitedCredentials(context.Background(), suite.service, order)
+	ordercreds := suite.fetchTimeLimitedCredentials(suite.service, order)
 
 	issuerID, err := encodeIssuerID(order.MerchantID, "integration-test-free")
 	suite.Require().NoError(err, "error attempting to encode issuer id")
@@ -1467,10 +1485,21 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	// start processing all messages
 	go func(ctx context.Context) {
 		for {
-			_, err := skuService.RunStoreSignedOrderCredentialsJob(ctx)
-			fmt.Println(err)
+			_, _ = skuService.RunStoreSignedOrderCredentialsJob(ctx)
 		}
 	}(ctx)
+
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				_, _ = skuService.RunSendSigningRequestJob(ctx)
+			}
+		}
+	}(ctx)
+
 	// TODO wrap in poller
 	time.Sleep(30 * time.Second)
 
@@ -1503,6 +1532,8 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		suite.Assert().True(ok)
 		suite.Assert().Equal(orderItem.OrderID, cred.OrderID)
 	}
+
+	ctx.Done()
 }
 
 // ReadSigningOrderRequestMessage reads messages from the unsigned order request topic

@@ -165,6 +165,55 @@ func (suite *PostgresTestSuite) TestGetTimeLimitedV2OrderCredsByOrderItem_Succes
 	suite.Assert().ElementsMatch(orderCredentials[0:1], actual.Credentials)
 }
 
+func (suite *PostgresTestSuite) TestSendSigningRequest_Success() {
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	metadata := Metadata{
+		ItemID:         uuid.NewV4(),
+		OrderID:        uuid.NewV4(),
+		IssuerID:       uuid.NewV4(),
+		CredentialType: test.RandomString(),
+	}
+
+	associatedData, err := json.Marshal(metadata)
+	suite.Require().NoError(err)
+
+	signingOrderRequests := []SigningOrderRequest{
+		{
+			RequestID: test.RandomString(),
+			Data: []SigningOrder{
+				{
+					IssuerType:     test.RandomString(),
+					IssuerCohort:   defaultCohort,
+					BlindedTokens:  []string{test.RandomString()},
+					AssociatedData: associatedData,
+				},
+			},
+		},
+	}
+
+	signingRequestWriter := NewMockSigningRequestWriter(ctrl)
+	signingRequestWriter.EXPECT().WriteMessage(ctx, gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	err = suite.storage.InsertSigningOrderRequestOutbox(context.Background(), metadata.OrderID, signingOrderRequests)
+	suite.Require().NoError(err)
+
+	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
+	suite.Require().NoError(err)
+
+	soro, err := suite.storage.GetSigningOrderRequestOutbox(ctx, metadata.OrderID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Equal(1, len(soro))
+	suite.Assert().Equal(metadata.OrderID, soro[0].OrderID)
+	suite.Assert().True(soro[0].Ack)
+}
+
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Success() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
