@@ -21,6 +21,11 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
+// KafkaReader - reader interface
+type KafkaReader interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+}
+
 // Reader - implements KafkaReader
 type Reader struct {
 	kafkaReader *kafka.Reader
@@ -181,9 +186,9 @@ func InitKafkaWriter(ctx context.Context, topic string) (*kafka.Writer, *kafka.D
 
 	kafkaWriter := kafka.NewWriter(kafka.WriterConfig{
 		Brokers:  strings.Split(kafkaBrokers, ","),
-		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 		Dialer:   dialer,
+		Topic:    topic,
 		Logger:   kafka.LoggerFunc(logger.Printf), // FIXME
 	})
 

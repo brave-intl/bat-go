@@ -160,6 +160,8 @@ func InstrumentHandlerFunc(name string, f handlers.AppHandler) http.HandlerFunc 
 	return InstrumentHandler(name, f).ServeHTTP
 }
 
+type InstrumentHandlerDef func(name string, h http.Handler) http.Handler
+
 // InstrumentHandler instruments an http.Handler to capture metrics like the number
 // the total number of requests served and latency information
 func InstrumentHandler(name string, h http.Handler) http.Handler {

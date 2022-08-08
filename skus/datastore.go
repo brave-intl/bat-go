@@ -10,11 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-	"github.com/lib/pq"
-	uuid "github.com/satori/go.uuid"
-	"github.com/shopspring/decimal"
-
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/datastore"
@@ -22,6 +17,13 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/getsentry/sentry-go"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
+	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -54,40 +56,33 @@ type Datastore interface {
 	GetPagedMerchantTransactions(ctx context.Context, merchantID uuid.UUID, pagination *inputs.Pagination) (*[]Transaction, int, error)
 	// GetSumForTransactions gets a decimal sum of for transactions for an order
 	GetSumForTransactions(orderID uuid.UUID) (decimal.Decimal, error)
-	// InsertIssuer
 	InsertIssuer(issuer *Issuer) (*Issuer, error)
-	// GetIssuer
 	GetIssuer(merchantID string) (*Issuer, error)
-	// GetIssuerByPublicKey
 	GetIssuerByPublicKey(publicKey string) (*Issuer, error)
-	// InsertOrderCreds
-	InsertOrderCreds(creds *OrderCreds) error
-	// GetOrderCreds
-	GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error)
-	// DeleteOrderCreds
+	InsertOrderCreds(ctx context.Context, creds *OrderCreds) error
+	GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error)
 	DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error
 	// GetOrderCredsByItemID retrieves an order credential by item id
 	GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error)
-	// RunNextOrderJob
+	// RunNextOrderJob Deprecated.
 	RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error)
-
-	// GetKeysByMerchant
 	GetKeysByMerchant(merchant string, showExpired bool) (*[]Key, error)
-	// GetKey
 	GetKey(id uuid.UUID, showExpired bool) (*Key, error)
-	// CreateKey
 	CreateKey(merchant string, name string, encryptedSecretKey string, nonce string) (*Key, error)
-	// DeleteKey
 	DeleteKey(id uuid.UUID, delaySeconds int) (*Key, error)
-
-	// Votes
 	GetUncommittedVotesForUpdate(ctx context.Context) (*sqlx.Tx, []*VoteRecord, error)
 	CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	MarkVoteErrored(ctx context.Context, vr VoteRecord, tx *sqlx.Tx) error
 	InsertVote(ctx context.Context, vr VoteRecord) error
-
 	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 	IsStripeSub(uuid.UUID) (bool, string, error)
+	GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error)
+	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
+	InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error
+	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
+	StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error
+	GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
+	InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -333,7 +328,6 @@ func (pg *Postgres) GetOrder(orderID uuid.UUID) (*Order, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &order, nil
 }
 
@@ -759,23 +753,23 @@ func (pg *Postgres) GetIssuerByPublicKey(publicKey string) (*Issuer, error) {
 }
 
 // InsertOrderCreds inserts the given order creds
-func (pg *Postgres) InsertOrderCreds(creds *OrderCreds) error {
+func (pg *Postgres) InsertOrderCreds(ctx context.Context, creds *OrderCreds) error {
 	blindedCredsJSON, err := json.Marshal(creds.BlindedCreds)
 	if err != nil {
 		return err
 	}
 
 	statement := `
-	insert into order_creds (item_id, order_id, issuer_id, blinded_creds)
-	values ($1, $2, $3, $4)`
-	_, err = pg.RawDB().Exec(statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON)
+	insert into order_creds (item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key)
+	values ($1, $2, $3, $4, $5, $6, $7)`
+	_, err = pg.ExecContext(ctx, statement, creds.ID, creds.OrderID, creds.IssuerID, blindedCredsJSON,
+		creds.SignedCreds, creds.BatchProof, creds.PublicKey)
+
 	return err
 }
 
 // GetOrderCreds returns the order credentials for a OrderID
-func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCreds, error) {
-	orderCreds := []OrderCreds{}
-
+func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCreds, error) {
 	query := `
 		select item_id, order_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key
 		from order_creds
@@ -784,16 +778,89 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) (*[]OrderCre
 		query += " and signed_creds is not null"
 	}
 
+	var orderCreds []OrderCreds
 	err := pg.RawDB().Select(&orderCreds, query, orderID)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(orderCreds) > 0 {
-		return &orderCreds, nil
+		return orderCreds, nil
 	}
 
 	return nil, nil
+}
+
+// GetOrderTimeLimitedV2Creds returns all order credentials for an order
+func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error) {
+	// each "order item" is a different record
+	var timeLimitedV2Creds []TimeLimitedV2Creds
+	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
+
+	// get all the credentials related to the order_id
+	query := `
+		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
+		from order_creds
+		where order_id = $1
+
+	`
+
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// convert our time aware creds into result
+	itemCredMap := map[uuid.UUID][]TimeAwareSubIssuedCreds{}
+	for i := range timeAwareSubIssuedCreds {
+		itemCredMap[timeAwareSubIssuedCreds[i].ItemID] = append(itemCredMap[timeAwareSubIssuedCreds[i].ItemID], timeAwareSubIssuedCreds[i])
+	}
+
+	for _, v := range itemCredMap {
+		if len(v) > 0 {
+			timeLimitedV2Creds = append(timeLimitedV2Creds, TimeLimitedV2Creds{
+				OrderID:     v[0].OrderID,
+				IssuerID:    v[0].IssuerID,
+				Credentials: v,
+			})
+		}
+	}
+
+	if len(timeLimitedV2Creds) > 0 {
+		return &timeLimitedV2Creds, nil
+	}
+
+	return nil, nil
+}
+
+// GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item
+func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	query := `
+		select
+			order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
+		from order_creds
+		where
+			order_id = $1
+			and item_id = $2
+		  	and valid_to is not null
+			and valid_from is not null
+	`
+
+	var timeAwareCreds []TimeAwareSubIssuedCreds
+	err := pg.RawDB().Select(&timeAwareCreds, query, orderID, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting time aware creds: %w", err)
+	}
+
+	if len(timeAwareCreds) == 0 {
+		return nil, nil
+	}
+
+	return &TimeLimitedV2Creds{
+		OrderID:     timeAwareCreds[0].OrderID,
+		IssuerID:    timeAwareCreds[0].IssuerID,
+		Credentials: timeAwareCreds,
+	}, nil
 }
 
 // DeleteOrderCreds deletes the order credentials for a OrderID
@@ -933,6 +1000,8 @@ func (pg *Postgres) InsertVote(ctx context.Context, vr VoteRecord) error {
 }
 
 // RunNextOrderJob to sign order credentials if there is a order waiting, returning true if a job was attempted
+// TODO: deprecated, remove once all existing order creds have been processed.
+// TODO: This should not pick credentials waiting to be signed as they are only inserted with a non null batch proof.
 func (pg *Postgres) RunNextOrderJob(ctx context.Context, worker OrderWorker) (bool, error) {
 	tx, err := pg.RawDB().Beginx()
 	attempted := false
@@ -1047,4 +1116,287 @@ func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value str
 	}
 
 	return nil
+}
+
+// TimeLimitedV2Creds represent all the
+type TimeLimitedV2Creds struct {
+	OrderID     uuid.UUID                 `json:"orderId"`
+	IssuerID    uuid.UUID                 `json:"issuerId" `
+	Credentials []TimeAwareSubIssuedCreds `json:"credentials"`
+}
+
+// TimeAwareSubIssuedCreds sub issued time aware credentials
+type TimeAwareSubIssuedCreds struct {
+	OrderID      uuid.UUID                 `json:"orderId" db:"order_id"`
+	ItemID       uuid.UUID                 `json:"itemId" db:"item_id"`
+	IssuerID     uuid.UUID                 `json:"issuerId" db:"issuer_id"`
+	ValidTo      time.Time                 `json:"validTo" db:"valid_to"`
+	ValidFrom    time.Time                 `json:"validFrom" db:"valid_from"`
+	BlindedCreds jsonutils.JSONStringArray `json:"blindedCreds" db:"blinded_creds"`
+	SignedCreds  jsonutils.JSONStringArray `json:"signedCreds" db:"signed_creds"`
+	BatchProof   string                    `json:"batchProof" db:"batch_proof"`
+	PublicKey    string                    `json:"publicKey" db:"public_key"`
+}
+
+// GetTimeLimitedV2OrderCredsByOrder returns all the time limited v2 order credentials for an order single order.
+func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	query := `
+		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
+		from time_limited_v2_order_creds
+		where order_id = $1
+	`
+
+	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	timeLimitedV2Creds := TimeLimitedV2Creds{
+		OrderID:     timeAwareSubIssuedCreds[0].OrderID,
+		IssuerID:    timeAwareSubIssuedCreds[0].IssuerID,
+		Credentials: timeAwareSubIssuedCreds,
+	}
+
+	return &timeLimitedV2Creds, nil
+}
+
+// GetTimeLimitedV2OrderCredsByOrderItem returns all the order credentials for a single order item.
+func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
+	query := `
+		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
+		from time_limited_v2_order_creds
+		where item_id = $1
+	`
+
+	var timeAwareSubIssuedCreds []TimeAwareSubIssuedCreds
+	err := pg.RawDB().Select(&timeAwareSubIssuedCreds, query, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting time aware creds: %w", err)
+	}
+
+	if len(timeAwareSubIssuedCreds) == 0 {
+		return nil, nil
+	}
+
+	return &TimeLimitedV2Creds{
+		OrderID:     timeAwareSubIssuedCreds[0].OrderID,
+		IssuerID:    timeAwareSubIssuedCreds[0].IssuerID,
+		Credentials: timeAwareSubIssuedCreds,
+	}, nil
+}
+
+func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error {
+	blindedCredsJSON, err := json.Marshal(tlv2.BlindedCreds)
+	if err != nil {
+		return err
+	}
+
+	SignedCredsJSON, err := json.Marshal(tlv2.SignedCreds)
+	if err != nil {
+		return err
+	}
+
+	query := `insert into time_limited_v2_order_creds(item_id, order_id, issuer_id, blinded_creds, 
+                        signed_creds, batch_proof, public_key, valid_to, valid_from) 
+                    values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+
+	_, err = pg.ExecContext(ctx, query, tlv2.ItemID, tlv2.OrderID, tlv2.IssuerID, blindedCredsJSON,
+		SignedCredsJSON, tlv2.BatchProof, tlv2.PublicKey, tlv2.ValidTo, tlv2.ValidFrom)
+	if err != nil {
+		return fmt.Errorf("error inserting row: %w", err)
+	}
+
+	return nil
+}
+
+type SigningOrderRequestOutbox struct {
+	ID      uuid.UUID       `db:"id"`
+	OrderID uuid.UUID       `db:"order_id"`
+	Message json.RawMessage `db:"message_data" json:"message"`
+}
+
+func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
+	var signingRequestOutbox []SigningOrderRequestOutbox
+	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
+		`select id, order_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
+	}
+	return signingRequestOutbox, nil
+}
+
+func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("error insert signing order request outbox could not begin tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	for _, sor := range signingOrderRequests {
+		message, err := json.Marshal(sor)
+		if err != nil {
+			return fmt.Errorf("error marshalling signing order request: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `insert into signing_order_request_outbox(order_id, message_data) 
+											values ($1, $2)`, orderID, message)
+		if err != nil {
+			return fmt.Errorf("error inserting order request outbox row: %w", err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error insert signing order request outbox: %w", err)
+	}
+
+	return nil
+}
+
+func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error {
+	tx, err := pg.RawDB().Beginx()
+	if err != nil {
+		return fmt.Errorf("error send signing request could not begin tx: %w", err)
+	}
+	defer pg.RollbackTx(tx)
+
+	var soro SigningOrderRequestOutbox
+	err = tx.GetContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
+													where processed_at is null order by created_at asc 
+													for update skip locked limit 1`)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("error could not get signing order request outbox: %w", err)
+	}
+
+	// If there is an error writing messages we need to log here instead of returning to the job runner then we can
+	// continue to update the messages as processed.
+	err = signingRequestWriter.WriteMessage(ctx, soro.Message)
+	if err != nil {
+		logging.FromContext(ctx).Err(err).
+			Interface("orderID", soro.OrderID).
+			Interface("message", soro.Message).
+			Msg("error writing messages")
+		sentry.CaptureException(err)
+	}
+
+	result, err := tx.ExecContext(ctx, `update signing_order_request_outbox 
+											  set processed_at = now() where id = $1`, soro.ID)
+	if err != nil {
+		return fmt.Errorf("error updating outbox message: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting updated outbox message rows: %w", err)
+	}
+
+	if rows != 1 {
+		return fmt.Errorf("error updating outbox message: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("error updating signing order request outbox: %w", err)
+	}
+
+	return nil
+}
+
+func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			signedOrderResult, err := worker.FetchSignedOrderCredentials(ctx)
+			if err != nil {
+				return fmt.Errorf("error fetching signed order request: %w", err)
+			}
+
+			for _, so := range signedOrderResult.Data {
+
+				var metadata Metadata
+				err = json.Unmarshal(so.AssociatedData, &metadata)
+				if err != nil {
+					return fmt.Errorf("error desearializing associated data for requestID %s: %w",
+						signedOrderResult.RequestID, err)
+				}
+
+				if so.Status != SignedOrderStatusOk {
+					return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
+						metadata.OrderID, metadata.ItemID, metadata.IssuerID, so.Status.String())
+				}
+
+				blindedCreds := jsonutils.JSONStringArray(so.BlindedTokens)
+				if len(blindedCreds) == 0 {
+					return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s: %w",
+						metadata.OrderID, metadata.ItemID, err)
+				}
+
+				signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+				if len(signedTokens) == 0 {
+					return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s: %w",
+						metadata.OrderID, metadata.ItemID, err)
+				}
+
+				switch metadata.CredentialType {
+
+				case singleUse:
+
+					cred := &OrderCreds{
+						ID:           metadata.ItemID,
+						OrderID:      metadata.OrderID,
+						IssuerID:     metadata.IssuerID,
+						BlindedCreds: blindedCreds,
+						SignedCreds:  &signedTokens,
+						BatchProof:   ptr.FromString(so.Proof),
+						PublicKey:    ptr.FromString(so.PublicKey),
+					}
+
+					err = pg.InsertOrderCreds(ctx, cred)
+					if err != nil {
+						return fmt.Errorf("error inserting single use order credential: %w", err)
+					}
+
+				case timeLimitedV2:
+
+					validTo, err := timeutils.ParseStringToTime(so.ValidTo.Value())
+					if err != nil {
+						return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
+							metadata.OrderID, metadata.ItemID, err)
+					}
+
+					validFrom, err := timeutils.ParseStringToTime(so.ValidFrom.Value())
+					if err != nil {
+						return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
+							metadata.OrderID, metadata.ItemID, err)
+					}
+
+					cred := TimeAwareSubIssuedCreds{
+						ItemID:       metadata.ItemID,
+						OrderID:      metadata.OrderID,
+						IssuerID:     metadata.IssuerID,
+						BlindedCreds: blindedCreds,
+						SignedCreds:  signedTokens,
+						BatchProof:   so.Proof,
+						PublicKey:    so.PublicKey,
+						ValidTo:      *validTo,
+						ValidFrom:    *validFrom,
+					}
+
+					err = pg.InsertTimeLimitedV2OrderCreds(ctx, cred)
+					if err != nil {
+						return fmt.Errorf("error inserting time limited order credential: %w", err)
+					}
+
+				default:
+					return fmt.Errorf("error unknown credential type %s", metadata.CredentialType)
+				}
+			}
+		}
+		return errors.New("error no signing order result data is empty")
+	}
 }

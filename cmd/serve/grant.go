@@ -216,9 +216,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(middleware.RequestIDTransfer)
 	r.Use(middleware.HostTransfer)
 
-	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
-	// provided to us. In particular it uses the first element.
-	// Consequently we should consider the request IP as primarily "informational".
+	// NOTE: This uses standard forwarding headers, note that this puts implicit trust in the header values
+	// provided to us. In particular, it uses the first element.
+	// Consequently, we should consider the request IP as primarily "informational".
 	r.Use(chiware.RealIP)
 
 	r.Use(chiware.Heartbeat("/"))
@@ -311,7 +311,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 		logger.Panic().Err(err).Msg("Must be able to init postgres connection to start")
 	}
 
-	// skus gemini varibles
+	// skus gemini variables
 	skuCtx := context.WithValue(ctx, appctx.GeminiSettlementAddressCTXKey, viper.GetString("skus-gemini-settlement-address"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPIKeyCTXKey, viper.GetString("skus-gemini-api-key"))
 	skuCtx = context.WithValue(skuCtx, appctx.GeminiAPISecretCTXKey, viper.GetString("skus-gemini-api-secret"))
@@ -333,10 +333,10 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 
 	r.Mount("/v1/credentials", skus.CredentialRouter(skusService))
 	r.Mount("/v2/credentials", skus.CredentialV2Router(skusService))
-	r.Mount("/v1/orders", skus.Router(skusService))
+	r.Mount("/v1/orders", skus.Router(skusService, middleware.InstrumentHandler))
 	// for skus webhook integrations
 	r.Mount("/v1/webhooks", skus.WebhookRouter(skusService))
-	r.Mount("/v1/votes", skus.VoteRouter(skusService))
+	r.Mount("/v1/votes", skus.VoteRouter(skusService, middleware.InstrumentHandler))
 
 	if os.Getenv("FEATURE_MERCHANT") != "" {
 		skusDB, err := skus.NewPostgres("", true, "merch_skus_db")

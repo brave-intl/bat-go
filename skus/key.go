@@ -89,7 +89,7 @@ func GenerateSecret() (secret string, nonce string, err error) {
 }
 
 // LookupVerifier returns the merchant key corresponding to the keyID used for verifying requests
-func (service *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
+func (s *Service) LookupVerifier(ctx context.Context, keyID string) (context.Context, *httpsignature.Verifier, error) {
 	rootKeyIDStr, caveats, err := cryptography.DecodeKeyID(keyID)
 	if err != nil {
 		return nil, nil, err
@@ -100,7 +100,7 @@ func (service *Service) LookupVerifier(ctx context.Context, keyID string) (conte
 		return nil, nil, fmt.Errorf("root key id must be a uuid: %v", err)
 	}
 
-	key, err := service.Datastore.GetKey(rootKeyID, false)
+	key, err := s.Datastore.GetKey(rootKeyID, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,7 +131,7 @@ func (service *Service) LookupVerifier(ctx context.Context, keyID string) (conte
 }
 
 // MerchantSignedMiddleware requires that requests are signed by valid merchant keys
-func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handler {
+func (s *Service) MerchantSignedMiddleware() func(http.Handler) http.Handler {
 	merchantVerifier := httpsignature.ParameterizedKeystoreVerifier{
 		SignatureParams: httpsignature.SignatureParams{
 			Algorithm: httpsignature.HS2019,
@@ -139,7 +139,7 @@ func (service *Service) MerchantSignedMiddleware() func(http.Handler) http.Handl
 				"(request-target)", "host", "date", "digest", "content-length", "content-type",
 			},
 		},
-		Keystore: service,
+		Keystore: s,
 		Opts:     crypto.Hash(0),
 	}
 
@@ -180,14 +180,14 @@ func GetMerchant(ctx context.Context) (string, error) {
 
 // ValidateOrderMerchantAndCaveats checks that the current authentication of the request has
 // permissions to this order by cross-checking the merchant and caveats in context
-func (service *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
+func (s *Service) ValidateOrderMerchantAndCaveats(r *http.Request, orderID uuid.UUID) error {
 	merchant, err := GetMerchant(r.Context())
 	if err != nil {
 		return err
 	}
 	caveats := GetCaveats(r.Context())
 
-	order, err := service.Datastore.GetOrder(orderID)
+	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
 		return err
 	}
