@@ -206,12 +206,19 @@ func (suite *PostgresTestSuite) TestSendSigningRequest_Success() {
 	err = suite.storage.SendSigningRequest(ctx, signingRequestWriter)
 	suite.Require().NoError(err)
 
-	soro, err := suite.storage.GetSigningOrderRequestOutbox(ctx, metadata.OrderID)
+	// Use OutboxMessage as we don't want to expose certain fields in production code
+	type OutboxMessage struct {
+		ProcessedAt time.Time `db:"processed_at"`
+		OrderID     uuid.UUID `db:"order_id"`
+	}
+
+	var om OutboxMessage
+	err = suite.storage.RawDB().GetContext(ctx, &om,
+		`select order_id, processed_at from signing_order_request_outbox where order_id = $1`, metadata.OrderID)
 	suite.Require().NoError(err)
 
-	suite.Assert().Equal(1, len(soro))
-	suite.Assert().Equal(metadata.OrderID, soro[0].OrderID)
-	suite.Assert().True(soro[0].Ack)
+	suite.Assert().Equal(metadata.OrderID, om.OrderID)
+	suite.Assert().NotNil(om.ProcessedAt)
 }
 
 func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Success() {

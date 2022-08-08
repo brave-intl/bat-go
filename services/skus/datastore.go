@@ -19,6 +19,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
@@ -1309,7 +1310,6 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
 
 type SigningOrderRequestOutbox struct {
 	ID      uuid.UUID       `db:"id"`
-	Ack     bool            `db:"ack"`
 	OrderID uuid.UUID       `db:"order_id"`
 	Message json.RawMessage `db:"message_data" json:"message"`
 }
@@ -1317,7 +1317,7 @@ type SigningOrderRequestOutbox struct {
 func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
-		`select id, ack, order_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
+		`select id, order_id, message_data from signing_order_request_outbox where order_id = $1`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving signing request submitted results: %w", err)
 	}
@@ -1360,7 +1360,8 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 
 	var soro SigningOrderRequestOutbox
 	err = tx.GetContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
-													where ack = false for update skip locked limit 1`)
+													where processed_at is null order by created_at asc 
+													for update skip locked limit 1`)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
@@ -1368,12 +1369,19 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 		return fmt.Errorf("error could not get signing order request outbox: %w", err)
 	}
 
+	// If there is an error writing messages we need to log here instead of returning to the job runner then we can
+	// continue to update the messages as processed.
 	err = signingRequestWriter.WriteMessage(ctx, soro.Message)
 	if err != nil {
-		return fmt.Errorf("error writing signing request message to kafka: %w", err)
+		logging.FromContext(ctx).Err(err).
+			Interface("orderID", soro.OrderID).
+			Interface("message", soro.Message).
+			Msg("error writing messages")
+		sentry.CaptureException(err)
 	}
 
-	result, err := tx.ExecContext(ctx, `update signing_order_request_outbox set ack = true where id = $1`, soro.ID)
+	result, err := tx.ExecContext(ctx, `update signing_order_request_outbox 
+											  set processed_at = now() where id = $1`, soro.ID)
 	if err != nil {
 		return fmt.Errorf("error updating outbox message: %w", err)
 	}
