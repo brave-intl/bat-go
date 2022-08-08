@@ -13,6 +13,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/datastore"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -63,6 +64,9 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	r.Method("POST", "/{orderID}/transactions/uphold", middleware.InstrumentHandler("CreateUpholdTransaction", CreateUpholdTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/gemini", middleware.InstrumentHandler("CreateGeminiTransaction", CreateGeminiTransaction(service)))
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
+
+	// api routes for order receipt validation
+	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", SubmitReceipt(service)))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
@@ -1058,4 +1062,60 @@ func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler
 
 		return handlers.RenderContent(r.Context(), creds, w, status)
 	}
+}
+
+// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
+func SubmitReceipt(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              SubmitReceiptRequestV1     // the body of the request
+			orderID          = new(inputs.ID)           // the order id
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// validate the order id
+		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			validationErrMap["orderID"] = err.Error()
+		}
+
+		// read the payload
+		payload, err := requestutils.Read(r.Context(), r.Body)
+		if err != nil {
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// validate the payload
+		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// validate the receipt
+		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
+		if err != nil {
+			if errors.Is(err, errNotFound) {
+				return handlers.WrapError(err, "order not found", http.StatusNotFound)
+			}
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		// set order paid and include the vendor and external id to metadata
+		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
+			"vendor":     req.Type.String(),
+			"externalID": externalID,
+		}); err != nil {
+			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
+		}
+
+		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
+			ExternalID: externalID,
+			Vendor:     req.Type.String(),
+		}, w, http.StatusOK)
+	})
 }

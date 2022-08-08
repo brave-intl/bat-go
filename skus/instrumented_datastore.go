@@ -43,6 +43,34 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// AppendOrderMetadata implements Datastore
+func (_d DatastoreWithPrometheus) AppendOrderMetadata(ctx context.Context, up1 *uuid.UUID, s1 string, s2 string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "AppendOrderMetadata", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.AppendOrderMetadata(ctx, up1, s1, s2)
+}
+
+// BeginTx implements Datastore
+func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // CheckExpiredCheckoutSession implements Datastore
 func (_d DatastoreWithPrometheus) CheckExpiredCheckoutSession(u1 uuid.UUID) (b1 bool, s1 string, err error) {
 	_since := time.Now()
@@ -552,6 +580,20 @@ func (_d DatastoreWithPrometheus) SendSigningRequest(ctx context.Context, signin
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SendSigningRequest", result).Observe(time.Since(_since).Seconds())
 	}()
 	return _d.base.SendSigningRequest(ctx, signingRequestWriter)
+}
+
+// SetOrderPaid implements Datastore
+func (_d DatastoreWithPrometheus) SetOrderPaid(ctx context.Context, up1 *uuid.UUID) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "SetOrderPaid", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.SetOrderPaid(ctx, up1)
 }
 
 // SetOrderTrialDays implements Datastore

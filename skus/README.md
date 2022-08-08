@@ -190,6 +190,30 @@ Documentation above refers to a general use of the payment service. In the conte
 <img width="1065" alt="Screen Shot 2021-04-30 at 1 58 22 PM" src="https://user-images.githubusercontent.com/4713771/116735903-2afbf300-a9bd-11eb-97fc-a384cece6346.png">
 
 
+### Submitting a Receipt
+
+In some circumstances it is desirable to submit a receipt for a particular order to prove it was
+paid, and have the skus service handle the validation of said receipt.  Currently implemented
+there are two receipt providers of which SKUs is capable of validating payment was collected,
+android and ios.
+
+```
+curl -XPOST /v1/orders/<order_id>/submit-receipt -d '<base64 encoded json payload>'
+```
+
+The payload of the above call is a Base64 encoded string of a JSON document.  Two examples follow:
+
+```json
+{
+    "type": "ios",
+    "raw_receipt": "<vendor specific receipt string>",
+    "package": "com.brave...", // android specific,
+    "subscription_id": "brave-firewall-vpn-premium", // the sku string value of the subscription
+}
+```
+
+The and example POST payload of the API call to submit receipt is the above json base64 encoded. 
+
 ### Stripe Integration 
 
 For the stripe integration details refer to the diagram below with numbered interactions.

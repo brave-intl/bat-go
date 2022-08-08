@@ -148,6 +148,8 @@ const (
 	// RateLimitPerMinuteCTXKey - the context key for getting the rate limit
 	RateLimitPerMinuteCTXKey CTXKey = "rate_limit_per_min"
 
+	// PlaystoreJSONKeyCTXKey - the context key for playstore json key
+	PlaystoreJSONKeyCTXKey CTXKey = "playstore_json_key"
 	// ParametersMergeBucketCTXKey - the context key for getting the rate limit
 	ParametersMergeBucketCTXKey CTXKey = "merge_param_bucket"
 	// AWSRegionCTXKey - the context key for getting the rate limit

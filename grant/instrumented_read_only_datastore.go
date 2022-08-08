@@ -40,6 +40,20 @@ func NewReadOnlyDatastoreWithPrometheus(base ReadOnlyDatastore, instanceName str
 	}
 }
 
+// BeginTx implements ReadOnlyDatastore
+func (_d ReadOnlyDatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		readonlydatastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // GetGrantsOrderedByExpiry implements ReadOnlyDatastore
 func (_d ReadOnlyDatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) (ga1 []Grant, err error) {
 	_since := time.Now()

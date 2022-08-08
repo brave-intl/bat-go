@@ -14,6 +14,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
 	go_uuid "github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
 )
 
@@ -50,6 +51,10 @@ func (m *MockDatastore) CheckExpiredCheckoutSession(arg0 go_uuid.UUID) (bool, st
 	return ret0, ret1, ret2
 }
 
+func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
+	return nil, nil
+}
+
 // CheckExpiredCheckoutSession indicates an expected call of CheckExpiredCheckoutSession.
 func (mr *MockDatastoreMockRecorder) CheckExpiredCheckoutSession(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
@@ -68,6 +73,16 @@ func (m *MockDatastore) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.
 func (mr *MockDatastoreMockRecorder) CommitVote(ctx, vr, tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitVote", reflect.TypeOf((*MockDatastore)(nil).CommitVote), ctx, vr, tx)
+}
+
+// SetOrderPaid -
+func (m *MockDatastore) SetOrderPaid(context.Context, *uuid.UUID) error {
+	return nil
+}
+
+// AppendOrderMetadata -
+func (m *MockDatastore) AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error {
+	return nil
 }
 
 // CreateKey mocks base method.
