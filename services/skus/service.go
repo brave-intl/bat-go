@@ -890,6 +890,13 @@ func (s *Service) GetSingleUseCreds(ctx context.Context, order *Order) ([]OrderC
 	}
 
 	if creds != nil {
+		// TODO: Issues #1541 remove once all creds using RunOrderJob have need processed
+		for i := 0; i < len(creds); i++ {
+			if creds[i].SignedCreds == nil {
+				return nil, http.StatusAccepted, nil
+			}
+		}
+		// TODO: End
 		return creds, http.StatusOK, nil
 	}
 
