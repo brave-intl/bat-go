@@ -1417,10 +1417,13 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 	stmt := `update orders set metadata = jsonb_set(metadata, '{$1}', '$2'), updated_at = current_timestamp where id = $3`
 
 	result, err := tx.Exec(stmt, key, value, orderID.String())
+	if err != nil {
+		return fmt.Errorf("error updating order metadata %s: %w", orderID, err)
+	}
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
-		return errors.New("No rows updated")
+		return errors.New("no rows updated")
 	}
 
 	return commit()
@@ -1435,6 +1438,9 @@ func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error 
 	}
 
 	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, OrderStatusPaid, *orderID)
+	if err != nil {
+		return fmt.Errorf("error updating order %s: %w", orderID, err)
+	}
 
 	rowsAffected, err := result.RowsAffected()
 	if rowsAffected == 0 || err != nil {
