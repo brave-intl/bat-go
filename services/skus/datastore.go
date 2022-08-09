@@ -1578,7 +1578,7 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = jsonb_set(metadata, '{0,$1}', '$2'), updated_at = current_timestamp where id = $3`
+	stmt := `update orders set metadata = metadata || jsonb_build_object($1, $2), updated_at = current_timestamp where id = $3`
 
 	result, err := tx.Exec(stmt, key, value, orderID.String())
 	if err != nil {
