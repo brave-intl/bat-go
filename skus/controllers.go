@@ -66,7 +66,7 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	r.Method("POST", "/{orderID}/transactions/anonymousCard", instrumentHandler("CreateAnonCardTransaction", CreateAnonCardTransaction(service)))
 
 	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", SubmitReceipt(service)))
+	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
 
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
