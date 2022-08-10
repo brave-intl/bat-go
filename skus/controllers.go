@@ -1075,19 +1075,25 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			validationErrMap = map[string]interface{}{} // for tracking our validation errors
 		)
 
+		logger := logging.Logger(ctx, "skus").With().Str("func", "SubmitReceipt").Logger()
+
 		// validate the order id
 		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
+			logger.Warn().Err(err).Msg("Failed to decode/validate order id from url")
 			validationErrMap["orderID"] = err.Error()
 		}
 
 		// read the payload
 		payload, err := requestutils.Read(r.Context(), r.Body)
 		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to read the payload")
 			validationErrMap["request-body"] = err.Error()
 		}
 
 		// validate the payload
 		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
+			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
 			validationErrMap["request-body"] = err.Error()
 		}
 
@@ -1097,6 +1103,7 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			if errors.Is(err, errNotFound) {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)
 			}
+			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
 			validationErrMap["request-body"] = err.Error()
 		}
 
@@ -1110,6 +1117,7 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 			"vendor":     req.Type.String(),
 			"externalID": externalID,
 		}); err != nil {
+			logger.Warn().Err(err).Msg("Failed to update the order with appropriate metadata")
 			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
 		}
 
