@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	go_uuid "github.com/satori/go.uuid"
+	kafka_go "github.com/segmentio/kafka-go"
 )
 
 // MockOrderWorker is a mock of OrderWorker interface.
@@ -87,40 +88,74 @@ func (mr *MockSigningRequestWriterMockRecorder) WriteMessage(ctx, message interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessage", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessage), ctx, message)
 }
 
-// MockOrderCredentialsWorker is a mock of OrderCredentialsWorker interface.
-type MockOrderCredentialsWorker struct {
+// MockSigningResultReader is a mock of SigningResultReader interface.
+type MockSigningResultReader struct {
 	ctrl     *gomock.Controller
-	recorder *MockOrderCredentialsWorkerMockRecorder
+	recorder *MockSigningResultReaderMockRecorder
 }
 
-// MockOrderCredentialsWorkerMockRecorder is the mock recorder for MockOrderCredentialsWorker.
-type MockOrderCredentialsWorkerMockRecorder struct {
-	mock *MockOrderCredentialsWorker
+// MockSigningResultReaderMockRecorder is the mock recorder for MockSigningResultReader.
+type MockSigningResultReaderMockRecorder struct {
+	mock *MockSigningResultReader
 }
 
-// NewMockOrderCredentialsWorker creates a new mock instance.
-func NewMockOrderCredentialsWorker(ctrl *gomock.Controller) *MockOrderCredentialsWorker {
-	mock := &MockOrderCredentialsWorker{ctrl: ctrl}
-	mock.recorder = &MockOrderCredentialsWorkerMockRecorder{mock}
+// NewMockSigningResultReader creates a new mock instance.
+func NewMockSigningResultReader(ctrl *gomock.Controller) *MockSigningResultReader {
+	mock := &MockSigningResultReader{ctrl: ctrl}
+	mock.recorder = &MockSigningResultReaderMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockOrderCredentialsWorker) EXPECT() *MockOrderCredentialsWorkerMockRecorder {
+func (m *MockSigningResultReader) EXPECT() *MockSigningResultReaderMockRecorder {
 	return m.recorder
 }
 
-// FetchSignedOrderCredentials mocks base method.
-func (m *MockOrderCredentialsWorker) FetchSignedOrderCredentials(ctx context.Context) (*SigningOrderResult, error) {
+// CommitMessages mocks base method.
+func (m *MockSigningResultReader) CommitMessages(ctx context.Context, messages ...kafka_go.Message) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchSignedOrderCredentials", ctx)
+	varargs := []interface{}{ctx}
+	for _, a := range messages {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CommitMessages", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitMessages indicates an expected call of CommitMessages.
+func (mr *MockSigningResultReaderMockRecorder) CommitMessages(ctx interface{}, messages ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx}, messages...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockSigningResultReader)(nil).CommitMessages), varargs...)
+}
+
+// Decode mocks base method.
+func (m *MockSigningResultReader) Decode(message kafka_go.Message) (*SigningOrderResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Decode", message)
 	ret0, _ := ret[0].(*SigningOrderResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FetchSignedOrderCredentials indicates an expected call of FetchSignedOrderCredentials.
-func (mr *MockOrderCredentialsWorkerMockRecorder) FetchSignedOrderCredentials(ctx interface{}) *gomock.Call {
+// Decode indicates an expected call of Decode.
+func (mr *MockSigningResultReaderMockRecorder) Decode(message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchSignedOrderCredentials", reflect.TypeOf((*MockOrderCredentialsWorker)(nil).FetchSignedOrderCredentials), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Decode", reflect.TypeOf((*MockSigningResultReader)(nil).Decode), message)
+}
+
+// FetchMessage mocks base method.
+func (m *MockSigningResultReader) FetchMessage(ctx context.Context) (kafka_go.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchMessage", ctx)
+	ret0, _ := ret[0].(kafka_go.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchMessage indicates an expected call of FetchMessage.
+func (mr *MockSigningResultReaderMockRecorder) FetchMessage(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMessage", reflect.TypeOf((*MockSigningResultReader)(nil).FetchMessage), ctx)
 }

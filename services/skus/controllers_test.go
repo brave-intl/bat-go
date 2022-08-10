@@ -960,7 +960,7 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 
 	voteTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
-	kafkaOrderCredsSignedRequestReaderGroupID = test.RandomString()
+	kafkaSignedRequestReaderGroupID = test.RandomString()
 
 	ctx = skustest.SetupKafka(suite.T(), ctx, voteTopic,
 		kafkaUnsignedOrderCredsTopic, kafkaSignedOrderCredsTopic)
@@ -1431,7 +1431,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 	// setup kafka
 	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
 	kafkaSignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
-	kafkaOrderCredsSignedRequestReaderGroupID = test.RandomString()
+	kafkaSignedRequestReaderGroupID = test.RandomString()
 	ctx = skustest.SetupKafka(suite.T(), ctx, kafkaUnsignedOrderCredsTopic, kafkaSignedOrderCredsTopic)
 
 	// create macaroon token for sku and whitelist

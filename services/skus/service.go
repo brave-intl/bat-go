@@ -69,11 +69,11 @@ var (
 
 	// TODO address in kafka refactor. Check topics are correct
 	// kafka topic for requesting order credentials are signed, write to by sku service
-	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaUnsignedOrderCredsTopic = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
 
 	// kafka topic which receives order creds once they have been signed, read by sku service
-	kafkaSignedOrderCredsTopic                = os.Getenv("GRANT_CBP_SIGN_PRODUCER_TOPIC")
-	kafkaOrderCredsSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
+	kafkaSignedOrderCredsTopic      = os.Getenv("GRANT_CBP_SIGN_CONSUMER_TOPIC")
+	kafkaSignedRequestReaderGroupID = os.Getenv("KAFKA_CONSUMER_GROUP_SIGNED_ORDER_CREDENTIALS")
 )
 
 const (
@@ -93,20 +93,20 @@ const (
 
 // Service contains datastore
 type Service struct {
-	wallet                             *wallet.Service
-	cbClient                           cbr.Client
-	geminiClient                       gemini.Client
-	geminiConf                         *gemini.Conf
-	scClient                           *client.API
-	Datastore                          Datastore
-	codecs                             map[string]*goavro.Codec
-	kafkaWriter                        *kafka.Writer
-	kafkaDialer                        *kafka.Dialer
-	jobs                               []srv.Job
-	pauseVoteUntil                     time.Time
-	pauseVoteUntilMu                   sync.RWMutex
-	kafkaOrderCredsSignedRequestReader kafkautils.KafkaReader
-	retry                              backoff.RetryFunc
+	wallet                   *wallet.Service
+	cbClient                 cbr.Client
+	geminiClient             gemini.Client
+	geminiConf               *gemini.Conf
+	scClient                 *client.API
+	Datastore                Datastore
+	codecs                   map[string]*goavro.Codec
+	kafkaWriter              *kafka.Writer
+	kafkaDialer              *kafka.Dialer
+	jobs                     []srv.Job
+	pauseVoteUntil           time.Time
+	pauseVoteUntilMu         sync.RWMutex
+	kafkaSignedRequestReader kafkautils.KafkaReader
+	retry                    backoff.RetryFunc
 }
 
 // PauseWorker - pause worker until time specified
@@ -142,7 +142,7 @@ func (s *Service) InitKafka(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize kafka: %w", err)
 	}
 
-	s.kafkaOrderCredsSignedRequestReader, err = kafkautils.NewKafkaReader(ctx, kafkaOrderCredsSignedRequestReaderGroupID,
+	s.kafkaSignedRequestReader, err = kafkautils.NewKafkaReader(ctx, kafkaSignedRequestReaderGroupID,
 		kafkaSignedOrderCredsTopic)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kafka sigend order credentials reader: %w", err)
@@ -1403,7 +1403,17 @@ func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 }
 
 func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {
-	return true, s.Datastore.StoreSignedOrderCredentials(ctx, s)
+	for {
+		select {
+		case <-ctx.Done():
+			return true, ctx.Err()
+		default:
+			err := s.Datastore.StoreSignedOrderCredentials(ctx, s)
+			if err != nil {
+				return true, fmt.Errorf("error storing signed order credentails: %w", err)
+			}
+		}
+	}
 }
 
 // validateReciept - perform reciept validation

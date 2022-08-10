@@ -569,7 +569,7 @@ func (_d DatastoreWithPrometheus) SetOrderTrialDays(ctx context.Context, orderID
 }
 
 // StoreSignedOrderCredentials implements Datastore
-func (_d DatastoreWithPrometheus) StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) (err error) {
+func (_d DatastoreWithPrometheus) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) (err error) {
 	_since := time.Now()
 	defer func() {
 		result := "ok"
@@ -579,7 +579,7 @@ func (_d DatastoreWithPrometheus) StoreSignedOrderCredentials(ctx context.Contex
 
 		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "StoreSignedOrderCredentials", result).Observe(time.Since(_since).Seconds())
 	}()
-	return _d.base.StoreSignedOrderCredentials(ctx, worker)
+	return _d.base.StoreSignedOrderCredentials(ctx, reader)
 }
 
 // UpdateOrder implements Datastore
