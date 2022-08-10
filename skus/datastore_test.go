@@ -23,6 +23,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -254,15 +255,22 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SingleUse_Succes
 		},
 	}
 
-	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
-	orderCredentialsWorker.EXPECT().
-		FetchSignedOrderCredentials(ctx).
-		Return(signingOrderResult, nil).
-		AnyTimes()
+	message := kafka.Message{}
+	reader := NewMockSigningResultReader(ctrl)
+	reader.EXPECT().
+		FetchMessage(ctx).
+		Return(message, nil)
 
-	go func() {
-		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-	}()
+	reader.EXPECT().
+		Decode(message).
+		Return(signingOrderResult, nil)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
+	suite.Require().NoError(err)
 
 	time.Sleep(time.Millisecond)
 
@@ -315,15 +323,22 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_TimeAwareV2_Succ
 		},
 	}
 
-	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
-	orderCredentialsWorker.EXPECT().
-		FetchSignedOrderCredentials(ctx).
-		Return(signingOrderResult, nil).
-		AnyTimes()
+	message := kafka.Message{}
+	reader := NewMockSigningResultReader(ctrl)
+	reader.EXPECT().
+		FetchMessage(ctx).
+		Return(message, nil)
 
-	go func() {
-		_ = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
-	}()
+	reader.EXPECT().
+		Decode(message).
+		Return(signingOrderResult, nil)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
+	suite.Require().NoError(err)
 
 	time.Sleep(time.Millisecond)
 
@@ -375,13 +390,21 @@ func (suite *PostgresTestSuite) TestStoreSignedOrderCredentials_SignedOrderStatu
 		},
 	}
 
-	orderCredentialsWorker := NewMockOrderCredentialsWorker(ctrl)
-	orderCredentialsWorker.EXPECT().
-		FetchSignedOrderCredentials(ctx).
-		Return(signingOrderResult, nil).
-		AnyTimes()
+	message := kafka.Message{}
+	reader := NewMockSigningResultReader(ctrl)
+	reader.EXPECT().
+		FetchMessage(ctx).
+		Return(message, nil)
 
-	err = suite.storage.StoreSignedOrderCredentials(ctx, orderCredentialsWorker)
+	reader.EXPECT().
+		Decode(message).
+		Return(signingOrderResult, nil)
+
+	reader.EXPECT().
+		CommitMessages(ctx, message).
+		Return(nil)
+
+	err = suite.storage.StoreSignedOrderCredentials(ctx, reader)
 
 	suite.Assert().EqualError(err, fmt.Sprintf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
 		metadata.OrderID, metadata.ItemID, metadata.IssuerID, SignedOrderStatusError.String()))

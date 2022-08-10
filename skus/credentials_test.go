@@ -14,7 +14,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mock_cbr "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
-	mockdialer "github.com/brave-intl/bat-go/utils/kafka/mock"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/brave-intl/bat-go/utils/test"
 	"github.com/golang/mock/gomock"
@@ -231,68 +230,24 @@ func TestIssuerID(t *testing.T) {
 	}
 }
 
-func TestFetchSignedOrderCredentials_KafkaError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
-
-	ctx := context.Background()
-	err := errors.New(uuid.NewV4().String())
-
-	kafkaReader.EXPECT().
-		ReadMessage(gomock.Eq(ctx)).
-		Return(kafka.Message{}, err)
-
-	s := Service{
-		kafkaOrderCredsSignedRequestReader: kafkaReader,
-	}
-
-	expected := fmt.Errorf("read message: error reading kafka message %w", err)
-
-	signingOrderResult, actual := s.FetchSignedOrderCredentials(ctx)
-
-	assert.Nil(t, signingOrderResult)
-	assert.EqualError(t, actual, expected.Error())
-}
-
-func TestFetchSignedOrderCredentials_CodecError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
-
-	ctx := context.Background()
-
-	kafkaReader.EXPECT().
-		ReadMessage(gomock.Eq(ctx)).
-		Return(kafka.Message{}, nil)
-
+func TestDecodeSignedOrderCredentials_CodecError(t *testing.T) {
 	codec := make(map[string]*goavro.Codec)
-
-	s := Service{
-		codecs:                             codec,
-		kafkaOrderCredsSignedRequestReader: kafkaReader,
-	}
+	s := Service{codecs: codec}
 
 	expected := fmt.Errorf("read message: could not find codec %s", kafkaSignedOrderCredsTopic)
 
-	signingOrderResult, actual := s.FetchSignedOrderCredentials(ctx)
+	signingOrderResult, actual := s.Decode(kafka.Message{})
 
 	assert.Nil(t, signingOrderResult)
 	assert.EqualError(t, actual, expected.Error())
 }
 
-func TestFetchSignedOrderCredentials_Success(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
+func TestDecodeSignedOrderCredentials_Success(t *testing.T) {
 	codecs, err := kafkautils.GenerateCodecs(map[string]string{
 		kafkaSignedOrderCredsTopic: signingOrderResultSchema,
 	})
 	require.NoError(t, err)
 
-	ctx := context.Background()
 	msg := makeMsg()
 
 	textual, err := json.Marshal(msg)
@@ -309,17 +264,9 @@ func TestFetchSignedOrderCredentials_Success(t *testing.T) {
 		Value: binary,
 	}
 
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
-	kafkaReader.EXPECT().
-		ReadMessage(gomock.Eq(ctx)).
-		Return(message, nil)
+	s := Service{codecs: codecs}
 
-	s := Service{
-		codecs:                             codecs,
-		kafkaOrderCredsSignedRequestReader: kafkaReader,
-	}
-
-	actual, err := s.FetchSignedOrderCredentials(ctx)
+	actual, err := s.Decode(message)
 	require.NoError(t, err)
 
 	assert.Equal(t, msg, actual)

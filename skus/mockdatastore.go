@@ -14,7 +14,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	sqlx "github.com/jmoiron/sqlx"
 	go_uuid "github.com/satori/go.uuid"
-	uuid "github.com/satori/go.uuid"
 	decimal "github.com/shopspring/decimal"
 )
 
@@ -41,6 +40,35 @@ func (m *MockDatastore) EXPECT() *MockDatastoreMockRecorder {
 	return m.recorder
 }
 
+// AppendOrderMetadata mocks base method.
+func (m *MockDatastore) AppendOrderMetadata(arg0 context.Context, arg1 *go_uuid.UUID, arg2, arg3 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendOrderMetadata", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendOrderMetadata indicates an expected call of AppendOrderMetadata.
+func (mr *MockDatastoreMockRecorder) AppendOrderMetadata(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendOrderMetadata", reflect.TypeOf((*MockDatastore)(nil).AppendOrderMetadata), arg0, arg1, arg2, arg3)
+}
+
+// BeginTx mocks base method.
+func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeginTx")
+	ret0, _ := ret[0].(*sqlx.Tx)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BeginTx indicates an expected call of BeginTx.
+func (mr *MockDatastoreMockRecorder) BeginTx() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginTx", reflect.TypeOf((*MockDatastore)(nil).BeginTx))
+}
+
 // CheckExpiredCheckoutSession mocks base method.
 func (m *MockDatastore) CheckExpiredCheckoutSession(arg0 go_uuid.UUID) (bool, string, error) {
 	m.ctrl.T.Helper()
@@ -49,10 +77,6 @@ func (m *MockDatastore) CheckExpiredCheckoutSession(arg0 go_uuid.UUID) (bool, st
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
-}
-
-func (m *MockDatastore) BeginTx() (*sqlx.Tx, error) {
-	return nil, nil
 }
 
 // CheckExpiredCheckoutSession indicates an expected call of CheckExpiredCheckoutSession.
@@ -73,16 +97,6 @@ func (m *MockDatastore) CommitVote(ctx context.Context, vr VoteRecord, tx *sqlx.
 func (mr *MockDatastoreMockRecorder) CommitVote(ctx, vr, tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitVote", reflect.TypeOf((*MockDatastore)(nil).CommitVote), ctx, vr, tx)
-}
-
-// SetOrderPaid -
-func (m *MockDatastore) SetOrderPaid(context.Context, *uuid.UUID) error {
-	return nil
-}
-
-// AppendOrderMetadata -
-func (m *MockDatastore) AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error {
-	return nil
 }
 
 // CreateKey mocks base method.
@@ -603,6 +617,20 @@ func (mr *MockDatastoreMockRecorder) SendSigningRequest(ctx, signingRequestWrite
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendSigningRequest", reflect.TypeOf((*MockDatastore)(nil).SendSigningRequest), ctx, signingRequestWriter)
 }
 
+// SetOrderPaid mocks base method.
+func (m *MockDatastore) SetOrderPaid(arg0 context.Context, arg1 *go_uuid.UUID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetOrderPaid", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetOrderPaid indicates an expected call of SetOrderPaid.
+func (mr *MockDatastoreMockRecorder) SetOrderPaid(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOrderPaid", reflect.TypeOf((*MockDatastore)(nil).SetOrderPaid), arg0, arg1)
+}
+
 // SetOrderTrialDays mocks base method.
 func (m *MockDatastore) SetOrderTrialDays(ctx context.Context, orderID *go_uuid.UUID, days int64) (*Order, error) {
 	m.ctrl.T.Helper()
@@ -619,17 +647,17 @@ func (mr *MockDatastoreMockRecorder) SetOrderTrialDays(ctx, orderID, days interf
 }
 
 // StoreSignedOrderCredentials mocks base method.
-func (m *MockDatastore) StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error {
+func (m *MockDatastore) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreSignedOrderCredentials", ctx, worker)
+	ret := m.ctrl.Call(m, "StoreSignedOrderCredentials", ctx, reader)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StoreSignedOrderCredentials indicates an expected call of StoreSignedOrderCredentials.
-func (mr *MockDatastoreMockRecorder) StoreSignedOrderCredentials(ctx, worker interface{}) *gomock.Call {
+func (mr *MockDatastoreMockRecorder) StoreSignedOrderCredentials(ctx, reader interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreSignedOrderCredentials", reflect.TypeOf((*MockDatastore)(nil).StoreSignedOrderCredentials), ctx, worker)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreSignedOrderCredentials", reflect.TypeOf((*MockDatastore)(nil).StoreSignedOrderCredentials), ctx, reader)
 }
 
 // UpdateOrder mocks base method.

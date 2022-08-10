@@ -24,6 +24,8 @@ import (
 // KafkaReader - reader interface
 type KafkaReader interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, messages ...kafka.Message) error
 }
 
 // Reader - implements KafkaReader
@@ -65,6 +67,17 @@ func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader,
 // ReadMessage - reads kafka messages
 func (k *Reader) ReadMessage(ctx context.Context) (kafka.Message, error) {
 	return k.kafkaReader.ReadMessage(ctx)
+}
+
+// FetchMessage reads and return the next message.
+// FetchMessage does not commit offsets automatically when using consumer groups.
+func (k *Reader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	return k.kafkaReader.FetchMessage(ctx)
+}
+
+// CommitMessages commits the list of messages passed as argument.
+func (k *Reader) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
+	return k.kafkaReader.CommitMessages(ctx, messages...)
 }
 
 // TLSDialer creates a Kafka dialer over TLS. The function requires

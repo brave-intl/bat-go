@@ -82,7 +82,7 @@ type Datastore interface {
 	GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*TimeLimitedV2Creds, error)
 	InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error
 	SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error
-	StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error
+	StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error
 	GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error)
 	InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error
 	SetOrderPaid(context.Context, *uuid.UUID) error
@@ -1310,100 +1310,112 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	return nil
 }
 
-func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, worker OrderCredentialsWorker) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			signedOrderResult, err := worker.FetchSignedOrderCredentials(ctx)
-			if err != nil {
-				return fmt.Errorf("error fetching signed order request: %w", err)
-			}
-
-			for _, so := range signedOrderResult.Data {
-
-				var metadata Metadata
-				err = json.Unmarshal(so.AssociatedData, &metadata)
-				if err != nil {
-					return fmt.Errorf("error desearializing associated data for requestID %s: %w",
-						signedOrderResult.RequestID, err)
-				}
-
-				if so.Status != SignedOrderStatusOk {
-					return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
-						metadata.OrderID, metadata.ItemID, metadata.IssuerID, so.Status.String())
-				}
-
-				blindedCreds := jsonutils.JSONStringArray(so.BlindedTokens)
-				if len(blindedCreds) == 0 {
-					return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s: %w",
-						metadata.OrderID, metadata.ItemID, err)
-				}
-
-				signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
-				if len(signedTokens) == 0 {
-					return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s: %w",
-						metadata.OrderID, metadata.ItemID, err)
-				}
-
-				switch metadata.CredentialType {
-
-				case singleUse:
-
-					cred := &OrderCreds{
-						ID:           metadata.ItemID,
-						OrderID:      metadata.OrderID,
-						IssuerID:     metadata.IssuerID,
-						BlindedCreds: blindedCreds,
-						SignedCreds:  &signedTokens,
-						BatchProof:   ptr.FromString(so.Proof),
-						PublicKey:    ptr.FromString(so.PublicKey),
-					}
-
-					err = pg.InsertOrderCreds(ctx, cred)
-					if err != nil {
-						return fmt.Errorf("error inserting single use order credential: %w", err)
-					}
-
-				case timeLimitedV2:
-
-					validTo, err := timeutils.ParseStringToTime(so.ValidTo.Value())
-					if err != nil {
-						return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
-							metadata.OrderID, metadata.ItemID, err)
-					}
-
-					validFrom, err := timeutils.ParseStringToTime(so.ValidFrom.Value())
-					if err != nil {
-						return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
-							metadata.OrderID, metadata.ItemID, err)
-					}
-
-					cred := TimeAwareSubIssuedCreds{
-						ItemID:       metadata.ItemID,
-						OrderID:      metadata.OrderID,
-						IssuerID:     metadata.IssuerID,
-						BlindedCreds: blindedCreds,
-						SignedCreds:  signedTokens,
-						BatchProof:   so.Proof,
-						PublicKey:    so.PublicKey,
-						ValidTo:      *validTo,
-						ValidFrom:    *validFrom,
-					}
-
-					err = pg.InsertTimeLimitedV2OrderCreds(ctx, cred)
-					if err != nil {
-						return fmt.Errorf("error inserting time limited order credential: %w", err)
-					}
-
-				default:
-					return fmt.Errorf("error unknown credential type %s", metadata.CredentialType)
-				}
-			}
-		}
-		return errors.New("error no signing order result data is empty")
+func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
+	message, err := reader.FetchMessage(ctx)
+	if err != nil {
+		return fmt.Errorf("error fetching signed order request: %w", err)
 	}
+	defer func() {
+		err := reader.CommitMessages(ctx, message)
+		logging.FromContext(ctx).Err(err).
+			Str("key", string(message.Key)).
+			Int("partition", message.Partition).
+			Int64("offset", message.Offset).
+			Msg("error committing kafka message")
+	}()
+
+	signedOrderResult, err := reader.Decode(message)
+	if err != nil {
+		return fmt.Errorf("error fetching signed order request: %w", err)
+	}
+
+	if len(signedOrderResult.Data) == 0 {
+		return fmt.Errorf("error no signing order result is empty for requestID %s",
+			signedOrderResult.RequestID)
+	}
+
+	for _, so := range signedOrderResult.Data {
+
+		var metadata Metadata
+		err = json.Unmarshal(so.AssociatedData, &metadata)
+		if err != nil {
+			return fmt.Errorf("error desearializing associated data for requestID %s: %w",
+				signedOrderResult.RequestID, err)
+		}
+
+		if so.Status != SignedOrderStatusOk {
+			return fmt.Errorf("error signing order creds for orderID %s itemID %s issuerID %s status %s",
+				metadata.OrderID, metadata.ItemID, metadata.IssuerID, so.Status.String())
+		}
+
+		blindedCreds := jsonutils.JSONStringArray(so.BlindedTokens)
+		if len(blindedCreds) == 0 {
+			return fmt.Errorf("error blinded tokens is empty order creds orderID %s itemID %s: %w",
+				metadata.OrderID, metadata.ItemID, err)
+		}
+
+		signedTokens := jsonutils.JSONStringArray(so.SignedTokens)
+		if len(signedTokens) == 0 {
+			return fmt.Errorf("error signed tokens is empty order creds orderID %s itemID %s: %w",
+				metadata.OrderID, metadata.ItemID, err)
+		}
+
+		switch metadata.CredentialType {
+
+		case singleUse:
+
+			cred := &OrderCreds{
+				ID:           metadata.ItemID,
+				OrderID:      metadata.OrderID,
+				IssuerID:     metadata.IssuerID,
+				BlindedCreds: blindedCreds,
+				SignedCreds:  &signedTokens,
+				BatchProof:   ptr.FromString(so.Proof),
+				PublicKey:    ptr.FromString(so.PublicKey),
+			}
+
+			err = pg.InsertOrderCreds(ctx, cred)
+			if err != nil {
+				return fmt.Errorf("error inserting single use order credential: %w", err)
+			}
+
+		case timeLimitedV2:
+
+			validTo, err := timeutils.ParseStringToTime(so.ValidTo.Value())
+			if err != nil {
+				return fmt.Errorf("error parsing validTo for order creds orderID %s itemID %s: %w",
+					metadata.OrderID, metadata.ItemID, err)
+			}
+
+			validFrom, err := timeutils.ParseStringToTime(so.ValidFrom.Value())
+			if err != nil {
+				return fmt.Errorf("error parsing validFrom for order creds orderID %s itemID %s: %w",
+					metadata.OrderID, metadata.ItemID, err)
+			}
+
+			cred := TimeAwareSubIssuedCreds{
+				ItemID:       metadata.ItemID,
+				OrderID:      metadata.OrderID,
+				IssuerID:     metadata.IssuerID,
+				BlindedCreds: blindedCreds,
+				SignedCreds:  signedTokens,
+				BatchProof:   so.Proof,
+				PublicKey:    so.PublicKey,
+				ValidTo:      *validTo,
+				ValidFrom:    *validFrom,
+			}
+
+			err = pg.InsertTimeLimitedV2OrderCreds(ctx, cred)
+			if err != nil {
+				return fmt.Errorf("error inserting time limited order credential: %w", err)
+			}
+
+		default:
+			return fmt.Errorf("error unknown credential type %s", metadata.CredentialType)
+		}
+	}
+
+	return nil
 }
 
 // AppendOrderMetadata appends a key value pair to an order's metadata

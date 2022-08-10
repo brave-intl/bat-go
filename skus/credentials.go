@@ -334,16 +334,21 @@ func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 	return nil
 }
 
-type OrderCredentialsWorker interface {
-	FetchSignedOrderCredentials(ctx context.Context) (*SigningOrderResult, error)
+type SigningResultReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, messages ...kafka.Message) error
+	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
-func (s *Service) FetchSignedOrderCredentials(ctx context.Context) (*SigningOrderResult, error) {
-	message, err := s.kafkaOrderCredsSignedRequestReader.ReadMessage(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read message: error reading kafka message %w", err)
-	}
+func (s *Service) FetchMessage(ctx context.Context) (kafka.Message, error) {
+	return s.kafkaSignedRequestReader.FetchMessage(ctx)
+}
 
+func (s *Service) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
+	return s.kafkaSignedRequestReader.CommitMessages(ctx, messages...)
+}
+
+func (s *Service) Decode(message kafka.Message) (*SigningOrderResult, error) {
 	codec, ok := s.codecs[kafkaSignedOrderCredsTopic]
 	if !ok {
 		return nil, fmt.Errorf("read message: could not find codec %s", kafkaSignedOrderCredsTopic)
