@@ -67,10 +67,11 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 	if androidClient != nil {
 		// FIXME: what is package and subscription id
 		if v, ok := receipt.(SubmitReceiptRequestV1); ok {
+			logger.Debug().Str("receipt", fmt.Sprintf("%+v", v)).Msg("about to verify subscription")
 			// handle v1 receipt type
 			resp, err := androidClient.VerifySubscription(ctx, v.Package, v.SubscriptionID, v.Blob)
 			if err != nil {
-				logger.Error().Err(err).Msg("client is not configured")
+				logger.Error().Err(err).Msg("failed to verify subscription")
 				return "", fmt.Errorf("failed to verify subscription: %w", err)
 			}
 			return resp.OrderId, nil

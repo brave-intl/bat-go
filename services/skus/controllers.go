@@ -1234,6 +1234,8 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 				// unknown error
 				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
 			}
+			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
+			validationErrMap["request-body"] = err.Error()
 		}
 
 		// if we had any validation errors, return the validation error map to the caller
