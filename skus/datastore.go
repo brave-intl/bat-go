@@ -1317,11 +1317,14 @@ func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader Sign
 	}
 	defer func() {
 		err := reader.CommitMessages(ctx, message)
-		logging.FromContext(ctx).Err(err).
-			Str("key", string(message.Key)).
-			Int("partition", message.Partition).
-			Int64("offset", message.Offset).
-			Msg("error committing kafka message")
+		if err != nil {
+			logging.FromContext(ctx).Err(err).
+				Str("key", string(message.Key)).
+				Int("partition", message.Partition).
+				Int64("offset", message.Offset).
+				Msg("error committing kafka message")
+			sentry.CaptureException(err)
+		}
 	}()
 
 	signedOrderResult, err := reader.Decode(message)
