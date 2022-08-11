@@ -1190,6 +1190,7 @@ func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrderItem(itemID uuid.UUID) (*Ti
 	}, nil
 }
 
+// InsertTimeLimitedV2OrderCreds - insertion of time aware credentials
 func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 TimeAwareSubIssuedCreds) error {
 	blindedCredsJSON, err := json.Marshal(tlv2.BlindedCreds)
 
@@ -1215,12 +1216,14 @@ func (pg *Postgres) InsertTimeLimitedV2OrderCreds(ctx context.Context, tlv2 Time
 	return nil
 }
 
+// SigningOrderRequestOutbox - model for the signing request outbox
 type SigningOrderRequestOutbox struct {
 	ID      uuid.UUID       `db:"id"`
 	OrderID uuid.UUID       `db:"order_id"`
 	Message json.RawMessage `db:"message_data" json:"message"`
 }
 
+// GetSigningOrderRequestOutbox - get a message from the outbox
 func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID) ([]SigningOrderRequestOutbox, error) {
 	var signingRequestOutbox []SigningOrderRequestOutbox
 	err := pg.RawDB().SelectContext(ctx, &signingRequestOutbox,
@@ -1231,6 +1234,7 @@ func (pg *Postgres) GetSigningOrderRequestOutbox(ctx context.Context, orderID uu
 	return signingRequestOutbox, nil
 }
 
+// InsertSigningOrderRequestOutbox - insert the signing order request into the outbox
 func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID uuid.UUID, signingOrderRequests []SigningOrderRequest) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
@@ -1258,6 +1262,7 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID
 	return nil
 }
 
+// SendSigningRequest - send the signing request to cb via kafka
 func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
@@ -1310,6 +1315,7 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	return nil
 }
 
+// StoreSignedOrderCredentials - write the order credentials to database
 func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
 	message, err := reader.FetchMessage(ctx)
 	if err != nil {

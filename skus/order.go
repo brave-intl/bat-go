@@ -131,13 +131,14 @@ func decodeAndUnmarshalSku(sku string) (*macaroon.Macaroon, error) {
 	return mac, nil
 }
 
-type issuerConfig struct {
+// IssuerConfig - the configuration of an issuer
+type IssuerConfig struct {
 	buffer  int
 	overlap int
 }
 
 // CreateOrderItemFromMacaroon creates an order item from a macaroon
-func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, *issuerConfig, error) {
+func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, quantity int) (*OrderItem, *Methods, *IssuerConfig, error) {
 	sublogger := logging.Logger(ctx, "CreateOrderItemFromMacaroon")
 
 	// validation prior to decoding/unmarshalling
@@ -168,7 +169,7 @@ func (s *Service) CreateOrderItemFromMacaroon(ctx context.Context, sku string, q
 	orderItem.Location.String = mac.Location()
 	orderItem.Location.Valid = true
 
-	issuerConfig := &issuerConfig{
+	issuerConfig := &IssuerConfig{
 		buffer:  defaultBuffer,
 		overlap: defaultOverlap,
 	}

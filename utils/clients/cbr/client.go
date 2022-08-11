@@ -73,6 +73,7 @@ func (c *HTTPClient) CreateIssuer(ctx context.Context, issuer string, maxTokens 
 	return err
 }
 
+// IssuerRequest - create a new issuer request structure
 type IssuerRequest struct {
 	Name      string     `json:"name"`
 	Version   int        `json:"version"`
@@ -122,6 +123,7 @@ type CredentialsIssueResponse struct {
 	SignedTokens []string `json:"signed_tokens"`
 }
 
+// GetIssuerV2 - get a v2 issuer from CB
 func (c *HTTPClient) GetIssuerV2(ctx context.Context, issuer string, cohort int16) (*IssuerResponse, error) {
 	payload := struct {
 		Cohort int16 `json:"cohort"`

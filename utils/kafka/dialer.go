@@ -21,14 +21,14 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
-// KafkaReader - reader interface
-type KafkaReader interface {
+// Messager - kafka message helper functions
+type Messager interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
 }
 
-// Reader - implements KafkaReader
+// Reader - structure of a reader
 type Reader struct {
 	kafkaReader *kafka.Reader
 	kafkaDialer *kafka.Dialer

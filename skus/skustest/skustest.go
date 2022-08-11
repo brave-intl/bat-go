@@ -3,20 +3,22 @@ package skustest
 
 import (
 	"context"
+	"os"
+	"strings"
+	"testing"
+
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	"github.com/jmoiron/sqlx"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"strings"
-	"testing"
 )
 
 var tables = []string{"vote_drain", "api_keys", "transactions", "signing_order_request_outbox",
 	"time_limited_v2_order_creds", "order_creds", "order_cred_issuers", "order_items", "orders"}
 
+// Migrate - perform a migration for skus
 func Migrate(t *testing.T) {
 	postgres, err := grantserver.NewPostgres("", false, "skus_db")
 	assert.NoError(t, err)
@@ -37,6 +39,7 @@ func Migrate(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// CleanDB - clean up the test db fixtures
 func CleanDB(t *testing.T, datastore *sqlx.DB) {
 	for _, table := range tables {
 		_, err := datastore.Exec("delete from " + table)
@@ -45,7 +48,7 @@ func CleanDB(t *testing.T, datastore *sqlx.DB) {
 }
 
 // SetupKafka is a test helper to setup kafka brokers and topic
-func SetupKafka(t *testing.T, ctx context.Context, topics ...string) context.Context {
+func SetupKafka(ctx context.Context, t *testing.T, topics ...string) context.Context {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	ctx = context.WithValue(ctx, appctx.KafkaBrokersCTXKey, kafkaBrokers)
 
