@@ -111,7 +111,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon() {
 	suite.Require().NoError(err)
 
 	suite.assertSuccess(orderItem, apm, issuerConf,
-		issuerConfig{buffer: defaultBuffer, overlap: defaultOverlap})
+		IssuerConfig{buffer: defaultBuffer, overlap: defaultOverlap})
 
 	badSku, err := t.Generate("321testing")
 	suite.Require().NoError(err)
@@ -130,7 +130,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 	_, err = suite.service.Datastore.CreateKey("brave.com", "brave.com", hex.EncodeToString(cipher), hex.EncodeToString(nonce[:]))
 	suite.Require().NoError(err)
 
-	expectedIC := issuerConfig{buffer: test.RandomInt(), overlap: test.RandomInt()}
+	expectedIC := IssuerConfig{buffer: test.RandomInt(), overlap: test.RandomInt()}
 
 	c := macarooncmd.Caveats{
 		"sku":                     "sku",
@@ -170,7 +170,7 @@ func (suite *OrderTestSuite) TestCreateOrderItemFromMacaroon_WithBufferAndOverla
 	suite.assertSuccess(orderItem, apm, issuerConf, expectedIC)
 }
 
-func (suite *OrderTestSuite) assertSuccess(orderItem *OrderItem, apm *Methods, issuerConf *issuerConfig, expectedIssuerConf issuerConfig) {
+func (suite *OrderTestSuite) assertSuccess(orderItem *OrderItem, apm *Methods, issuerConf *IssuerConfig, expectedIssuerConf IssuerConfig) {
 	suite.Assert().Equal("stripe", strings.Join(*apm, ","))
 	suite.Assert().Equal("usd", orderItem.Currency)
 	suite.Assert().Equal("sku", orderItem.SKU)
