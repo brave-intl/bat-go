@@ -163,4 +163,4 @@ format-lint:
 	make format && make lint
 
 lint:
-	golangci-lint run -E gofmt -E revive --exclude-use-default=false
+	golangci-lint run -v ./...
