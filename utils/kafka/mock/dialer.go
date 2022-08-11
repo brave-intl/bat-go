@@ -12,31 +12,31 @@ import (
 	kafka "github.com/segmentio/kafka-go"
 )
 
-// MockKafkaReader is a mock of KafkaReader interface.
-type MockKafkaReader struct {
+// MockConsumer is a mock of Consumer interface.
+type MockConsumer struct {
 	ctrl     *gomock.Controller
-	recorder *MockKafkaReaderMockRecorder
+	recorder *MockConsumerMockRecorder
 }
 
-// MockKafkaReaderMockRecorder is the mock recorder for MockKafkaReader.
-type MockKafkaReaderMockRecorder struct {
-	mock *MockKafkaReader
+// MockConsumerMockRecorder is the mock recorder for MockConsumer.
+type MockConsumerMockRecorder struct {
+	mock *MockConsumer
 }
 
-// NewMockKafkaReader creates a new mock instance.
-func NewMockKafkaReader(ctrl *gomock.Controller) *MockKafkaReader {
-	mock := &MockKafkaReader{ctrl: ctrl}
-	mock.recorder = &MockKafkaReaderMockRecorder{mock}
+// NewMockConsumer creates a new mock instance.
+func NewMockConsumer(ctrl *gomock.Controller) *MockConsumer {
+	mock := &MockConsumer{ctrl: ctrl}
+	mock.recorder = &MockConsumerMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockKafkaReader) EXPECT() *MockKafkaReaderMockRecorder {
+func (m *MockConsumer) EXPECT() *MockConsumerMockRecorder {
 	return m.recorder
 }
 
 // CommitMessages mocks base method.
-func (m *MockKafkaReader) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
+func (m *MockConsumer) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx}
 	for _, a := range messages {
@@ -48,14 +48,14 @@ func (m *MockKafkaReader) CommitMessages(ctx context.Context, messages ...kafka.
 }
 
 // CommitMessages indicates an expected call of CommitMessages.
-func (mr *MockKafkaReaderMockRecorder) CommitMessages(ctx interface{}, messages ...interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) CommitMessages(ctx interface{}, messages ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx}, messages...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockKafkaReader)(nil).CommitMessages), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitMessages", reflect.TypeOf((*MockConsumer)(nil).CommitMessages), varargs...)
 }
 
 // FetchMessage mocks base method.
-func (m *MockKafkaReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+func (m *MockConsumer) FetchMessage(ctx context.Context) (kafka.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchMessage", ctx)
 	ret0, _ := ret[0].(kafka.Message)
@@ -64,13 +64,13 @@ func (m *MockKafkaReader) FetchMessage(ctx context.Context) (kafka.Message, erro
 }
 
 // FetchMessage indicates an expected call of FetchMessage.
-func (mr *MockKafkaReaderMockRecorder) FetchMessage(ctx interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) FetchMessage(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMessage", reflect.TypeOf((*MockKafkaReader)(nil).FetchMessage), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMessage", reflect.TypeOf((*MockConsumer)(nil).FetchMessage), ctx)
 }
 
 // ReadMessage mocks base method.
-func (m *MockKafkaReader) ReadMessage(ctx context.Context) (kafka.Message, error) {
+func (m *MockConsumer) ReadMessage(ctx context.Context) (kafka.Message, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadMessage", ctx)
 	ret0, _ := ret[0].(kafka.Message)
@@ -79,7 +79,7 @@ func (m *MockKafkaReader) ReadMessage(ctx context.Context) (kafka.Message, error
 }
 
 // ReadMessage indicates an expected call of ReadMessage.
-func (mr *MockKafkaReaderMockRecorder) ReadMessage(ctx interface{}) *gomock.Call {
+func (mr *MockConsumerMockRecorder) ReadMessage(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadMessage", reflect.TypeOf((*MockKafkaReader)(nil).ReadMessage), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadMessage", reflect.TypeOf((*MockConsumer)(nil).ReadMessage), ctx)
 }

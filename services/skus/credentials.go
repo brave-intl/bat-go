@@ -12,6 +12,13 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/utils/context"
+	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/segmentio/kafka-go"
@@ -22,6 +29,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 )
 
 const (

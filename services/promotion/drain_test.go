@@ -38,7 +38,7 @@ func TestReadMessage_KafkaError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 
 	ctx := context.Background()
 	err := errors.New(uuid.NewV4().String())
@@ -63,7 +63,7 @@ func TestReadMessage_CodecError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 
 	ctx := context.Background()
 
@@ -114,7 +114,7 @@ func TestReadMessage_WalletIDInvalidError(t *testing.T) {
 		Value: binary,
 	}
 
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 	kafkaReader.EXPECT().
 		ReadMessage(gomock.Eq(ctx)).
 		Return(message, nil)
@@ -159,7 +159,7 @@ func TestReadMessage_Success(t *testing.T) {
 		Value: binary,
 	}
 
-	kafkaReader := mockdialer.NewMockKafkaReader(ctrl)
+	kafkaReader := mockdialer.NewMockConsumer(ctrl)
 	kafkaReader.EXPECT().
 		ReadMessage(gomock.Eq(ctx)).
 		Return(message, nil)

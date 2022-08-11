@@ -105,7 +105,7 @@ type Service struct {
 	jobs                     []srv.Job
 	pauseVoteUntil           time.Time
 	pauseVoteUntilMu         sync.RWMutex
-	kafkaSignedRequestReader kafkautils.Messager
+	kafkaSignedRequestReader kafkautils.Consumer
 	retry                    backoff.RetryFunc
 }
 

@@ -21,20 +21,20 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 )
 
-// Messager - kafka message helper functions
-type Messager interface {
+// Consumer defines methods for consuming kafka messages.
+type Consumer interface {
 	ReadMessage(ctx context.Context) (kafka.Message, error)
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
 }
 
-// Reader - structure of a reader
+// Reader is an implementation of the kafka.Consumer interface.
 type Reader struct {
 	kafkaReader *kafka.Reader
 	kafkaDialer *kafka.Dialer
 }
 
-// NewKafkaReader - creates a new kafka reader for groupID and topic
+// NewKafkaReader creates a new kafka reader for groupID and topic.
 func NewKafkaReader(ctx context.Context, groupID string, topic string) (*Reader, error) {
 	logger := logging.Logger(ctx, "kafka.NewKafkaReader")
 

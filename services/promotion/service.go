@@ -125,7 +125,7 @@ type Service struct {
 	codecs                      map[string]*goavro.Codec
 	kafkaWriter                 *kafka.Writer
 	kafkaDialer                 *kafka.Dialer
-	kafkaAdminAttestationReader kafkautils.Messager
+	kafkaAdminAttestationReader kafkautils.Consumer
 	hotWallet                   *uphold.Wallet
 	drainChannel                chan *w.TransactionInfo
 	jobs                        []srv.Job
