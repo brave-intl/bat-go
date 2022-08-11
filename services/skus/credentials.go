@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"time"
+
 	"github.com/brave-intl/bat-go/utils/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/segmentio/kafka-go"
-	"net/http"
-	"net/url"
-	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -33,6 +34,7 @@ var (
 	nonRetriableErrors = []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError, http.StatusConflict}
 )
 
+// ErrOrderUnpaid - unpaid order variable
 var ErrOrderUnpaid = errors.New("order not paid")
 
 // Issuer includes information about a particular credential issuer
@@ -101,7 +103,7 @@ func (s *Service) CreateIssuer(ctx context.Context, merchantID string, orderItem
 }
 
 // CreateIssuerV3 creates a new v3 issuer if it does not exist. This only happens in the event of a new sku being created.
-func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig issuerConfig) error {
+func (s *Service) CreateIssuerV3(ctx context.Context, merchantID string, orderItem OrderItem, issuerConfig IssuerConfig) error {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	if err != nil {
 		return errorutils.Wrap(err, "error encoding issuer name")
@@ -215,6 +217,7 @@ type TimeLimitedCreds struct {
 	Token     string    `json:"token"`
 }
 
+// CreateOrderCredentials - create the order credentials if order is paid
 func (s *Service) CreateOrderCredentials(ctx context.Context, orderID uuid.UUID, blindedCreds []string) error {
 	order, err := s.Datastore.GetOrder(orderID)
 	if err != nil {
@@ -308,10 +311,12 @@ func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer 
 	return creds, nil
 }
 
+// SigningRequestWriter - defines capabilities of a signing request writer
 type SigningRequestWriter interface {
 	WriteMessage(ctx context.Context, message []byte) error
 }
 
+// WriteMessage - write a message to the topic
 func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 	native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(message)
 	if err != nil {
@@ -334,20 +339,24 @@ func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 	return nil
 }
 
+// SigningResultReader - interface describing the signing result reader capabilities
 type SigningResultReader interface {
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
 	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
+// FetchMessage - get a message
 func (s *Service) FetchMessage(ctx context.Context) (kafka.Message, error) {
 	return s.kafkaSignedRequestReader.FetchMessage(ctx)
 }
 
+// CommitMessages - commit the messages passed in
 func (s *Service) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
 	return s.kafkaSignedRequestReader.CommitMessages(ctx, messages...)
 }
 
+// Decode - perform a kafka message decode
 func (s *Service) Decode(message kafka.Message) (*SigningOrderResult, error) {
 	codec, ok := s.codecs[kafkaSignedOrderCredsTopic]
 	if !ok {

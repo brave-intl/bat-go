@@ -105,7 +105,7 @@ type Service struct {
 	jobs                     []srv.Job
 	pauseVoteUntil           time.Time
 	pauseVoteUntilMu         sync.RWMutex
-	kafkaSignedRequestReader kafkautils.KafkaReader
+	kafkaSignedRequestReader kafkautils.Messager
 	retry                    backoff.RetryFunc
 }
 
@@ -1398,10 +1398,12 @@ func (s *Service) RunNextOrderJob(ctx context.Context) (bool, error) {
 	}
 }
 
+// RunSendSigningRequestJob - send the order credentials signing requests
 func (s *Service) RunSendSigningRequestJob(ctx context.Context) (bool, error) {
 	return true, s.Datastore.SendSigningRequest(ctx, s)
 }
 
+// RunStoreSignedOrderCredentialsJob - store the signed order credentials
 func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, error) {
 	for {
 		select {

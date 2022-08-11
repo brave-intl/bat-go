@@ -11,6 +11,13 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 )
 
+const (
+	androidPaymentStatePending int64 = iota
+	androidPaymentStatePaid
+	androidPaymentStateTrial
+	androidPaymentStatePendingDeferred
+)
+
 var (
 	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
 		appleVendor:  validateIOSReceipt,
@@ -74,7 +81,18 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 				logger.Error().Err(err).Msg("failed to verify subscription")
 				return "", fmt.Errorf("failed to verify subscription: %w", err)
 			}
-			return resp.OrderId, nil
+			// check that the order was paid
+			switch resp.PaymentState {
+			case androidPaymentStatePaid, androidPaymentStateTrial:
+				break
+			case androidPaymentStatePending:
+				return "", fmt.Errorf("purchase is still pending: %w", ErrOrderUnpaid)
+			case androidPaymentStatePendingDeferred:
+				return "", fmt.Errorf("purchase is deferred: %w", ErrOrderUnpaid)
+			default:
+				return "", fmt.Errorf("purchase status unknown: %d - %w", resp.PaymentState, ErrOrderUnpaid)
+			}
+			return v.Blob, nil
 		}
 	}
 	logger.Error().Msg("client is not configured")

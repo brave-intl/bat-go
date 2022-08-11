@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/utils/backoff"
-	"github.com/brave-intl/bat-go/utils/clients"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/brave-intl/bat-go/utils/backoff"
+	"github.com/brave-intl/bat-go/utils/clients"
 
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mock_cbr "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
@@ -41,7 +42,7 @@ func TestCreateIssuerV3_NewIssuer(t *testing.T) {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	assert.NoError(t, err)
 
-	issuerConfig := issuerConfig{
+	issuerConfig := IssuerConfig{
 		buffer:  test.RandomInt(),
 		overlap: test.RandomInt(),
 	}
@@ -113,7 +114,7 @@ func TestCreateIssuerV3_AlreadyExists(t *testing.T) {
 	issuerID, err := encodeIssuerID(merchantID, orderItem.SKU)
 	assert.NoError(t, err)
 
-	issuerConfig := issuerConfig{
+	issuerConfig := IssuerConfig{
 		buffer:  test.RandomInt(),
 		overlap: test.RandomInt(),
 	}

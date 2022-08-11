@@ -160,6 +160,7 @@ func InstrumentHandlerFunc(name string, f handlers.AppHandler) http.HandlerFunc 
 	return InstrumentHandler(name, f).ServeHTTP
 }
 
+// InstrumentHandlerDef - definition of an instrument handler http.Handler
 type InstrumentHandlerDef func(name string, h http.Handler) http.Handler
 
 // InstrumentHandler instruments an http.Handler to capture metrics like the number

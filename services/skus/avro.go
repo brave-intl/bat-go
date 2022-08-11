@@ -61,11 +61,13 @@ const signingOrderRequestSchema = `{
     ]
 }`
 
+// SigningOrderRequest - the structure of a signing order request
 type SigningOrderRequest struct {
 	RequestID string         `json:"request_id"`
 	Data      []SigningOrder `json:"data"`
 }
 
+// SigningOrder - signing order structure
 type SigningOrder struct {
 	AssociatedData []byte   `json:"associated_data"`
 	BlindedTokens  []string `json:"blinded_tokens"`
@@ -73,6 +75,7 @@ type SigningOrder struct {
 	IssuerCohort   int16    `json:"issuer_cohort"`
 }
 
+// Metadata - skus metadata structure
 type Metadata struct {
 	ItemID         uuid.UUID `json:"id"`
 	OrderID        uuid.UUID `json:"orderId"`
@@ -128,11 +131,13 @@ const signingOrderResultSchema = `{
     ]
 }`
 
+// SigningOrderResult - structure of a signing result
 type SigningOrderResult struct {
 	RequestID string        `json:"request_id"`
 	Data      []SignedOrder `json:"data"`
 }
 
+// SignedOrder - structure for a signed order
 type SignedOrder struct {
 	PublicKey      string            `json:"public_key"`
 	Proof          string            `json:"proof"`
@@ -144,14 +149,19 @@ type SignedOrder struct {
 	AssociatedData []byte            `json:"associated_data"`
 }
 
+// SignedOrderStatus - signed order status structure
 type SignedOrderStatus int
 
 const (
+	// SignedOrderStatusOk - Okay status from signed order status
 	SignedOrderStatusOk SignedOrderStatus = iota
+	// SignedOrderStatusInvalidIssuer - invalid issuer
 	SignedOrderStatusInvalidIssuer
+	// SignedOrderStatusError - error status for signed order status
 	SignedOrderStatusError
 )
 
+// MarshalJSON - marshaller for signed order status
 func (s SignedOrderStatus) MarshalJSON() ([]byte, error) {
 	var status string
 	switch s {
@@ -168,6 +178,7 @@ func (s SignedOrderStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(status)
 }
 
+// UnmarshalJSON - unmarshaller for signed order status
 func (s *SignedOrderStatus) UnmarshalJSON(data []byte) error {
 	var str string
 	err := json.Unmarshal(data, &str)
@@ -189,6 +200,7 @@ func (s *SignedOrderStatus) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// String - stringer for signed order status
 func (s SignedOrderStatus) String() string {
 	switch s {
 	case SignedOrderStatusOk:
@@ -202,8 +214,10 @@ func (s SignedOrderStatus) String() string {
 	}
 }
 
+// UnionNullString - type describing
 type UnionNullString map[string]interface{}
 
+// UnmarshalJSON - implement unmarshaling for union null string
 func (u *UnionNullString) UnmarshalJSON(data []byte) error {
 	var temp map[string]interface{}
 	err := json.Unmarshal(data, &temp)
@@ -214,6 +228,7 @@ func (u *UnionNullString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Value - perform a valuer on unionnullstring
 func (u UnionNullString) Value() *string {
 	s, ok := u["string"]
 	if ok {
