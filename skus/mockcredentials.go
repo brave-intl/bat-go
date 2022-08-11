@@ -88,6 +88,20 @@ func (mr *MockSigningRequestWriterMockRecorder) WriteMessage(ctx, message interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessage", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessage), ctx, message)
 }
 
+// WriteMessages mocks base method.
+func (m *MockSigningRequestWriter) WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteMessages", ctx, messages)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteMessages indicates an expected call of WriteMessages.
+func (mr *MockSigningRequestWriterMockRecorder) WriteMessages(ctx, messages interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteMessages", reflect.TypeOf((*MockSigningRequestWriter)(nil).WriteMessages), ctx, messages)
+}
+
 // MockSigningResultReader is a mock of SigningResultReader interface.
 type MockSigningResultReader struct {
 	ctrl     *gomock.Controller

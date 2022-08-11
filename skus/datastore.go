@@ -23,13 +23,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
-
-var errNotFound = errors.New("not found")
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
@@ -88,6 +87,10 @@ type Datastore interface {
 	SetOrderPaid(context.Context, *uuid.UUID) error
 	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 }
+
+const signingRequestBatchSize = 10
+
+var errNotFound = errors.New("not found")
 
 // VoteRecord - how the ac votes are stored in the queue
 type VoteRecord struct {
@@ -795,7 +798,7 @@ func (pg *Postgres) GetOrderCreds(orderID uuid.UUID, isSigned bool) ([]OrderCred
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2Creds returns all order credentials for an order
+// GetOrderTimeLimitedV2Creds returns all order credentials for an order.
 func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimitedV2Creds, error) {
 	// each "order item" is a different record
 	var timeLimitedV2Creds []TimeLimitedV2Creds
@@ -837,7 +840,7 @@ func (pg *Postgres) GetOrderTimeLimitedV2Creds(orderID uuid.UUID) (*[]TimeLimite
 	return nil, nil
 }
 
-// GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item
+// GetOrderTimeLimitedV2CredsByItemID returns the order credentials by order and item.
 func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select
@@ -867,7 +870,7 @@ func (pg *Postgres) GetOrderTimeLimitedV2CredsByItemID(orderID uuid.UUID, itemID
 	}, nil
 }
 
-// DeleteOrderCreds deletes the order credentials for a OrderID
+// DeleteOrderCreds deletes the order credentials for a OrderID.
 func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 
 	query := `
@@ -887,7 +890,7 @@ func (pg *Postgres) DeleteOrderCreds(orderID uuid.UUID, isSigned bool) error {
 	return nil
 }
 
-// GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID
+// GetOrderCredsByItemID returns the order credentials for a OrderID by the itemID.
 func (pg *Postgres) GetOrderCredsByItemID(orderID uuid.UUID, itemID uuid.UUID, isSigned bool) (*OrderCreds, error) {
 	orderCreds := OrderCreds{}
 
@@ -1262,7 +1265,9 @@ func (pg *Postgres) InsertSigningOrderRequestOutbox(ctx context.Context, orderID
 	return nil
 }
 
-// SendSigningRequest - send the signing request to cb via kafka
+// SendSigningRequest sends batches of signing order requests to kafka for signing.
+// Failed messages are logged and can be manually retried.
+// Default batch size 10.
 func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter SigningRequestWriter) error {
 	tx, err := pg.RawDB().Beginx()
 	if err != nil {
@@ -1270,30 +1275,50 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 	}
 	defer pg.RollbackTx(tx)
 
-	var soro SigningOrderRequestOutbox
-	err = tx.GetContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
+	var soro []SigningOrderRequestOutbox
+	err = tx.SelectContext(ctx, &soro, `select id, order_id, message_data from signing_order_request_outbox 
 													where processed_at is null order by created_at asc 
-													for update skip locked limit 1`)
+													for update skip locked limit $1`, signingRequestBatchSize)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
 		return fmt.Errorf("error could not get signing order request outbox: %w", err)
 	}
 
-	// If there is an error writing messages we need to log here instead of returning to the job runner then we can
-	// continue to update the messages as processed.
-	err = signingRequestWriter.WriteMessage(ctx, soro.Message)
-	if err != nil {
+	if len(soro) == 0 {
+		return nil
+	}
+
+	// If there is an error writing messages we need to log the failed messages here instead of returning to the
+	// job runner then continue to update all the messages as processed.
+	switch err := signingRequestWriter.WriteMessages(ctx, soro).(type) {
+	case nil:
+	case kafka.WriteErrors:
+		for i := range soro {
+			if err[i] != nil {
+				logging.FromContext(ctx).Err(err[i]).
+					Interface("message", soro[i]).
+					Msg("error writing outbox message")
+				sentry.CaptureException(err)
+			}
+		}
+	default:
 		logging.FromContext(ctx).Err(err).
-			Interface("orderID", soro.OrderID).
-			Interface("message", soro.Message).
-			Msg("error writing messages")
+			Interface("messages", soro).
+			Msg("error writing outbox messages")
 		sentry.CaptureException(err)
 	}
 
-	result, err := tx.ExecContext(ctx, `update signing_order_request_outbox 
-											  set processed_at = now() where id = $1`, soro.ID)
+	soroIDs := make([]uuid.UUID, len(soro))
+	for i := 0; i < len(soroIDs); i++ {
+		soroIDs[i] = soro[i].ID
+	}
+
+	qry, args, err := sqlx.In(`update signing_order_request_outbox 
+										set processed_at = now() where id IN (?)`, soroIDs)
+	if err != nil {
+		return fmt.Errorf("error creating sql update statement: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, pg.Rebind(qry), args...)
 	if err != nil {
 		return fmt.Errorf("error updating outbox message: %w", err)
 	}
@@ -1303,19 +1328,20 @@ func (pg *Postgres) SendSigningRequest(ctx context.Context, signingRequestWriter
 		return fmt.Errorf("error getting updated outbox message rows: %w", err)
 	}
 
-	if rows != 1 {
-		return fmt.Errorf("error updating outbox message: %w", err)
+	if rows != int64(len(soroIDs)) {
+		return fmt.Errorf("error updating rows expected %d got %d", len(soroIDs), rows)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return fmt.Errorf("error updating signing order request outbox: %w", err)
+		return fmt.Errorf("error committing signing order request outbox: %w", err)
 	}
 
 	return nil
 }
 
-// StoreSignedOrderCredentials - write the order credentials to database
+// StoreSignedOrderCredentials stores signed order requests and handles
+// both TimeLimitedV2Creds and SingleUse credentials.
 func (pg *Postgres) StoreSignedOrderCredentials(ctx context.Context, reader SigningResultReader) error {
 	message, err := reader.FetchMessage(ctx)
 	if err != nil {
