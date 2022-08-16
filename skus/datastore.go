@@ -39,6 +39,8 @@ type Datastore interface {
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
+	// GetOrderByExternalID by the external id from the purchase vendor
+	GetOrderByExternalID(string) (*Order, error)
 	// RenewOrder - renew the order with this id
 	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
@@ -306,6 +308,35 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		return nil, err
 	}
 
+	return &order, nil
+}
+
+// GetOrderByExternalID by the external id from the purchase vendor
+func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
+	statement := `
+		SELECT 
+			id, created_at, currency, updated_at, total_price, 
+			merchant_id, location, status, allowed_payment_methods, 
+			metadata, valid_for, last_paid_at, expires_at, trial_days
+		FROM orders WHERE metadata->>externalID = $1`
+	order := Order{}
+	err := pg.RawDB().Get(&order, statement, externalID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		FROM order_items WHERE order_id = $1`
+	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
 	return &order, nil
 }
 

@@ -1304,6 +1304,56 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 	}
 }
 
+// verifyDeveloperNotification - verify the developer notification from playstore
+func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
+	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+		return errors.New("notification has no purchase token")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+	// have order, now validate the receipt from the notification
+	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
+		Type:           "android",
+		Blob:           dn.SubscriptionNotification.PurchaseToken,
+		Package:        dn.PackageName,
+		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to validate purchase token: %w", err)
+	}
+
+	switch dn.SubscriptionNotification.NotificationType {
+	case androidSubscriptionRenewed,
+		androidSubscriptionRecovered,
+		androidSubscriptionPurchased,
+		androidSubscriptionRestarted,
+		androidSubscriptionInGracePeriod,
+		androidSubscriptionPriceChangeConfirmed:
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	case androidSubscriptionExpired,
+		androidSubscriptionRevoked,
+		androidSubscriptionPausedScheduleChanged,
+		androidSubscriptionPaused,
+		androidSubscriptionDeferred,
+		androidSubscriptionOnHold,
+		androidSubscriptionCanceled,
+		androidSubscriptionUnknown:
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	default:
+		return errors.New("failed to act on subscription notification")
+	}
+
+	return nil
+}
+
 // validateReceipt - perform receipt validation
 func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
