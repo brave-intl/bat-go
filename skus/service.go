@@ -907,7 +907,7 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
 	}
 
-	// To ensure we have completed signing all the creds for our order we need to check the total number of creds match
+	// To ensure we have completed signing all the creds for our order we need to check the total number of creds matches
 	// the number of signing results we are expecting otherwise we are not finished signing and return http.StatusAccepted.
 	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	if err != nil {
@@ -915,6 +915,11 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 	}
 
 	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	if err != nil {
+		return nil, http.StatusInternalServerError,
+			fmt.Errorf("error calculating total expected signing results: %w", err)
+	}
+
 	if creds != nil && len(creds.Credentials) == total {
 		return creds, http.StatusOK, nil
 	}

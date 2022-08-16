@@ -1,36 +1,18 @@
-//go:build integration
-
 package skus
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/skus/skustest"
 	"github.com/brave-intl/bat-go/utils/test"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/golang/mock/gomock"
+	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 )
-
-type ServiceTestSuite struct {
-	suite.Suite
-	storage Datastore
-}
-
-func TestServiceTestSuite(t *testing.T) {
-	suite.Run(t, new(ServiceTestSuite))
-}
-
-func (suite *ServiceTestSuite) SetupSuite() {
-	skustest.Migrate(suite.T())
-	suite.storage, _ = NewPostgres("", false, "")
-}
-
-func (suite *ServiceTestSuite) AfterTest() {
-	skustest.CleanDB(suite.T(), suite.storage.RawDB())
-}
 
 func TestCredChunkFn(t *testing.T) {
 	// Jan 1, 2021
@@ -77,6 +59,134 @@ func TestCredChunkFn(t *testing.T) {
 	}
 }
 
+func TestGetTimeLimitedV2Creds_OK(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	order := &Order{
+		ID: uuid.NewV4(),
+	}
+
+	sor1 := SigningOrderRequest{
+		Data: []SigningOrder{
+			{
+				BlindedTokens: []string{test.RandomString()},
+			},
+		},
+	}
+
+	m1, err := json.Marshal(sor1)
+	assert.NoError(t, err)
+
+	outboxMessages := []SigningOrderRequestOutbox{
+		{
+			Message: m1,
+		},
+	}
+
+	timeLimitedV2Creds := &TimeLimitedV2Creds{
+		Credentials: []TimeAwareSubIssuedCreds{
+			{
+				BlindedCreds: []string{test.RandomString()},
+			},
+		},
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetSigningOrderRequestOutbox(ctx, order.ID).
+		Return(outboxMessages, nil)
+
+	datastore.EXPECT().
+		GetTimeLimitedV2OrderCredsByOrder(order.ID).
+		Return(timeLimitedV2Creds, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	actual, status, err := s.GetTimeLimitedV2Creds(ctx, order)
+	assert.NoError(t, err)
+
+	assert.Equal(t, timeLimitedV2Creds, actual)
+	assert.Equal(t, http.StatusOK, status)
+}
+
+func TestGetTimeLimitedV2Creds_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	order := &Order{
+		ID: uuid.NewV4(),
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetSigningOrderRequestOutbox(ctx, order.ID).
+		Return(nil, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	actual, status, err := s.GetTimeLimitedV2Creds(ctx, order)
+
+	assert.Nil(t, actual)
+	assert.Equal(t, http.StatusNotFound, status)
+	assert.EqualError(t, err, "credentials do not exist")
+}
+
+func TestGetTimeLimitedV2Creds_Accepted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	order := &Order{
+		ID: uuid.NewV4(),
+	}
+
+	sor1 := SigningOrderRequest{
+		Data: []SigningOrder{
+			{
+				BlindedTokens: []string{test.RandomString()},
+			},
+		},
+	}
+
+	m1, err := json.Marshal(sor1)
+	assert.NoError(t, err)
+
+	outboxMessages := []SigningOrderRequestOutbox{
+		{
+			Message: m1,
+		},
+	}
+
+	datastore := NewMockDatastore(ctrl)
+	datastore.EXPECT().
+		GetSigningOrderRequestOutbox(ctx, order.ID).
+		Return(outboxMessages, nil)
+
+	datastore.EXPECT().
+		GetTimeLimitedV2OrderCredsByOrder(order.ID).
+		Return(nil, nil)
+
+	s := Service{
+		Datastore: datastore,
+	}
+
+	orderCreds, status, err := s.GetTimeLimitedV2Creds(ctx, order)
+	assert.NoError(t, err)
+
+	assert.Nil(t, orderCreds)
+	assert.Equal(t, http.StatusAccepted, status)
+}
+
 func TestCalculateTotalExpectedSigningResults(t *testing.T) {
 	sor1 := SigningOrderRequest{
 		Data: []SigningOrder{
@@ -110,6 +220,7 @@ func TestCalculateTotalExpectedSigningResults(t *testing.T) {
 	}
 
 	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	assert.NoError(t, err)
 
 	assert.Equal(t, 3, total)
 }
