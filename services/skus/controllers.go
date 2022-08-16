@@ -76,9 +76,6 @@ func Router(service *Service, instrumentHandler middleware.InstrumentHandlerDef)
 	// api routes for order receipt validation
 	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
 
-	// api routes for order receipt validation
-	r.Method("POST", "/{orderID}/submit-receipt", middleware.InstrumentHandler("SubmitReceipt", corsMiddleware([]string{"POST"})(SubmitReceipt(service))))
-
 	r.Route("/{orderID}/credentials", func(cr chi.Router) {
 		cr.Use(corsMiddleware([]string{"GET", "POST"}))
 		cr.Method("POST", "/", middleware.InstrumentHandler("CreateOrderCreds", CreateOrderCreds(service)))
@@ -880,7 +877,6 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
-	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
 	return r
 }
 
@@ -915,6 +911,54 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		// extract out the Developer notification
 		dn, err := req.Message.GetDeveloperNotification()
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
+			validationErrMap["invalid-developer-notification"] = err.Error()
+		}
+
+		// if we had any validation errors, return the validation error map to the caller
+		if len(validationErrMap) != 0 {
+			return handlers.ValidationError("Error validating request url", validationErrMap)
+		}
+
+		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
+			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
+		}
+		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
+	})
+}
+
+// HandleAndroidWebhook is the handler for stripe checkout session webhooks
+func HandleAndroidWebhook(service *Service) handlers.AppHandler {
+	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+
+		var (
+			ctx              = r.Context()
+			req              = new(AndroidNotificationMessage)
+			validationErrMap = map[string]interface{}{} // for tracking our validation errors
+		)
+
+		// get logger
+		logger := logging.Logger(ctx, "payments").With().
+			Str("func", "HandleAndroidWebhook").
+			Logger()
+
+		// read the payload
+		payload, err := requestutils.Read(r.Context(), r.Body)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to read the payload")
+			validationErrMap["request-body"] = err.Error()
+		}
+
+		// validate the payload
+		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
+			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
+			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
+			validationErrMap["request-body-decode"] = err.Error()
+		}
+
+		// extract out the Developer notification
+		dn, err := req.GetDeveloperNotification()
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification"] = err.Error()
@@ -1074,65 +1118,9 @@ func HandleStripeWebhook(service *Service) handlers.AppHandler {
 	})
 }
 
-// SubmitReceipt submit a vendor verifiable receipt that proves order is paid
-func SubmitReceipt(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		var (
-			ctx              = r.Context()
-			req              SubmitReceiptRequestV1     // the body of the request
-			orderID          = new(inputs.ID)           // the order id
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
-
-		// validate the order id
-		if err := inputs.DecodeAndValidateString(context.Background(), orderID, chi.URLParam(r, "orderID")); err != nil {
-			validationErrMap["orderID"] = err.Error()
-		}
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
-		if err != nil {
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), &req, payload); err != nil {
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the receipt
-		externalID, err := service.validateReceipt(ctx, orderID.UUID(), req)
-		if err != nil {
-			if errors.Is(err, errNotFound) {
-				return handlers.WrapError(err, "order not found", http.StatusNotFound)
-			}
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
-
-		// set order paid and include the vendor and external id to metadata
-		if err := service.UpdateOrderStatusPaidWithMetadata(ctx, orderID.UUID(), datastore.Metadata{
-			"vendor":     req.Type.String(),
-			"externalID": externalID,
-		}); err != nil {
-			return handlers.WrapError(err, "failed to store status of order", http.StatusInternalServerError)
-		}
-
-		return handlers.RenderContent(r.Context(), SubmitReceiptResponseV1{
-			ExternalID: externalID,
-			Vendor:     req.Type.String(),
-		}, w, http.StatusOK)
-	})
-}
-
 // GetTimeLimitedV2OrderCredsByOrderItem handler fetches all the time limited v2 order credentials for a given order item.
-// If the order credentials are signed it returns a status of http.StatusOK and the signed order item.
-// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted and no order creds.
+// If the order credentials are signed it returns a status of http.StatusOK.
+// If the order credentials are still waiting to be signed it returns a status of http.StatusAccepted.
 func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var (
@@ -1158,23 +1146,25 @@ func GetTimeLimitedV2OrderCredsByOrderItem(service *Service) handlers.AppHandler
 				validationPayload)
 		}
 
-		// check the order is fully signed before returning a single order item.
-		_, status, err := service.GetCredentials(r.Context(), *orderID.UUID())
-		if err != nil {
-			return handlers.WrapError(err, "error retrieving credentials for order item", status)
-		}
-
-		if status == http.StatusAccepted {
-			return handlers.RenderContent(r.Context(), nil, w, http.StatusAccepted)
-		}
-
 		creds, err := service.Datastore.GetTimeLimitedV2OrderCredsByOrderItem(*itemID.UUID())
 		if err != nil {
-			return handlers.WrapError(err, "error retrieving credentials for order item",
-				http.StatusInternalServerError)
+			return handlers.WrapError(err, "error retrieving credential", http.StatusBadRequest)
 		}
 
-		return handlers.RenderContent(r.Context(), creds, w, http.StatusOK)
+		if creds == nil {
+			return &handlers.AppError{
+				Message: "could not find credentials",
+				Code:    http.StatusNotFound,
+				Data:    map[string]interface{}{},
+			}
+		}
+
+		status := http.StatusOK
+		if len(creds.Credentials) < 0 || creds.Credentials[0].SignedCreds == nil {
+			status = http.StatusAccepted
+		}
+
+		return handlers.RenderContent(r.Context(), creds, w, status)
 	}
 }
 
@@ -1218,27 +1208,12 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)
 			}
 			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
-			validationErrMap["receiptErrors"] = err.Error()
-			// return codified errors for application
-			if errors.Is(err, errPurchaseFailed) {
-				return handlers.CodedValidationError(err.Error(), purchaseFailedErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchasePending) {
-				return handlers.CodedValidationError(err.Error(), purchasePendingErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseDeferred) {
-				return handlers.CodedValidationError(err.Error(), purchaseDeferredErrCode, validationErrMap)
-			} else if errors.Is(err, errPurchaseStatusUnknown) {
-				return handlers.CodedValidationError(err.Error(), purchaseStatusUnknownErrCode, validationErrMap)
-			} else {
-				// unknown error
-				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
-			}
-			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
 			validationErrMap["request-body"] = err.Error()
 		}
 
 		// if we had any validation errors, return the validation error map to the caller
 		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("error validating request", validationErrMap)
+			return handlers.ValidationError("Error validating request url", validationErrMap)
 		}
 
 		// set order paid and include the vendor and external id to metadata
