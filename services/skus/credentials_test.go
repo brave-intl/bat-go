@@ -11,7 +11,6 @@ import (
 
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/clients"
-
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mock_cbr "github.com/brave-intl/bat-go/utils/clients/cbr/mock"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"

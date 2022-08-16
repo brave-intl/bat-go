@@ -921,26 +921,29 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
+	// First check order creds have successfully been submitted for processing.
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if len(outboxMessages) == 0 {
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	}
+
+	// To ensure we have completed signing all the creds for our order we need to check the total number of creds match
+	// the number of signing results we are expecting otherwise we are not finished signing and return http.StatusAccepted.
 	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds != nil {
+	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	if creds != nil && len(creds.Credentials) == total {
 		return creds, http.StatusOK, nil
 	}
 
-	// check to see if messages are in outbox
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
-	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
-
-	if len(outboxMessages) > 0 {
-		return nil, http.StatusAccepted, nil
-	}
-
-	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	return nil, http.StatusAccepted, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
@@ -1454,4 +1457,25 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+// calculateTotalExpectedSigningResults calculates the expected number of signing results by multiplying the number
+// of blinded creds by the number of order items in the order. This function is only relevant to
+// skus.TimeLimitedV2Creds credentials so we can compare how many results we have received and if we are done
+// signing the order.
+func calculateTotalExpectedSigningResults(outboxMessages []SigningOrderRequestOutbox) (int, error) {
+	total := 0
+
+	var sor SigningOrderRequest
+	for _, outboxMessage := range outboxMessages {
+		err := json.Unmarshal(outboxMessage.Message, &sor)
+		if err != nil {
+			return 0, fmt.Errorf("error unmarshaling outbox message: %w", err)
+		}
+		for _, data := range sor.Data {
+			total += len(data.BlindedTokens)
+		}
+	}
+
+	return total, nil
 }
