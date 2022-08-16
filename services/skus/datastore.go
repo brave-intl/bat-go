@@ -1298,7 +1298,7 @@ type TimeAwareSubIssuedCreds struct {
 	PublicKey    string                    `json:"publicKey" db:"public_key"`
 }
 
-// GetTimeLimitedV2OrderCredsByOrder returns all the time limited v2 order credentials for an order single order.
+// GetTimeLimitedV2OrderCredsByOrder returns all the time limited v2 order credentials for a single order.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
