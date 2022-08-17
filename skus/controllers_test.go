@@ -1439,7 +1439,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		}
 	}()
 
-	// TODO wrap in poller
 	time.Sleep(30 * time.Second)
 
 	// retrieve the newly signed order creds by orderID and itemID.
