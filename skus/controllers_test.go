@@ -883,6 +883,7 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	defer ctx.Done()
 
 	voteTopic = test.RandomString()
+	kafkaUnsignedOrderCredsTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
 	kafkaSignedRequestReaderGroupID = test.RandomString()
 
