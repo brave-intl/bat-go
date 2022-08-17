@@ -1318,6 +1318,11 @@ func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *Developer
 	if err != nil {
 		return fmt.Errorf("failed to get order from db: %w", err)
 	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
 	// have order, now validate the receipt from the notification
 	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
 		Type:           "android",
