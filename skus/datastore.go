@@ -40,7 +40,7 @@ type Datastore interface {
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
-	GetOrderByExternalID(string) (*Order, error)
+	GetOrderByExternalID(externalID string) (*Order, error)
 	// RenewOrder - renew the order with this id
 	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
@@ -318,7 +318,7 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 			id, created_at, currency, updated_at, total_price, 
 			merchant_id, location, status, allowed_payment_methods, 
 			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE metadata->>externalID = $1`
+		FROM orders WHERE metadata->>'externalID' = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, externalID)
 	if err == sql.ErrNoRows {
@@ -1492,7 +1492,7 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = metadata || jsonb_build_object($1::text, $2::text), updated_at = current_timestamp where id = $3`
+	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::text), metadata, jsonb_build_object($1::text, $2::text)), updated_at = current_timestamp where id = $3`
 
 	result, err := tx.Exec(stmt, key, value, orderID.String())
 	if err != nil {
