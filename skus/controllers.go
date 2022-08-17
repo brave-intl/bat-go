@@ -879,7 +879,7 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 
 		var (
 			ctx              = r.Context()
-			req              = new(AndroidNotificationMessage)
+			req              = new(AndroidNotification)
 			validationErrMap = map[string]interface{}{} // for tracking our validation errors
 		)
 
@@ -903,7 +903,7 @@ func HandleAndroidWebhook(service *Service) handlers.AppHandler {
 		}
 
 		// extract out the Developer notification
-		dn, err := req.GetDeveloperNotification()
+		dn, err := req.Message.GetDeveloperNotification()
 		if err != nil {
 			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
 			validationErrMap["invalid-developer-notification"] = err.Error()
