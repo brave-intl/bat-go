@@ -19,14 +19,6 @@ import (
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/responses"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/libs/handlers"
-	"github.com/brave-intl/bat-go/libs/inputs"
-	"github.com/brave-intl/bat-go/libs/logging"
-	"github.com/brave-intl/bat-go/libs/middleware"
-	"github.com/brave-intl/bat-go/libs/requestutils"
-	"github.com/brave-intl/bat-go/libs/responses"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	uuid "github.com/satori/go.uuid"
@@ -877,55 +869,8 @@ func VerifyCredentialV1(service *Service) handlers.AppHandler {
 func WebhookRouter(service *Service) chi.Router {
 	r := chi.NewRouter()
 	r.Method("POST", "/stripe", middleware.InstrumentHandler("HandleStripeWebhook", HandleStripeWebhook(service)))
+	r.Method("POST", "/android", middleware.InstrumentHandler("HandleAndroidWebhook", HandleAndroidWebhook(service)))
 	return r
-}
-
-// HandleAndroidWebhook is the handler for stripe checkout session webhooks
-func HandleAndroidWebhook(service *Service) handlers.AppHandler {
-	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-
-		var (
-			ctx              = r.Context()
-			req              = new(AndroidNotification)
-			validationErrMap = map[string]interface{}{} // for tracking our validation errors
-		)
-
-		// get logger
-		logger := logging.Logger(ctx, "payments").With().
-			Str("func", "HandleAndroidWebhook").
-			Logger()
-
-		// read the payload
-		payload, err := requestutils.Read(r.Context(), r.Body)
-		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to read the payload")
-			validationErrMap["request-body"] = err.Error()
-		}
-
-		// validate the payload
-		if err := inputs.DecodeAndValidate(context.Background(), req, payload); err != nil {
-			logger.Debug().Str("payload", string(payload)).Msg("Failed to decode and validate the payload")
-			logger.Warn().Err(err).Msg("Failed to decode and validate the payload")
-			validationErrMap["request-body-decode"] = err.Error()
-		}
-
-		// extract out the Developer notification
-		dn, err := req.Message.GetDeveloperNotification()
-		if err != nil {
-			logger.Warn().Err(err).Msg("Failed to get developer notification from message")
-			validationErrMap["invalid-developer-notification"] = err.Error()
-		}
-
-		// if we had any validation errors, return the validation error map to the caller
-		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
-		}
-
-		if err := service.verifyDeveloperNotification(ctx, dn); err != nil {
-			return handlers.WrapError(err, "failed to verify subscription notification", http.StatusInternalServerError)
-		}
-		return handlers.RenderContent(ctx, "event received", w, http.StatusOK)
-	})
 }
 
 // HandleAndroidWebhook is the handler for stripe checkout session webhooks

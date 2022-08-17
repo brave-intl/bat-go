@@ -276,6 +276,27 @@ func (anm *AndroidNotificationMessage) GetDeveloperNotification() (*DeveloperNot
 
 // AndroidNotification - wrapping structure of an android notification
 type AndroidNotification struct {
-	Message      AndroidNotificationMessage `json:"message"`
-	Subscription string                     `json:"subscription"`
+	Message      AndroidNotificationMessage `json:"message" valid:"-"`
+	Subscription string                     `json:"subscription" valid:"-"`
+}
+
+// Decode - implement Decodable interface
+func (an *AndroidNotification) Decode(ctx context.Context, data []byte) error {
+	logger := logging.Logger(ctx, "AndroidNotification.Decode")
+	logger.Debug().Msg("starting AndroidNotification.Decode")
+
+	if err := json.Unmarshal(data, an); err != nil {
+		return fmt.Errorf("failed to json decode android notification: %w", err)
+	}
+	return nil
+}
+
+// Validate - implement Validable interface
+func (an *AndroidNotification) Validate(ctx context.Context) error {
+	logger := logging.Logger(ctx, "AndroidNotification.Validate")
+	if _, err := govalidator.ValidateStruct(an); err != nil {
+		logger.Error().Err(err).Msg("failed to validate request")
+		return fmt.Errorf("failed to validate android notification: %w", err)
+	}
+	return nil
 }

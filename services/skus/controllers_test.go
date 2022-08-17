@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/ptr"
+
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd/macaroon"
 	"github.com/brave-intl/bat-go/skus/skustest"
@@ -33,38 +35,18 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/test"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
-	"github.com/brave-intl/bat-go/libs/altcurrency"
-	"github.com/brave-intl/bat-go/libs/clients/cbr"
-	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
-	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
-	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/cryptography"
-	"github.com/brave-intl/bat-go/libs/datastore"
-	"github.com/brave-intl/bat-go/libs/httpsignature"
-	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
-	logutils "github.com/brave-intl/bat-go/libs/logging"
-	timeutils "github.com/brave-intl/bat-go/libs/time"
-	walletutils "github.com/brave-intl/bat-go/libs/wallet"
-	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/wallet"
-	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
-	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 )
 
 var (
@@ -323,14 +305,14 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 }
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
-	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 40)
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 	suite.Assert().NotNil(order)
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
 
 	// add the external id to metadata as if an initial receipt was submitted
-	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
+	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
 	// overwrite the receipt validation function for this test
@@ -960,7 +942,6 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	defer ctx.Done()
 
 	voteTopic = test.RandomString()
-	kafkaUnsignedOrderCredsTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
 	kafkaSignedRequestReaderGroupID = test.RandomString()
 
@@ -1517,6 +1498,7 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		}
 	}()
 
+	// TODO wrap in poller
 	time.Sleep(30 * time.Second)
 
 	// retrieve the newly signed order creds by orderID and itemID.
@@ -1606,28 +1588,4 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 	skuMap["development"][mac] = true
 
 	return mac
-}
-
-func writeSigningOrderResultMessage(t *testing.T, ctx context.Context, signingOrderResult SigningOrderResult, topic string) {
-	codec, err := goavro.NewCodec(signingOrderResultSchema)
-	assert.NoError(t, err)
-
-	textual, err := json.Marshal(signingOrderResult)
-	assert.NoError(t, err)
-
-	native, _, err := codec.NativeFromTextual(textual)
-	assert.NoError(t, err)
-
-	binary, err := codec.BinaryFromNative(nil, native)
-	assert.NoError(t, err)
-
-	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, "")
-	assert.NoError(t, err)
-
-	err = kafkaWriter.WriteMessages(ctx, kafka.Message{
-		Topic: topic,
-		Key:   []byte(signingOrderResult.RequestID),
-		Value: binary,
-	})
-	assert.NoError(t, err)
 }
