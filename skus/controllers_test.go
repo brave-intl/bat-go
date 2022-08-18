@@ -305,6 +305,66 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	return order, issuer
 }
 
+func (suite *ControllersTestSuite) TestAndroidWebhook() {
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
+	suite.Assert().NotNil(order)
+
+	// Check the order
+	suite.Assert().Equal("10", order.TotalPrice.String())
+
+	// add the external id to metadata as if an initial receipt was submitted
+	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
+	suite.Require().NoError(err)
+
+	// overwrite the receipt validation function for this test
+	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
+		appleVendor: validateIOSReceipt,
+		googleVendor: func(ctx context.Context, v interface{}) (string, error) {
+			return "my external id", nil
+		},
+	}
+
+	handler := HandleAndroidWebhook(suite.service)
+
+	// notification message
+	devNotify := DeveloperNotification{
+		PackageName: "package name",
+		SubscriptionNotification: SubscriptionNotification{
+			NotificationType: androidSubscriptionCanceled,
+			PurchaseToken:    "my external id",
+			SubscriptionID:   "subscription id",
+		},
+	}
+
+	buf, err := json.Marshal(&devNotify)
+	suite.Require().NoError(err)
+
+	// wrapper notification message
+	notification := &AndroidNotification{
+		Message: AndroidNotificationMessage{
+			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
+		},
+		Subscription: "subscription",
+	}
+
+	body, err := json.Marshal(&notification)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	// get order and check the state changed to canceled
+	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
+	suite.Assert().Equal("canceled", updatedOrder.Status)
+}
+
 func (suite *ControllersTestSuite) TestCreateOrder() {
 	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
 
