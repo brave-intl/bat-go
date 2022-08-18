@@ -10,10 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/brave-intl/bat-go/utils/ptr"
 
-	"github.com/brave-intl/bat-go/middleware"
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
@@ -24,6 +23,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
@@ -672,7 +672,7 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, total d
 
 	// in the event that gemini configs or service do not exist
 	// error on redeem and transfer
-	if service.geminiConf == nil || service.geminiClient == nil {
+	if service.geminiConf == nil {
 		return nil, fmt.Errorf("missing gemini client and configuration: %w", errGeminiMisconfigured)
 	}
 
@@ -691,7 +691,7 @@ func redeemAndTransferGeminiFunds(ctx context.Context, service *Service, total d
 	tx.DestAmount = total
 	tx.Status = txnStatusGeminiPending
 
-	settlementTx := settlement.Transaction{
+	settlementTx := custodian.Transaction{
 		SettlementID: transferID,
 		Type:         txType,
 		Destination:  depositDestination,

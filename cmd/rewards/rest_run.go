@@ -10,9 +10,10 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/rewards"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"
@@ -25,7 +26,7 @@ import (
 func RestRun(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
+	cmdutils.Must(err)
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
 		// pprof attaches routes to default serve mux

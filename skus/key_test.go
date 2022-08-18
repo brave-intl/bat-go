@@ -14,9 +14,9 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/cryptography"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"

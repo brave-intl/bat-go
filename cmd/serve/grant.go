@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 
 	// needed for profiling
 	_ "net/http/pprof"
@@ -17,7 +18,6 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/grant"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/promotion"
 	"github.com/brave-intl/bat-go/skus"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -25,6 +25,7 @@ import (
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/brave-intl/bat-go/wallet"
 	sentry "github.com/getsentry/sentry-go"
@@ -49,7 +50,7 @@ var (
 func init() {
 	cmd.ServeCmd.AddCommand(GrantServerCmd)
 
-	flagBuilder := cmd.NewFlagBuilder(GrantServerCmd)
+	flagBuilder := cmdutils.NewFlagBuilder(GrantServerCmd)
 
 	flagBuilder.Flag().Bool("require-uphold-destination-country", false,
 		"require responses for linkings to uphold to contain country identity information").

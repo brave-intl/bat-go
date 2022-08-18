@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/settlement"
+	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
 
 	"github.com/jmoiron/sqlx"

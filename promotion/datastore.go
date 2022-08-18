@@ -13,8 +13,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/brave-intl/bat-go/utils/ptr"
 
 	"github.com/brave-intl/bat-go/datastore/grantserver"
@@ -1955,7 +1955,7 @@ func (pg *Postgres) RunNextGeminiCheckStatus(ctx context.Context, worker GeminiT
 		return false, fmt.Errorf("gemini check status job: sql error %w", err)
 	}
 
-	settlementTx := settlement.Transaction{
+	settlementTx := custodian.Transaction{
 		SettlementID: ptr.String(drainJob.TransactionID),
 		Type:         "drain",
 		Destination:  ptr.String(drainJob.DepositDestination),

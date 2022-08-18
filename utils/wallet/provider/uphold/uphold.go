@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -29,6 +28,7 @@ import (
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/brave-intl/bat-go/utils/pindialer"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/validators"

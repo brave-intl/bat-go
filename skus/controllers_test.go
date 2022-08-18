@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	macarooncmd "github.com/brave-intl/bat-go/cmd/macaroon"
+	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/utils/clients/cbr/mock"

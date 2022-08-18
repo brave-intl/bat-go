@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -63,7 +63,7 @@ func (suite *GeminiTestSuite) TestBulkPay() {
 		"must have at least 5 bat to pass the rest of the test",
 	)
 
-	tx := settlement.Transaction{
+	tx := custodian.Transaction{
 		// use this settlement id to create an ephemeral test
 		SettlementID: uuid.NewV4().String(),
 		Destination:  os.Getenv("GEMINI_TEST_DESTINATION_ID"),

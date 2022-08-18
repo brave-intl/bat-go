@@ -15,10 +15,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/google/go-querystring/query"
@@ -253,7 +253,7 @@ type WithdrawToDepositIDBulkResponse struct {
 // NewWithdrawsFromTxs creates an array of withdrawal requests
 func NewWithdrawsFromTxs(
 	sourceFrom string,
-	txs []settlement.Transaction,
+	txs []custodian.Transaction,
 ) (*[]WithdrawToDepositIDPayload, error) {
 	withdrawals := []WithdrawToDepositIDPayload{}
 	tolerance := decimal.NewFromFloat(0.00000001)

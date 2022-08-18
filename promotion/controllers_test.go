@@ -25,7 +25,6 @@ import (
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
@@ -35,6 +34,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"

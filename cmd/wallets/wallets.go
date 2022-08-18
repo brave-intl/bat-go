@@ -1,6 +1,7 @@
 package wallets
 
 import (
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 
 	// pprof imports
 	_ "net/http/pprof"
@@ -31,7 +32,7 @@ func init() {
 	cmd.RootCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
-	walletsCmdBuilder := cmd.NewFlagBuilder(WalletsCmd)
+	walletsCmdBuilder := cmdutils.NewFlagBuilder(WalletsCmd)
 
 	walletsCmdBuilder.Flag().String("bitflyer-jwt-key", "",
 		"the bitflyer jwt key for validation of linking info").

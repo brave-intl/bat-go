@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
@@ -17,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/go-chi/chi"

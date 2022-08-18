@@ -13,10 +13,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"

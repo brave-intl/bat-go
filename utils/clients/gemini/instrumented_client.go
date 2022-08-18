@@ -4,7 +4,7 @@ package gemini
 // template: ../../../.prom-gowrap.tmpl
 // gowrap: http://github.com/hexdigest/gowrap
 
-//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/gemini -i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go -l ""
+//go:generate gowrap gen -p github.com/brave-intl/bat-go/utils/clients/-i Client -t ../../../.prom-gowrap.tmpl -o instrumented_client.go -l ""
 
 import (
 	"context"

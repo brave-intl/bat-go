@@ -15,11 +15,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	walletutils "github.com/brave-intl/bat-go/utils/wallet"
 	uphold "github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/go-chi/chi"

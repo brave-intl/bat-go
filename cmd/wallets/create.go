@@ -7,6 +7,7 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/httpsignature"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -27,7 +28,7 @@ var (
 func init() {
 	WalletsCmd.AddCommand(CreateCmd)
 
-	createBuilder := cmd.NewFlagBuilder(CreateCmd)
+	createBuilder := cmdutils.NewFlagBuilder(CreateCmd)
 
 	// name - the name of the new wallet
 	createBuilder.Flag().String("name", "",

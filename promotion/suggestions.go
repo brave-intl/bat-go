@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	contextutil "github.com/brave-intl/bat-go/utils/context"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/getsentry/sentry-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"

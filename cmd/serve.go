@@ -5,10 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/middleware"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	srv "github.com/brave-intl/bat-go/utils/service"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
@@ -27,13 +28,13 @@ func init() {
 	// address - sets the address of the server to be started
 	ServeCmd.PersistentFlags().String("address", ":8080",
 		"the default address to bind to")
-	Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
-	Must(viper.BindEnv("address", "ADDR"))
+	cmdutils.Must(viper.BindPFlag("address", ServeCmd.PersistentFlags().Lookup("address")))
+	cmdutils.Must(viper.BindEnv("address", "ADDR"))
 
 	ServeCmd.PersistentFlags().Bool("enable-job-workers", true,
 		"enable job workers (defaults true)")
-	Must(viper.BindPFlag("enable-job-workers", ServeCmd.PersistentFlags().Lookup("enable-job-workers")))
-	Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
+	cmdutils.Must(viper.BindPFlag("enable-job-workers", ServeCmd.PersistentFlags().Lookup("enable-job-workers")))
+	cmdutils.Must(viper.BindEnv("enable-job-workers", "ENABLE_JOB_WORKERS"))
 }
 
 // ServeCmd the serve command
@@ -45,7 +46,7 @@ var ServeCmd = &cobra.Command{
 // SetupRouter sets up a router
 func SetupRouter(ctx context.Context) *chi.Mux {
 	logger, err := appctx.GetLogger(ctx)
-	Must(err)
+	cmdutils.Must(err)
 
 	r := chi.NewRouter()
 	r.Use(

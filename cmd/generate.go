@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/jsonschema"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/spf13/cobra"
@@ -21,7 +22,7 @@ func init() {
 	// overwrite - defaults to false
 	JSONSchemaCmd.Flags().Bool("overwrite", false,
 		"overwrite the existing json schema files")
-	Must(viper.BindPFlag("overwrite", JSONSchemaCmd.Flags().Lookup("overwrite")))
+	cmdutils.Must(viper.BindPFlag("overwrite", JSONSchemaCmd.Flags().Lookup("overwrite")))
 }
 
 // GenerateCmd is the generate command

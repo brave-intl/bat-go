@@ -11,10 +11,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -42,7 +42,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	suite.Require().NoError(err, "fetching a quote does not fail")
 
 	dryRun := &DryRunOption{}
-	tx := settlement.Transaction{
+	tx := custodian.Transaction{
 		SettlementID: uuid.NewV4().String(),
 		Destination:  os.Getenv("BITFLYER_TEST_DESTINATION_ID"),
 		Channel:      "brave.com",
@@ -53,7 +53,7 @@ func (suite *BitflyerTestSuite) TestBulkPay() {
 	if sourceFrom == "" {
 		sourceFrom = "tipping"
 	}
-	txs := []settlement.Transaction{tx}
+	txs := []custodian.Transaction{tx}
 	withdrawals, err := NewWithdrawsFromTxs(sourceFrom, txs)
 	suite.Require().NoError(err)
 	bulkTransferRequest := NewWithdrawToDepositIDBulkPayload(

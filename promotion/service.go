@@ -26,7 +26,7 @@ import (
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/segmentio/kafka-go"
+	kafka "github.com/segmentio/kafka-go"
 	"golang.org/x/crypto/ed25519"
 )
 

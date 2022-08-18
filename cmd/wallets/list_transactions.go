@@ -11,6 +11,7 @@ import (
 
 	"github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	"github.com/brave-intl/bat-go/utils/wallet"
 	"github.com/brave-intl/bat-go/utils/wallet/provider"
 	"github.com/spf13/cobra"
@@ -38,7 +39,7 @@ var (
 func init() {
 	WalletsCmd.AddCommand(ListTransactionsCmd)
 
-	listTransactionsBuilder := cmd.NewFlagBuilder(ListTransactionsCmd)
+	listTransactionsBuilder := cmdutils.NewFlagBuilder(ListTransactionsCmd)
 
 	listTransactionsBuilder.Flag().Bool("csv", false,
 		"the output file should be csv").

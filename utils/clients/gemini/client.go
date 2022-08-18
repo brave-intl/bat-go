@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/google/go-querystring/query"
@@ -159,7 +159,7 @@ func nonce() int64 {
 }
 
 // SettlementTransactionToPayoutPayload converts to a payout request
-func SettlementTransactionToPayoutPayload(tx *settlement.Transaction) PayoutPayload {
+func SettlementTransactionToPayoutPayload(tx *custodian.Transaction) PayoutPayload {
 	currency := "BAT"
 	if tx.Currency != "" {
 		currency = tx.Currency
@@ -173,7 +173,7 @@ func SettlementTransactionToPayoutPayload(tx *settlement.Transaction) PayoutPayl
 }
 
 // GenerateTxRef generates a deterministic transaction reference id for idempotency
-func GenerateTxRef(tx *settlement.Transaction) string {
+func GenerateTxRef(tx *custodian.Transaction) string {
 	key := strings.Join([]string{
 		tx.SettlementID,
 		// if you have to resubmit referrals to get status

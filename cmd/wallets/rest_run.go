@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/brave-intl/bat-go/cmd"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/wallet"
 	sentry "github.com/getsentry/sentry-go"
@@ -24,7 +25,7 @@ func WalletRestRun(command *cobra.Command, args []string) {
 	r := cmd.SetupRouter(command.Context())
 	r, ctx, _ := wallet.SetupService(command.Context(), r)
 	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
+	cmdutils.Must(err)
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {

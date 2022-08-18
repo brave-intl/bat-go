@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/middleware"
 	"github.com/brave-intl/bat-go/utils/clients"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -19,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/brave-intl/bat-go/utils/useragent"

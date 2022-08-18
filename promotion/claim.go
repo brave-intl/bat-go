@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/brave-intl/bat-go/middleware"
 	errorutils "github.com/brave-intl/bat-go/utils/errors"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/jsonutils"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/getsentry/sentry-go"
 	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"

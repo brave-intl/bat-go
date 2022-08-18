@@ -11,11 +11,11 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/middleware"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
 	"github.com/brave-intl/bat-go/utils/inputs"
 	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/utils/middleware"
 	"github.com/brave-intl/bat-go/utils/requestutils"
 	"github.com/brave-intl/bat-go/utils/responses"
 	"github.com/go-chi/chi"

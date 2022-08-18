@@ -5,7 +5,7 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	"github.com/brave-intl/bat-go/cmd"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/spf13/cobra"
 )
@@ -16,7 +16,7 @@ import (
 func GRPCRun(command *cobra.Command, args []string) {
 	ctx := command.Context()
 	logger, err := appctx.GetLogger(ctx)
-	cmd.Must(err)
+	cmdutils.Must(err)
 	// TODO: implement gRPC service
 	logger.Fatal().Msg("gRPC server is not implemented")
 }
