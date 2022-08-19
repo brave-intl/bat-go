@@ -9,7 +9,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
@@ -31,7 +31,7 @@ var (
 	TransferFundsCmd = &cobra.Command{
 		Use:   "transfer-funds",
 		Short: "transfers funds from one wallet to another",
-		Run:   cmd.Perform("transfer funds", RunTransferFunds),
+		Run:   rootcmd.Perform("transfer funds", RunTransferFunds),
 	}
 	// WalletsCmd root wallets command
 	WalletsCmd = &cobra.Command{
@@ -43,7 +43,7 @@ var (
 func init() {
 
 	// add this command as a serve subcommand
-	cmd.RootCmd.AddCommand(WalletsCmd)
+	rootcmd.RootCmd.AddCommand(WalletsCmd)
 
 	WalletsCmd.AddCommand(
 		TransferFundsCmd,

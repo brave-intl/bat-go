@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
@@ -29,7 +29,7 @@ var (
 	CreateWalletCmd = &cobra.Command{
 		Use:   "create-wallet WALLET_NAME",
 		Short: "creates a wallet on a given provider",
-		Run:   cmd.Perform("create wallet", CreateWallet),
+		Run:   rootcmd.Perform("create wallet", CreateWallet),
 	}
 )
 

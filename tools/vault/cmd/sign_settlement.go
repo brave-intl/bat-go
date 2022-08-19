@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
+
 	settlement "github.com/brave-intl/bat-go/tools/settlement"
 	bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
 	settlementcmd "github.com/brave-intl/bat-go/tools/settlement/cmd"
@@ -35,7 +36,7 @@ var (
 	SignSettlementCmd = &cobra.Command{
 		Use:   "sign-settlement INPUT_FILE...",
 		Short: "sign settlement files using vault held secrets",
-		Run:   cmd.Perform("sign settlement", SignSettlement),
+		Run:   rootcmd.Perform("sign settlement", SignSettlement),
 	}
 	// the combination of provider + transaction type gives you the key
 	// under which the vault secrets are located by default

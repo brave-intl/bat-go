@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -21,7 +21,7 @@ var (
 	CreateCmd = &cobra.Command{
 		Use:   "create",
 		Short: "creates a wallet",
-		Run:   cmd.Perform("create", Create),
+		Run:   rootcmd.Perform("create", Create),
 	}
 )
 

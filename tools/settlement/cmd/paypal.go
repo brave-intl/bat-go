@@ -11,10 +11,10 @@ import (
 	"text/template"
 	"time"
 
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	"github.com/brave-intl/bat-go/utils/custodian"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/tools/settlement/paypal"
 	"github.com/brave-intl/bat-go/utils/closers"
@@ -121,21 +121,21 @@ var (
 	EmailPaypalSettlementCmd = &cobra.Command{
 		Use:   "email",
 		Short: "provides population of a templated email",
-		Run:   cmd.Perform("email", EmailPaypalSettlement),
+		Run:   rootcmd.Perform("email", EmailPaypalSettlement),
 	}
 
 	// CompletePaypalSettlementCmd provides completion of paypal settlement
 	CompletePaypalSettlementCmd = &cobra.Command{
 		Use:   "complete",
 		Short: "provides completion of paypal settlement",
-		Run:   cmd.Perform("complete", CompletePaypalSettlement),
+		Run:   rootcmd.Perform("complete", CompletePaypalSettlement),
 	}
 
 	// TransformPaypalSettlementCmd provides transform of paypal settlement for mass pay
 	TransformPaypalSettlementCmd = &cobra.Command{
 		Use:   "transform",
 		Short: "provides transform of paypal settlement for mass pay",
-		Run:   cmd.Perform("transform", RunTransformPaypalSettlement),
+		Run:   rootcmd.Perform("transform", RunTransformPaypalSettlement),
 	}
 )
 

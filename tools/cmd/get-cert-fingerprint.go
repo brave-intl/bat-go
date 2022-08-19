@@ -17,7 +17,7 @@ var (
 	GetCertFingerprintCmd = &cobra.Command{
 		Use:   "get-cert-fingerprint",
 		Short: "A helper for fetching tls fingerprint info for pinning",
-		Run:   Perform("get cert fingerprint", GetCertFingerprint),
+		Run:   rootcmd.Perform("get cert fingerprint", GetCertFingerprint),
 	}
 )
 

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -31,14 +31,14 @@ var (
 	UploadGeminiSettlementCmd = &cobra.Command{
 		Use:   "upload",
 		Short: "uploads signed gemini transactions",
-		Run:   cmd.Perform("gemini upload", UploadGeminiSettlement),
+		Run:   rootcmd.Perform("gemini upload", UploadGeminiSettlement),
 	}
 
 	// CheckStatusGeminiSettlementCmd creates the gemini checkstatus subcommand
 	CheckStatusGeminiSettlementCmd = &cobra.Command{
 		Use:   "checkstatus",
 		Short: "uploads signed gemini transactions",
-		Run:   cmd.Perform("gemini checkstatus", CheckStatusGeminiSettlement),
+		Run:   rootcmd.Perform("gemini checkstatus", CheckStatusGeminiSettlement),
 	}
 )
 

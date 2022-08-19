@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/tools/settlement"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -32,7 +32,7 @@ var (
 	UpholdUploadCmd = &cobra.Command{
 		Use:   "upload",
 		Short: "upload to uphold",
-		Run:   cmd.Perform("upload", RunUpholdUpload),
+		Run:   rootcmd.Perform("upload", RunUpholdUpload),
 	}
 )
 

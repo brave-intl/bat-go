@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/brave-intl/bat-go/utils/logging"
@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	cmd.RootCmd.AddCommand(SettlementCmd)
+	rootcmd.RootCmd.AddCommand(SettlementCmd)
 }
 
 // SettlementCmd is the settlement command

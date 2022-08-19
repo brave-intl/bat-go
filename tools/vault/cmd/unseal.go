@@ -6,7 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
+
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/spf13/cobra"
@@ -18,7 +19,7 @@ var (
 	UnsealCmd = &cobra.Command{
 		Use:   "unseal",
 		Short: "unseals the vault server",
-		Run:   cmd.Perform("unseal vault", Unseal),
+		Run:   rootcmd.Perform("unseal vault", Unseal),
 	}
 )
 

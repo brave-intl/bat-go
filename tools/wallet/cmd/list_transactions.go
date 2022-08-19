@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	"github.com/brave-intl/bat-go/utils/wallet"
@@ -32,7 +32,7 @@ var (
 	ListTransactionsCmd = &cobra.Command{
 		Use:   "list-transactions",
 		Short: "lists a transactions from a given wallet",
-		Run:   cmd.Perform("list transactions", RunListTransactions),
+		Run:   rootcmd.Perform("list transactions", RunListTransactions),
 	}
 )
 

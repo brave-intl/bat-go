@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
@@ -29,21 +29,21 @@ var (
 	UploadBitflyerSettlementCmd = &cobra.Command{
 		Use:   "upload",
 		Short: "uploads signed bitflyer transactions",
-		Run:   cmd.Perform("bitflyer upload", UploadBitflyerSettlement),
+		Run:   rootcmd.Perform("bitflyer upload", UploadBitflyerSettlement),
 	}
 
 	// CheckStatusBitflyerSettlementCmd creates the bitflyer checkstatus subcommand
 	CheckStatusBitflyerSettlementCmd = &cobra.Command{
 		Use:   "checkstatus",
 		Short: "uploads signed bitflyer transactions",
-		Run:   cmd.Perform("bitflyer checkstatus", CheckStatusBitflyerSettlement),
+		Run:   rootcmd.Perform("bitflyer checkstatus", CheckStatusBitflyerSettlement),
 	}
 
 	// GetBitflyerTokenCmd gets a new bitflyer token
 	GetBitflyerTokenCmd = &cobra.Command{
 		Use:   "token",
 		Short: "gets a new token for authing",
-		Run:   cmd.Perform("bitflyer token", GetBitflyerToken),
+		Run:   rootcmd.Perform("bitflyer token", GetBitflyerToken),
 	}
 )
 

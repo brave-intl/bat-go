@@ -10,9 +10,10 @@ import (
 	"os/user"
 	"path"
 
+	rootcmd "github.com/brave-intl/bat-go/cmd"
+
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/brave-intl/bat-go/utils/closers"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -28,7 +29,7 @@ var (
 	InitCmd = &cobra.Command{
 		Use:   "init",
 		Short: "initializes the vault server",
-		Run:   cmd.Perform("init vault", Initialize),
+		Run:   rootcmd.Perform("init vault", Initialize),
 	}
 )
 
@@ -56,7 +57,7 @@ func Initialize(command *cobra.Command, args []string) error {
 	secretShares := viper.GetUint("key-shares")
 	secretThreshold := viper.GetUint("key-threshold")
 	logger, err := appctx.GetLogger(command.Context())
-	cmd.Must(err)
+	cmdutils.Must(err)
 
 	if len(gpgKeyFiles) == 0 {
 		return errors.New("a gpg file was not passed")

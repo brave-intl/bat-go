@@ -6,7 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
+
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -26,7 +27,7 @@ var (
 	ImportKeyCmd = &cobra.Command{
 		Use:   "import-key",
 		Short: "import keys to be used in vault",
-		Run:   cmd.Perform("import key", ImportKey),
+		Run:   rootcmd.Perform("import key", ImportKey),
 	}
 )
 

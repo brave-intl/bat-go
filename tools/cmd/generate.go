@@ -35,7 +35,7 @@ var GenerateCmd = &cobra.Command{
 var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
-	Run:   Perform("generate json schema", jsonSchemaRun),
+	Run:   rootcmd.Perform("generate json schema", jsonSchemaRun),
 }
 
 // jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand

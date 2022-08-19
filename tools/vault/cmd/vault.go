@@ -1,8 +1,9 @@
 package vault
 
 import (
-	cmd "github.com/brave-intl/bat-go/tools/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	settlement "github.com/brave-intl/bat-go/tools/settlement"
+	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -18,15 +19,15 @@ var (
 )
 
 func init() {
-	cmd.RootCmd.AddCommand(VaultCmd)
+	rootcmd.RootCmd.AddCommand(VaultCmd)
 }
 
 // ReadConfig sets up the config flag
 func ReadConfig(command *cobra.Command) *settlement.Config {
 	configPath, err := command.Flags().GetString("config")
-	cmd.Must(err)
+	cmdutils.Must(err)
 	config, err := settlement.ReadYamlConfig(configPath)
-	cmd.Must(err)
+	cmdutils.Must(err)
 	Config = config
 	return config
 }
