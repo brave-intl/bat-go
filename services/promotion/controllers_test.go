@@ -25,7 +25,6 @@ import (
 	mockbitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer/mock"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
@@ -38,6 +37,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/middleware"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog/log"
@@ -1074,8 +1074,10 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		handler.ServeHTTP(rr, req)
 		return rr.Code
 	}
+
+	// govalidator does not allow empty array if required.
 	code := run([]uuid.UUID{})
-	suite.Require().Equal(http.StatusOK, code)
+	suite.Require().Equal(http.StatusBadRequest, code)
 
 	code = run([]uuid.UUID{
 		id0,
