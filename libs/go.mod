@@ -1,4 +1,4 @@
-module github.com/brave-intl/bat-go/utils
+module github.com/brave-intl/bat-go/libs
 
 go 1.18
 

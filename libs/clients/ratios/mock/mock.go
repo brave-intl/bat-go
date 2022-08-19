@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	ratios "github.com/brave-intl/bat-go/utils/clients/ratios"
+	ratios "github.com/brave-intl/bat-go/libs/clients/ratios"
 	gomock "github.com/golang/mock/gomock"
 )
 

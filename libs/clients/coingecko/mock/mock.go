@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	coingecko "github.com/brave-intl/bat-go/utils/clients/coingecko"
+	coingecko "github.com/brave-intl/bat-go/libs/clients/coingecko"
 	gomock "github.com/golang/mock/gomock"
 )
 

@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	gemini "github.com/brave-intl/bat-go/libs/clients/gemini"
 	cryptography "github.com/brave-intl/bat-go/libs/cryptography"
-	gemini "github.com/brave-intl/bat-go/utils/clients/gemini"
 	gomock "github.com/golang/mock/gomock"
 )
 

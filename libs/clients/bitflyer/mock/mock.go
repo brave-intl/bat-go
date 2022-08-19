@@ -8,7 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	bitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer"
+	bitflyer "github.com/brave-intl/bat-go/libs/clients/bitflyer"
 	gomock "github.com/golang/mock/gomock"
 )
 
