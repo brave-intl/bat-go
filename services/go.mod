@@ -4,7 +4,7 @@ go 1.18
 
 replace github.com/brave-intl/bat-go => ../
 
-replace github.com/brave-intl/bat-go/utils => ../utils
+replace github.com/brave-intl/bat-go/libs => ../libs
 
 replace github.com/brave-intl/bat-go/tools => ../tools
 
@@ -15,8 +15,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.27.5
 	github.com/aws/smithy-go v1.12.1
 	github.com/brave-intl/bat-go v0.5.1
+	github.com/brave-intl/bat-go/libs v0.0.0-00010101000000-000000000000
 	github.com/brave-intl/bat-go/tools v0.0.0-00010101000000-000000000000
-	github.com/brave-intl/bat-go/utils v0.0.0-00010101000000-000000000000
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1

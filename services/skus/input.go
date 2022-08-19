@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // VerifyCredentialRequestV1 includes an opaque subscription credential blob

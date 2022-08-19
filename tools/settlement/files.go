@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/libs/custodian"
 )
 
 // ReadFiles reads a series of files

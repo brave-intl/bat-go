@@ -7,11 +7,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/custodian"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
-	"github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/custodian"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/ed25519"
 )

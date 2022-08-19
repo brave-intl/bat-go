@@ -9,7 +9,7 @@ import (
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

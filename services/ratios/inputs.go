@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 // CoingeckoCoin - type for coingecko coin input

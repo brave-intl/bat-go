@@ -13,23 +13,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/gemini"
-	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	"github.com/brave-intl/bat-go/libs/custodian"
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/brave-intl/bat-go/utils/ptr"
+	"github.com/brave-intl/bat-go/libs/ptr"
 
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/logging"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
 
 	"github.com/brave-intl/bat-go/services/wallet"
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/utils/jsonutils"
-	testutils "github.com/brave-intl/bat-go/utils/test"
-	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	"github.com/brave-intl/bat-go/libs/jsonutils"
+	testutils "github.com/brave-intl/bat-go/libs/test"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"

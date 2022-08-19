@@ -11,8 +11,8 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/cryptography"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/cryptography"
 	"github.com/stretchr/testify/suite"
 )
 

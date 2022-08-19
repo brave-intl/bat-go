@@ -12,11 +12,11 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
-	"github.com/brave-intl/bat-go/utils/closers"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/libs/closers"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/hashicorp/vault/api"
 	"github.com/keybase/go-crypto/openpgp"
 	"github.com/keybase/go-crypto/openpgp/packet"

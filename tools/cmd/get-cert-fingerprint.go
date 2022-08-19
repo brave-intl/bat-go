@@ -6,9 +6,9 @@ import (
 	"errors"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/pindialer"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/pindialer"
 	"github.com/spf13/cobra"
 )
 

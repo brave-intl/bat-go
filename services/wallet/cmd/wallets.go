@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 
 	// pprof imports
 	_ "net/http/pprof"

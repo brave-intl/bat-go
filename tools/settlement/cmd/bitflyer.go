@@ -10,10 +10,10 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	bitflyersettlement "github.com/brave-intl/bat-go/tools/settlement/bitflyer"
-	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

@@ -3,8 +3,8 @@ package rewards
 import (
 	"context"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/shopspring/decimal"
 )
 

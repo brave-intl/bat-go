@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/shopspring/decimal"
 	"gotest.tools/assert"
 )

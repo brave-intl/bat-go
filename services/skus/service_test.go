@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	timeutils "github.com/brave-intl/bat-go/utils/time"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 )
 
 func TestCredChunkFn(t *testing.T) {

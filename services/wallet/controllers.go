@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
 	uuid "github.com/satori/go.uuid"
 )
 

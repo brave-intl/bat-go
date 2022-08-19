@@ -11,9 +11,9 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	"github.com/brave-intl/bat-go/utils/datastore"
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 )
 
 type BytesContains []byte

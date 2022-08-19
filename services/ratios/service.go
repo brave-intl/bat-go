@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/coingecko"
-	ratiosclient "github.com/brave-intl/bat-go/utils/clients/ratios"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/logging"
-	logutils "github.com/brave-intl/bat-go/utils/logging"
-	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
+	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/logging"
+	logutils "github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
 	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
 )

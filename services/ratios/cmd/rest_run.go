@@ -10,9 +10,9 @@ import (
 
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/ratios"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/middleware"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"

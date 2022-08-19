@@ -6,7 +6,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/brave-intl/bat-go/services/cmd"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

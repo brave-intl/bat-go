@@ -15,12 +15,12 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/brave-intl/bat-go/utils/clients"
-	"github.com/brave-intl/bat-go/utils/datastore"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/utils/jsonutils"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/jsonutils"
+	"github.com/brave-intl/bat-go/libs/logging"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"

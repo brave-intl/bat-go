@@ -10,10 +10,10 @@ import (
 	"time"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	"github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/brave-intl/bat-go/utils/wallet/provider"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	"github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/spf13/cobra"
 )
 

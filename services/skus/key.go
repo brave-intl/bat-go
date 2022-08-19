@@ -12,9 +12,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/cryptography"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
-	"github.com/brave-intl/bat-go/utils/middleware"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
+	"github.com/brave-intl/bat-go/libs/middleware"
 	uuid "github.com/satori/go.uuid"
 )
 

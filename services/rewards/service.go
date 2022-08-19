@@ -12,12 +12,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	awslogging "github.com/aws/smithy-go/logging"
-	"github.com/brave-intl/bat-go/utils/clients/ratios"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/utils/logging"
-	srv "github.com/brave-intl/bat-go/utils/service"
+	"github.com/brave-intl/bat-go/libs/clients/ratios"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
 	"github.com/rs/zerolog"
 )
 

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/coingecko"
-	ratiosclient "github.com/brave-intl/bat-go/utils/clients/ratios"
-	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
+	ratiosclient "github.com/brave-intl/bat-go/libs/clients/ratios"
+	"github.com/brave-intl/bat-go/libs/closers"
 	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
 )

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/shengdoushi/base58"
 	"github.com/shopspring/decimal"
 )

@@ -12,12 +12,12 @@ import (
 	"time"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	"github.com/brave-intl/bat-go/utils/custodian"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	"github.com/brave-intl/bat-go/libs/custodian"
 
 	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/tools/settlement/paypal"
-	"github.com/brave-intl/bat-go/utils/closers"
+	"github.com/brave-intl/bat-go/libs/closers"
 	"github.com/gocarina/gocsv"
 	"github.com/rs/zerolog"
 	"github.com/shopspring/decimal"

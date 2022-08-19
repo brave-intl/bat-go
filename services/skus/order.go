@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/datastore"
-	"github.com/brave-intl/bat-go/utils/logging"
-	timeutils "github.com/brave-intl/bat-go/utils/time"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/logging"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"

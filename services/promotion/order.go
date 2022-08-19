@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/services/skus"
-	"github.com/brave-intl/bat-go/utils/datastore"
+	"github.com/brave-intl/bat-go/libs/datastore"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )

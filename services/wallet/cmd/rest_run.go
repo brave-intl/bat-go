@@ -9,8 +9,8 @@ import (
 
 	"github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/wallet"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	"github.com/spf13/cobra"

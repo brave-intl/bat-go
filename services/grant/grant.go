@@ -1,8 +1,8 @@
 package grant
 
 import (
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	"github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	"github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 )

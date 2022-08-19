@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/cbr"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/jsonutils"
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/jsonutils"
 	uuid "github.com/satori/go.uuid"
 )
 

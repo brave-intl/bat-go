@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	"github.com/brave-intl/bat-go/utils/custodian"
-	"github.com/brave-intl/bat-go/utils/logging"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/custodian"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/spf13/cobra"
 )
 

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 
@@ -22,7 +22,7 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 	// re-using viper bind-env for wallet env variables
 	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/suite"
 )

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 )
 
 // List of all the allowed and whitelisted brave skus

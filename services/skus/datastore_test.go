@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/utils/datastore"
-	"github.com/brave-intl/bat-go/utils/inputs"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 )

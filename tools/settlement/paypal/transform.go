@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients/ratios"
-	"github.com/brave-intl/bat-go/utils/custodian"
+	"github.com/brave-intl/bat-go/libs/clients/ratios"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/shopspring/decimal"
 )
 

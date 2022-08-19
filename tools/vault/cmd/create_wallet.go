@@ -8,12 +8,12 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
-	"github.com/brave-intl/bat-go/utils/httpsignature"
-	logutils "github.com/brave-intl/bat-go/utils/logging"
-	"github.com/brave-intl/bat-go/utils/wallet"
-	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	"github.com/brave-intl/bat-go/libs/httpsignature"
+	logutils "github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ed25519"
 )

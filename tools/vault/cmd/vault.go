@@ -3,7 +3,7 @@ package vault
 import (
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	settlement "github.com/brave-intl/bat-go/tools/settlement"
-	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	"github.com/spf13/cobra"
 )
 

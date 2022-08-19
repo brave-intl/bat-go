@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/brave-intl/bat-go/utils/cryptography"
+	"github.com/brave-intl/bat-go/libs/cryptography"
 	uuid "github.com/satori/go.uuid"
 )
 

@@ -13,9 +13,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/shopspring/decimal"
 
-	"github.com/brave-intl/bat-go/utils/clients/ratios"
-	ratiosmock "github.com/brave-intl/bat-go/utils/clients/ratios/mock"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/libs/clients/ratios"
+	ratiosmock "github.com/brave-intl/bat-go/libs/clients/ratios/mock"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/go-chi/chi"
 	gomock "github.com/golang/mock/gomock"
 )

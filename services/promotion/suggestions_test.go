@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	kafkautils "github.com/brave-intl/bat-go/utils/kafka"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
 	"github.com/stretchr/testify/assert"
 )
 

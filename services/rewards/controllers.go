@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/brave-intl/bat-go/utils/handlers"
-	"github.com/brave-intl/bat-go/utils/inputs"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/logging"
 )
 
 // GetParametersHandler - handler to get reward parameters

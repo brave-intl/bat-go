@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/suite"
 )

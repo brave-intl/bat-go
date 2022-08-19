@@ -1,6 +1,6 @@
 go 1.18
 
 use .
-use ./utils
+use ./libs
 use ./services
 use ./tools

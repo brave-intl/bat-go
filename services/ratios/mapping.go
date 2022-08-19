@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/brave-intl/bat-go/utils/clients/coingecko"
-	appctx "github.com/brave-intl/bat-go/utils/context"
+	"github.com/brave-intl/bat-go/libs/clients/coingecko"
+	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/shopspring/decimal"
 )
 

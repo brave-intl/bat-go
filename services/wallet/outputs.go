@@ -1,8 +1,8 @@
 package wallet
 
 import (
-	"github.com/brave-intl/bat-go/utils/altcurrency"
-	walletutils "github.com/brave-intl/bat-go/utils/wallet"
+	"github.com/brave-intl/bat-go/libs/altcurrency"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 )
 
