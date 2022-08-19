@@ -3,8 +3,8 @@ package responses
 import (
 	"reflect"
 
-	"github.com/brave-intl/bat-go/rewards"
-	"github.com/brave-intl/bat-go/wallet"
+	"github.com/brave-intl/bat-go/services/rewards"
+	"github.com/brave-intl/bat-go/services/wallet"
 )
 
 var (

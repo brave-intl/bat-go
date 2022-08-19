@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	ratiosrv "github.com/brave-intl/bat-go/ratios"
 	"github.com/brave-intl/bat-go/utils/clients"
+	"github.com/brave-intl/bat-go/utils/clients/coingecko"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/google/go-querystring/query"
 	cache "github.com/patrickmn/go-cache"
@@ -100,6 +100,12 @@ func (fo *FetchOptions) GenerateQueryString() (url.Values, error) {
 	return query.Values(fo)
 }
 
+// RelativeResponse - the relative response structure
+type RelativeResponse struct {
+	Payload     coingecko.SimplePriceResponse `json:"payload"`
+	LastUpdated time.Time                     `json:"lastUpdated"`
+}
+
 // FetchRate fetches the rate of a currency to BAT
 func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string) (*RateResponse, error) {
 	// normalize base and currency to lowercase
@@ -118,7 +124,7 @@ func (c *HTTPClient) FetchRate(ctx context.Context, base string, currency string
 		return nil, err
 	}
 
-	var body ratiosrv.RelativeResponse
+	var body RelativeResponse
 	_, err = c.client.Do(ctx, req, &body)
 	if err != nil {
 		return nil, err

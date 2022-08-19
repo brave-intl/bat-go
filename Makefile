@@ -17,11 +17,11 @@ buildcmd:
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -v -ldflags "-w -s -X main.version=${GIT_VERSION} -X main.buildTime=${BUILD_TIME} -X main.commit=${GIT_COMMIT}" -o bat-go main.go
 
 mock:
-	mockgen -source=./promotion/claim.go -destination=promotion/mockclaim.go -package=promotion
-	mockgen -source=./promotion/drain.go -destination=promotion/mockdrain.go -package=promotion
-	mockgen -source=./promotion/datastore.go -destination=promotion/mockdatastore.go -package=promotion
-	mockgen -source=./promotion/service.go -destination=promotion/mockservice.go -package=promotion
-	mockgen -source=./grant/datastore.go -destination=grant/mockdatastore.go -package=grant
+	mockgen -source=./services/promotion/claim.go -destination=services/promotion/mockclaim.go -package=promotion
+	mockgen -source=./services/promotion/drain.go -destination=services/promotion/mockdrain.go -package=promotion
+	mockgen -source=./services/promotion/datastore.go -destination=services/promotion/mockdatastore.go -package=promotion
+	mockgen -source=./services/promotion/service.go -destination=services/promotion/mockservice.go -package=promotion
+	mockgen -source=./services/grant/datastore.go -destination=services/grant/mockdatastore.go -package=grant
 	mockgen -source=./utils/clients/ratios/client.go -destination=utils/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./utils/clients/cbr/client.go -destination=utils/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./utils/clients/reputation/client.go -destination=utils/clients/reputation/mock/mock.go -package=mock_reputation
@@ -31,21 +31,21 @@ mock:
 	mockgen -source=./utils/backoff/retrypolicy/retrypolicy.go -destination=utils/backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
 
 instrumented:
-	gowrap gen -p github.com/brave-intl/bat-go/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/grant -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./grant/instrumented_read_only_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/promotion -i Datastore -t ./.prom-gowrap.tmpl -o ./promotion/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/promotion -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./promotion/instrumented_read_only_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/skus -i Datastore -t ./.prom-gowrap.tmpl -o ./skus/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_datastore.go
-	gowrap gen -p github.com/brave-intl/bat-go/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./wallet/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i Datastore -t ./.prom-gowrap.tmpl -o ./services/promotion/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/promotion -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/promotion/instrumented_read_only_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/skus -i Datastore -t ./.prom-gowrap.tmpl -o ./services/skus/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i Datastore -t ./.prom-gowrap.tmpl -o ./services/wallet/instrumented_datastore.go
+	gowrap gen -p github.com/brave-intl/bat-go/services/wallet -i ReadOnlyDatastore -t ./.prom-gowrap.tmpl -o ./services/wallet/instrumented_read_only_datastore.go
 	# fix everything called datastore...
-	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' grant/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./grant/instrumented_read_only_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./promotion/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./promotion/instrumented_read_only_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./skus/instrumented_datastore.go
-	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./wallet/instrumented_datastore.go
-	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./wallet/instrumented_read_only_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/grant_datastore_duration_seconds/g' services/grant/instrumented_datastore.go
+	sed -i'bak' 's/readonlydatastore_duration_seconds/grant_readonly_datastore_duration_seconds/g' ./services/grant/instrumented_read_only_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/promotion_datastore_duration_seconds/g' ./services/promotion/instrumented_datastore.go
+	sed -i'bak' 's/readonlydatastore_duration_seconds/promotion_readonly_datastore_duration_seconds/g' ./services/promotion/instrumented_read_only_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/skus_datastore_duration_seconds/g' ./services/skus/instrumented_datastore.go
+	sed -i'bak' 's/datastore_duration_seconds/wallet_datastore_duration_seconds/g' ./services/wallet/instrumented_datastore.go
+	sed -i'bak' 's/readonlydatastore_duration_seconds/wallet_readonly_datastore_duration_seconds/g' ./services/wallet/instrumented_read_only_datastore.go
 	# http clients
 	gowrap gen -p github.com/brave-intl/bat-go/utils/clients/cbr -i Client -t ./.prom-gowrap.tmpl -o ./utils/clients/cbr/instrumented_client.go
 	sed -i'bak' 's/cbr.//g' utils/clients/cbr/instrumented_client.go

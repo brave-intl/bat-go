@@ -3,6 +3,7 @@ module github.com/brave-intl/bat-go/tools
 go 1.18
 
 require (
+	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/brave-intl/bat-go v0.5.1
 	github.com/brave-intl/bat-go/utils v0.0.0-00010101000000-000000000000
 	github.com/getsentry/sentry-go v0.13.0
@@ -53,7 +54,6 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
-	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190620160927-9418d7b0cd0f // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect

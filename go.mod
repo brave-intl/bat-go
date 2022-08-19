@@ -8,7 +8,6 @@ replace github.com/brave-intl/bat-go/utils => ./utils
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/aws/aws-sdk-go-v2/config v1.15.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.27.1
@@ -59,6 +58,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
+	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190620160927-9418d7b0cd0f // indirect
 	github.com/armon/go-metrics v0.3.10 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
@@ -168,8 +168,10 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/square/go-jose v2.6.0+incompatible // indirect
 	github.com/subosito/gotenv v1.3.0 // indirect
+	github.com/superp00t/niceware v0.0.0-20170614015008-16cb30c384b5 // indirect
 	github.com/throttled/throttled v2.2.5+incompatible // indirect
 	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c // indirect
+	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234 // indirect
