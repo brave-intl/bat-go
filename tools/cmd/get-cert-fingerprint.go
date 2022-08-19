@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/logging"
 	"github.com/brave-intl/bat-go/utils/pindialer"
@@ -21,7 +22,7 @@ var (
 )
 
 func init() {
-	RootCmd.AddCommand(GetCertFingerprintCmd)
+	rootcmd.RootCmd.AddCommand(GetCertFingerprintCmd)
 }
 
 // GetCertFingerprint runs the command for GetCertFingerprint

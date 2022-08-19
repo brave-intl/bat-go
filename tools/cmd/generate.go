@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/jsonschema"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/spf13/cobra"
@@ -15,7 +16,7 @@ import (
 )
 
 func init() {
-	RootCmd.AddCommand(GenerateCmd)
+	rootcmd.RootCmd.AddCommand(GenerateCmd)
 	GenerateCmd.AddCommand(JSONSchemaCmd)
 
 	// overwrite - defaults to false
