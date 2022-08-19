@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
+	"github.com/brave-intl/bat-go/utils/custodian"
 
 	"github.com/jmoiron/sqlx"
 
@@ -1475,7 +1475,7 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Complete() {
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
 	// create tx_ref
-	settlementTx := settlement.Transaction{
+	settlementTx := custodian.Transaction{
 		SettlementID: ptr.String(drainJob.TransactionID),
 		Type:         "drain",
 		Destination:  ptr.String(drainJob.DepositDestination),
@@ -1522,7 +1522,7 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Pending() {
 		drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
 		// create tx_ref
-		settlementTx := settlement.Transaction{
+		settlementTx := custodian.Transaction{
 			SettlementID: ptr.String(drainJob.TransactionID),
 			Type:         "drain",
 			Destination:  ptr.String(drainJob.DepositDestination),
@@ -1577,7 +1577,7 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_Failure() {
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
 	// create tx_ref
-	settlementTx := settlement.Transaction{
+	settlementTx := custodian.Transaction{
 		SettlementID: ptr.String(drainJob.TransactionID),
 		Type:         "drain",
 		Destination:  ptr.String(drainJob.DepositDestination),
@@ -1618,7 +1618,7 @@ func (suite *PostgresTestSuite) TestRunNextGeminiCheckStatus_GetGeminiTxnStatus_
 	drainJob := suite.insertClaimDrainWithStatus(pg, txnStatusGeminiPending, true)
 
 	// create tx_ref
-	settlementTx := settlement.Transaction{
+	settlementTx := custodian.Transaction{
 		SettlementID: ptr.String(drainJob.TransactionID),
 		Type:         "drain",
 		Destination:  ptr.String(drainJob.DepositDestination),

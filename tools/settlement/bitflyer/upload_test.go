@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/utils/altcurrency"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
@@ -68,12 +68,12 @@ func TestBitflyerSuite(t *testing.T) {
 	suite.Run(t, new(BitflyerSuite))
 }
 
-func settlementTransaction(amount, address string) settlement.Transaction {
+func settlementTransaction(amount, address string) custodian.Transaction {
 	amountDecimal, _ := decimal.NewFromString(amount)
 	bat := altcurrency.BAT
 	fees := amountDecimal.Div(decimal.NewFromFloat(19))
 	settlementID := uuid.NewV4().String()
-	tx := settlement.Transaction{
+	tx := custodian.Transaction{
 		AltCurrency:      &bat,
 		Currency:         "BAT",
 		Amount:           amountDecimal,
@@ -92,8 +92,8 @@ func settlementTransaction(amount, address string) settlement.Transaction {
 	return tx
 }
 
-func transactionSubmitted(status string, tx settlement.Transaction, note string) settlement.Transaction {
-	return settlement.Transaction{
+func transactionSubmitted(status string, tx custodian.Transaction, note string) custodian.Transaction {
+	return custodian.Transaction{
 		Status:           status,
 		Channel:          tx.Channel,
 		AltCurrency:      tx.AltCurrency,
@@ -120,7 +120,7 @@ func (suite *BitflyerSuite) TestFailures() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx0},
+		[]custodian.Transaction{settlementTx0},
 		false,
 		"tipping",
 	)
@@ -143,7 +143,7 @@ func (suite *BitflyerSuite) TestFailures() {
 	failedTxNote := failedTxs[0].Note
 	fmt.Printf("%#v\n", failedTxNote)
 	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
-	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	expectedBytes, err := json.Marshal([]custodian.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("failed", settlementTx0, failedTxNote),
 	})
 	suite.Require().NoError(err)
@@ -194,14 +194,14 @@ func (suite *BitflyerSuite) TestFormData() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx1},
+		[]custodian.Transaction{settlementTx1},
 		false,
 		sourceFrom,
 	)
 	/*
 		resultIteration := make(map[string]int)
 
-		var payoutFiles *map[string][]settlement.Transaction
+		var payoutFiles *map[string][]custodian.Transaction
 		for i := 0; i < 2; i++ {
 			<-time.After(2 * time.Second)
 			results, err := IterateRequest(
@@ -240,7 +240,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().NoError(err)
 
 	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID()
-	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	expectedBytes, err := json.Marshal([]custodian.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
 	suite.Require().JSONEq(
@@ -266,7 +266,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	suite.Require().NoError(err)
 
 	settlementTx1.ProviderID = settlementTx1.BitflyerTransferID() // add bitflyer transaction hash
-	mCompleted, err := json.Marshal([]settlement.Transaction{     // serialize for comparison (decimal.Decimal does not do so well)
+	mCompleted, err := json.Marshal([]custodian.Transaction{      // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS"),
 	})
 	suite.Require().NoError(err)
@@ -275,7 +275,7 @@ func (suite *BitflyerSuite) TestFormData() {
 		string(mCompleted),
 	)
 
-	var completedStatus []settlement.Transaction
+	var completedStatus []custodian.Transaction
 	for {
 		<-time.After(time.Second)
 		payoutFiles, err = IterateRequest(
@@ -297,7 +297,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	completeSerializedStatus, err := json.Marshal(completedStatus)
 	suite.Require().NoError(err)
 
-	mCompletedStatus, err := json.Marshal([]settlement.Transaction{
+	mCompletedStatus, err := json.Marshal([]custodian.Transaction{
 		transactionSubmitted("complete", settlementTx1, "EXECUTED"),
 	})
 	suite.Require().NoError(err)
@@ -333,7 +333,7 @@ func (suite *BitflyerSuite) TestFormData() {
 	// so that we do not send to eyeshade
 	idempotencyFailNote := idempotencyFailComplete[0].Note
 	suite.Require().Equal("OTHER_ERROR: Duplicate transfer_id and different parameters", idempotencyFailNote)
-	idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
+	idempotencyFailCompleteExpected, err := json.Marshal([]custodian.Transaction{
 		transactionSubmitted("failed", settlementTx2, idempotencyFailNote),
 	})
 	suite.Require().NoError(err)

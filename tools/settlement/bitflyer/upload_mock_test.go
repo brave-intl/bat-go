@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brave-intl/bat-go/tools/settlement"
 	"github.com/brave-intl/bat-go/utils/clients"
 	"github.com/brave-intl/bat-go/utils/clients/bitflyer"
 	mockbitflyer "github.com/brave-intl/bat-go/utils/clients/bitflyer/mock"
+	"github.com/brave-intl/bat-go/utils/custodian"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -79,7 +79,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx0},
+		[]custodian.Transaction{settlementTx0},
 		false,
 		"tipping",
 	)
@@ -157,7 +157,7 @@ func (suite *BitflyerMockSuite) TestFailures() {
 	settlementTx0.ProviderID = settlementTx0.TransferID()
 	failedTxNote := failedTxs[0].Note
 	suite.Require().True(strings.Contains(failedTxNote, "NOT_FOUND"))
-	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	expectedBytes, err := json.Marshal([]custodian.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("failed", settlementTx0, failedTxNote),
 	})
 	suite.Require().NoError(err)
@@ -261,7 +261,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx1},
+		[]custodian.Transaction{settlementTx1},
 		false,
 		sourceFrom,
 	)
@@ -337,7 +337,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	suite.Require().NoError(err)
 
 	settlementTx1.ProviderID = settlementTx1.TransferID()
-	expectedBytes, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	expectedBytes, err := json.Marshal([]custodian.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().JSONEq(
@@ -407,8 +407,8 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	completeSerialized, err := json.Marshal(completed)
 	suite.Require().NoError(err)
 
-	settlementTx1.ProviderID = settlementTx1.TransferID()     // add bitflyer transaction hash
-	mCompleted, err := json.Marshal([]settlement.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
+	settlementTx1.ProviderID = settlementTx1.TransferID()    // add bitflyer transaction hash
+	mCompleted, err := json.Marshal([]custodian.Transaction{ // serialize for comparison (decimal.Decimal does not do so well)
 		transactionSubmitted("complete", settlementTx1, "SUCCESS transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().NoError(err)
@@ -416,7 +416,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 		string(completeSerialized),
 		string(mCompleted),
 	)
-	var completedStatus []settlement.Transaction
+	var completedStatus []custodian.Transaction
 	for {
 		<-time.After(time.Second)
 		suite.client.EXPECT().
@@ -470,7 +470,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	completeSerializedStatus, err := json.Marshal(completedStatus)
 	suite.Require().NoError(err)
 
-	mCompletedStatus, err := json.Marshal([]settlement.Transaction{
+	mCompletedStatus, err := json.Marshal([]custodian.Transaction{
 		transactionSubmitted("complete", settlementTx1, "EXECUTED transferID: "+settlementTx1.BitflyerTransferID()),
 	})
 	suite.Require().NoError(err)
@@ -498,7 +498,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 	preparedTransactions, err = PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx2},
+		[]custodian.Transaction{settlementTx2},
 		false,
 		sourceFrom,
 	)
@@ -568,7 +568,7 @@ func (suite *BitflyerMockSuite) TestFormData() {
 
 	// idempotencyFailNote := idempotencyFailComplete[0].Note
 	// suite.Require().Equal("OTHER_ERROR: Duplicate transfer_id and different parameters. transferID: "+idempotencyFailComplete[0].BitflyerTransferID(), idempotencyFailNote)
-	// idempotencyFailCompleteExpected, err := json.Marshal([]settlement.Transaction{
+	// idempotencyFailCompleteExpected, err := json.Marshal([]custodian.Transaction{
 	// 	transactionSubmitted("complete", settlementTx2, idempotencyFailNote),
 	// })
 	// suite.Require().NoError(err)
@@ -609,7 +609,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 	preparedTransactions, err := PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
+		[]custodian.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		false,
 		"tipping",
 	)
@@ -636,7 +636,7 @@ func (suite *BitflyerMockSuite) TestPrepareRequests() {
 	preparedTransactions, err = PrepareRequests(
 		ctx,
 		suite.client,
-		[]settlement.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
+		[]custodian.Transaction{settlementTx1, settlementTx2, settlementTx3, settlementTx4},
 		true,
 		"tipping",
 	)
