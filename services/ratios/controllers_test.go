@@ -16,6 +16,7 @@ import (
 	"github.com/brave-intl/bat-go/services/ratios"
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
 	mockcoingecko "github.com/brave-intl/bat-go/utils/clients/coingecko/mock"
+	ratiosclient "github.com/brave-intl/bat-go/utils/clients/ratios"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	logutils "github.com/brave-intl/bat-go/utils/logging"
 	"github.com/go-chi/chi"
@@ -174,7 +175,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 
 	// example
 	// {"payload":{"bat":{"usd":1.3,"usd_timeframe_change":0.8356218194962891}}
-	var resp = new(ratios.RelativeResponse)
+	var resp = new(ratiosclient.RelativeResponse)
 	err = json.Unmarshal(rr.Body.Bytes(), resp)
 	suite.Require().NoError(err)
 
