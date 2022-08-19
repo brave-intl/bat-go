@@ -158,7 +158,7 @@ create-json-schema:
 	go run main.go generate json-schema
 
 test:
-	GODEBUG=x509ignoreCN=0 go test -count 1 -v -p 1 $(TEST_FLAGS)
+	go test -count 1 -v -p 1 $(TEST_FLAGS) github.com/brave-intl/bat-go/...
 
 format:
 	gofmt -s -w ./
