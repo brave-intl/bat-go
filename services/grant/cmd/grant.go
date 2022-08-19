@@ -17,6 +17,7 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd"
+	servicescmd "github.com/brave-intl/bat-go/services/cmd"
 	"github.com/brave-intl/bat-go/services/grant"
 	"github.com/brave-intl/bat-go/services/promotion"
 	"github.com/brave-intl/bat-go/services/skus"
@@ -48,7 +49,7 @@ var (
 )
 
 func init() {
-	cmd.ServeCmd.AddCommand(GrantServerCmd)
+	servicescmd.ServeCmd.AddCommand(GrantServerCmd)
 
 	flagBuilder := cmdutils.NewFlagBuilder(GrantServerCmd)
 

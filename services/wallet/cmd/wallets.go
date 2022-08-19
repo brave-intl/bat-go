@@ -6,7 +6,7 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	"github.com/brave-intl/bat-go/services/cmd"
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ func init() {
 	WalletsCmd.AddCommand(walletsRestCmd)
 
 	// add this command as a serve subcommand
-	cmd.RootCmd.AddCommand(WalletsCmd)
+	rootcmd.RootCmd.AddCommand(WalletsCmd)
 
 	// setup the flags
 	walletsCmdBuilder := cmdutils.NewFlagBuilder(WalletsCmd)

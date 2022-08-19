@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/utils/clients/coingecko"
+	ratiosclient "github.com/brave-intl/bat-go/utils/clients/ratios"
 	"github.com/brave-intl/bat-go/utils/closers"
 	"github.com/gomodule/redigo/redis"
 	"github.com/shopspring/decimal"
@@ -97,7 +98,7 @@ func (s *Service) CacheRelative(ctx context.Context, resp coingecko.SimplePriceR
 	tmp[0] = "relative"
 
 	for coin, rates := range resp {
-		var subResp RelativeResponse
+		var subResp ratiosclient.RelativeResponse
 		payload := make(map[string]map[string]decimal.Decimal, 1)
 		payload[coin] = rates
 		subResp.Payload = payload
@@ -141,7 +142,7 @@ func (s *Service) GetRelativeFromCache(ctx context.Context, vsCurrencies Coingec
 		coin := coinIds[i].String()
 
 		if len(rate) > 0 {
-			var r RelativeResponse
+			var r ratiosclient.RelativeResponse
 			err = json.Unmarshal([]byte(rate), &r)
 			if err != nil {
 				return nil, updated, err

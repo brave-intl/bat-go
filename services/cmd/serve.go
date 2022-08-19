@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	rootcmd "github.com/brave-intl/bat-go/cmd"
 	cmdutils "github.com/brave-intl/bat-go/utils/cmd"
 	appctx "github.com/brave-intl/bat-go/utils/context"
 	"github.com/brave-intl/bat-go/utils/handlers"
@@ -23,7 +24,7 @@ const (
 )
 
 func init() {
-	RootCmd.AddCommand(ServeCmd)
+	rootcmd.RootCmd.AddCommand(ServeCmd)
 
 	// address - sets the address of the server to be started
 	ServeCmd.PersistentFlags().String("address", ":8080",
