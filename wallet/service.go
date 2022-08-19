@@ -357,6 +357,19 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 			// disconnect verified custodial wallet
 			r.Delete("/{custodian}/{paymentID}/claim", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
+
+			// create wallet connect routes for our wallet providers
+			r.Post("/uphold/{paymentID}/connect", middleware.InstrumentHandlerFunc(
+				"LinkUpholdDepositAccount", LinkUpholdDepositAccountV3(s)))
+			r.Post("/bitflyer/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkBitFlyerDepositAccount", LinkBitFlyerDepositAccountV3(s))).ServeHTTP)
+			r.Post("/brave/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkBraveDepositAccount", LinkBraveDepositAccountV3(s))).ServeHTTP)
+			r.Post("/gemini/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"LinkGeminiDepositAccount", LinkGeminiDepositAccountV3(s))).ServeHTTP)
+			// disconnect verified custodial wallet
+			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
+				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 		}
 		// support only APIs to assist in linking limit issues
 		/*
