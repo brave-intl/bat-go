@@ -45,7 +45,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/linkedin/goavro"
 	uuid "github.com/satori/go.uuid"
+	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -302,6 +304,66 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, token macar
 	issuer, _ := suite.storage.GetIssuer(issuerID)
 
 	return order, issuer
+}
+
+func (suite *ControllersTestSuite) TestAndroidWebhook() {
+	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
+	suite.Assert().NotNil(order)
+
+	// Check the order
+	suite.Assert().Equal("10", order.TotalPrice.String())
+
+	// add the external id to metadata as if an initial receipt was submitted
+	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
+	suite.Require().NoError(err)
+
+	// overwrite the receipt validation function for this test
+	receiptValidationFns = map[Vendor]func(context.Context, interface{}) (string, error){
+		appleVendor: validateIOSReceipt,
+		googleVendor: func(ctx context.Context, v interface{}) (string, error) {
+			return "my external id", nil
+		},
+	}
+
+	handler := HandleAndroidWebhook(suite.service)
+
+	// notification message
+	devNotify := DeveloperNotification{
+		PackageName: "package name",
+		SubscriptionNotification: SubscriptionNotification{
+			NotificationType: androidSubscriptionCanceled,
+			PurchaseToken:    "my external id",
+			SubscriptionID:   "subscription id",
+		},
+	}
+
+	buf, err := json.Marshal(&devNotify)
+	suite.Require().NoError(err)
+
+	// wrapper notification message
+	notification := &AndroidNotification{
+		Message: AndroidNotificationMessage{
+			Data: base64.StdEncoding.EncodeToString(buf), // dev notification is b64 encoded
+		},
+		Subscription: "subscription",
+	}
+
+	body, err := json.Marshal(&notification)
+	suite.Require().NoError(err)
+
+	req, err := http.NewRequest("POST", "/v1/android", bytes.NewBuffer(body))
+	suite.Require().NoError(err)
+
+	req = req.WithContext(context.WithValue(req.Context(), appctx.EnvironmentCTXKey, "development"))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	// get order and check the state changed to canceled
+	updatedOrder, err := suite.service.Datastore.GetOrder(order.ID)
+	suite.Assert().Equal("canceled", updatedOrder.Status)
 }
 
 func (suite *ControllersTestSuite) TestCreateOrder() {
@@ -882,6 +944,7 @@ func (suite *ControllersTestSuite) TestE2EAnonymousCard() {
 	defer ctx.Done()
 
 	voteTopic = test.RandomString()
+	kafkaUnsignedOrderCredsTopic = test.RandomString()
 	kafkaSignedOrderCredsTopic = test.RandomString()
 	kafkaSignedRequestReaderGroupID = test.RandomString()
 
@@ -1438,7 +1501,6 @@ func (suite *ControllersTestSuite) TestE2E_CreateOrderCreds_StoreSignedOrderCred
 		}
 	}()
 
-	// TODO wrap in poller
 	time.Sleep(30 * time.Second)
 
 	// retrieve the newly signed order creds by orderID and itemID.
@@ -1528,4 +1590,28 @@ func (suite *ControllersTestSuite) CreateMacaroon(sku string, price int) string 
 	skuMap["development"][mac] = true
 
 	return mac
+}
+
+func writeSigningOrderResultMessage(t *testing.T, ctx context.Context, signingOrderResult SigningOrderResult, topic string) {
+	codec, err := goavro.NewCodec(signingOrderResultSchema)
+	assert.NoError(t, err)
+
+	textual, err := json.Marshal(signingOrderResult)
+	assert.NoError(t, err)
+
+	native, _, err := codec.NativeFromTextual(textual)
+	assert.NoError(t, err)
+
+	binary, err := codec.BinaryFromNative(nil, native)
+	assert.NoError(t, err)
+
+	kafkaWriter, _, err := kafkautils.InitKafkaWriter(ctx, "")
+	assert.NoError(t, err)
+
+	err = kafkaWriter.WriteMessages(ctx, kafka.Message{
+		Topic: topic,
+		Key:   []byte(signingOrderResult.RequestID),
+		Value: binary,
+	})
+	assert.NoError(t, err)
 }

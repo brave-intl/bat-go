@@ -903,26 +903,34 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
+	// First check order creds have successfully been submitted for processing.
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if len(outboxMessages) == 0 {
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	}
+
+	// To ensure we have completed signing all the creds for our order we need to check the total number of creds matches
+	// the number of signing results we are expecting otherwise we are not finished signing and return http.StatusAccepted.
 	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds != nil {
+	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	if err != nil {
+		return nil, http.StatusInternalServerError,
+			fmt.Errorf("error calculating total expected signing results: %w", err)
+	}
+
+	if creds != nil && len(creds.Credentials) == total {
 		return creds, http.StatusOK, nil
 	}
 
-	// check to see if messages are in outbox
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
-	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
-
-	if len(outboxMessages) > 0 {
-		return nil, http.StatusAccepted, nil
-	}
-
-	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	return nil, http.StatusAccepted, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
@@ -1310,6 +1318,61 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 	}
 }
 
+// verifyDeveloperNotification - verify the developer notification from playstore
+func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
+	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+		return errors.New("notification has no purchase token")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
+	// have order, now validate the receipt from the notification
+	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
+		Type:           "android",
+		Blob:           dn.SubscriptionNotification.PurchaseToken,
+		Package:        dn.PackageName,
+		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to validate purchase token: %w", err)
+	}
+
+	switch dn.SubscriptionNotification.NotificationType {
+	case androidSubscriptionRenewed,
+		androidSubscriptionRecovered,
+		androidSubscriptionPurchased,
+		androidSubscriptionRestarted,
+		androidSubscriptionInGracePeriod,
+		androidSubscriptionPriceChangeConfirmed:
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	case androidSubscriptionExpired,
+		androidSubscriptionRevoked,
+		androidSubscriptionPausedScheduleChanged,
+		androidSubscriptionPaused,
+		androidSubscriptionDeferred,
+		androidSubscriptionOnHold,
+		androidSubscriptionCanceled,
+		androidSubscriptionUnknown:
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	default:
+		return errors.New("failed to act on subscription notification")
+	}
+
+	return nil
+}
+
 // validateReceipt - perform receipt validation
 func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
 	// based on the vendor call the vendor specific apis to check the status of the receipt,
@@ -1343,4 +1406,25 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+// calculateTotalExpectedSigningResults calculates the expected number of signing results by multiplying the number
+// of blinded creds by the number of order items in the order. This function is only relevant to
+// skus.TimeLimitedV2Creds credentials so we can compare how many results we have received and if we are done
+// signing the order.
+func calculateTotalExpectedSigningResults(outboxMessages []SigningOrderRequestOutbox) (int, error) {
+	total := 0
+
+	var sor SigningOrderRequest
+	for _, outboxMessage := range outboxMessages {
+		err := json.Unmarshal(outboxMessage.Message, &sor)
+		if err != nil {
+			return 0, fmt.Errorf("error unmarshaling outbox message: %w", err)
+		}
+		for _, data := range sor.Data {
+			total += len(data.BlindedTokens)
+		}
+	}
+
+	return total, nil
 }
