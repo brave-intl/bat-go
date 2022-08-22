@@ -14,6 +14,12 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/jsonutils"
+	"github.com/brave-intl/bat-go/libs/ptr"
+	"github.com/brave-intl/bat-go/libs/test"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	"github.com/brave-intl/bat-go/services/skus/skustest"
+	"github.com/golang/mock/gomock"
 	"github.com/brave-intl/bat-go/datastore/grantserver"
 	"github.com/brave-intl/bat-go/skus/skustest"
 	appctx "github.com/brave-intl/bat-go/utils/context"
@@ -65,7 +71,7 @@ func TestGetPagedMerchantTransactions(t *testing.T) {
 		}
 	}()
 	// inject our mock db into our postgres
-	pg := &skus.Postgres{Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}}
+	pg := &Postgres{Postgres: datastore.Postgres{DB: sqlx.NewDb(mockDB, "sqlmock")}}
 
 	// setup inputs
 	merchantID := uuid.NewV4()

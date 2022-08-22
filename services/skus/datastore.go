@@ -20,11 +20,22 @@ import (
 	"github.com/brave-intl/bat-go/utils/ptr"
 	timeutils "github.com/brave-intl/bat-go/utils/time"
 	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
+
+	"github.com/brave-intl/bat-go/libs/clients"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/jsonutils"
+	"github.com/brave-intl/bat-go/libs/logging"
+	ptr "github.com/brave-intl/bat-go/libs/ptr"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -32,7 +43,7 @@ import (
 
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
-	grantserver.Datastore
+	datastore.Datastore
 	// CreateOrder is used to create an order for payments
 	CreateOrder(totalPrice decimal.Decimal, merchantID string, status string, currency string, location string, validFor *time.Duration, orderItems []OrderItem, allowedPaymentMethods *Methods) (*Order, error)
 	// SetOrderTrialDays - set the number of days of free trial for this order
@@ -40,9 +51,6 @@ type Datastore interface {
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
 	// GetOrderByExternalID by the external id from the purchase vendor
-	GetOrderByExternalID(string) (*Order, error)
-	// GetOrderByExternalID by the external id from the purchase vendor
-	GetOrderByExternalID(externalID string) (*Order, error)
 	GetOrderByExternalID(externalID string) (*Order, error)
 	// RenewOrder - renew the order with this id
 	RenewOrder(ctx context.Context, orderID uuid.UUID) error
@@ -109,12 +117,12 @@ type VoteRecord struct {
 
 // Postgres is a Datastore wrapper around a postgres database
 type Postgres struct {
-	grantserver.Postgres
+	datastore.Postgres
 }
 
 // NewPostgres creates a new Postgres Datastore
 func NewPostgres(databaseURL string, performMigration bool, migrationTrack string, dbStatsPrefix ...string) (Datastore, error) {
-	pg, err := grantserver.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
+	pg, err := datastore.NewPostgres(databaseURL, performMigration, migrationTrack, dbStatsPrefix...)
 	if pg != nil {
 		return &DatastoreWithPrometheus{
 			base: &Postgres{*pg}, instanceName: "payment_datastore",
@@ -321,7 +329,7 @@ func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
 			id, created_at, currency, updated_at, total_price, 
 			merchant_id, location, status, allowed_payment_methods, 
 			metadata, valid_for, last_paid_at, expires_at, trial_days
-		FROM orders WHERE metadata->>externalID = $1`
+		FROM orders WHERE metadata->>'externalID' = $1`
 	order := Order{}
 	err := pg.RawDB().Get(&order, statement, externalID)
 	if err == sql.ErrNoRows {
@@ -1179,7 +1187,7 @@ type TimeAwareSubIssuedCreds struct {
 	PublicKey    string                    `json:"publicKey" db:"public_key"`
 }
 
-// GetTimeLimitedV2OrderCredsByOrder returns all the time limited v2 order credentials for an order single order.
+// GetTimeLimitedV2OrderCredsByOrder returns all the time limited v2 order credentials for a single order.
 func (pg *Postgres) GetTimeLimitedV2OrderCredsByOrder(orderID uuid.UUID) (*TimeLimitedV2Creds, error) {
 	query := `
 		select order_id, item_id, issuer_id, blinded_creds, signed_creds, batch_proof, public_key, valid_from, valid_to
@@ -1495,7 +1503,7 @@ func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID,
 	if err != nil {
 		return err
 	}
-	stmt := `update orders set metadata = metadata || jsonb_build_object($1::text, $2::text), updated_at = current_timestamp where id = $3`
+	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::text), metadata, jsonb_build_object($1::text, $2::text)), updated_at = current_timestamp where id = $3`
 
 	result, err := tx.Exec(stmt, key, value, orderID.String())
 	if err != nil {
