@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	sentry "github.com/getsentry/sentry-go"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	uuid "github.com/satori/go.uuid"
+	kafka "github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
 
 	"github.com/brave-intl/bat-go/libs/clients"
@@ -21,6 +23,8 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
 	"github.com/brave-intl/bat-go/libs/logging"
+	ptr "github.com/brave-intl/bat-go/libs/ptr"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
 
 	// needed for magic migration
 	_ "github.com/golang-migrate/migrate/v4/source/file"
