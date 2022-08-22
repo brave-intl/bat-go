@@ -9,9 +9,9 @@ replace github.com/brave-intl/bat-go/services => ./services
 replace github.com/brave-intl/bat-go/libs => ./libs
 
 require (
-	github.com/brave-intl/bat-go/libs v0.0.0-00010101000000-000000000000
-	github.com/brave-intl/bat-go/services v0.0.0-00010101000000-000000000000
-	github.com/brave-intl/bat-go/tools v0.0.0-00010101000000-000000000000
+	github.com/brave-intl/bat-go/libs v1.0.0
+	github.com/brave-intl/bat-go/services v1.0.0
+	github.com/brave-intl/bat-go/tools v1.0.0
 	github.com/rs/zerolog v1.27.0
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.12.0

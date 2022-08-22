@@ -5,8 +5,8 @@ go 1.18
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/brave-intl/bat-go v0.5.1
-	github.com/brave-intl/bat-go/libs v0.0.0-00010101000000-000000000000
-	github.com/brave-intl/bat-go/services v0.0.0-00010101000000-000000000000
+	github.com/brave-intl/bat-go/libs v1.0.0
+	github.com/brave-intl/bat-go/services v1.0.0
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/gocarina/gocsv v0.0.0-20220729221910-a7386ae0b221
 	github.com/golang/mock v1.6.0
