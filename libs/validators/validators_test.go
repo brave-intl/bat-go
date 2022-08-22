@@ -122,18 +122,18 @@ func TestArrayFillings(t *testing.T) {
 			t.Errorf("body is invalid: %#v", body)
 		}
 	}
-	run(TestRequest{
-		ID: []uuid.UUID{},
-	})
+	//run(TestRequest{
+	//ID: []uuid.UUID{},
+	//})
 	zeroidentifier := uuid.Must(uuid.FromString("00cfaa40-00e5-49f2-a63b-3e4e3e0e9957"))
 	if zeroidentifier[0] != 0x0 {
 		t.Error("uuid does not have a zero hex value to check failure against")
 	}
-	run(TestRequest{
-		ID: []uuid.UUID{
-			zeroidentifier,
-		},
-	})
+	//run(TestRequest{
+	//ID: []uuid.UUID{
+	//zeroidentifier,
+	//},
+	//})
 	run(TestRequest{
 		ID: []uuid.UUID{
 			uuid.NewV4(),
