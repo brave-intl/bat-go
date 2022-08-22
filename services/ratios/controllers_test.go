@@ -189,7 +189,7 @@ func (suite *ControllersTestSuite) TestGetRelativeHandler() {
 func (suite *ControllersTestSuite) TestGetCoinMarketsHandler() {
 	handler := ratios.GetCoinMarketsHandler(suite.service)
 	coingeckoResp := coingecko.CoinMarketResponse(
-		[]coingecko.CoinMarket{
+		[]*coingecko.CoinMarket{
 			{
 				ID:                       "bitcoin",
 				Symbol:                   "btc",

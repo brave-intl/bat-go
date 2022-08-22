@@ -6,6 +6,7 @@ package coingecko_test
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"testing"
 
@@ -152,4 +153,7 @@ func (suite *CoingeckoTestSuite) TestFetchCoinMarkets() {
 	suite.Require().NoError(err, "should be able to fetch the coin markets")
 	suite.Require().Equal(10, len(*resp1), "should have a response length of 10 for limit=10")
 	suite.Require().Equal(t, t1, "the lastUpdated time should be equal because of cache usage")
+	u, err := url.Parse((*resp1)[0].Image)
+	suite.Require().NoError(err)
+	suite.Require().Equal(u.Host, "api.cgproxy.brave.com", "image host should be the brave proxy")
 }

@@ -19,6 +19,7 @@ import (
 const (
 	coinMarketsPageSize      = 250
 	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
+	coingeckoImageProxy      = "assets.cgproxy.brave.com"
 )
 
 // Client abstracts over the underlying client
@@ -327,7 +328,7 @@ type CoinMarket struct {
 }
 
 // CoinMarketResponse is the coingecko response for FetchCoinMarkets
-type CoinMarketResponse []CoinMarket
+type CoinMarketResponse []*CoinMarket
 
 func (cmr *CoinMarketResponse) applyLimit(limit int) CoinMarketResponse {
 	return (*cmr)[:limit]
@@ -340,14 +341,14 @@ func (c *HTTPClient) FetchCoinMarkets(
 	limit int,
 ) (*CoinMarketResponse, time.Time, error) {
 	updated := time.Now()
-	url := "/api/v3/coins/markets"
+	cgURL := "/api/v3/coins/markets"
 	params := &coinMarketParams{
 		baseParams: c.baseParams,
 		VsCurrency: vsCurrency,
 		Limit:      limit,
 	}
 
-	cacheKey, err := c.cacheKey(ctx, url, params)
+	cacheKey, err := c.cacheKey(ctx, cgURL, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -357,9 +358,9 @@ func (c *HTTPClient) FetchCoinMarkets(
 
 	var body CoinMarketResponse
 	var entry cacheEntry
-	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
 
 	// Check cache first before making request to Coingecko
+	entryBytes, err := redis.Bytes(conn.Do("GET", cacheKey))
 	if err == nil {
 		err = json.Unmarshal(entryBytes, &entry)
 		if err != nil {
@@ -377,7 +378,8 @@ func (c *HTTPClient) FetchCoinMarkets(
 			return &body, entry.LastUpdated, err
 		}
 	}
-	req, err := c.client.NewRequest(ctx, "GET", url, nil, params)
+
+	req, err := c.client.NewRequest(ctx, "GET", cgURL, nil, params)
 	if err != nil {
 		return nil, updated, err
 	}
@@ -391,6 +393,16 @@ func (c *HTTPClient) FetchCoinMarkets(
 		}
 
 		return nil, updated, err
+	}
+
+	// Replace image URL with our own proxy
+	for _, market := range body {
+		imageURL, err := url.Parse(market.Image)
+		if err != nil {
+			return nil, updated, err
+		}
+		imageURL.Host = coingeckoImageProxy
+		market.Image = imageURL.String()
 	}
 
 	bodyBytes, err := json.Marshal(&body)
