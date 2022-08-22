@@ -38,7 +38,7 @@ elif [ "${service}" = "/ia2" ]; then
     /enclave/kafkaproxy > /tmp/kafkaproxy.log &
 
     # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
-    export IN_ADDRS=":8080,:80,${PARENT_CID}:80"
+    export IN_ADDRS=":8080,:80,${PARENT_CID}:1080"
     export OUT_ADDRS="${CID}:8080,${CID}:80,127.0.0.1:1080"
 elif [ "${service}" = "/star-randsrv" ]; then
     # setup proxy that allows the enclave to talk to Let's Encrypt
@@ -48,7 +48,7 @@ elif [ "${service}" = "/star-randsrv" ]; then
     /enclave/socksproxy > /tmp/socksproxy.log &
 
     # setup proxy for inbound traffic, ACME, and the enclave's SOCKS proxy
-    export IN_ADDRS=":8443,:80,${PARENT_CID}:80"
+    export IN_ADDRS=":8443,:80,${PARENT_CID}:1080"
     export OUT_ADDRS="${CID}:8443,${CID}:80,127.0.0.1:1080"
 fi
 
