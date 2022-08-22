@@ -19,7 +19,7 @@ import (
 const (
 	coinMarketsPageSize      = 250
 	coinMarketsCacheTTLHours = 1 // How long we consider Redis cached FetchCoinMarkets responses to be valid
-	coingeckoImageProxy      = "api.cgproxy.brave.com"
+	coingeckoImageProxy      = "assets.cgproxy.brave.com"
 )
 
 // Client abstracts over the underlying client
