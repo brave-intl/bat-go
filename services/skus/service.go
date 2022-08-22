@@ -14,13 +14,9 @@ import (
 	"sync"
 	"time"
 
-	session "github.com/stripe/stripe-go/v72/checkout/session"
-	client "github.com/stripe/stripe-go/v72/client"
-	sub "github.com/stripe/stripe-go/v72/sub"
-
-	"errors"
-
+	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
@@ -30,6 +26,9 @@ import (
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	stripe "github.com/stripe/stripe-go/v72"
+	session "github.com/stripe/stripe-go/v72/checkout/session"
+	client "github.com/stripe/stripe-go/v72/client"
+	sub "github.com/stripe/stripe-go/v72/sub"
 
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
@@ -40,10 +39,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
-	"github.com/stripe/stripe-go/v72"
-	"github.com/stripe/stripe-go/v72/checkout/session"
-	"github.com/stripe/stripe-go/v72/client"
-	"github.com/stripe/stripe-go/v72/sub"
 )
 
 var (
