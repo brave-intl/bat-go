@@ -23,10 +23,15 @@ import (
 	"github.com/brave-intl/bat-go/utils/ptr"
 	"github.com/segmentio/kafka-go"
 
+	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
+	"github.com/brave-intl/bat-go/libs/clients"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/jsonutils"
+	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/libs/ptr"
+	"github.com/brave-intl/bat-go/libs/requestutils"
 	"github.com/brave-intl/bat-go/libs/requestutils"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
@@ -319,12 +324,13 @@ func (s *Service) SignOrderCreds(ctx context.Context, orderID uuid.UUID, issuer 
 	return creds, nil
 }
 
-// SigningRequestWriter - defines capabilities of a signing request writer
+// SigningRequestWriter is the interface implemented by types that can write signing request messages.
 type SigningRequestWriter interface {
 	WriteMessage(ctx context.Context, message []byte) error
+	WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error
 }
 
-// WriteMessage - write a message to the topic
+// WriteMessage writes a single message to the kafka topic configured on this writer.
 func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 	native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(message)
 	if err != nil {
@@ -347,19 +353,53 @@ func (s *Service) WriteMessage(ctx context.Context, message []byte) error {
 	return nil
 }
 
-// SigningResultReader - interface describing the signing result reader capabilities
+// WriteMessages writes a batch of SigningOrderRequestOutbox messages to the kafka topic configured on this writer.
+func (s *Service) WriteMessages(ctx context.Context, messages []SigningOrderRequestOutbox) error {
+	msgs := make([]kafka.Message, len(messages))
+
+	for i := 0; i < len(messages); i++ {
+
+		native, _, err := s.codecs[kafkaUnsignedOrderCredsTopic].NativeFromTextual(messages[i].Message)
+		if err != nil {
+			return fmt.Errorf("error converting native from textual: %w", err)
+		}
+
+		binary, err := s.codecs[kafkaUnsignedOrderCredsTopic].BinaryFromNative(nil, native)
+		if err != nil {
+			return fmt.Errorf("error converting binary from native: %w", err)
+		}
+
+		km := kafka.Message{
+			Topic: kafkaUnsignedOrderCredsTopic,
+			Key:   messages[i].ID.Bytes(),
+			Value: binary,
+		}
+
+		msgs[i] = km
+	}
+
+	err := s.kafkaWriter.WriteMessages(ctx, msgs...)
+	if err != nil {
+		return fmt.Errorf("error writting kafka message: %w", err)
+	}
+
+	return nil
+}
+
+// SigningResultReader is the interface implemented by types that can read SigningOrderResult's.
 type SigningResultReader interface {
 	FetchMessage(ctx context.Context) (kafka.Message, error)
 	CommitMessages(ctx context.Context, messages ...kafka.Message) error
 	Decode(message kafka.Message) (*SigningOrderResult, error)
 }
 
-// FetchMessage - get a message
+// FetchMessage reads and return the next message.
+// FetchMessage does not commit offsets automatically when using consumer groups.
 func (s *Service) FetchMessage(ctx context.Context) (kafka.Message, error) {
 	return s.kafkaSignedRequestReader.FetchMessage(ctx)
 }
 
-// CommitMessages - commit the messages passed in
+// CommitMessages commits the list of messages passed as argument.
 func (s *Service) CommitMessages(ctx context.Context, messages ...kafka.Message) error {
 	return s.kafkaSignedRequestReader.CommitMessages(ctx, messages...)
 }

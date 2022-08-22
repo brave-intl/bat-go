@@ -14,6 +14,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/backoff"
+	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/datastore"
+	"github.com/brave-intl/bat-go/libs/handlers"
+	"github.com/brave-intl/bat-go/libs/logging"
+	srv "github.com/brave-intl/bat-go/libs/service"
+	timeutils "github.com/brave-intl/bat-go/libs/time"
+	"github.com/brave-intl/bat-go/libs/wallet/provider"
+	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/utils/backoff"
 	"github.com/brave-intl/bat-go/utils/clients/cbr"
 	"github.com/brave-intl/bat-go/utils/clients/gemini"
@@ -31,6 +41,17 @@ import (
 	"github.com/brave-intl/bat-go/utils/wallet/provider/uphold"
 	"github.com/brave-intl/bat-go/wallet"
 	"github.com/linkedin/goavro"
+	stripe "github.com/stripe/stripe-go/v72"
+	session "github.com/stripe/stripe-go/v72/checkout/session"
+	client "github.com/stripe/stripe-go/v72/client"
+	sub "github.com/stripe/stripe-go/v72/sub"
+
+	"github.com/brave-intl/bat-go/libs/clients/cbr"
+	"github.com/brave-intl/bat-go/libs/clients/gemini"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	uuid "github.com/satori/go.uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/shopspring/decimal"
@@ -897,26 +918,34 @@ func (s *Service) GetTimeLimitedV2Creds(ctx context.Context, order *Order) (*Tim
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to create credentials, bad order")
 	}
 
+	// First check order creds have successfully been submitted for processing.
+	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error getting outbox messages: %w", err)
+	}
+
+	if len(outboxMessages) == 0 {
+		return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	}
+
+	// To ensure we have completed signing all the creds for our order we need to check the total number of creds matches
+	// the number of signing results we are expecting otherwise we are not finished signing and return http.StatusAccepted.
 	creds, err := s.Datastore.GetTimeLimitedV2OrderCredsByOrder(order.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	if creds != nil {
+	total, err := calculateTotalExpectedSigningResults(outboxMessages)
+	if err != nil {
+		return nil, http.StatusInternalServerError,
+			fmt.Errorf("error calculating total expected signing results: %w", err)
+	}
+
+	if creds != nil && len(creds.Credentials) == total {
 		return creds, http.StatusOK, nil
 	}
 
-	// check to see if messages are in outbox
-	outboxMessages, err := s.Datastore.GetSigningOrderRequestOutbox(ctx, order.ID)
-	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error getting credentials: %w", err)
-	}
-
-	if len(outboxMessages) > 0 {
-		return nil, http.StatusAccepted, nil
-	}
-
-	return nil, http.StatusNotFound, fmt.Errorf("credentials do not exist")
+	return nil, http.StatusAccepted, nil
 }
 
 // GetActiveCredentialSigningKey get the current active signing key for this merchant
@@ -1304,9 +1333,6 @@ func (s *Service) RunStoreSignedOrderCredentialsJob(ctx context.Context) (bool, 
 	}
 }
 
-// validateReciept - perform reciept validation
-func (s *Service) validateReciept(ctx context.Context, orderID *uuid.UUID, vendor, reciept string) (string, error) {
-	// based on the vendor call the vendor specific apis to check the status of the reciept,
 // verifyDeveloperNotification - verify the developer notification from playstore
 func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
 	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
@@ -1395,4 +1421,25 @@ func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID
 	}
 
 	return commit()
+}
+
+// calculateTotalExpectedSigningResults calculates the expected number of signing results by multiplying the number
+// of blinded creds by the number of order items in the order. This function is only relevant to
+// skus.TimeLimitedV2Creds credentials so we can compare how many results we have received and if we are done
+// signing the order.
+func calculateTotalExpectedSigningResults(outboxMessages []SigningOrderRequestOutbox) (int, error) {
+	total := 0
+
+	var sor SigningOrderRequest
+	for _, outboxMessage := range outboxMessages {
+		err := json.Unmarshal(outboxMessage.Message, &sor)
+		if err != nil {
+			return 0, fmt.Errorf("error unmarshaling outbox message: %w", err)
+		}
+		for _, data := range sor.Data {
+			total += len(data.BlindedTokens)
+		}
+	}
+
+	return total, nil
 }
