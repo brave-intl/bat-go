@@ -3,14 +3,14 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
-	"github.com/brave-intl/bat-go/utils/clients"
-	appctx "github.com/brave-intl/bat-go/utils/context"
-	errorutils "github.com/brave-intl/bat-go/utils/errors"
-	"github.com/brave-intl/bat-go/utils/logging"
+	"github.com/brave-intl/bat-go/libs/clients"
+	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	appctx "github.com/brave-intl/bat-go/libs/context"
+	errorutils "github.com/brave-intl/bat-go/libs/errors"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,15 +24,6 @@ var (
 	}
 	ctx = context.Background()
 )
-
-// Must helper to make sure there is no errors
-func Must(err error) {
-	if err != nil {
-		log.Printf("failed to initialize: %s\n", err.Error())
-		// exit with failure
-		os.Exit(1)
-	}
-}
 
 // Execute - the main entrypoint for all subcommands in bat-go
 func Execute(version, commit, buildTime string) {
@@ -60,43 +51,43 @@ func init() {
 	// pprof-enabled - defaults to ""
 	RootCmd.PersistentFlags().String("pprof-enabled", "",
 		"pprof enablement")
-	Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
-	Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
+	cmdutils.Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
+	cmdutils.Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
 
 	// env - defaults to local
 	RootCmd.PersistentFlags().String("environment", "local",
 		"the default environment")
-	Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
-	Must(viper.BindEnv("environment", "ENV"))
+	cmdutils.Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
+	cmdutils.Must(viper.BindEnv("environment", "ENV"))
 
 	// debug logging - defaults to off
 	RootCmd.PersistentFlags().Bool("debug", false, "turn on debug logging")
-	Must(viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug")))
-	Must(viper.BindEnv("debug", "DEBUG"))
+	cmdutils.Must(viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug")))
+	cmdutils.Must(viper.BindEnv("debug", "DEBUG"))
 
 	// ratiosAccessToken (required by all)
 	RootCmd.PersistentFlags().String("ratios-token", "",
 		"the ratios service token for this service")
-	Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
-	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
+	cmdutils.Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
+	cmdutils.Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
 
 	// ratiosService (required by all)
 	RootCmd.PersistentFlags().String("ratios-service", "",
 		"the ratios service address")
-	Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
-	Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
+	cmdutils.Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
+	cmdutils.Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
 
 	// ratiosClientExpiry
 	RootCmd.PersistentFlags().Duration("ratios-client-cache-expiry", 5*time.Second,
 		"the ratios client cache default eviction duration")
-	Must(viper.BindPFlag("ratios-client-cache-expiry", RootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
-	Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
+	cmdutils.Must(viper.BindPFlag("ratios-client-cache-expiry", RootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
+	cmdutils.Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
 
 	// ratiosClientPurge
 	RootCmd.PersistentFlags().Duration("ratios-client-cache-purge", 1*time.Minute,
 		"the ratios client cache default purge duration")
-	Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
-	Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
+	cmdutils.Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
+	cmdutils.Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 
 	RootCmd.AddCommand(VersionCmd)
 }
