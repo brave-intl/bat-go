@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
-	"github.com/brave-intl/bat-go/tools/settlement"
-	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/logging"
+	"github.com/brave-intl/bat-go/tools/settlement"
+	geminisettlement "github.com/brave-intl/bat-go/tools/settlement/gemini"
 	"github.com/spf13/cobra"
 )
 

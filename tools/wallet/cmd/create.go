@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"

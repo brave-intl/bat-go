@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/clients/bitflyer"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 
 	// needed for profiling
 	_ "net/http/pprof"
@@ -17,11 +17,6 @@ import (
 
 	"github.com/asaskevich/govalidator"
 	"github.com/brave-intl/bat-go/cmd"
-	servicescmd "github.com/brave-intl/bat-go/services/cmd"
-	"github.com/brave-intl/bat-go/services/grant"
-	"github.com/brave-intl/bat-go/services/promotion"
-	"github.com/brave-intl/bat-go/services/skus"
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -29,6 +24,11 @@ import (
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	srv "github.com/brave-intl/bat-go/libs/service"
+	servicescmd "github.com/brave-intl/bat-go/services/cmd"
+	"github.com/brave-intl/bat-go/services/grant"
+	"github.com/brave-intl/bat-go/services/promotion"
+	"github.com/brave-intl/bat-go/services/skus"
+	"github.com/brave-intl/bat-go/services/wallet"
 	sentry "github.com/getsentry/sentry-go"
 	"github.com/go-chi/chi"
 	chiware "github.com/go-chi/chi/middleware"
