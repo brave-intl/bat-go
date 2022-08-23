@@ -9,9 +9,9 @@ import (
 	"sort"
 	"time"
 
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	"github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/spf13/cobra"

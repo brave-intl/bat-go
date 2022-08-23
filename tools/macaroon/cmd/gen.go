@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/brave-intl/bat-go/cmd"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/spf13/cobra"
