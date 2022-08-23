@@ -8,9 +8,9 @@ import (
 
 	rootcmd "github.com/brave-intl/bat-go/cmd"
 
-	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	vaultsigner "github.com/brave-intl/bat-go/tools/vault/signer"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

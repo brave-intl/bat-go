@@ -8,15 +8,14 @@ import (
 	"strings"
 
 	"github.com/alecthomas/jsonschema"
-	rootcmd "github.com/brave-intl/bat-go/cmd"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 func init() {
-	rootcmd.RootCmd.AddCommand(GenerateCmd)
+	cmdutils.RootCmd.AddCommand(GenerateCmd)
 	GenerateCmd.AddCommand(JSONSchemaCmd)
 
 	// overwrite - defaults to false
@@ -35,7 +34,7 @@ var GenerateCmd = &cobra.Command{
 var JSONSchemaCmd = &cobra.Command{
 	Use:   "json-schema",
 	Short: "entrypoint to generate json schema for project",
-	Run:   rootcmd.Perform("generate json schema", jsonSchemaRun),
+	Run:   cmdutils.Perform("generate json schema", jsonSchemaRun),
 }
 
 // jsonSchemaRun - main entrypoint for the `generate json-schema` subcommand

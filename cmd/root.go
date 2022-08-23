@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/brave-intl/bat-go/libs/clients"
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -51,43 +50,43 @@ func init() {
 	// pprof-enabled - defaults to ""
 	RootCmd.PersistentFlags().String("pprof-enabled", "",
 		"pprof enablement")
-	cmdutils.Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
-	cmdutils.Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
+	Must(viper.BindPFlag("pprof-enabled", RootCmd.PersistentFlags().Lookup("pprof-enabled")))
+	Must(viper.BindEnv("pprof-enabled", "PPROF_ENABLED"))
 
 	// env - defaults to local
 	RootCmd.PersistentFlags().String("environment", "local",
 		"the default environment")
-	cmdutils.Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
-	cmdutils.Must(viper.BindEnv("environment", "ENV"))
+	Must(viper.BindPFlag("environment", RootCmd.PersistentFlags().Lookup("environment")))
+	Must(viper.BindEnv("environment", "ENV"))
 
 	// debug logging - defaults to off
 	RootCmd.PersistentFlags().Bool("debug", false, "turn on debug logging")
-	cmdutils.Must(viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug")))
-	cmdutils.Must(viper.BindEnv("debug", "DEBUG"))
+	Must(viper.BindPFlag("debug", RootCmd.PersistentFlags().Lookup("debug")))
+	Must(viper.BindEnv("debug", "DEBUG"))
 
 	// ratiosAccessToken (required by all)
 	RootCmd.PersistentFlags().String("ratios-token", "",
 		"the ratios service token for this service")
-	cmdutils.Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
-	cmdutils.Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
+	Must(viper.BindPFlag("ratios-token", RootCmd.PersistentFlags().Lookup("ratios-token")))
+	Must(viper.BindEnv("ratios-token", "RATIOS_TOKEN"))
 
 	// ratiosService (required by all)
 	RootCmd.PersistentFlags().String("ratios-service", "",
 		"the ratios service address")
-	cmdutils.Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
-	cmdutils.Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
+	Must(viper.BindPFlag("ratios-service", RootCmd.PersistentFlags().Lookup("ratios-service")))
+	Must(viper.BindEnv("ratios-service", "RATIOS_SERVICE"))
 
 	// ratiosClientExpiry
 	RootCmd.PersistentFlags().Duration("ratios-client-cache-expiry", 5*time.Second,
 		"the ratios client cache default eviction duration")
-	cmdutils.Must(viper.BindPFlag("ratios-client-cache-expiry", RootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
-	cmdutils.Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
+	Must(viper.BindPFlag("ratios-client-cache-expiry", RootCmd.PersistentFlags().Lookup("ratios-client-cache-expiry")))
+	Must(viper.BindEnv("ratios-client-cache-expiry", "RATIOS_CACHE_EXPIRY"))
 
 	// ratiosClientPurge
 	RootCmd.PersistentFlags().Duration("ratios-client-cache-purge", 1*time.Minute,
 		"the ratios client cache default purge duration")
-	cmdutils.Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
-	cmdutils.Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
+	Must(viper.BindPFlag("ratios-client-cache-purge", RootCmd.PersistentFlags().Lookup("ratios-client-cache-purge")))
+	Must(viper.BindEnv("ratios-client-cache-purge", "RATIOS_CACHE_PURGE"))
 
 	RootCmd.AddCommand(VersionCmd)
 }

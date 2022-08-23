@@ -5,7 +5,7 @@ import (
 	// pprof imports
 	_ "net/http/pprof"
 
-	cmdutils "github.com/brave-intl/bat-go/libs/cmd"
+	cmdutils "github.com/brave-intl/bat-go/cmd"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	"github.com/spf13/cobra"
 )
