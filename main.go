@@ -27,7 +27,7 @@ import (
 	// pull in ratios module. setup code is in init
 	_ "github.com/brave-intl/bat-go/services/ratios/cmd"
 	// pull in grants module. setup code is in init
-	_ "github.com/brave-intl/bat-go/services/grants/cmd"
+	_ "github.com/brave-intl/bat-go/services/grant/cmd"
 )
 
 var (
