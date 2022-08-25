@@ -26,6 +26,17 @@ var (
 	iosClient              *appstore.Client
 	androidClient          *playstore.Client
 	errClientMisconfigured = errors.New("misconfigured client")
+
+	errPurchasePending       = errors.New("purchase is pending")
+	errPurchaseDeferred      = errors.New("purchase is deferred")
+	errPurchaseStatusUnknown = errors.New("purchase status is unknown")
+	errPurchaseFailed        = errors.New("purchase failed")
+
+	purchasePendingErrCode       = "purchase_pending"
+	purchaseDeferredErrCode      = "purchase_deferred"
+	purchaseStatusUnknownErrCode = "purchase_status_unknown"
+	purchaseFailedErrCode        = "purchase_failed"
+	purchaseValidationErrCode    = "validation_failed"
 )
 
 func initClients(ctx context.Context) {
@@ -79,18 +90,18 @@ func validateAndroidReceipt(ctx context.Context, receipt interface{}) (string, e
 			resp, err := androidClient.VerifySubscription(ctx, v.Package, v.SubscriptionID, v.Blob)
 			if err != nil {
 				logger.Error().Err(err).Msg("failed to verify subscription")
-				return "", fmt.Errorf("failed to verify subscription: %w", err)
+				return "", errPurchaseFailed
 			}
 			// check that the order was paid
 			switch resp.PaymentState {
 			case androidPaymentStatePaid, androidPaymentStateTrial:
 				break
 			case androidPaymentStatePending:
-				return "", fmt.Errorf("purchase is still pending: %w", ErrOrderUnpaid)
+				return "", errPurchasePending
 			case androidPaymentStatePendingDeferred:
-				return "", fmt.Errorf("purchase is deferred: %w", ErrOrderUnpaid)
+				return "", errPurchaseDeferred
 			default:
-				return "", fmt.Errorf("purchase status unknown: %d - %w", resp.PaymentState, ErrOrderUnpaid)
+				return "", errPurchaseStatusUnknown
 			}
 			return v.Blob, nil
 		}

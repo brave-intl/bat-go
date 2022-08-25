@@ -1151,12 +1151,25 @@ func SubmitReceipt(service *Service) handlers.AppHandler {
 				return handlers.WrapError(err, "order not found", http.StatusNotFound)
 			}
 			logger.Warn().Err(err).Msg("Failed to validate the receipt with vendor")
-			validationErrMap["request-body"] = err.Error()
+			validationErrMap["receiptErrors"] = err.Error()
+			// return codified errors for application
+			if errors.Is(err, errPurchaseFailed) {
+				return handlers.CodedValidationError(err.Error(), purchaseFailedErrCode, validationErrMap)
+			} else if errors.Is(err, errPurchasePending) {
+				return handlers.CodedValidationError(err.Error(), purchasePendingErrCode, validationErrMap)
+			} else if errors.Is(err, errPurchaseDeferred) {
+				return handlers.CodedValidationError(err.Error(), purchaseDeferredErrCode, validationErrMap)
+			} else if errors.Is(err, errPurchaseStatusUnknown) {
+				return handlers.CodedValidationError(err.Error(), purchaseStatusUnknownErrCode, validationErrMap)
+			} else {
+				// unknown error
+				return handlers.CodedValidationError("error validating receipt", purchaseValidationErrCode, validationErrMap)
+			}
 		}
 
 		// if we had any validation errors, return the validation error map to the caller
 		if len(validationErrMap) != 0 {
-			return handlers.ValidationError("Error validating request url", validationErrMap)
+			return handlers.ValidationError("error validating request", validationErrMap)
 		}
 
 		// set order paid and include the vendor and external id to metadata
