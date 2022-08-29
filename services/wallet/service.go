@@ -44,7 +44,7 @@ type Service struct {
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(ctx context.Context, datastore Datastore, roDatastore ReadOnlyDatastore) (*Service, error) {
 	// setup s3 client to get the custodian regions supported on boot
-	logger := logging.Logger(ctx, "wallet.NewService")
+	logger := logging.Logger(ctx, "wallet.InitService")
 
 	cfg, err := appaws.BaseAWSConfig(ctx, logger)
 	if err != nil {
@@ -344,12 +344,15 @@ func SetupService(ctx context.Context, r *chi.Mux) (*chi.Mux, context.Context, *
 	if featureOK && useCustodianRegions && !bucketOK {
 		logger.Fatal().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
 	}
-	// use client to put the custodian regions on ctx
-	custodianRegions, err := custodian.ExtractCustodianRegions(ctx, s.s3Client, bucket)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
+
+	if useCustodianRegions {
+		// use client to put the custodian regions on ctx
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, s.s3Client, bucket)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
+		}
+		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 	}
-	ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 
 	if os.Getenv("GEMINI_ENABLED") == "true" {
 		s.geminiClient, err = gemini.New()
