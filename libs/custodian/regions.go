@@ -100,6 +100,7 @@ type PayoutStatus struct {
 	Uphold     string `json:"uphold" valid:"in(off|processing|complete)"`
 	Gemini     string `json:"gemini" valid:"in(off|processing|complete)"`
 	Bitflyer   string `json:"bitflyer" valid:"in(off|processing|complete)"`
+	Date       string `json:"payoutDate" valid:"-"`
 }
 
 // GeoAllowBlockMap - this is the allow / block list of geos for a custodian
