@@ -24,6 +24,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"github.com/brave-intl/bat-go/libs/digest"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
@@ -280,13 +281,16 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 			return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrNoIdentityCountry
 		}
 	}
-	// do country blacklist checking
-	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
-		// check all three country codes to see if any are equal to a blacklist item
-		for _, v := range blacklist {
-			if strings.EqualFold(uhResp.IdentityCountry, v) ||
-				strings.EqualFold(uhResp.CitizenshipCountry, v) ||
-				strings.EqualFold(uhResp.ResidenceCountry, v) {
+
+	// feature flag for using new custodian regions
+	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
+		// get the uphold custodian supported regions
+		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.CustodianRegions); ok {
+			allowed := custodianRegions.Uphold.Verdict(
+				uhResp.CitizenshipCountry, uhResp.IdentityCountry, uhResp.ResidenceCountry,
+			)
+
+			if !allowed {
 				countUpholdWalletAccountValidation.With(prometheus.Labels{
 					"citizenship_country": uhResp.CitizenshipCountry,
 					"identity_country":    uhResp.IdentityCountry,
@@ -294,6 +298,24 @@ func (w *Wallet) IsUserKYC(ctx context.Context, destination string) (string, boo
 					"status":              "failure",
 				}).Inc()
 				return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
+			}
+		}
+	} else { // use default blacklist functionality
+		// do country blacklist checking
+		if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
+			// check all three country codes to see if any are equal to a blacklist item
+			for _, v := range blacklist {
+				if strings.EqualFold(uhResp.IdentityCountry, v) ||
+					strings.EqualFold(uhResp.CitizenshipCountry, v) ||
+					strings.EqualFold(uhResp.ResidenceCountry, v) {
+					countUpholdWalletAccountValidation.With(prometheus.Labels{
+						"citizenship_country": uhResp.CitizenshipCountry,
+						"identity_country":    uhResp.IdentityCountry,
+						"residence_country":   uhResp.ResidenceCountry,
+						"status":              "failure",
+					}).Inc()
+					return uhResp.UserID, uhResp.KYC, uhResp.IdentityCountry, errorutils.ErrInvalidCountry
+				}
 			}
 		}
 	}

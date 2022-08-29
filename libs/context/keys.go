@@ -103,6 +103,10 @@ const (
 	BitflyerClientIDCTXKey CTXKey = "bitflyer_client_id"
 	// ReputationOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationOnDrainCTXKey CTXKey = "reputation_on_drain"
+	// UseCustodianRegionsCTXKey - context key for getting the reputation on drain feature flag
+	UseCustodianRegionsCTXKey CTXKey = "use-custodian-regions"
+	// CustodianRegionsCTXKey - context key for getting the reputation on drain feature flag
+	CustodianRegionsCTXKey CTXKey = "custodian-regions"
 	// ReputationWithdrawalOnDrainCTXKey - context key for getting the reputation on drain feature flag
 	ReputationWithdrawalOnDrainCTXKey CTXKey = "reputation_withdrawal_on_drain"
 	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials

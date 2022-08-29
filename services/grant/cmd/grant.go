@@ -78,6 +78,11 @@ func init() {
 		Bind("country-blacklist").
 		Env("COUNTRY_BLACKLIST")
 
+	flagBuilder.Flag().String("merge-param-bucket", "",
+		"parameters for the application").
+		Bind("merge-param-bucket").
+		Env("MERGE_PARAM_BUCKET")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
@@ -87,6 +92,11 @@ func init() {
 		"check wallet reputation on drain").
 		Bind("reputation-on-drain").
 		Env("REPUTATION_ON_DRAIN")
+
+	flagBuilder.Flag().Bool("use-custodian-regions", false,
+		"use custodian regions for figuring block on country for linking").
+		Bind("use-custodian-regions").
+		Env("USE_CUSTODIAN_REGIONS")
 
 	flagBuilder.Flag().Bool("reputation-withdrawal-on-drain", false,
 		"check wallet withdrawal reputation on drain").
@@ -435,6 +445,7 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.BraveTransferPromotionIDCTXKey, viper.GetStringSlice("brave-transfer-promotion-ids"))
 	ctx = context.WithValue(ctx, appctx.WalletOnPlatformPriorToCTXKey, viper.GetString("wallet-on-platform-prior-to"))
 	ctx = context.WithValue(ctx, appctx.ReputationOnDrainCTXKey, viper.GetBool("reputation-on-drain"))
+	ctx = context.WithValue(ctx, appctx.UseCustodianRegionsCTXKey, viper.GetBool("use-custodian-regions"))
 	ctx = context.WithValue(ctx, appctx.ReputationWithdrawalOnDrainCTXKey, viper.GetBool("reputation-withdrawal-on-drain"))
 
 	// bitflyer variables
@@ -461,8 +472,13 @@ func GrantServer(
 	// whitelisted skus
 	ctx = context.WithValue(ctx, appctx.WhitelistSKUsCTXKey, viper.GetStringSlice("skus-whitelist"))
 
+	// the bucket for the custodian regions
+	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
+
 	// blacklisted countries
 	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))
+
+	// pull down from s3 the appropriate values for geo allow/block rules
 
 	// custodian unlinking cooldown
 	ctx = context.WithValue(ctx, appctx.NoUnlinkPriorToDurationCTXKey, viper.GetString("unlinking-cooldown"))
