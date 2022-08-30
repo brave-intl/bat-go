@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"strings"
 	"time"
 
@@ -451,35 +453,33 @@ func NewGeoLocationValidator(s3 aws.S3, config Config) *GeoLocationValidator {
 
 // Validate checks to see if the given geolocation is enabled.
 func (g GeoLocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
-	return geolocation == "UK" || geolocation == "US", nil
+	out, err := g.s3.GetObject(
+		ctx, &s3.GetObjectInput{
+			Bucket: &g.config.bucket,
+			Key:    &g.config.object,
+		})
+	if err != nil {
+		return false, fmt.Errorf("failed to get payout status: %w", err)
+	}
+	defer func() {
+		err := out.Body.Close()
+		if err != nil {
+			logging.FromContext(ctx).Error().
+				Err(err).Msg("error closing body")
+		}
+	}()
 
-	//out, err := g.s3.GetObject(
-	//	ctx, &s3.GetObjectInput{
-	//		Bucket: &g.config.bucket,
-	//		Key:    &g.config.object,
-	//	})
-	//if err != nil {
-	//	return false, fmt.Errorf("failed to get payout status: %w", err)
-	//}
-	//defer func() {
-	//	err := out.Body.Close()
-	//	if err != nil {
-	//		logging.FromContext(ctx).Error().
-	//			Err(err).Msg("error closing body")
-	//	}
-	//}()
-	//
-	//var locations []string
-	//err = json.NewDecoder(out.Body).Decode(&locations)
-	//if err != nil {
-	//	return false, fmt.Errorf("error decoding geolocations")
-	//}
-	//
-	//for _, location := range locations {
-	//	if location == geolocation {
-	//		return true, nil
-	//	}
-	//}
+	var locations []string
+	err = json.NewDecoder(out.Body).Decode(&locations)
+	if err != nil {
+		return false, fmt.Errorf("error decoding geolocations")
+	}
 
-	//return false, nil
+	for _, location := range locations {
+		if location == geolocation {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

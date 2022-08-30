@@ -133,13 +133,13 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, geminiClient)
 	}
 
-	bucket, ok := ctx.Value(appctx.WalletGeolocationDisabledBucketCTXKey).(string)
+	bucket, ok := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
 	if !ok {
 		logger.Fatal().Err(errors.New("wallet geolocation disabled bucket ctx key value not found")).
 			Msg("failed to initialize wallet service")
 	}
 
-	object, ok := ctx.Value(appctx.WalletGeolocationDisabledCTXKey).(string)
+	object, ok := ctx.Value(appctx.DisabledWalletGeolocationsCTXKey).(string)
 	if !ok {
 		logger.Fatal().Err(errors.New("wallet geolocation disabled ctx key value not found")).
 			Msg("failed to initialize wallet service")
@@ -552,15 +552,14 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 		return nil, fmt.Errorf("error inserting brave wallet: %w", err)
 	}
 
-	// TODO commented out for dev testing and until reputation deployed
-	//op := func() (interface{}, error) {
-	//	return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
-	//}
+	op := func() (interface{}, error) {
+		return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
+	}
 
-	//_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-	//if err != nil {
-	//	return nil, fmt.Errorf("error calling reputation service: %w", err)
-	//}
+	_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
+	if err != nil {
+		return nil, fmt.Errorf("error calling reputation service: %w", err)
+	}
 
 	err = tx.Commit()
 	if err != nil {
@@ -570,7 +569,6 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 	return info, nil
 }
 
-// TODO check errors when implement rep side
 func canRetry(nonRetriableErrors []int) func(error) bool {
 	return func(err error) bool {
 		var eb *errorutils.ErrorBundle

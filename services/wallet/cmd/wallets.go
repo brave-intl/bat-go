@@ -2,7 +2,6 @@ package cmd
 
 import (
 	cmdutils "github.com/brave-intl/bat-go/cmd"
-
 	// pprof imports
 	_ "net/http/pprof"
 
@@ -58,4 +57,14 @@ func init() {
 		Bind("enable-link-drain-flag").
 		Require()
 
+	walletsCmdBuilder.Flag().String("merge-param-bucket", "",
+		"the bucket for which parameters are merged into this service").
+		Env("MERGE_PARAM_BUCKET").
+		Bind("merge-param-bucket").
+		Require()
+
+	walletsCmdBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
+		"the bucket for which parameters are merged into this service").
+		Env("DISABLED_WALLET_GEOLOCATIONS").
+		Bind("disabled-wallet-geolocations")
 }

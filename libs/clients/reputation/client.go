@@ -318,7 +318,7 @@ func (c *HTTPClient) UpdateWallet(ctx context.Context, walletID, geoLocation str
 		Geolocation: geoLocation,
 	}
 
-	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/wallets/%s", walletID), b, nil)
+	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/declare/%s", walletID), b, nil)
 	if err != nil {
 		return err
 	}

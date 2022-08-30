@@ -23,14 +23,14 @@ import (
 // wallets rest microservice.
 func WalletRestRun(command *cobra.Command, args []string) {
 	ctx, service := wallet.SetupService(command.Context())
-	router := cmd.SetupRouter(command.Context())
+	router := cmd.SetupRouter(ctx)
 	wallet.RegisterRoutes(ctx, service, router)
 
 	logger, err := appctx.GetLogger(ctx)
 	cmdutils.Must(err)
 
-	ctx = context.WithValue(ctx, appctx.WalletGeolocationDisabledBucketCTXKey, viper.GetString("disabled-wallet-geolocations-bucket"))
-	ctx = context.WithValue(ctx, appctx.WalletGeolocationDisabledCTXKey, viper.GetString("disabled-wallet-geolocations.json"))
+	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, viper.Get("disabled-wallet-geolocations"))
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
