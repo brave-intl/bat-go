@@ -112,3 +112,17 @@ func (mr *MockClientMockRecorder) IsWalletReputable(ctx, id, platform interface{
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWalletReputable", reflect.TypeOf((*MockClient)(nil).IsWalletReputable), ctx, id, platform)
 }
+
+// UpdateWallet mocks base method.
+func (m *MockClient) UpdateWallet(ctx context.Context, walletID, geoLocation string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWallet", ctx, walletID, geoLocation)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWallet indicates an expected call of UpdateWallet.
+func (mr *MockClientMockRecorder) UpdateWallet(ctx, walletID, geoLocation interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWallet", reflect.TypeOf((*MockClient)(nil).UpdateWallet), ctx, walletID, geoLocation)
+}

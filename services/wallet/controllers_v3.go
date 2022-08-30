@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -23,9 +24,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// ------------------ V3 Wallet APIs ---------------
-
-// CreateUpholdWalletV3 - produces an http handler for the service s which handles creation of uphold wallets
+// CreateUpholdWalletV3 produces a http handler for the service which handles creation of uphold wallets.
 func CreateUpholdWalletV3(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	var (
 		ucReq       = new(UpholdCreationRequest)
@@ -606,27 +605,6 @@ func UnlinkWalletV3(s *Service) func(w http.ResponseWriter, r *http.Request) *ha
 	}
 }
 
-// IncreaseLinkingLimitV3 - increase the allowable linking limit for the specified paymentId by one
-func IncreaseLinkingLimitV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
-		var (
-			ctx         = r.Context()
-			custodianID = chi.URLParam(r, "custodian_id")
-		)
-		// get logger from context
-		logger := logging.Logger(ctx, "wallet.IncreaseLinkingLimitV3")
-
-		logger.Debug().Str("custodianId", custodianID).Msg("increasing linking limit for custodian id")
-		err := s.IncreaseLinkingLimit(ctx, custodianID)
-		if err != nil {
-			logger.Error().Err(err).Str("custodianId", custodianID).Msg("failed to increase linking limit")
-			return handlers.WrapError(err, "error increasing linking limit", http.StatusBadRequest)
-		}
-
-		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
-	}
-}
-
 // GetLinkingInfoV3 - get linking metadata
 func GetLinkingInfoV3(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -739,5 +717,51 @@ func DisconnectCustodianLinkV3(s *Service) func(w http.ResponseWriter, r *http.R
 		}
 
 		return handlers.RenderContent(ctx, nil, w, http.StatusOK)
+	}
+}
+
+type CreateBraveWalletV4Request struct {
+	Geolocation string `json:"geolocation"`
+}
+
+// CreateBraveWalletV4 creates a brave wallet. This endpoint takes a geolocation as part of the request.
+func CreateBraveWalletV4(s *Service) func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+	return func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
+		verifier := httpsignature.ParameterizedKeystoreVerifier{
+			SignatureParams: httpsignature.SignatureParams{
+				Algorithm: httpsignature.ED25519,
+				Headers:   []string{"digest", "(request-target)"},
+			},
+			Keystore: &DecodeEd25519Keystore{},
+			Opts:     crypto.Hash(0),
+		}
+
+		// perform validation based on public key that the user submits
+		ctx, publicKey, err := verifier.VerifyRequest(r)
+		if err != nil {
+			return handlers.WrapError(err, "invalid http signature", http.StatusForbidden)
+		}
+
+		var c CreateBraveWalletV4Request
+		err = json.NewDecoder(r.Body).Decode(&c)
+		if err != nil {
+			return handlers.WrapError(err, "error decoding request body", http.StatusBadRequest)
+		}
+
+		info, err := s.CreateBraveWallet(ctx, publicKey, c.Geolocation)
+		if err != nil {
+			logging.FromContext(ctx).Error().Err(err).
+				Msg("error creating brave wallet")
+			switch {
+			case errors.Is(err, errGeoLocationDisabled):
+				return handlers.WrapError(errGeoLocationDisabled,
+					"error creating brave wallet", http.StatusForbidden)
+			default:
+				return handlers.WrapError(errorutils.ErrInternalServerError,
+					"error creating brave wallet", http.StatusInternalServerError)
+			}
+		}
+
+		return handlers.RenderContent(ctx, infoToResponseV3(info), w, http.StatusCreated)
 	}
 }

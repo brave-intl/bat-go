@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -21,11 +22,15 @@ import (
 // This function takes a cobra command and starts up the
 // wallets rest microservice.
 func WalletRestRun(command *cobra.Command, args []string) {
-	// setup generic middlewares and routes for health-check and metrics
-	r := cmd.SetupRouter(command.Context())
-	r, ctx, _ := wallet.SetupService(command.Context(), r)
+	ctx, service := wallet.SetupService(command.Context())
+	router := cmd.SetupRouter(command.Context())
+	wallet.RegisterRoutes(ctx, service, router)
+
 	logger, err := appctx.GetLogger(ctx)
 	cmdutils.Must(err)
+
+	ctx = context.WithValue(ctx, appctx.WalletGeolocationDisabledBucketCTXKey, viper.GetString("disabled-wallet-geolocations-bucket"))
+	ctx = context.WithValue(ctx, appctx.WalletGeolocationDisabledCTXKey, viper.GetString("disabled-wallet-geolocations.json"))
 
 	// add profiling flag to enable profiling routes
 	if viper.GetString("pprof-enabled") != "" {
@@ -39,7 +44,7 @@ func WalletRestRun(command *cobra.Command, args []string) {
 	// setup server, and run
 	srv := http.Server{
 		Addr:         viper.GetString("address"),
-		Handler:      chi.ServerBaseContext(ctx, r),
+		Handler:      chi.ServerBaseContext(ctx, router),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 20 * time.Second,
 	}

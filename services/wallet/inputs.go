@@ -18,6 +18,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet/aws"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -426,4 +427,59 @@ func (blr *BitFlyerLinkingRequest) HandleErrors(err error) *handlers.AppError {
 		}
 	}
 	return handlers.ValidationError("bitflyer deposit wallet linking request validation errors", issues)
+}
+
+// Config defines a GeoLocationValidator configuration.
+type Config struct {
+	bucket string
+	object string
+}
+
+// GeoLocationValidator defines a GeoLocationValidator.
+type GeoLocationValidator struct {
+	s3     aws.S3
+	config Config
+}
+
+// NewGeoLocationValidator creates a new instance of NewGeoLocationValidator.
+func NewGeoLocationValidator(s3 aws.S3, config Config) *GeoLocationValidator {
+	return &GeoLocationValidator{
+		s3:     s3,
+		config: config,
+	}
+}
+
+// Validate checks to see if the given geolocation is enabled.
+func (g GeoLocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
+	return geolocation == "UK" || geolocation == "US", nil
+
+	//out, err := g.s3.GetObject(
+	//	ctx, &s3.GetObjectInput{
+	//		Bucket: &g.config.bucket,
+	//		Key:    &g.config.object,
+	//	})
+	//if err != nil {
+	//	return false, fmt.Errorf("failed to get payout status: %w", err)
+	//}
+	//defer func() {
+	//	err := out.Body.Close()
+	//	if err != nil {
+	//		logging.FromContext(ctx).Error().
+	//			Err(err).Msg("error closing body")
+	//	}
+	//}()
+	//
+	//var locations []string
+	//err = json.NewDecoder(out.Body).Decode(&locations)
+	//if err != nil {
+	//	return false, fmt.Errorf("error decoding geolocations")
+	//}
+	//
+	//for _, location := range locations {
+	//	if location == geolocation {
+	//		return true, nil
+	//	}
+	//}
+
+	//return false, nil
 }

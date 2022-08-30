@@ -250,9 +250,9 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	r.Use(middleware.RequestIDTransfer)
 	r.Use(middleware.HostTransfer)
 
-	// NOTE: This uses standard fowarding headers, note that this puts implicit trust in the header values
-	// provided to us. In particular it uses the first element.
-	// Consequently we should consider the request IP as primarily "informational".
+	// NOTE: This uses standard forwarding headers, note that this puts implicit trust in the header values
+	// provided to us. In particular, it uses the first element.
+	// Consequently, we should consider the request IP as primarily "informational".
 	r.Use(chiware.RealIP)
 
 	r.Use(chiware.Heartbeat("/"))
@@ -278,7 +278,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// use cobra configurations for setting up wallet service
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
-	r, ctx, walletService = wallet.SetupService(ctx, r)
+	ctx, walletService = wallet.SetupService(ctx)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {

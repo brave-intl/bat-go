@@ -109,3 +109,17 @@ func (_d ClientWithPrometheus) IsWalletReputable(ctx context.Context, id uuid.UU
 	}()
 	return _d.base.IsWalletReputable(ctx, id, platform)
 }
+
+// UpdateWallet implements Client
+func (_d ClientWithPrometheus) UpdateWallet(ctx context.Context, walletID string, geoLocation string) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		clientDurationSummaryVec.WithLabelValues(_d.instanceName, "UpdateWallet", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.UpdateWallet(ctx, walletID, geoLocation)
+}

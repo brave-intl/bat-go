@@ -224,6 +224,20 @@ func (_d DatastoreWithPrometheus) InsertWallet(ctx context.Context, wallet *wall
 	return _d.base.InsertWallet(ctx, wallet)
 }
 
+// InsertWalletTx implements Datastore
+func (_d DatastoreWithPrometheus) InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) (err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "InsertWalletTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.InsertWalletTx(ctx, tx, wallet)
+}
+
 // LinkWallet implements Datastore
 func (_d DatastoreWithPrometheus) LinkWallet(ctx context.Context, ID string, providerID string, providerLinkingID uuid.UUID, anonymousAddress *uuid.UUID, depositProvider string, country string) (err error) {
 	_since := time.Now()

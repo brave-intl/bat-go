@@ -1,3 +1,5 @@
+//go:build integration
+
 package wallet_test
 
 import (
@@ -8,6 +10,8 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -15,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/brave-intl/bat-go/libs/backoff"
 	mockgemini "github.com/brave-intl/bat-go/libs/clients/gemini/mock"
 	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -25,32 +29,197 @@ import (
 	"github.com/brave-intl/bat-go/libs/httpsignature"
 	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
+	"github.com/brave-intl/bat-go/libs/test"
+	walletutils "github.com/brave-intl/bat-go/libs/wallet"
+	"github.com/brave-intl/bat-go/services/wallet"
+	"github.com/brave-intl/bat-go/services/wallet/wallettest"
 	"github.com/go-chi/chi"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	jose "gopkg.in/square/go-jose.v2"
+	"github.com/stretchr/testify/suite"
+	"gopkg.in/square/go-jose.v2"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
-func must(t *testing.T, msg string, err error) {
-	if err != nil {
-		t.Errorf("%s: %s\n", msg, err)
+type WalletControllersV3TestSuite struct {
+	storage wallet.Datastore
+	suite.Suite
+}
+
+func TestWalletControllersV3TestSuite(t *testing.T) {
+	suite.Run(t, new(WalletControllersV3TestSuite))
+}
+
+func (suite *WalletControllersV3TestSuite) SetupSuite() {
+	//wallettest.Migrate(suite.T())
+	storage, _ := wallet.NewWritablePostgres("", false, "")
+	suite.storage = storage
+}
+
+func (suite *WalletControllersV3TestSuite) SetupTest() {
+	wallettest.CleanDB(suite.T(), suite.storage.RawDB())
+}
+
+func (suite *WalletControllersV3TestSuite) TestCreateBraveWalletV4_Success() {
+	ctx := context.Background()
+
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	reputationClient := mockreputation.NewMockClient(ctrl)
+	reputationClient.EXPECT().
+		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	geoLocation := "test"
+
+	locationValidator := wallet.NewMockValidator(ctrl)
+	locationValidator.EXPECT().
+		Validate(gomock.Any(), geoLocation).
+		Return(true, nil)
+
+	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.CreateBraveWalletV4Request{
+		Geolocation: geoLocation,
 	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	err = signRequest(request, publicKey, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Assert().Equal(http.StatusCreated, rw.Code)
+
+	var info walletutils.Info
+	err = json.NewDecoder(rw.Body).Decode(&info)
+	suite.Require().NoError(err)
+
+	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+	suite.Assert().Equal(walletID.String(), info.ID)
 }
 
-func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
-	var s httpsignature.SignatureParams
-	s.Algorithm = httpsignature.ED25519
-	s.KeyID = hex.EncodeToString(publicKey)
-	s.Headers = []string{"digest", "(request-target)"}
-	return s.Sign(privateKey, crypto.Hash(0), req)
+func (suite *WalletControllersV3TestSuite) TestCreateBraveWalletV4_GeoLocationDisabled() {
+	ctx := context.Background()
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	locationValidator := wallet.NewMockValidator(ctrl)
+	locationValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any()).
+		Return(false, nil)
+
+	service, err := wallet.InitService(nil, nil, nil, nil, locationValidator, backoff.Retry)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.CreateBraveWalletV4Request{
+		Geolocation: test.RandomString(),
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	err = signRequest(request, publicKey, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Assert().Equal(http.StatusForbidden, rw.Code)
+
+	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+
+	info, err := suite.storage.GetWallet(ctx, walletID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Nil(info)
 }
 
-type result struct{}
+func (suite *WalletControllersV3TestSuite) TestCreateBraveWalletV4_ReputationCallFailed() {
+	ctx := context.Background()
 
-func (r result) LastInsertId() (int64, error) { return 1, nil }
-func (r result) RowsAffected() (int64, error) { return 1, nil }
+	storage, err := wallet.NewWritablePostgres("", false, "")
+	suite.NoError(err)
+
+	ctrl := gomock.NewController(suite.T())
+	defer ctrl.Finish()
+
+	errReputation := errors.New(test.RandomString())
+	reputationClient := mockreputation.NewMockClient(ctrl)
+	reputationClient.EXPECT().
+		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(errReputation)
+
+	locationValidator := wallet.NewMockValidator(ctrl)
+	locationValidator.EXPECT().
+		Validate(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
+	suite.Require().NoError(err)
+
+	router := chi.NewRouter()
+	wallet.RegisterRoutes(ctx, service, router)
+
+	data := wallet.CreateBraveWalletV4Request{
+		Geolocation: "test",
+	}
+
+	payload, err := json.Marshal(data)
+	suite.Require().NoError(err)
+
+	rw := httptest.NewRecorder()
+
+	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+
+	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+	suite.Require().NoError(err)
+
+	err = signRequest(request, publicKey, privateKey)
+	suite.Require().NoError(err)
+
+	server := &http.Server{Addr: ":8080", Handler: router}
+	server.Handler.ServeHTTP(rw, request)
+
+	suite.Assert().Equal(http.StatusInternalServerError, rw.Code)
+
+	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+
+	info, err := suite.storage.GetWallet(ctx, walletID)
+	suite.Require().NoError(err)
+
+	suite.Assert().Nil(info)
+}
 
 func TestLinkBraveWalletV3(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
@@ -59,13 +228,13 @@ func TestLinkBraveWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -110,7 +279,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	// begin linking tx
 	mock.ExpectBegin()
 
-	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -138,7 +307,7 @@ func TestLinkBraveWalletV3(t *testing.T) {
 	mock.ExpectQuery("^select max(.+)").WithArgs(linkingID).WillReturnRows(lastUnlink)
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "brave", uuid.NewV5(wallet.ClaimNamespace, idTo.String())).WillReturnRows(clRows)
 
 	// updates the user_deposit_destination
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "brave", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -172,13 +341,13 @@ func TestCreateBraveWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -266,13 +435,13 @@ func TestGetWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -380,7 +549,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())
+	linkingID := uuid.NewV5(wallet.ClaimNamespace, accountHash.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -395,7 +564,7 @@ func TestLinkBitFlyerWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.WalletClaimNamespace, accountHash.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "bitflyer", uuid.NewV5(wallet.ClaimNamespace, accountHash.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "bitflyer", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -453,7 +622,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -509,7 +678,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
 
 	// acquire lock for linkingID
 	mock.ExpectExec("^SELECT pg_advisory_xact_lock\\(hashtext(.+)\\)").WithArgs(linkingID.String()).
@@ -536,7 +705,7 @@ func TestLinkGeminiWalletV3FirstLinking(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -635,7 +804,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 	mock.ExpectBegin()
 
 	// make sure old linking id matches new one for same custodian
-	linkingID := uuid.NewV5(wallet.WalletClaimNamespace, idTo.String())
+	linkingID := uuid.NewV5(wallet.ClaimNamespace, idTo.String())
 	var linkingIDRows = sqlmock.NewRows([]string{"linking_id"}).AddRow(linkingID)
 
 	// acquire lock for linkingID
@@ -650,7 +819,7 @@ func TestLinkGeminiWalletV3(t *testing.T) {
 		AddRow(time.Now(), time.Now())
 
 	// insert into wallet custodian
-	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.WalletClaimNamespace, accountID.String())).WillReturnRows(clRows)
+	mock.ExpectQuery("^insert into wallet_custodian (.+)").WithArgs(idFrom, "gemini", uuid.NewV5(wallet.ClaimNamespace, accountID.String())).WillReturnRows(clRows)
 
 	// updates the link to the wallet_custodian record in wallets
 	mock.ExpectExec("^update wallets (.+)").WithArgs(idTo, linkingID, "gemini", idFrom).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -816,13 +985,13 @@ func TestUnlinkFailCooldownWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
@@ -866,3 +1035,22 @@ func TestUnlinkFailCooldownWalletV3(t *testing.T) {
 		must(t, "invalid response", fmt.Errorf("expected %d, got %d", http.StatusForbidden, resp.StatusCode))
 	}
 }
+
+func must(t *testing.T, msg string, err error) {
+	if err != nil {
+		t.Errorf("%s: %s\n", msg, err)
+	}
+}
+
+func signRequest(req *http.Request, publicKey httpsignature.Ed25519PubKey, privateKey ed25519.PrivateKey) error {
+	var s httpsignature.SignatureParams
+	s.Algorithm = httpsignature.ED25519
+	s.KeyID = hex.EncodeToString(publicKey)
+	s.Headers = []string{"digest", "(request-target)"}
+	return s.Sign(privateKey, crypto.Hash(0), req)
+}
+
+type result struct{}
+
+func (r result) LastInsertId() (int64, error) { return 1, nil }
+func (r result) RowsAffected() (int64, error) { return 1, nil }

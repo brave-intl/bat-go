@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package wallet
 
@@ -144,7 +143,7 @@ func (suite *WalletPostgresTestSuite) TestCustodianLink() {
 		pg.DisconnectCustodialWallet(ctx, id),
 		"connect custodial wallet should succeed")
 
-	// perform a connect custodial wallet to make sure not more than one linking is added for same cust/wallet
+	// connect a custodial wallet to make sure not more than one linking is added for same cust/wallet
 	suite.Require().NoError(
 		pg.ConnectCustodialWallet(ctx, &CustodianLink{
 			WalletID:  &id,

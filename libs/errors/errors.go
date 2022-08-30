@@ -9,16 +9,12 @@ import (
 var (
 	// ErrInvalidCountry - invalid country error for validation
 	ErrInvalidCountry = errors.New("invalid country")
-
 	// ErrNoIdentityCountry - no specified identity country
 	ErrNoIdentityCountry = errors.New("no identity country")
-
 	// ErrConflictBAPReportEvent is an error created when trying to update a bat loss event with a different amount
 	ErrConflictBAPReportEvent = errors.New("unable to record BAP report")
 	// ErrConflictBATLossEvent is an error created when trying to update a bat loss event with a different amount
 	ErrConflictBATLossEvent = errors.New("unable to update bat loss events")
-	// ErrWalletNotFound when there is no wallet found
-	ErrWalletNotFound = errors.New("unable to find wallet")
 	// ErrCertificateExpired - a certificate is expired
 	ErrCertificateExpired = errors.New("certificate expired")
 	// ErrMarshalTransferRequest - failed to marshal the transfer request
@@ -37,10 +33,10 @@ var (
 	ErrMissingWallet = errors.New("missing wallet")
 	// ErrNoDepositProviderDestination - no linked wallet
 	ErrNoDepositProviderDestination = errors.New("no deposit provider destination for wallet for transfer")
-	// ErrNotImplemented - this function is not yet implemented
-	ErrNotImplemented = errors.New("this function is not yet implemented")
 	// ErrNotFound - resource not found
 	ErrNotFound = errors.New("not found")
+	// ErrInternalServerError internal server error
+	ErrInternalServerError = errors.New("server encountered an internal error and was unable to complete the request")
 )
 
 // ErrorBundle creates a new response error

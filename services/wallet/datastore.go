@@ -82,9 +82,11 @@ type Datastore interface {
 	GetWalletByPublicKey(context.Context, string) (*walletutils.Info, error)
 	// InsertWallet inserts the given wallet
 	InsertWallet(ctx context.Context, wallet *walletutils.Info) error
+	// InsertWalletTx inserts the given wallet as part of provided sql.Tx transaction.
+	InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) error
 	// InsertBitFlyerRequestID - attempt an insert on a request id
 	InsertBitFlyerRequestID(ctx context.Context, requestID string) error
-	// UpsertWallets inserts a wallet if it does not already exist
+	// UpsertWallet UpsertWallets inserts a wallet if it does not already exist
 	UpsertWallet(ctx context.Context, wallet *walletutils.Info) error
 	// ConnectCustodialWallet - connect the wallet's custodial verified wallet.
 	ConnectCustodialWallet(ctx context.Context, cl *CustodianLink, depositDest string) error
@@ -296,6 +298,25 @@ func (pg *Postgres) InsertWallet(ctx context.Context, wallet *walletutils.Info) 
 		return err
 	}
 
+	return nil
+}
+
+// InsertWalletTx inserts the given wallet
+func (pg *Postgres) InsertWalletTx(ctx context.Context, tx *sqlx.Tx, wallet *walletutils.Info) error {
+	statement := `
+	INSERT INTO wallets (id, provider, provider_id, public_key)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT DO NOTHING`
+	_, err := tx.ExecContext(ctx,
+		statement,
+		wallet.ID,
+		wallet.Provider,
+		wallet.ProviderID,
+		wallet.PublicKey,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
