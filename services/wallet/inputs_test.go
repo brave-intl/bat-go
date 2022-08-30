@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"testing"
+
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	mockaws "github.com/brave-intl/bat-go/libs/aws/mock"
-
 	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"testing"
 )
 
 func TestGeolocationValidator_Validate_Enabled(t *testing.T) {
