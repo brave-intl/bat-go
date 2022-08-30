@@ -151,7 +151,7 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		object: object,
 	}
 
-	geolocationValidator := NewGeoLocationValidator(awsClient, config)
+	geolocationValidator := NewGeolocationValidator(awsClient, config)
 
 	s, err := InitService(db, roDB, repClient, geminiClient, geolocationValidator, backoff.Retry)
 	if err != nil {

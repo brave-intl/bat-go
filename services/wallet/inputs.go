@@ -431,28 +431,28 @@ func (blr *BitFlyerLinkingRequest) HandleErrors(err error) *handlers.AppError {
 	return handlers.ValidationError("bitflyer deposit wallet linking request validation errors", issues)
 }
 
-// Config defines a GeoLocationValidator configuration.
+// Config defines a GeolocationValidator configuration.
 type Config struct {
 	bucket string
 	object string
 }
 
-// GeoLocationValidator defines a GeoLocationValidator.
-type GeoLocationValidator struct {
+// GeolocationValidator defines a GeolocationValidator.
+type GeolocationValidator struct {
 	s3     appaws.S3GetObjectAPI
 	config Config
 }
 
-// NewGeoLocationValidator creates a new instance of NewGeoLocationValidator.
-func NewGeoLocationValidator(s3 appaws.S3GetObjectAPI, config Config) *GeoLocationValidator {
-	return &GeoLocationValidator{
+// NewGeolocationValidator creates a new instance of NewGeolocationValidator.
+func NewGeolocationValidator(s3 appaws.S3GetObjectAPI, config Config) *GeolocationValidator {
+	return &GeolocationValidator{
 		s3:     s3,
 		config: config,
 	}
 }
 
 // Validate checks to see if the given geolocation is enabled.
-func (g GeoLocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
+func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
 	out, err := g.s3.GetObject(
 		ctx, &s3.GetObjectInput{
 			Bucket: &g.config.bucket,
@@ -477,9 +477,9 @@ func (g GeoLocationValidator) Validate(ctx context.Context, geolocation string) 
 
 	for _, location := range locations {
 		if location == geolocation {
-			return true, nil
+			return false, nil
 		}
 	}
 
-	return false, nil
+	return true, nil
 }

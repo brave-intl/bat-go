@@ -31,6 +31,7 @@ mock:
 	mockgen -source=./libs/clients/bitflyer/client.go -destination=libs/clients/bitflyer/mock/mock.go -package=mock_bitflyer
 	mockgen -source=./libs/clients/coingecko/client.go -destination=libs/clients/coingecko/mock/mock.go -package=mock_coingecko
 	mockgen -source=./libs/backoff/retrypolicy/retrypolicy.go -destination=libs/backoff/retrypolicy/mock/retrypolicy.go -package=mockretrypolicy
+	mockgen -source=./libs/aws/s3.go -destination=libs/aws/mock/mock.go -package=mockaws
 
 instrumented:
 	gowrap gen -p github.com/brave-intl/bat-go/services/grant -i Datastore -t ./.prom-gowrap.tmpl -o ./services/grant/instrumented_datastore.go
