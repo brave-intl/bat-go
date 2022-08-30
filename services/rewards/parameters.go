@@ -1,5 +1,7 @@
 package rewards
 
+import "github.com/brave-intl/bat-go/libs/custodian"
+
 // AutoContribute - reward parameters about ac (votes)
 type AutoContribute struct {
 	Choices       []float64 `json:"choices,omitempty"`
@@ -14,9 +16,9 @@ type Tips struct {
 
 // ParametersV1 - structure of reward parameters
 type ParametersV1 struct {
-	PayoutStatus     *PayoutStatus     `json:"payoutStatus"`
-	CustodianRegions *CustodianRegions `json:"custodianRegions"`
-	BATRate          float64           `json:"batRate,omitempty"`
-	AutoContribute   AutoContribute    `json:"autocontribute,omitempty"`
-	Tips             Tips              `json:"tips,omitempty"`
+	PayoutStatus     *custodian.PayoutStatus     `json:"payoutStatus"`
+	CustodianRegions *custodian.CustodianRegions `json:"custodianRegions"`
+	BATRate          float64                     `json:"batRate,omitempty"`
+	AutoContribute   AutoContribute              `json:"autocontribute,omitempty"`
+	Tips             Tips                        `json:"tips,omitempty"`
 }
