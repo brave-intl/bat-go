@@ -863,7 +863,8 @@ func (pg *Postgres) DisconnectCustodialWallet(ctx context.Context, walletID uuid
 		update
 			wallets
 		set
-			user_deposit_destination=''
+			user_deposit_destination='',
+			user_deposit_account_provider=null
 		where
 			id=$1
 	`
