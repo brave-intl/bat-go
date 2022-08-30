@@ -14,9 +14,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.17.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.27.5
 	github.com/aws/smithy-go v1.12.1
-	github.com/brave-intl/bat-go v0.5.1
-	github.com/brave-intl/bat-go/libs v1.0.0
-	github.com/brave-intl/bat-go/tools v1.0.0
+	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go/libs v1.0.2
+	github.com/brave-intl/bat-go/tools v1.0.2
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/cors v1.2.1
@@ -27,7 +27,7 @@ require (
 	github.com/lib/pq v1.10.6
 	github.com/linkedin/goavro v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.13.0
-	github.com/rs/zerolog v1.27.0
+	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/segmentio/kafka-go v0.4.34
 	github.com/shopspring/decimal v1.3.1
@@ -83,7 +83,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/rs/xid v1.3.0 // indirect
+	github.com/rs/xid v1.4.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spf13/afero v1.8.2 // indirect

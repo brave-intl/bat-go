@@ -4,9 +4,9 @@ go 1.18
 
 require (
 	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
-	github.com/brave-intl/bat-go v0.5.1
-	github.com/brave-intl/bat-go/libs v1.0.0
-	github.com/brave-intl/bat-go/services v1.0.0
+	github.com/brave-intl/bat-go v1.0.2
+	github.com/brave-intl/bat-go/libs v1.0.2
+	github.com/brave-intl/bat-go/services v1.0.2
 	github.com/getsentry/sentry-go v0.13.0
 	github.com/gocarina/gocsv v0.0.0-20220729221910-a7386ae0b221
 	github.com/golang/mock v1.6.0
@@ -15,7 +15,7 @@ require (
 	github.com/hashicorp/vault/api v1.7.2
 	github.com/hashicorp/vault/sdk v0.5.3
 	github.com/keybase/go-crypto v0.0.0-20200123153347-de78d2cb44f4
-	github.com/rs/zerolog v1.27.0
+	github.com/rs/zerolog v1.28.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/shengdoushi/base58 v1.0.0
 	github.com/shopspring/decimal v1.3.1
@@ -155,7 +155,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/rs/xid v1.3.0 // indirect
+	github.com/rs/xid v1.4.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
