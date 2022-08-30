@@ -473,21 +473,38 @@ func (c *HTTPClient) ValidateAccount(ctx context.Context, verificationToken, rec
 		return "", res.CountryCode, err
 	}
 
-	if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
-		// check country code
-		for _, v := range blacklist {
-			if strings.EqualFold(res.CountryCode, v) {
-				if res.CountryCode != "" {
-					countGeminiWalletAccountValidation.With(prometheus.Labels{
-						"country_code": res.CountryCode,
-						"status":       "failure",
-					}).Inc()
-				}
+	// feature flag for using new custodian regions
+	if useCustodianRegions, ok := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool); ok && useCustodianRegions {
+		// get the uphold custodian supported regions
+		if custodianRegions, ok := ctx.Value(appctx.CustodianRegionsCTXKey).(*custodian.CustodianRegions); ok {
+			allowed := custodianRegions.Gemini.Verdict(
+				res.CountryCode,
+			)
+
+			if !allowed {
+				countGeminiWalletAccountValidation.With(prometheus.Labels{
+					"country_code": res.CountryCode,
+					"status":       "failure",
+				}).Inc()
 				return "", res.CountryCode, errorutils.ErrInvalidCountry
 			}
 		}
+	} else { // use default blacklist functionality
+		if blacklist, ok := ctx.Value(appctx.BlacklistedCountryCodesCTXKey).([]string); ok {
+			// check country code
+			for _, v := range blacklist {
+				if strings.EqualFold(res.CountryCode, v) {
+					if res.CountryCode != "" {
+						countGeminiWalletAccountValidation.With(prometheus.Labels{
+							"country_code": res.CountryCode,
+							"status":       "failure",
+						}).Inc()
+					}
+					return "", res.CountryCode, errorutils.ErrInvalidCountry
+				}
+			}
+		}
 	}
-
 	if res.CountryCode != "" {
 		countGeminiWalletAccountValidation.With(prometheus.Labels{
 			"country_code": res.CountryCode,
