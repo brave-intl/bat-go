@@ -33,8 +33,9 @@ func ExtractCustodianRegions(ctx context.Context, client appaws.S3GetObjectAPI, 
 		return nil, fmt.Errorf("failed to get payout status: %w", err)
 	}
 	defer func() {
-		err := out.Body.Close()
-		logger.Error().Err(err).Msg("failed to close s3 result body")
+		if err := out.Body.Close(); err != nil {
+			logger.Error().Err(err).Msg("failed to close s3 result body")
+		}
 	}()
 	var custodianRegions = new(CustodianRegions)
 
@@ -59,8 +60,9 @@ func ExtractPayoutStatus(ctx context.Context, client appaws.S3GetObjectAPI, buck
 		return nil, fmt.Errorf("failed to get payout status: %w", err)
 	}
 	defer func() {
-		err := out.Body.Close()
-		logger.Error().Err(err).Msg("failed to close s3 result body")
+		if err := out.Body.Close(); err != nil {
+			logger.Error().Err(err).Msg("failed to close s3 result body")
+		}
 	}()
 	var payoutStatus = new(PayoutStatus)
 
