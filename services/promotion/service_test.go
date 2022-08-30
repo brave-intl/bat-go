@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/brave-intl/bat-go/services/cmd"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	kafkautils "github.com/brave-intl/bat-go/libs/kafka"
@@ -19,11 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brave-intl/bat-go/libs/inputs"
 	"github.com/brave-intl/bat-go/services/wallet"
 	// re-using viper bind-env for wallet env variables
 	_ "github.com/brave-intl/bat-go/services/wallet/cmd"
-	"github.com/brave-intl/bat-go/libs/inputs"
-	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -74,9 +74,9 @@ func TestServiceTestSuite(t *testing.T) {
 }
 
 func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
-	ctx := context.Background()
-	r := chi.NewRouter()
-	r, ctx, walletService := wallet.SetupService(ctx, r)
+	ctx, walletService := wallet.SetupService(context.Background())
+	router := cmd.SetupRouter(ctx)
+	wallet.RegisterRoutes(ctx, walletService, router)
 	promotionDB, promotionRODB, err := NewPostgres()
 	suite.Require().NoError(err, "unable connect to promotion db")
 	s, err := InitService(
