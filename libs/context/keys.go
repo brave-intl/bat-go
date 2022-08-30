@@ -112,6 +112,13 @@ const (
 	// SkipRedeemCredentialsCTXKey - context key for getting the skip redeem credentials
 	SkipRedeemCredentialsCTXKey CTXKey = "skip_redeem_credentials"
 
+	// DisableUpholdLinkingCTXKey - this informs if uphold linking is enabled
+	DisableUpholdLinkingCTXKey CTXKey = "disable_uphold_linking"
+	// DisableGeminiLinkingCTXKey - this informs if gemini linking is enabled
+	DisableGeminiLinkingCTXKey CTXKey = "disable_gemini_linking"
+	// DisableBitflyerLinkingCTXKey - this informs if bitflyer linking is enabled
+	DisableBitflyerLinkingCTXKey CTXKey = "disable_bitflyer_linking"
+
 	// stripe related keys
 
 	// StripeEnabledCTXKey - this informs if stripe is enabled

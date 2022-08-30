@@ -159,6 +159,14 @@ func LinkBitFlyerDepositAccountV3(s *Service) func(w http.ResponseWriter, r *htt
 		// get logger from context
 		logger := logging.Logger(ctx, "wallet.CreateBitflyerWalletV3")
 
+		// check if we have disabled bitflyer
+		if disableBitflyer, ok := ctx.Value(appctx.DisableBitflyerLinkingCTXKey).(bool); ok && disableBitflyer {
+			return handlers.ValidationError(
+				"Connecting Brave Rewards to Bitflyer is temporarily unavailable.  Please try again later",
+				nil,
+			)
+		}
+
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
 			logger.Warn().Str("paymentID", err.Error()).Msg("failed to decode and validate paymentID from url")
@@ -215,6 +223,14 @@ func LinkGeminiDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		)
 		// get logger from context
 		logger := logging.Logger(ctx, "wallet.LinkGeminiDepositAccountV3")
+
+		// check if we have disabled gemini
+		if disableGemini, ok := ctx.Value(appctx.DisableGeminiLinkingCTXKey).(bool); ok && disableGemini {
+			return handlers.ValidationError(
+				"Connecting Brave Rewards to Gemini is temporarily unavailable.  Please try again later",
+				nil,
+			)
+		}
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {
@@ -275,6 +291,14 @@ func LinkUpholdDepositAccountV3(s *Service) func(w http.ResponseWriter, r *http.
 		)
 		// get logger from context
 		logger := logging.Logger(ctx, "wallet.LinkUpholdDepositAccountV3")
+
+		// check if we have disabled uphold
+		if disableUphold, ok := ctx.Value(appctx.DisableUpholdLinkingCTXKey).(bool); ok && disableUphold {
+			return handlers.ValidationError(
+				"Connecting Brave Rewards to Uphold is temporarily unavailable.  Please try again later",
+				nil,
+			)
+		}
 
 		// get payment id
 		if err := inputs.DecodeAndValidateString(ctx, id, chi.URLParam(r, "paymentID")); err != nil {

@@ -63,6 +63,21 @@ func init() {
 		Bind("enable-job-workers").
 		Env("ENABLE_JOB_WORKERS")
 
+	flagBuilder.Flag().Bool("disable-uphold-linking", false,
+		"disable custodian linking to uphold").
+		Bind("disable-uphold-linking").
+		Env("DISABLE_UPHOLD_LINKING")
+
+	flagBuilder.Flag().Bool("disable-gemini-linking", false,
+		"disable custodian linking to gemini").
+		Bind("disable-gemini-linking").
+		Env("DISABLE_GEMINI_LINKING")
+
+	flagBuilder.Flag().Bool("disable-bitflyer-linking", false,
+		"disable custodian linking to bitflyer").
+		Bind("disable-bitflyer-linking").
+		Env("DISABLE_BITFLYER_LINKING")
+
 	flagBuilder.Flag().StringSlice("brave-transfer-promotion-ids", []string{""},
 		"brave vg deposit destination promotion id").
 		Bind("brave-transfer-promotion-ids").
@@ -460,6 +475,11 @@ func GrantServer(
 	ctx = context.WithValue(ctx, appctx.GeminiBrowserClientIDCTXKey, viper.GetString("gemini-browser-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientIDCTXKey, viper.GetString("gemini-client-id"))
 	ctx = context.WithValue(ctx, appctx.GeminiClientSecretCTXKey, viper.GetString("gemini-client-secret"))
+
+	// linking variables
+	ctx = context.WithValue(ctx, appctx.DisableUpholdLinkingCTXKey, viper.GetBool("disable-uphold-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableGeminiLinkingCTXKey, viper.GetBool("disable-gemini-linking"))
+	ctx = context.WithValue(ctx, appctx.DisableBitflyerLinkingCTXKey, viper.GetBool("disable-bitflyer-linking"))
 
 	// stripe variables
 	ctx = context.WithValue(ctx, appctx.StripeEnabledCTXKey, viper.GetBool("stripe-enabled"))
