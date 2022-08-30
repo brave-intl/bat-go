@@ -476,7 +476,7 @@ func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) 
 	}
 
 	for _, location := range locations {
-		if location == geolocation {
+		if strings.EqualFold(location, geolocation) {
 			return false, nil
 		}
 	}
