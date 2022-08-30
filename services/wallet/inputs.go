@@ -8,19 +8,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	appaws "github.com/brave-intl/bat-go/libs/aws"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
+	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/wallet/aws"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
 
@@ -439,12 +439,12 @@ type Config struct {
 
 // GeoLocationValidator defines a GeoLocationValidator.
 type GeoLocationValidator struct {
-	s3     aws.S3
+	s3     appaws.S3GetObjectAPI
 	config Config
 }
 
 // NewGeoLocationValidator creates a new instance of NewGeoLocationValidator.
-func NewGeoLocationValidator(s3 aws.S3, config Config) *GeoLocationValidator {
+func NewGeoLocationValidator(s3 appaws.S3GetObjectAPI, config Config) *GeoLocationValidator {
 	return &GeoLocationValidator{
 		s3:     s3,
 		config: config,

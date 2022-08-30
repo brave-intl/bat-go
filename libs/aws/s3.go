@@ -18,6 +18,20 @@ type S3GetObjectAPI interface {
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
+// Client defines the aws client.
+type Client struct {
+	S3GetObjectAPI
+}
+
+// NewClient creates a new aws client instance.
+func NewClient(cfg aws.Config) (*Client, error) {
+	return &Client{
+		S3GetObjectAPI: s3.NewFromConfig(cfg),
+	}, nil
+}
+
+// BaseAWSConfig return an aws.Config with region and logger.
+// Default region is us-west-2.
 func BaseAWSConfig(ctx context.Context, logger *zerolog.Logger) (aws.Config, error) {
 	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
 	if !ok || len(region) == 0 {

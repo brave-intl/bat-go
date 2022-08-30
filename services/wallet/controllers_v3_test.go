@@ -392,13 +392,13 @@ func TestCreateUpholdWalletV3(t *testing.T) {
 		db, mock, _ = sqlmock.New()
 		datastore   = wallet.Datastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})
 		roDatastore = wallet.ReadOnlyDatastore(
 			&wallet.Postgres{
-				datastoreutils.Postgres{
+				Postgres: datastoreutils.Postgres{
 					DB: sqlx.NewDb(db, "postgres"),
 				},
 			})

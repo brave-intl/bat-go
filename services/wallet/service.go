@@ -5,19 +5,18 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	"net/http"
 	"os"
 
 	"github.com/brave-intl/bat-go/libs/altcurrency"
+	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/backoff"
 	"github.com/brave-intl/bat-go/libs/backoff/retrypolicy"
 	"github.com/brave-intl/bat-go/libs/clients"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
-	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -25,7 +24,6 @@ import (
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
-	"github.com/brave-intl/bat-go/services/wallet/aws"
 	"github.com/go-chi/chi"
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
@@ -57,18 +55,12 @@ type Service struct {
 	geminiClient      gemini.Client
 	locationValidator Validator
 	retry             backoff.RetryFunc
-	s3Client     appaws.S3GetObjectAPI
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client,
-	geminiClient gemini.Client, locationValidator Validator, retry backoff.RetryFunc) (*Service, error) {
-
-	cfg, err := appaws.BaseAWSConfig(ctx, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create base aws config: %w", err)
-	}
-
+	geminiClient gemini.Client, locationValidator Validator,
+	retry backoff.RetryFunc) (*Service, error) {
 	service := &Service{
 		Datastore:         datastore,
 		RoDatastore:       roDatastore,
@@ -76,7 +68,6 @@ func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient r
 		geminiClient:      geminiClient,
 		locationValidator: locationValidator,
 		retry:             retry,
-		s3Client:    s3.NewFromConfig(cfg),
 	}
 	return service, nil
 }
@@ -133,10 +124,20 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		ctx = context.WithValue(ctx, appctx.GeminiClientCTXKey, geminiClient)
 	}
 
-	bucket, ok := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
-	if !ok {
-		logger.Fatal().Err(errors.New("wallet geolocation disabled bucket ctx key value not found")).
-			Msg("failed to initialize wallet service")
+	cfg, err := appaws.BaseAWSConfig(ctx, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+	}
+
+	awsClient, err := appaws.NewClient(cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+	}
+
+	bucket, bucketOK := ctx.Value(appctx.ParametersMergeBucketCTXKey).(string)
+	useCustodianRegions, featureOK := ctx.Value(appctx.UseCustodianRegionsCTXKey).(bool)
+	if featureOK && useCustodianRegions && !bucketOK {
+		logger.Fatal().Msg("failed to initialize wallet service, misconfiguration for custodian regions bucket")
 	}
 
 	object, ok := ctx.Value(appctx.DisabledWalletGeolocationsCTXKey).(string)
@@ -150,21 +151,20 @@ func SetupService(ctx context.Context) (context.Context, *Service) {
 		object: object,
 	}
 
-	region, ok := ctx.Value(appctx.AWSRegionCTXKey).(string)
-	if !ok {
-		region = "us-west-2"
-	}
-
-	client, err := aws.NewClient(ctx, region)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
-	}
-
-	geolocationValidator := NewGeoLocationValidator(client, config)
+	geolocationValidator := NewGeoLocationValidator(awsClient, config)
 
 	s, err := InitService(db, roDB, repClient, geminiClient, geolocationValidator, backoff.Retry)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize wallet service")
+	}
+
+	if useCustodianRegions {
+		// use client to put the custodian regions on ctx
+		custodianRegions, err := custodian.ExtractCustodianRegions(ctx, awsClient, bucket)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to initialize wallet service, unable to extract custodian regions")
+		}
+		ctx = context.WithValue(ctx, appctx.CustodianRegionsCTXKey, custodianRegions)
 	}
 
 	return ctx, s
@@ -306,7 +306,7 @@ func (service *Service) UnlinkWallet(ctx context.Context, walletID, custodian st
 // IncreaseLinkingLimit - increase this wallet's linking limit
 func (service *Service) IncreaseLinkingLimit(ctx context.Context, custodianID string) error {
 	// convert to provider id
-	providerLinkingID := uuid.NewV5(WalletClaimNamespace, custodianID)
+	providerLinkingID := uuid.NewV5(ClaimNamespace, custodianID)
 
 	if err := service.Datastore.IncreaseLinkingLimit(ctx, providerLinkingID); err != nil {
 		return fmt.Errorf("unable to increase linking limit: %w", err)

@@ -57,12 +57,6 @@ func init() {
 		Bind("enable-link-drain-flag").
 		Require()
 
-	walletsCmdBuilder.Flag().String("merge-param-bucket", "",
-		"the bucket for which parameters are merged into this service").
-		Env("MERGE_PARAM_BUCKET").
-		Bind("merge-param-bucket").
-		Require()
-
 	walletsCmdBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
 		"the bucket for which parameters are merged into this service").
 		Env("DISABLED_WALLET_GEOLOCATIONS").
