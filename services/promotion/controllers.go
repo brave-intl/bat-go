@@ -676,11 +676,24 @@ type ClobberedClaimsRequest struct {
 	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
 }
 
+func (ccr *ClobberedClaimsRequest) Validate(ctx context.Context) error {
+	// govalidator "required" does not always work on arrays, just make sure there
+	// are more than 0 items
+	if ccr.ClaimIDs == nil || len(ccr.ClaimIDs) < 1 {
+		return errors.New("request should have more than zero items")
+	}
+	return nil
+}
+
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
 func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
 		var req ClobberedClaimsRequest
 		err := requestutils.ReadJSON(r.Context(), r.Body, &req)
+		if err != nil {
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
+		}
+		err = req.Validate(r.Context())
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
