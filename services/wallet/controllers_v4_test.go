@@ -34,7 +34,7 @@ func TestWalletControllersV4TestSuite(t *testing.T) {
 }
 
 func (suite *WalletControllersV4TestSuite) SetupSuite() {
-	//wallettest.Migrate(suite.T())
+	wallettest.Migrate(suite.T())
 	storage, _ := wallet.NewWritablePostgres("", false, "")
 	suite.storage = storage
 }
