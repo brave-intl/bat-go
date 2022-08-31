@@ -12,13 +12,10 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	appaws "github.com/brave-intl/bat-go/libs/aws"
 	appctx "github.com/brave-intl/bat-go/libs/context"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/inputs"
-	"github.com/brave-intl/bat-go/libs/logging"
 	"github.com/brave-intl/bat-go/libs/middleware"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
 	"gopkg.in/square/go-jose.v2/jwt"
@@ -429,57 +426,4 @@ func (blr *BitFlyerLinkingRequest) HandleErrors(err error) *handlers.AppError {
 		}
 	}
 	return handlers.ValidationError("bitflyer deposit wallet linking request validation errors", issues)
-}
-
-// Config defines a GeolocationValidator configuration.
-type Config struct {
-	bucket string
-	object string
-}
-
-// GeolocationValidator defines a GeolocationValidator.
-type GeolocationValidator struct {
-	s3     appaws.S3GetObjectAPI
-	config Config
-}
-
-// NewGeolocationValidator creates a new instance of NewGeolocationValidator.
-func NewGeolocationValidator(s3 appaws.S3GetObjectAPI, config Config) *GeolocationValidator {
-	return &GeolocationValidator{
-		s3:     s3,
-		config: config,
-	}
-}
-
-// Validate checks to see if the given geolocation is enabled.
-func (g GeolocationValidator) Validate(ctx context.Context, geolocation string) (bool, error) {
-	out, err := g.s3.GetObject(
-		ctx, &s3.GetObjectInput{
-			Bucket: &g.config.bucket,
-			Key:    &g.config.object,
-		})
-	if err != nil {
-		return false, fmt.Errorf("failed to get payout status: %w", err)
-	}
-	defer func() {
-		err := out.Body.Close()
-		if err != nil {
-			logging.FromContext(ctx).Error().
-				Err(err).Msg("error closing body")
-		}
-	}()
-
-	var locations []string
-	err = json.NewDecoder(out.Body).Decode(&locations)
-	if err != nil {
-		return false, fmt.Errorf("error decoding geolocations")
-	}
-
-	for _, location := range locations {
-		if strings.EqualFold(location, geolocation) {
-			return false, nil
-		}
-	}
-
-	return true, nil
 }

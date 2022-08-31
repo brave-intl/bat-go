@@ -5,10 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/brave-intl/bat-go/libs/custodian"
-	"net/http"
-	"os"
-
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/backoff"
@@ -17,6 +13,7 @@ import (
 	"github.com/brave-intl/bat-go/libs/clients/gemini"
 	"github.com/brave-intl/bat-go/libs/clients/reputation"
 	appctx "github.com/brave-intl/bat-go/libs/context"
+	"github.com/brave-intl/bat-go/libs/custodian"
 	errorutils "github.com/brave-intl/bat-go/libs/errors"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
@@ -28,6 +25,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/viper"
+	"net/http"
+	"os"
 )
 
 var (
@@ -41,7 +40,7 @@ var (
 		http.StatusInternalServerError, http.StatusConflict}
 )
 
-var errGeoLocationDisabled = errors.New("geo location disabled")
+var errGeoLocationDisabled = errors.New("geolocation is disabled")
 
 type Validator interface {
 	Validate(ctx context.Context, gelocation string) (bool, error)
@@ -49,25 +48,25 @@ type Validator interface {
 
 // Service contains datastore connections
 type Service struct {
-	Datastore         Datastore
-	RoDatastore       ReadOnlyDatastore
-	repClient         reputation.Client
-	geminiClient      gemini.Client
-	locationValidator Validator
-	retry             backoff.RetryFunc
+	Datastore            Datastore
+	RoDatastore          ReadOnlyDatastore
+	repClient            reputation.Client
+	geminiClient         gemini.Client
+	geolocationValidator Validator
+	retry                backoff.RetryFunc
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client,
-	geminiClient gemini.Client, locationValidator Validator,
+	geminiClient gemini.Client, geolocationValidator Validator,
 	retry backoff.RetryFunc) (*Service, error) {
 	service := &Service{
-		Datastore:         datastore,
-		RoDatastore:       roDatastore,
-		repClient:         repClient,
-		geminiClient:      geminiClient,
-		locationValidator: locationValidator,
-		retry:             retry,
+		Datastore:            datastore,
+		RoDatastore:          roDatastore,
+		repClient:            repClient,
+		geminiClient:         geminiClient,
+		geolocationValidator: geolocationValidator,
+		retry:                retry,
 	}
 	return service, nil
 }
@@ -524,7 +523,7 @@ func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian s
 // CreateBraveWallet creates a brave rewards wallet and informs the reputation service.
 // If either the local transaction or call to the reputation service fails then the wallet is not created.
 func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string, geolocation string) (*walletutils.Info, error) {
-	valid, err := service.locationValidator.Validate(ctx, geolocation)
+	valid, err := service.geolocationValidator.Validate(ctx, geolocation)
 	if err != nil {
 		return nil, fmt.Errorf("error validating geolocation: %w", err)
 	}
@@ -541,11 +540,11 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 		AltCurrency: &altCurrency,
 	}
 
-	tx, err := service.Datastore.RawDB().BeginTxx(ctx, nil)
+	ctx, tx, rollback, commit, err := getTx(ctx, service.Datastore)
 	if err != nil {
 		return nil, fmt.Errorf("error creating transaction: %w", err)
 	}
-	defer service.Datastore.RollbackTx(tx)
+	defer rollback()
 
 	err = service.Datastore.InsertWalletTx(ctx, tx, info)
 	if err != nil {
@@ -561,7 +560,7 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 		return nil, fmt.Errorf("error calling reputation service: %w", err)
 	}
 
-	err = tx.Commit()
+	err = commit()
 	if err != nil {
 		return nil, fmt.Errorf("error comitting brave wallet transaction: %w", err)
 	}
