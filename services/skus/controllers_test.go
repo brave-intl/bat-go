@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/brave-intl/bat-go/services/wallet"
-	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/brave-intl/bat-go/libs/altcurrency"
 	"github.com/brave-intl/bat-go/libs/clients/cbr"
 	mockcb "github.com/brave-intl/bat-go/libs/clients/cbr/mock"
@@ -36,6 +34,8 @@ import (
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
+	macarooncmd "github.com/brave-intl/bat-go/tools/macaroon/cmd"
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	uuid "github.com/satori/go.uuid"
@@ -285,14 +285,14 @@ func (suite *ControllersTestSuite) setupCreateOrder(skuToken string, quantity in
 }
 
 func (suite *ControllersTestSuite) TestAndroidWebhook() {
-	order, _ := suite.setupCreateOrder(UserWalletVoteTestSkuToken, UserWalletVoteToken, 40)
+	order := suite.setupCreateOrder(UserWalletVoteTestSkuToken, 40)
 	suite.Assert().NotNil(order)
 
 	// Check the order
 	suite.Assert().Equal("10", order.TotalPrice.String())
 
 	// add the external id to metadata as if an initial receipt was submitted
-	err := suite.storage.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
+	err := suite.service.Datastore.AppendOrderMetadata(context.Background(), &order.ID, "externalID", "my external id")
 	suite.Require().NoError(err)
 
 	// overwrite the receipt validation function for this test
