@@ -26,6 +26,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+var errNotFound = errors.New("not found")
+
 // Datastore abstracts over the underlying datastore
 type Datastore interface {
 	datastore.Datastore
@@ -35,6 +37,8 @@ type Datastore interface {
 	SetOrderTrialDays(ctx context.Context, orderID *uuid.UUID, days int64) (*Order, error)
 	// GetOrder by ID
 	GetOrder(orderID uuid.UUID) (*Order, error)
+	// GetOrderByExternalID by the external id from the purchase vendor
+	GetOrderByExternalID(externalID string) (*Order, error)
 	// RenewOrder - renew the order with this id
 	RenewOrder(ctx context.Context, orderID uuid.UUID) error
 	// UpdateOrder updates an order when it has been paid
@@ -87,6 +91,8 @@ type Datastore interface {
 
 	CheckExpiredCheckoutSession(uuid.UUID) (bool, string, error)
 	IsStripeSub(uuid.UUID) (bool, string, error)
+	SetOrderPaid(context.Context, *uuid.UUID) error
+	AppendOrderMetadata(context.Context, *uuid.UUID, string, string) error
 }
 
 // VoteRecord - how the ac votes are stored in the queue
@@ -303,6 +309,35 @@ func (pg *Postgres) CreateOrder(totalPrice decimal.Decimal, merchantID, status, 
 		return nil, err
 	}
 
+	return &order, nil
+}
+
+// GetOrderByExternalID by the external id from the purchase vendor
+func (pg *Postgres) GetOrderByExternalID(externalID string) (*Order, error) {
+	statement := `
+		SELECT 
+			id, created_at, currency, updated_at, total_price, 
+			merchant_id, location, status, allowed_payment_methods, 
+			metadata, valid_for, last_paid_at, expires_at, trial_days
+		FROM orders WHERE metadata->>'externalID' = $1`
+	order := Order{}
+	err := pg.RawDB().Get(&order, statement, externalID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	foundOrderItems := []OrderItem{}
+	statement = `
+		SELECT id, order_id, sku, created_at, updated_at, currency, quantity, price, (quantity * price) as subtotal, location, description, credential_type,metadata, valid_for_iso, issuance_interval
+		FROM order_items WHERE order_id = $1`
+	err = pg.RawDB().Select(&foundOrderItems, statement, order.ID)
+
+	order.Items = foundOrderItems
+	if err != nil {
+		return nil, err
+	}
 	return &order, nil
 }
 
@@ -1025,7 +1060,7 @@ ON order_cred.issuer_id = order_cred_issuers.id`
 	return attempted, nil
 }
 
-// UpdateOrderMetadata adds a key value pair to an order's metadata
+// UpdateOrderMetadata sets a key value pair to an order's metadata
 func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value string) error {
 	// create order
 	om := datastore.Metadata{
@@ -1046,4 +1081,60 @@ func (pg *Postgres) UpdateOrderMetadata(orderID uuid.UUID, key string, value str
 	}
 
 	return nil
+}
+
+// AppendOrderMetadata appends a key value pair to an order's metadata
+func (pg *Postgres) AppendOrderMetadata(ctx context.Context, orderID *uuid.UUID, key string, value string) error {
+	// get the db tx from context if exists, if not create it
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	defer rollback()
+	if err != nil {
+		return err
+	}
+	stmt := `update orders set metadata = coalesce(metadata||jsonb_build_object($1::text, $2::text), metadata, jsonb_build_object($1::text, $2::text)), updated_at = current_timestamp where id = $3`
+
+	result, err := tx.Exec(stmt, key, value, orderID.String())
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	return commit()
+}
+
+// SetOrderPaid - set the order as paid
+func (pg *Postgres) SetOrderPaid(ctx context.Context, orderID *uuid.UUID) error {
+	_, tx, rollback, commit, err := datastore.GetTx(ctx, pg)
+	defer rollback() // doesnt hurt to rollback incase we panic
+	if err != nil {
+		return fmt.Errorf("failed to get db transaction: %w", err)
+	}
+
+	result, err := tx.Exec(`UPDATE orders set status = $1, updated_at = CURRENT_TIMESTAMP where id = $2`, OrderStatusPaid, *orderID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if rowsAffected == 0 || err != nil {
+		return errors.New("no rows updated")
+	}
+
+	// record the order payment
+	if err := recordOrderPayment(ctx, tx, *orderID, time.Now()); err != nil {
+		return fmt.Errorf("failed to record order payment: %w", err)
+	}
+
+	// set the expires at value
+	err = pg.updateOrderExpiresAt(ctx, tx, *orderID)
+	if err != nil {
+		return fmt.Errorf("failed to set order expires_at: %w", err)
+	}
+
+	return commit()
 }

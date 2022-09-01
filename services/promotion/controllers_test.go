@@ -1044,8 +1044,10 @@ func (suite *ControllersTestSuite) TestCreatePromotion() {
 func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 	mockCtrl := gomock.NewController(suite.T())
 	defer mockCtrl.Finish()
+
 	pg, _, err := NewPostgres()
 	suite.Require().NoError(err, "could not connect to db")
+
 	mockReputation := mockreputation.NewMockClient(mockCtrl)
 	mockCB := mockcb.NewMockClient(mockCtrl)
 
@@ -1054,50 +1056,67 @@ func (suite *ControllersTestSuite) TestReportClobberedClaims() {
 		reputationClient: mockReputation,
 		cbClient:         mockCB,
 	}
+
 	handler := PostReportClobberedClaims(service, 1)
-	id0 := uuid.NewV4()
-	id1 := uuid.NewV4()
-	id2 := uuid.NewV4()
-	run := func(ids []uuid.UUID) int {
-		requestPayloadStruct := ClobberedClaimsRequest{
-			ClaimIDs: ids,
-		}
-		payload, err := json.Marshal(&requestPayloadStruct)
-		suite.Require().NoError(err)
-		req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer([]byte(payload)))
-		suite.Require().NoError(err)
 
-		rctx := chi.NewRouteContext()
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	claimIDs := []uuid.UUID{uuid.NewV4(), uuid.NewV4(), uuid.NewV4()}
+	requestPayloadStruct := ClobberedClaimsRequest{
+		ClaimIDs: claimIDs,
+	}
+	payload, err := json.Marshal(&requestPayloadStruct)
+	suite.Require().NoError(err)
 
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-		return rr.Code
+	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer(payload))
+	suite.Require().NoError(err)
+
+	rctx := chi.NewRouteContext()
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusOK, rr.Code)
+
+	var clobberedCreds []ClobberedCreds
+	err = pg.RawDB().Select(&clobberedCreds, `select * from clobbered_claims;`)
+	suite.Require().NoError(err)
+
+	var clobberedCredsIDs []uuid.UUID
+	for _, clobberedCred := range clobberedCreds {
+		clobberedCredsIDs = append(clobberedCredsIDs, clobberedCred.ID)
+	}
+	suite.Assert().ElementsMatch(claimIDs, clobberedCredsIDs)
+}
+
+func (suite *ControllersTestSuite) TestClobberedClaims_Empty() {
+	mockCtrl := gomock.NewController(suite.T())
+	defer mockCtrl.Finish()
+
+	mockReputation := mockreputation.NewMockClient(mockCtrl)
+	mockCB := mockcb.NewMockClient(mockCtrl)
+
+	service := &Service{
+		reputationClient: mockReputation,
+		cbClient:         mockCB,
 	}
 
-	// govalidator does not allow empty array if required.
-	code := run([]uuid.UUID{})
-	suite.Require().Equal(http.StatusBadRequest, code)
+	handler := PostReportClobberedClaims(service, 1)
+	requestPayloadStruct := ClobberedClaimsRequest{
+		ClaimIDs: []uuid.UUID{},
+	}
+	payload, err := json.Marshal(&requestPayloadStruct)
+	suite.Require().NoError(err)
 
-	code = run([]uuid.UUID{
-		id0,
-	})
-	suite.Require().Equal(http.StatusOK, code)
-	claims := []ClobberedCreds{}
-	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
-	suite.Assert().Equal(claims[0].ID, id0)
+	req, err := http.NewRequest("POST", "/v1/promotions/reportclaimsummary", bytes.NewBuffer(payload))
+	suite.Require().NoError(err)
 
-	code = run([]uuid.UUID{
-		id0,
-		id1,
-		id2,
-	})
-	suite.Require().Equal(http.StatusOK, code)
-	claims = []ClobberedCreds{}
-	suite.Require().NoError(pg.RawDB().Select(&claims, `select * from clobbered_claims;`))
-	suite.Assert().Equal(claims[0].ID, id0)
-	suite.Assert().Equal(claims[1].ID, id1)
-	suite.Assert().Equal(claims[2].ID, id2)
+	rctx := chi.NewRouteContext()
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	suite.Require().Equal(http.StatusBadRequest, rr.Code)
 }
 
 func (suite *ControllersTestSuite) TestPostReportWalletEvent() {

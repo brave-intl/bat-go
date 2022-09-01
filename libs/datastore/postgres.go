@@ -55,6 +55,7 @@ type Datastore interface {
 	Migrate(...uint) error
 	RollbackTxAndHandle(tx *sqlx.Tx) error
 	RollbackTx(tx *sqlx.Tx)
+	BeginTx() (*sqlx.Tx, error)
 }
 
 // Postgres is a Datastore wrapper around a postgres database
@@ -236,4 +237,9 @@ func (pg *Postgres) RollbackTxAndHandle(tx *sqlx.Tx) error {
 // RollbackTx rolls back a transaction (useful with defer)
 func (pg *Postgres) RollbackTx(tx *sqlx.Tx) {
 	_ = pg.RollbackTxAndHandle(tx)
+}
+
+// BeginTx starts a transaction
+func (pg *Postgres) BeginTx() (*sqlx.Tx, error) {
+	return pg.RawDB().Beginx()
 }

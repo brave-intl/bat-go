@@ -60,6 +60,20 @@ func (_d DatastoreWithPrometheus) ActivatePromotion(promotion *Promotion) (err e
 	return _d.base.ActivatePromotion(promotion)
 }
 
+// BeginTx implements Datastore
+func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // ClaimForWallet implements Datastore
 func (_d DatastoreWithPrometheus) ClaimForWallet(promotion *Promotion, issuer *Issuer, wallet *walletutils.Info, blindedCreds jsonutils.JSONStringArray) (cp1 *Claim, err error) {
 	_since := time.Now()

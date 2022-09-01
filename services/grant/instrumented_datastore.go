@@ -40,6 +40,20 @@ func NewDatastoreWithPrometheus(base Datastore, instanceName string) DatastoreWi
 	}
 }
 
+// BeginTx implements Datastore
+func (_d DatastoreWithPrometheus) BeginTx() (tp1 *sqlx.Tx, err error) {
+	_since := time.Now()
+	defer func() {
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+
+		datastoreDurationSummaryVec.WithLabelValues(_d.instanceName, "BeginTx", result).Observe(time.Since(_since).Seconds())
+	}()
+	return _d.base.BeginTx()
+}
+
 // GetGrantsOrderedByExpiry implements Datastore
 func (_d DatastoreWithPrometheus) GetGrantsOrderedByExpiry(wallet walletutils.Info, promotionType string) (ga1 []Grant, err error) {
 	_since := time.Now()

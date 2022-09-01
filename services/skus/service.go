@@ -19,14 +19,15 @@ import (
 
 	"errors"
 
-	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/libs/cryptography"
+	"github.com/brave-intl/bat-go/libs/datastore"
 	"github.com/brave-intl/bat-go/libs/handlers"
 	"github.com/brave-intl/bat-go/libs/logging"
 	srv "github.com/brave-intl/bat-go/libs/service"
 	timeutils "github.com/brave-intl/bat-go/libs/time"
 	"github.com/brave-intl/bat-go/libs/wallet/provider"
 	"github.com/brave-intl/bat-go/libs/wallet/provider/uphold"
+	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/linkedin/goavro"
 	stripe "github.com/stripe/stripe-go/v72"
 
@@ -114,6 +115,8 @@ func (s *Service) InitKafka(ctx context.Context) error {
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(ctx context.Context, datastore Datastore, walletService *wallet.Service) (service *Service, err error) {
 	sublogger := logging.Logger(ctx, "payments").With().Str("func", "InitService").Logger()
+	// setup the in app purchase clients
+	initClients(ctx)
 
 	// setup stripe if exists in context and enabled
 	var scClient = &client.API{}
@@ -1169,4 +1172,94 @@ func (s *Service) verifyCredential(ctx context.Context, req credential, w http.R
 		return handlers.RenderContent(ctx, "Credentials could not be verified", w, http.StatusForbidden)
 	}
 	return handlers.WrapError(nil, "Unknown credential type", http.StatusBadRequest)
+}
+
+// verifyDeveloperNotification - verify the developer notification from playstore
+func (s *Service) verifyDeveloperNotification(ctx context.Context, dn *DeveloperNotification) error {
+	if dn == nil || dn.SubscriptionNotification.PurchaseToken == "" {
+		return errors.New("notification has no purchase token")
+	}
+
+	// lookup the order based on the token as externalID
+	o, err := s.Datastore.GetOrderByExternalID(dn.SubscriptionNotification.PurchaseToken)
+	if err != nil {
+		return fmt.Errorf("failed to get order from db: %w", err)
+	}
+
+	if o == nil {
+		return fmt.Errorf("failed to get order from db: %w", errNotFound)
+	}
+
+	// have order, now validate the receipt from the notification
+	_, err = s.validateReceipt(ctx, &o.ID, SubmitReceiptRequestV1{
+		Type:           "android",
+		Blob:           dn.SubscriptionNotification.PurchaseToken,
+		Package:        dn.PackageName,
+		SubscriptionID: dn.SubscriptionNotification.SubscriptionID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to validate purchase token: %w", err)
+	}
+
+	switch dn.SubscriptionNotification.NotificationType {
+	case androidSubscriptionRenewed,
+		androidSubscriptionRecovered,
+		androidSubscriptionPurchased,
+		androidSubscriptionRestarted,
+		androidSubscriptionInGracePeriod,
+		androidSubscriptionPriceChangeConfirmed:
+		if err = s.Datastore.RenewOrder(ctx, o.ID); err != nil {
+			return fmt.Errorf("failed to renew subscription in skus: %w", err)
+		}
+	case androidSubscriptionExpired,
+		androidSubscriptionRevoked,
+		androidSubscriptionPausedScheduleChanged,
+		androidSubscriptionPaused,
+		androidSubscriptionDeferred,
+		androidSubscriptionOnHold,
+		androidSubscriptionCanceled,
+		androidSubscriptionUnknown:
+		if err = s.CancelOrder(o.ID); err != nil {
+			return fmt.Errorf("failed to cancel subscription in skus: %w", err)
+		}
+	default:
+		return errors.New("failed to act on subscription notification")
+	}
+
+	return nil
+}
+
+// validateReceipt - perform receipt validation
+func (s *Service) validateReceipt(ctx context.Context, orderID *uuid.UUID, receipt interface{}) (string, error) {
+	// based on the vendor call the vendor specific apis to check the status of the receipt,
+	if v, ok := receipt.(SubmitReceiptRequestV1); ok {
+		// and get back the external id
+		if fn, ok := receiptValidationFns[v.Type]; ok {
+			return fn(ctx, receipt)
+		}
+	}
+
+	return "", errorutils.ErrNotImplemented
+}
+
+// UpdateOrderStatusPaidWithMetadata - update the order status with metadata
+func (s *Service) UpdateOrderStatusPaidWithMetadata(ctx context.Context, orderID *uuid.UUID, metadata datastore.Metadata) error {
+	// create a tx for use in all datastore calls
+	ctx, _, rollback, commit, err := datastore.GetTx(ctx, s.Datastore)
+	defer rollback() // doesnt hurt to rollback incase we panic
+
+	if err != nil {
+		return fmt.Errorf("failed to get db transaction: %w", err)
+	}
+
+	for k, v := range metadata {
+		if err := s.Datastore.AppendOrderMetadata(ctx, orderID, k, v); err != nil {
+			return fmt.Errorf("failed to append order metadata: %w", err)
+		}
+	}
+	if err := s.Datastore.SetOrderPaid(ctx, orderID); err != nil {
+		return fmt.Errorf("failed to set order paid: %w", err)
+	}
+
+	return commit()
 }

@@ -676,6 +676,15 @@ type ClobberedClaimsRequest struct {
 	ClaimIDs []uuid.UUID `json:"claimIds" valid:"required"`
 }
 
+func (ccr *ClobberedClaimsRequest) Validate(ctx context.Context) error {
+	// govalidator "required" does not always work on arrays, just make sure there
+	// are more than 0 items
+	if ccr.ClaimIDs == nil || len(ccr.ClaimIDs) < 1 {
+		return errors.New("request should have more than zero items")
+	}
+	return nil
+}
+
 // PostReportClobberedClaims is the handler for reporting claims that were clobbered by client bug
 func PostReportClobberedClaims(service *Service, version int) handlers.AppHandler {
 	return handlers.AppHandler(func(w http.ResponseWriter, r *http.Request) *handlers.AppError {
@@ -684,13 +693,11 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 		if err != nil {
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
-
-		_, err = govalidator.ValidateStruct(req)
+		err = req.Validate(r.Context())
 		if err != nil {
-			return handlers.WrapValidationError(err)
+			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		// govalidator does not always catch empty array on required
 		if len(req.ClaimIDs) == 0 {
 			return handlers.WrapValidationError(errors.New("ClaimIDs: required, cannot be empty"))
 		}

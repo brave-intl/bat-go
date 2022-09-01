@@ -22,6 +22,7 @@ mock:
 	mockgen -source=./services/promotion/datastore.go -destination=services/promotion/mockdatastore.go -package=promotion
 	mockgen -source=./services/promotion/service.go -destination=services/promotion/mockservice.go -package=promotion
 	mockgen -source=./services/grant/datastore.go -destination=services/grant/mockdatastore.go -package=grant
+	mockgen -source=./services/skus/datastore.go -destination=services/skus/mockdatastore.go -package=skus
 	mockgen -source=./libs/clients/ratios/client.go -destination=libs/clients/ratios/mock/mock.go -package=mock_ratios
 	mockgen -source=./libs/clients/cbr/client.go -destination=libs/clients/cbr/mock/mock.go -package=mock_cbr
 	mockgen -source=./libs/clients/reputation/client.go -destination=libs/clients/reputation/mock/mock.go -package=mock_reputation
