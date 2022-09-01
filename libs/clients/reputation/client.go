@@ -313,12 +313,12 @@ type walletsRequest struct {
 	Geolocation string `json:"geo"`
 }
 
-func (c *HTTPClient) UpdateWallet(ctx context.Context, walletID, geoLocation string) error {
+func (c *HTTPClient) UpdateWallet(ctx context.Context, walletID, geolocation string) error {
 	b := walletsRequest{
-		Geolocation: geoLocation,
+		Geolocation: geolocation,
 	}
 
-	req, err := c.client.NewRequest(ctx, http.MethodPatch, fmt.Sprintf("v1/declare/%s", walletID), b, nil)
+	req, err := c.client.NewRequest(ctx, http.MethodPut, fmt.Sprintf("v1/reputation-summary/%s", walletID), b, nil)
 	if err != nil {
 		return err
 	}

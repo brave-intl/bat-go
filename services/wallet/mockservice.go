@@ -11,31 +11,31 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockValidator is a mock of Validator interface.
-type MockValidator struct {
+// MockGeoValidator is a mock of GeoValidator interface.
+type MockGeoValidator struct {
 	ctrl     *gomock.Controller
-	recorder *MockValidatorMockRecorder
+	recorder *MockGeoValidatorMockRecorder
 }
 
-// MockValidatorMockRecorder is the mock recorder for MockValidator.
-type MockValidatorMockRecorder struct {
-	mock *MockValidator
+// MockGeoValidatorMockRecorder is the mock recorder for MockGeoValidator.
+type MockGeoValidatorMockRecorder struct {
+	mock *MockGeoValidator
 }
 
-// NewMockValidator creates a new mock instance.
-func NewMockValidator(ctrl *gomock.Controller) *MockValidator {
-	mock := &MockValidator{ctrl: ctrl}
-	mock.recorder = &MockValidatorMockRecorder{mock}
+// NewMockGeoValidator creates a new mock instance.
+func NewMockGeoValidator(ctrl *gomock.Controller) *MockGeoValidator {
+	mock := &MockGeoValidator{ctrl: ctrl}
+	mock.recorder = &MockGeoValidatorMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockValidator) EXPECT() *MockValidatorMockRecorder {
+func (m *MockGeoValidator) EXPECT() *MockGeoValidatorMockRecorder {
 	return m.recorder
 }
 
 // Validate mocks base method.
-func (m *MockValidator) Validate(ctx context.Context, gelocation string) (bool, error) {
+func (m *MockGeoValidator) Validate(ctx context.Context, gelocation string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validate", ctx, gelocation)
 	ret0, _ := ret[0].(bool)
@@ -44,7 +44,7 @@ func (m *MockValidator) Validate(ctx context.Context, gelocation string) (bool, 
 }
 
 // Validate indicates an expected call of Validate.
-func (mr *MockValidatorMockRecorder) Validate(ctx, gelocation interface{}) *gomock.Call {
+func (mr *MockGeoValidatorMockRecorder) Validate(ctx, gelocation interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockValidator)(nil).Validate), ctx, gelocation)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockGeoValidator)(nil).Validate), ctx, gelocation)
 }

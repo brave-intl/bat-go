@@ -27,7 +27,22 @@ import (
 	"github.com/spf13/viper"
 	"net/http"
 	"os"
+	"strconv"
 )
+
+var ReputationGeoEnable = isReputationGeoEnabled()
+
+func isReputationGeoEnabled() bool {
+	var toggle = false
+	if os.Getenv("REPUTATION_GEO_ENABLED") != "" {
+		var err error
+		toggle, err = strconv.ParseBool(os.Getenv("REPUTATION_GEO_ENABLED"))
+		if err != nil {
+			return false
+		}
+	}
+	return toggle
+}
 
 var (
 	// ClaimNamespace uuidv5 namespace for provider linking - exported for tests
@@ -42,31 +57,31 @@ var (
 
 var errGeoLocationDisabled = errors.New("geolocation is disabled")
 
-type Validator interface {
+type GeoValidator interface {
 	Validate(ctx context.Context, gelocation string) (bool, error)
 }
 
 // Service contains datastore connections
 type Service struct {
-	Datastore            Datastore
-	RoDatastore          ReadOnlyDatastore
-	repClient            reputation.Client
-	geminiClient         gemini.Client
-	geolocationValidator Validator
-	retry                backoff.RetryFunc
+	Datastore    Datastore
+	RoDatastore  ReadOnlyDatastore
+	repClient    reputation.Client
+	geminiClient gemini.Client
+	geoValidator GeoValidator
+	retry        backoff.RetryFunc
 }
 
 // InitService creates a service using the passed datastore and clients configured from the environment
 func InitService(datastore Datastore, roDatastore ReadOnlyDatastore, repClient reputation.Client,
-	geminiClient gemini.Client, geolocationValidator Validator,
+	geminiClient gemini.Client, geolocationValidator GeoValidator,
 	retry backoff.RetryFunc) (*Service, error) {
 	service := &Service{
-		Datastore:            datastore,
-		RoDatastore:          roDatastore,
-		repClient:            repClient,
-		geminiClient:         geminiClient,
-		geolocationValidator: geolocationValidator,
-		retry:                retry,
+		Datastore:    datastore,
+		RoDatastore:  roDatastore,
+		repClient:    repClient,
+		geminiClient: geminiClient,
+		geoValidator: geolocationValidator,
+		retry:        retry,
 	}
 	return service, nil
 }
@@ -207,13 +222,6 @@ func RegisterRoutes(ctx context.Context, s *Service, r *chi.Mux) {
 			r.Delete("/{custodian}/{paymentID}/connect", middleware.HTTPSignedOnly(s)(middleware.InstrumentHandlerFunc(
 				"DisconnectCustodianLinkV3", DisconnectCustodianLinkV3(s))).ServeHTTP)
 		}
-		// support only APIs to assist in linking limit issues
-		/*
-			TODO: currently commented out due to concerns about how to enable/disable particular
-			people from accessing this endpoint.
-			r.Post("/{custodian}/increase-limit/{custodian_id}", middleware.SimpleTokenAuthorizedOnly(
-				middleware.InstrumentHandlerFunc("IncreaseLinkingLimit", IncreaseLinkingLimitV3(s))).ServeHTTP)
-		*/
 
 		// unlink verified custodial wallet
 		r.Delete("/{custodian}/{payment_id}/unlink", middleware.SimpleTokenAuthorizedOnly(
@@ -523,7 +531,7 @@ func (service *Service) DisconnectCustodianLink(ctx context.Context, custodian s
 // CreateBraveWallet creates a brave rewards wallet and informs the reputation service.
 // If either the local transaction or call to the reputation service fails then the wallet is not created.
 func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string, geolocation string) (*walletutils.Info, error) {
-	valid, err := service.geolocationValidator.Validate(ctx, geolocation)
+	valid, err := service.geoValidator.Validate(ctx, geolocation)
 	if err != nil {
 		return nil, fmt.Errorf("error validating geolocation: %w", err)
 	}
@@ -551,15 +559,16 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 		return nil, fmt.Errorf("error inserting brave wallet: %w", err)
 	}
 
-	// TODO uncomment when reputation deployed
-	//op := func() (interface{}, error) {
-	//	return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
-	//}
-	//
-	//_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-	//if err != nil {
-	//	return nil, fmt.Errorf("error calling reputation service: %w", err)
-	//}
+	if ReputationGeoEnable {
+		op := func() (interface{}, error) {
+			return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
+		}
+
+		_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
+		if err != nil {
+			return nil, fmt.Errorf("error calling reputation service: %w", err)
+		}
+	}
 
 	err = commit()
 	if err != nil {
