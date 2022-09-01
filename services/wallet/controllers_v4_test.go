@@ -6,15 +6,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/brave-intl/bat-go/libs/backoff"
-	mockreputation "github.com/brave-intl/bat-go/libs/clients/reputation/mock"
 	"github.com/brave-intl/bat-go/libs/httpsignature"
-	"github.com/brave-intl/bat-go/libs/test"
 	walletutils "github.com/brave-intl/bat-go/libs/wallet"
 	"github.com/brave-intl/bat-go/services/wallet"
 	"github.com/brave-intl/bat-go/services/wallet/wallettest"
@@ -52,10 +49,10 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 	ctrl := gomock.NewController(suite.T())
 	defer ctrl.Finish()
 
-	reputationClient := mockreputation.NewMockClient(ctrl)
-	reputationClient.EXPECT().
-		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil)
+	//reputationClient := mockreputation.NewMockClient(ctrl)
+	//reputationClient.EXPECT().
+	//	UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+	//	Return(nil)
 
 	geolocation := "AF"
 
@@ -64,7 +61,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		Validate(gomock.Any(), geolocation).
 		Return(true, nil)
 
-	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
+	service, err := wallet.InitService(storage, nil, nil, nil, locationValidator, backoff.Retry)
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
@@ -147,58 +144,58 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_GeoLocationDi
 	suite.Assert().Nil(info)
 }
 
-func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCallFailed() {
-	ctx := context.Background()
-
-	storage, err := wallet.NewWritablePostgres("", false, "")
-	suite.NoError(err)
-
-	ctrl := gomock.NewController(suite.T())
-	defer ctrl.Finish()
-
-	errReputation := errors.New(test.RandomString())
-	reputationClient := mockreputation.NewMockClient(ctrl)
-	reputationClient.EXPECT().
-		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(errReputation)
-
-	locationValidator := wallet.NewMockValidator(ctrl)
-	locationValidator.EXPECT().
-		Validate(gomock.Any(), gomock.Any()).
-		Return(true, nil)
-
-	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
-	suite.Require().NoError(err)
-
-	router := chi.NewRouter()
-	wallet.RegisterRoutes(ctx, service, router)
-
-	data := wallet.CreateBraveWalletV4Request{
-		Geolocation: "AF",
-	}
-
-	payload, err := json.Marshal(data)
-	suite.Require().NoError(err)
-
-	rw := httptest.NewRecorder()
-
-	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
-
-	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
-	suite.Require().NoError(err)
-
-	err = signRequest(request, publicKey, privateKey)
-	suite.Require().NoError(err)
-
-	server := &http.Server{Addr: ":8080", Handler: router}
-	server.Handler.ServeHTTP(rw, request)
-
-	suite.Assert().Equal(http.StatusInternalServerError, rw.Code)
-
-	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
-
-	info, err := suite.storage.GetWallet(ctx, walletID)
-	suite.Require().NoError(err)
-
-	suite.Assert().Nil(info)
-}
+//func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_ReputationCallFailed() {
+//	ctx := context.Background()
+//
+//	storage, err := wallet.NewWritablePostgres("", false, "")
+//	suite.NoError(err)
+//
+//	ctrl := gomock.NewController(suite.T())
+//	defer ctrl.Finish()
+//
+//	errReputation := errors.New(test.RandomString())
+//	reputationClient := mockreputation.NewMockClient(ctrl)
+//	reputationClient.EXPECT().
+//		UpdateWallet(gomock.Any(), gomock.Any(), gomock.Any()).
+//		Return(errReputation)
+//
+//	locationValidator := wallet.NewMockValidator(ctrl)
+//	locationValidator.EXPECT().
+//		Validate(gomock.Any(), gomock.Any()).
+//		Return(true, nil)
+//
+//	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
+//	suite.Require().NoError(err)
+//
+//	router := chi.NewRouter()
+//	wallet.RegisterRoutes(ctx, service, router)
+//
+//	data := wallet.CreateBraveWalletV4Request{
+//		Geolocation: "AF",
+//	}
+//
+//	payload, err := json.Marshal(data)
+//	suite.Require().NoError(err)
+//
+//	rw := httptest.NewRecorder()
+//
+//	request := httptest.NewRequest(http.MethodPost, "/v4/wallets/brave", bytes.NewBuffer(payload))
+//
+//	publicKey, privateKey, err := httpsignature.GenerateEd25519Key(nil)
+//	suite.Require().NoError(err)
+//
+//	err = signRequest(request, publicKey, privateKey)
+//	suite.Require().NoError(err)
+//
+//	server := &http.Server{Addr: ":8080", Handler: router}
+//	server.Handler.ServeHTTP(rw, request)
+//
+//	suite.Assert().Equal(http.StatusInternalServerError, rw.Code)
+//
+//	walletID := uuid.NewV5(wallet.ClaimNamespace, publicKey.String())
+//
+//	info, err := suite.storage.GetWallet(ctx, walletID)
+//	suite.Require().NoError(err)
+//
+//	suite.Assert().Nil(info)
+//}

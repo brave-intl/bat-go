@@ -551,14 +551,15 @@ func (service *Service) CreateBraveWallet(ctx context.Context, publicKey string,
 		return nil, fmt.Errorf("error inserting brave wallet: %w", err)
 	}
 
-	op := func() (interface{}, error) {
-		return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
-	}
-
-	_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
-	if err != nil {
-		return nil, fmt.Errorf("error calling reputation service: %w", err)
-	}
+	// TODO uncomment when reputation deployed
+	//op := func() (interface{}, error) {
+	//	return nil, service.repClient.UpdateWallet(ctx, info.ID, geolocation)
+	//}
+	//
+	//_, err = service.retry(ctx, op, retryPolicy, canRetry(nonRetriableErrors))
+	//if err != nil {
+	//	return nil, fmt.Errorf("error calling reputation service: %w", err)
+	//}
 
 	err = commit()
 	if err != nil {
