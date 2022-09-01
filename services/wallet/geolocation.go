@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	appaws "github.com/brave-intl/bat-go/libs/aws"
 	"github.com/brave-intl/bat-go/libs/logging"
-	"strings"
 )
 
 // Config defines a GeolocationValidator configuration.
