@@ -99,6 +99,11 @@ func init() {
 		Bind("merge-param-bucket").
 		Env("MERGE_PARAM_BUCKET")
 
+	flagBuilder.Flag().String("disabled-wallet-geolocations", "disabled-wallet-geolocations.json",
+		"the json file containing disabled geolocations for wallet creation").
+		Env("DISABLED_WALLET_GEOLOCATIONS").
+		Bind("disabled-wallet-geolocations")
+
 	flagBuilder.Flag().String("wallet-on-platform-prior-to", "",
 		"wallet on platform prior to for transfer").
 		Bind("wallet-on-platform-prior-to").
