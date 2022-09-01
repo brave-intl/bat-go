@@ -698,12 +698,6 @@ func PostReportClobberedClaims(service *Service, version int) handlers.AppHandle
 			return handlers.WrapError(err, "Error in request body", http.StatusBadRequest)
 		}
 
-		_, err = govalidator.ValidateStruct(req)
-		if err != nil {
-			return handlers.WrapValidationError(err)
-		}
-
-		// govalidator does not always catch empty array on required
 		if len(req.ClaimIDs) == 0 {
 			return handlers.WrapValidationError(errors.New("ClaimIDs: required, cannot be empty"))
 		}
