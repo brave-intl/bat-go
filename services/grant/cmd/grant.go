@@ -279,6 +279,7 @@ func setupRouter(ctx context.Context, logger *zerolog.Logger) (context.Context, 
 	// this way we can have the wallet service completely separated from
 	// grants service and easily deployable.
 	ctx, walletService = wallet.SetupService(ctx)
+	r = wallet.RegisterRoutes(ctx, walletService, r)
 
 	promotionDB, promotionRODB, err := promotion.NewPostgres()
 	if err != nil {
@@ -501,6 +502,9 @@ func GrantServer(
 
 	// the bucket for the custodian regions
 	ctx = context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, viper.Get("merge-param-bucket"))
+
+	// the json file containing disabled wallet geolocations.
+	ctx = context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, viper.Get("disabled-wallet-geolocations"))
 
 	// blacklisted countries
 	ctx = context.WithValue(ctx, appctx.BlacklistedCountryCodesCTXKey, viper.GetStringSlice("country-blacklist"))
