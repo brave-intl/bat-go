@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package promotion
 
@@ -7,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/brave-intl/bat-go/libs/test"
 	"github.com/brave-intl/bat-go/services/cmd"
 
 	appctx "github.com/brave-intl/bat-go/libs/context"
@@ -74,7 +74,11 @@ func TestServiceTestSuite(t *testing.T) {
 }
 
 func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
-	ctx, walletService := wallet.SetupService(context.Background())
+	ctx := context.Background()
+	context.WithValue(ctx, appctx.ParametersMergeBucketCTXKey, test.RandomString())
+	context.WithValue(ctx, appctx.DisabledWalletGeolocationsCTXKey, test.RandomString())
+
+	ctx, walletService := wallet.SetupService(ctx)
 	router := cmd.SetupRouter(ctx)
 	wallet.RegisterRoutes(ctx, walletService, router)
 	promotionDB, promotionRODB, err := NewPostgres()
@@ -86,6 +90,7 @@ func (suite *ServiceTestSuite) createService() (*Service, context.Context) {
 		walletService,
 	)
 	suite.Require().NoError(err)
+
 	return s, ctx
 }
 
