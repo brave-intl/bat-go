@@ -66,7 +66,7 @@ func (suite *WalletControllersV4TestSuite) TestCreateBraveWalletV4_Success() {
 		Validate(gomock.Any(), geolocation).
 		Return(true, nil)
 
-	service, err := wallet.InitService(storage, nil, nil, nil, locationValidator, backoff.Retry)
+	service, err := wallet.InitService(storage, nil, reputationClient, nil, locationValidator, backoff.Retry)
 	suite.Require().NoError(err)
 
 	router := chi.NewRouter()
